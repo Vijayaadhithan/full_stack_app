@@ -1,6 +1,123 @@
 # Indian E-commerce and Service Booking Platform
 
-A comprehensive booking and e-commerce platform tailored for the Indian market, supporting multiple user roles including customers, service providers, and shop owners.
+## Local Development Setup
+
+### Prerequisites
+
+1. Node.js (v20.x or later)
+```bash
+# On Windows/Mac, download from https://nodejs.org
+# On Ubuntu/Debian
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+2. PostgreSQL database
+```bash
+# On Windows, download from https://www.postgresql.org/download/windows/
+# On Mac
+brew install postgresql
+# On Ubuntu/Debian
+sudo apt-get install postgresql postgresql-contrib
+```
+
+### Environment Setup
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd <project-directory>
+```
+
+2. Create and configure your `.env` file:
+```bash
+cp .env.example .env
+```
+
+3. Update the `.env` file with your configuration:
+```env
+# Database Configuration
+DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+PGDATABASE=dbname
+PGHOST=localhost
+PGPORT=5432
+PGUSER=user
+PGPASSWORD=password
+
+# Server Configuration
+PORT=5000
+NODE_ENV=development
+SESSION_SECRET=your-session-secret
+
+# Razorpay Configuration (optional for payment features)
+RAZORPAY_KEY_ID=your-razorpay-key
+RAZORPAY_KEY_SECRET=your-razorpay-secret
+```
+
+### Installation
+
+1. Install project dependencies:
+```bash
+npm install
+```
+
+2. Initialize the database:
+```bash
+npx drizzle-kit push:pg
+```
+
+### Running the Application
+
+1. Start the development server:
+```bash
+npm run dev
+```
+
+The application will be available at:
+- Frontend: http://localhost:5000
+- API: http://localhost:5000/api
+
+### Development Guidelines
+
+1. The frontend React application is in the `client/` directory
+2. Backend Express application is in the `server/` directory
+3. Shared types and schemas are in the `shared/` directory
+4. Database migrations are managed using Drizzle ORM
+
+### Available Scripts
+
+- `npm run dev`: Start development server (runs both frontend and backend)
+- `npm run build`: Build for production
+- `npm run start`: Start production server
+
+### Troubleshooting
+
+1. If you encounter database connection issues:
+   - Verify PostgreSQL is running
+   - Check database credentials in `.env`
+   - Ensure the database exists
+
+2. If the server won't start:
+   - Check if port 5000 is available
+   - Verify all environment variables are set
+   - Check for any error messages in the console
+
+3. Common Issues:
+   - "Module not found": Run `npm install` again
+   - "Database connection failed": Check PostgreSQL service status
+   - "Port already in use": Kill the process using port 5000 or change PORT in `.env`
+
+### Testing
+
+1. To run tests:
+```bash
+npm test
+```
+
+2. To run specific test suites:
+```bash
+npm test -- --grep "test-name"
+```
 
 ## Features
 
@@ -38,72 +155,6 @@ A comprehensive booking and e-commerce platform tailored for the Indian market, 
    - Monitor inventory levels
    - View customer reviews
 
-## Prerequisites
-
-- Node.js (v20.x or later)
-- PostgreSQL database
-- Razorpay account for payments
-
-## Setup Instructions
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd <project-directory>
-```
-
-2. Copy the environment variables file:
-```bash
-cp .env.example .env
-```
-
-3. Update the `.env` file with your configuration:
-- Database credentials
-- Razorpay API keys
-- Session secret
-- Other optional configurations
-
-4. Install dependencies:
-```bash
-npm install
-```
-
-5. Start the development server:
-```bash
-npm run dev
-```
-
-The application will be available at:
-- Frontend: http://localhost:5000
-- API: http://localhost:5000/api
-
-## Environment Variables
-
-Required environment variables are listed in `.env.example`. Make sure to set these before running the application:
-
-```env
-# Database Configuration
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-PGDATABASE=dbname
-PGHOST=localhost
-PGPORT=5432
-PGUSER=user
-PGPASSWORD=password
-
-# Server Configuration
-PORT=5000
-NODE_ENV=development
-SESSION_SECRET=your-session-secret
-
-# Razorpay Configuration
-RAZORPAY_KEY_ID=your-razorpay-key
-RAZORPAY_KEY_SECRET=your-razorpay-secret
-
-# Frontend Configuration
-VITE_API_URL=http://localhost:5000
-VITE_RAZORPAY_KEY_ID=your-razorpay-key
-```
-
 ## Project Structure
 
 ```
@@ -117,12 +168,6 @@ VITE_RAZORPAY_KEY_ID=your-razorpay-key
 ├── shared/             # Shared types and schemas
 └── README.md
 ```
-
-## Available Scripts
-
-- `npm run dev`: Start development server
-- `npm run build`: Build for production
-- `npm run start`: Start production server
 
 ## User Roles
 
