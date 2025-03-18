@@ -26,6 +26,7 @@ export default function ServiceProvider() {
   const { id } = useParams();
   console.log("Service ID from params:", id); // Debug log
 
+  // Fetch service details
   const { data: service, isLoading: serviceLoading } = useQuery<Service>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
@@ -33,6 +34,7 @@ export default function ServiceProvider() {
 
   console.log("Fetched service:", service); // Debug log
 
+  // Fetch provider details once we have service data
   const { data: provider, isLoading: providerLoading } = useQuery<User>({
     queryKey: [`/api/users/${service?.providerId}`],
     enabled: !!service?.providerId,
@@ -40,6 +42,7 @@ export default function ServiceProvider() {
 
   console.log("Fetched provider:", provider); // Debug log
 
+  // Fetch reviews for the service
   const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
     queryKey: [`/api/reviews/service/${id}`],
     enabled: !!id,
@@ -86,18 +89,18 @@ export default function ServiceProvider() {
               <CardContent className="pt-6 space-y-4">
                 <div className="flex flex-col items-center text-center">
                   <img
-                    src={provider?.profilePicture || "https://via.placeholder.com/128"}
-                    alt={provider?.name}
+                    src={provider.profilePicture || "https://via.placeholder.com/128"}
+                    alt={provider.name || "Provider"}
                     className="h-32 w-32 rounded-full object-cover mb-4"
                   />
-                  <h2 className="text-2xl font-bold">{provider?.name}</h2>
+                  <h2 className="text-2xl font-bold">{provider.name || "Unknown Provider"}</h2>
                   <div className="flex items-center gap-1 text-yellow-500">
                     <Star className="h-4 w-4 fill-current" />
                     <span>{averageRating.toFixed(1)} ({reviews?.length} reviews)</span>
                   </div>
                   <p className="text-muted-foreground mt-2 flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
-                    {provider?.address}
+                    {provider.address || "Address not available"}
                   </p>
                 </div>
               </CardContent>

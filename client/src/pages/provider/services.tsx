@@ -17,6 +17,7 @@ import { Loader2, Plus, Edit2, Clock, Image as ImageIcon } from "lucide-react";
 import { motion } from "framer-motion";
 import { Service, insertServiceSchema } from "@shared/schema";
 import { z } from "zod";
+import { useState } from "react";
 
 const container = {
   hidden: { opacity: 0 },
@@ -43,6 +44,7 @@ type ServiceFormData = z.infer<typeof serviceFormSchema>;
 export default function ProviderServices() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: services, isLoading } = useQuery<Service[]>({
     queryKey: [`/api/services/provider/${user?.id}`],
@@ -67,7 +69,11 @@ export default function ProviderServices() {
 
   const createServiceMutation = useMutation({
     mutationFn: async (data: ServiceFormData) => {
-      const res = await apiRequest("POST", "/api/services", data);
+      console.log("Creating service with data:", data);
+      const res = await apiRequest("POST", "/api/services", {
+        ...data,
+        providerId: user?.id,
+      });
       if (!res.ok) {
         throw new Error("Failed to create service");
       }
@@ -80,6 +86,7 @@ export default function ProviderServices() {
         description: "Your service has been created successfully.",
       });
       form.reset();
+      setDialogOpen(false);
     },
     onError: (error: Error) => {
       toast({
@@ -123,7 +130,7 @@ export default function ProviderServices() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">My Services</h1>
-          <Dialog>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -297,7 +304,8 @@ export default function ProviderServices() {
                         variant="ghost"
                         size="icon"
                         onClick={() => {
-                          // TODO: Implement edit service
+                          form.reset(service);
+                          setDialogOpen(true);
                         }}
                       >
                         <Edit2 className="h-4 w-4" />
