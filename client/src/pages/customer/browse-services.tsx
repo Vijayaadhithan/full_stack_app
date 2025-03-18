@@ -113,7 +113,7 @@ export default function BrowseServices() {
                       <Link href={`/customer/service-details/${service.id}`}>
                         <Button 
                           className="w-full"
-                          onClick={() => console.log("Navigating to service:", service.id)} // Debug log
+                          onClick={() => console.log("Navigating to service:", service.id)}
                         >
                           View Details
                         </Button>

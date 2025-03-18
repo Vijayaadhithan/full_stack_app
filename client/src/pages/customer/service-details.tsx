@@ -5,7 +5,7 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Service } from "@shared/schema";
 import { motion } from "framer-motion";
-import { Loader2, MapPin, Clock, Star } from "lucide-react";
+import { Loader2, MapPin, Star, Clock } from "lucide-react";
 
 type ServiceDetails = Service & {
   provider: {
@@ -28,9 +28,9 @@ export default function ServiceDetails() {
   console.log("Service ID from params:", id);
 
   const { data: service, isLoading, error } = useQuery<ServiceDetails>({
-    queryKey: [`/api/services/${id}`],
+    queryKey: ["/api/services", id],
     enabled: !!id,
-    retry: 1,
+    retry: false,
     onError: (error) => {
       console.error("Error fetching service:", error);
     },
