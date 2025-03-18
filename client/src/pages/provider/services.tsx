@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/contexts/language-context";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -32,6 +33,7 @@ type ServiceFormData = z.infer<typeof serviceFormSchema>;
 
 export default function ProviderServices() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
@@ -126,17 +128,19 @@ export default function ProviderServices() {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">My Services</h1>
+          <h1 className="text-2xl font-bold">{t('my_services')}</h1>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                Add New Service
+                {t('add_service')}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
-                <DialogTitle>{editingService ? 'Edit Service' : 'Add New Service'}</DialogTitle>
+                <DialogTitle>
+                  {editingService ? t('edit_service') : t('add_service')}
+                </DialogTitle>
               </DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -145,7 +149,7 @@ export default function ProviderServices() {
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Service Name</FormLabel>
+                        <FormLabel>{t('service_name')}</FormLabel>
                         <FormControl>
                           <Input {...field} />
                         </FormControl>
@@ -159,7 +163,7 @@ export default function ProviderServices() {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Description</FormLabel>
+                        <FormLabel>{t('service_description')}</FormLabel>
                         <FormControl>
                           <Textarea {...field} />
                         </FormControl>
@@ -174,7 +178,7 @@ export default function ProviderServices() {
                       name="price"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Price (₹)</FormLabel>
+                          <FormLabel>{t('service_price')} (₹)</FormLabel>
                           <FormControl>
                             <Input {...field} type="number" min="0" step="0.01" />
                           </FormControl>
@@ -188,19 +192,19 @@ export default function ProviderServices() {
                       name="category"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Category</FormLabel>
+                          <FormLabel>{t('service_category')}</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select category" />
+                                <SelectValue placeholder={t('select_category')} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="Beauty & Wellness">Beauty & Wellness</SelectItem>
-                              <SelectItem value="Home Services">Home Services</SelectItem>
-                              <SelectItem value="Professional Services">Professional Services</SelectItem>
-                              <SelectItem value="Health & Fitness">Health & Fitness</SelectItem>
-                              <SelectItem value="Education & Training">Education & Training</SelectItem>
+                              <SelectItem value="Beauty & Wellness">{t('beauty_wellness')}</SelectItem>
+                              <SelectItem value="Home Services">{t('home_services')}</SelectItem>
+                              <SelectItem value="Professional Services">{t('professional_services')}</SelectItem>
+                              <SelectItem value="Health & Fitness">{t('health_fitness')}</SelectItem>
+                              <SelectItem value="Education & Training">{t('education_training')}</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -213,7 +217,7 @@ export default function ProviderServices() {
                       name="duration"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Duration (minutes)</FormLabel>
+                          <FormLabel>{t('service_duration')} ({t('minutes')})</FormLabel>
                           <FormControl>
                             <Input {...field} type="number" min="15" step="15" />
                           </FormControl>
@@ -227,7 +231,7 @@ export default function ProviderServices() {
                       name="bufferTime"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Buffer Time (minutes)</FormLabel>
+                          <FormLabel>{t('buffer_time')} ({t('minutes')})</FormLabel>
                           <FormControl>
                             <Input {...field} type="number" min="0" step="5" />
                           </FormControl>
@@ -243,7 +247,7 @@ export default function ProviderServices() {
                     render={({ field }) => (
                       <FormItem className="flex items-center justify-between rounded-lg border p-4">
                         <div className="space-y-0.5">
-                          <FormLabel>Available for Booking</FormLabel>
+                          <FormLabel>{t('available_for_booking')}</FormLabel>
                         </div>
                         <FormControl>
                           <Switch
@@ -263,7 +267,7 @@ export default function ProviderServices() {
                       {(createServiceMutation.isPending || updateServiceMutation.isPending) && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      {editingService ? 'Update Service' : 'Create Service'}
+                      {editingService ? t('update_service') : t('create_service')}
                     </Button>
                   </div>
                 </form>
@@ -279,7 +283,7 @@ export default function ProviderServices() {
         ) : !services?.length ? (
           <Card>
             <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">No services created yet</p>
+              <p className="text-muted-foreground">{t('no_services_yet')}</p>
             </CardContent>
           </Card>
         ) : (
@@ -312,22 +316,22 @@ export default function ProviderServices() {
 
                   <div className="mt-4 space-y-2">
                     <div className="flex justify-between items-center text-sm">
-                      <span>Price</span>
+                      <span>{t('price')}</span>
                       <span className="font-semibold">₹{service.price}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
-                      <span>Duration</span>
-                      <span className="font-semibold">{service.duration} mins</span>
+                      <span>{t('duration')}</span>
+                      <span className="font-semibold">{service.duration} {t('minutes')}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
-                      <span>Category</span>
+                      <span>{t('category')}</span>
                       <span className="font-semibold">{service.category}</span>
                     </div>
                   </div>
 
                   <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <span className="text-sm font-medium">Availability</span>
+                      <span className="text-sm font-medium">{t('availability')}</span>
                     </div>
                     <Switch
                       checked={service.isAvailable}

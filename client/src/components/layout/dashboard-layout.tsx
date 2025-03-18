@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import { MainNav } from "@/components/navigation/main-nav";
 import { NotificationsCenter } from "@/components/notifications-center";
+import { LanguageSelector } from "@/components/language-selector";
+import { useLanguage } from "@/contexts/language-context";
 import { motion } from "framer-motion";
 
 interface DashboardLayoutProps {
@@ -8,11 +10,16 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="min-h-screen bg-background">
       <div className="flex items-center justify-between px-4 border-b">
         <MainNav />
-        <NotificationsCenter />
+        <div className="flex items-center gap-4">
+          <LanguageSelector />
+          <NotificationsCenter />
+        </div>
       </div>
       <motion.main 
         initial={{ opacity: 0, y: 20 }}

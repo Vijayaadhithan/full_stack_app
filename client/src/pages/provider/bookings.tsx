@@ -6,12 +6,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/contexts/language-context";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Check, X, Calendar, Clock, User } from "lucide-react";
+import { Loader2, Check, X, Calendar, Clock } from "lucide-react";
 import { Booking, Service } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
@@ -26,6 +27,7 @@ type BookingActionData = z.infer<typeof bookingActionSchema>;
 
 export default function ProviderBookings() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { toast } = useToast();
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("");
@@ -89,10 +91,10 @@ export default function ProviderBookings() {
       id: selectedBooking.id,
       data: {
         ...data,
-        status: actionType === "accept" ? "accepted" 
-               : actionType === "reject" ? "rejected"
-               : actionType === "reschedule" ? "rescheduled"
-               : "completed"
+        status: actionType === "accept" ? "accepted"
+          : actionType === "reject" ? "rejected"
+          : actionType === "reschedule" ? "rescheduled"
+          : "completed"
       },
     });
   };
@@ -101,7 +103,7 @@ export default function ProviderBookings() {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Service Bookings</h1>
+          <h1 className="text-2xl font-bold">{t('service_bookings')}</h1>
           <div className="flex items-center gap-4">
             <Input
               type="date"
@@ -113,12 +115,12 @@ export default function ProviderBookings() {
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="border rounded p-2"
             >
-              <option value="all">All Bookings</option>
-              <option value="pending">Pending</option>
-              <option value="accepted">Accepted</option>
-              <option value="rejected">Rejected</option>
-              <option value="rescheduled">Rescheduled</option>
-              <option value="completed">Completed</option>
+              <option value="all">{t('all_bookings')}</option>
+              <option value="pending">{t('pending')}</option>
+              <option value="accepted">{t('accepted')}</option>
+              <option value="rejected">{t('rejected')}</option>
+              <option value="rescheduled">{t('rescheduled')}</option>
+              <option value="completed">{t('completed')}</option>
             </select>
           </div>
         </div>
@@ -130,7 +132,7 @@ export default function ProviderBookings() {
         ) : !filteredBookings?.length ? (
           <Card>
             <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">No bookings found</p>
+              <p className="text-muted-foreground">{t('no_bookings_found')}</p>
             </CardContent>
           </Card>
         ) : (
@@ -144,12 +146,12 @@ export default function ProviderBookings() {
                         <h3 className="font-semibold">{booking.service.name}</h3>
                         <span className={`text-sm font-medium ${
                           booking.status === 'accepted' ? 'text-green-600' :
-                          booking.status === 'rejected' ? 'text-red-600' :
-                          booking.status === 'rescheduled' ? 'text-yellow-600' :
-                          booking.status === 'completed' ? 'text-blue-600' :
-                          'text-gray-600'
+                            booking.status === 'rejected' ? 'text-red-600' :
+                              booking.status === 'rescheduled' ? 'text-yellow-600' :
+                                booking.status === 'completed' ? 'text-blue-600' :
+                                  'text-gray-600'
                         }`}>
-                          {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                          {t(booking.status)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -174,8 +176,8 @@ export default function ProviderBookings() {
                       <div className="flex gap-2">
                         <Dialog open={actionType === 'accept'} onOpenChange={() => setActionType(null)}>
                           <DialogTrigger asChild>
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               className="text-green-600"
                               onClick={() => {
                                 setActionType('accept');
@@ -183,12 +185,12 @@ export default function ProviderBookings() {
                               }}
                             >
                               <Check className="h-4 w-4 mr-2" />
-                              Accept
+                              {t('accept')}
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Accept Booking</DialogTitle>
+                              <DialogTitle>{t('accept_booking')}</DialogTitle>
                             </DialogHeader>
                             <Form {...form}>
                               <form onSubmit={form.handleSubmit(handleAction)} className="space-y-4">
@@ -197,15 +199,15 @@ export default function ProviderBookings() {
                                   name="comments"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>Additional Instructions</FormLabel>
+                                      <FormLabel>{t('additional_instructions')}</FormLabel>
                                       <FormControl>
-                                        <Textarea {...field} placeholder="Add any instructions for the customer" />
+                                        <Textarea {...field} placeholder={t('add_any_instructions_for_the_customer')} />
                                       </FormControl>
                                       <FormMessage />
                                     </FormItem>
                                   )}
                                 />
-                                <Button type="submit" className="w-full">Accept Booking</Button>
+                                <Button type="submit" className="w-full">{t('accept_booking')}</Button>
                               </form>
                             </Form>
                           </DialogContent>
@@ -213,8 +215,8 @@ export default function ProviderBookings() {
 
                         <Dialog open={actionType === 'reject'} onOpenChange={() => setActionType(null)}>
                           <DialogTrigger asChild>
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               className="text-red-600"
                               onClick={() => {
                                 setActionType('reject');
@@ -222,12 +224,12 @@ export default function ProviderBookings() {
                               }}
                             >
                               <X className="h-4 w-4 mr-2" />
-                              Reject
+                              {t('reject')}
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Reject Booking</DialogTitle>
+                              <DialogTitle>{t('reject_booking')}</DialogTitle>
                             </DialogHeader>
                             <Form {...form}>
                               <form onSubmit={form.handleSubmit(handleAction)} className="space-y-4">
@@ -236,16 +238,16 @@ export default function ProviderBookings() {
                                   name="comments"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>Reason for Rejection</FormLabel>
+                                      <FormLabel>{t('reason_for_rejection')}</FormLabel>
                                       <FormControl>
-                                        <Textarea {...field} placeholder="Please provide a reason for rejecting this booking" />
+                                        <Textarea {...field} placeholder={t('please_provide_a_reason_for_rejecting_this_booking')} />
                                       </FormControl>
                                       <FormMessage />
                                     </FormItem>
                                   )}
                                 />
                                 <Button type="submit" variant="destructive" className="w-full">
-                                  Reject Booking
+                                  {t('reject_booking')}
                                 </Button>
                               </form>
                             </Form>
@@ -254,7 +256,7 @@ export default function ProviderBookings() {
 
                         <Dialog open={actionType === 'reschedule'} onOpenChange={() => setActionType(null)}>
                           <DialogTrigger asChild>
-                            <Button 
+                            <Button
                               variant="outline"
                               onClick={() => {
                                 setActionType('reschedule');
@@ -262,12 +264,12 @@ export default function ProviderBookings() {
                               }}
                             >
                               <Calendar className="h-4 w-4 mr-2" />
-                              Reschedule
+                              {t('reschedule')}
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Reschedule Booking</DialogTitle>
+                              <DialogTitle>{t('reschedule_booking')}</DialogTitle>
                             </DialogHeader>
                             <Form {...form}>
                               <form onSubmit={form.handleSubmit(handleAction)} className="space-y-4">
@@ -276,7 +278,7 @@ export default function ProviderBookings() {
                                   name="rescheduleDate"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>New Date and Time</FormLabel>
+                                      <FormLabel>{t('new_date_and_time')}</FormLabel>
                                       <FormControl>
                                         <Input type="datetime-local" {...field} />
                                       </FormControl>
@@ -289,16 +291,16 @@ export default function ProviderBookings() {
                                   name="comments"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>Reason for Rescheduling</FormLabel>
+                                      <FormLabel>{t('reason_for_rescheduling')}</FormLabel>
                                       <FormControl>
-                                        <Textarea {...field} placeholder="Please provide a reason for rescheduling" />
+                                        <Textarea {...field} placeholder={t('please_provide_a_reason_for_rescheduling')} />
                                       </FormControl>
                                       <FormMessage />
                                     </FormItem>
                                   )}
                                 />
                                 <Button type="submit" className="w-full">
-                                  Confirm Reschedule
+                                  {t('confirm_reschedule')}
                                 </Button>
                               </form>
                             </Form>
@@ -310,7 +312,7 @@ export default function ProviderBookings() {
                     {booking.status === 'accepted' && (
                       <Dialog open={actionType === 'complete'} onOpenChange={() => setActionType(null)}>
                         <DialogTrigger asChild>
-                          <Button 
+                          <Button
                             variant="outline"
                             className="text-green-600"
                             onClick={() => {
@@ -319,12 +321,12 @@ export default function ProviderBookings() {
                             }}
                           >
                             <Check className="h-4 w-4 mr-2" />
-                            Complete Service
+                            {t('complete_service')}
                           </Button>
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
-                            <DialogTitle>Complete Service</DialogTitle>
+                            <DialogTitle>{t('complete_service')}</DialogTitle>
                           </DialogHeader>
                           <Form {...form}>
                             <form onSubmit={form.handleSubmit(handleAction)} className="space-y-4">
@@ -333,15 +335,15 @@ export default function ProviderBookings() {
                                 name="comments"
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel>Service Notes</FormLabel>
+                                    <FormLabel>{t('service_notes')}</FormLabel>
                                     <FormControl>
-                                      <Textarea {...field} placeholder="Add any notes about the completed service" />
+                                      <Textarea {...field} placeholder={t('add_any_notes_about_the_completed_service')} />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
                                 )}
                               />
-                              <Button type="submit" className="w-full">Mark as Complete</Button>
+                              <Button type="submit" className="w-full">{t('mark_as_complete')}</Button>
                             </form>
                           </Form>
                         </DialogContent>
