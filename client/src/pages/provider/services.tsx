@@ -2,6 +2,8 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ServiceAvailabilityForm } from "@/components/service-availability-form";
+import { ServiceAvailabilityCalendar } from "@/components/service-availability-calendar";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,12 +17,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2, Clock, Calendar } from "lucide-react";
+import { Loader2, Plus, Edit2 } from "lucide-react";
 import { Service, insertServiceSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
-import { ServiceAvailabilityForm } from "@/components/service-availability-form";
-import { ServiceAvailabilityCalendar } from "@/components/service-availability-calendar";
 
 // Extended service form schema with availability
 const serviceFormSchema = insertServiceSchema.extend({
@@ -118,13 +118,12 @@ export default function ProviderServices() {
       breakTime: [{ start: "13:00", end: "14:00" }],
       maxDailyBookings: 8,
       location: { lat: 19.076, lng: 72.8777 }, // Default to Mumbai coordinates
-
     },
   });
 
   const createServiceMutation = useMutation({
     mutationFn: async (data: ServiceFormData) => {
-      console.log("Creating service with data:", data); // Debug log
+      console.log("Creating service with data:", data);
       const res = await apiRequest("POST", "/api/services", {
         ...data,
         providerId: user?.id,
@@ -145,7 +144,7 @@ export default function ProviderServices() {
       setDialogOpen(false);
     },
     onError: (error: Error) => {
-      console.error("Service creation error:", error); // Debug log
+      console.error("Service creation error:", error);
       toast({
         title: t("error"),
         description: error.message,
@@ -156,7 +155,7 @@ export default function ProviderServices() {
 
   const updateServiceMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<ServiceFormData> }) => {
-      console.log("Updating service with data:", data); // Debug log
+      console.log("Updating service with data:", data);
       const res = await apiRequest("PATCH", `/api/services/${id}`, data);
       if (!res.ok) {
         const error = await res.json();
@@ -174,7 +173,7 @@ export default function ProviderServices() {
       setEditingService(null);
     },
     onError: (error: Error) => {
-      console.error("Service update error:", error); // Debug log
+      console.error("Service update error:", error);
       toast({
         title: t("error"),
         description: error.message,
@@ -184,7 +183,7 @@ export default function ProviderServices() {
   });
 
   const onSubmit = (data: ServiceFormData) => {
-    console.log("Form submission data:", data); // Debug log
+    console.log("Form submission data:", data);
     if (editingService) {
       updateServiceMutation.mutate({ id: editingService.id, data });
     } else {
@@ -210,7 +209,6 @@ export default function ProviderServices() {
                   {editingService ? t('edit_service') : t('add_service')}
                 </DialogTitle>
               </DialogHeader>
-
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                   <Tabs value={activeTab} onValueChange={setActiveTab}>
