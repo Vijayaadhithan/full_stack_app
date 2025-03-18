@@ -3,13 +3,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
-import { motion } from "framer-motion";
-import { Search, MapPin, Star, Clock, Loader2 } from "lucide-react";
-import { useState } from "react";
-import { Service } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { Loader2, MapPin, Star, Clock } from "lucide-react";
+import { useState } from "react";
+import { Service } from "@shared/schema";
+import { motion } from "framer-motion";
 
 const categories = [
   "All",
@@ -34,7 +33,6 @@ const item = {
 };
 
 export default function BrowseServices() {
-  const { user } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -55,14 +53,12 @@ export default function BrowseServices() {
         variants={container}
         initial="hidden"
         animate="show"
-        className="space-y-6"
+        className="space-y-6 p-6"
       >
         <div className="flex flex-col sm:flex-row gap-4 items-center">
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
               placeholder="Search services..."
-              className="pl-10"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -95,7 +91,7 @@ export default function BrowseServices() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredServices.map((service) => (
               <motion.div key={service.id} variants={item}>
-                <Link href={`/customer/service-provider/${service.id}`}>
+                <Link href={`/customer/service-details/${service.id}`}>
                   <Card className="cursor-pointer hover:shadow-lg transition-shadow">
                     <CardContent className="p-6">
                       <div className="flex flex-col gap-4">

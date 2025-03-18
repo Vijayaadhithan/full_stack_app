@@ -10,6 +10,7 @@ import { ProtectedRoute } from "./lib/protected-route";
 import AuthPage from "@/pages/auth-page";
 import CustomerDashboard from "@/pages/customer/dashboard";
 import BrowseServices from "@/pages/customer/browse-services";
+import ServiceDetails from "@/pages/customer/service-details";
 import BrowseProducts from "@/pages/customer/browse-products";
 import Cart from "@/pages/customer/cart";
 import Wishlist from "@/pages/customer/wishlist";
@@ -41,12 +42,13 @@ function Router() {
       {/* Customer Routes */}
       <ProtectedRoute path="/customer" component={CustomerDashboard} />
       <ProtectedRoute path="/customer/browse-services" component={BrowseServices} />
+      <ProtectedRoute path="/customer/service-details/:id" component={ServiceDetails} />
+      <ProtectedRoute path="/customer/book-service/:id" component={BookService} />
       <ProtectedRoute path="/customer/browse-products" component={BrowseProducts} />
       <ProtectedRoute path="/customer/cart" component={Cart} />
       <ProtectedRoute path="/customer/wishlist" component={Wishlist} />
       <ProtectedRoute path="/customer/bookings" component={Bookings} />
       <ProtectedRoute path="/customer/service-provider/:id" component={ServiceProvider} />
-      <ProtectedRoute path="/customer/book-service/:id" component={BookService} />
       <ProtectedRoute path="/customer/order/:id" component={OrderDetails} />
 
       {/* Provider Routes */}
