@@ -13,7 +13,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2, Clock, Image as ImageIcon } from "lucide-react";
+import { Loader2, Plus, Edit2, Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { Service, insertServiceSchema } from "@shared/schema";
 import { z } from "zod";
@@ -37,6 +37,7 @@ const item = {
 const serviceFormSchema = insertServiceSchema.extend({
   bufferTime: z.coerce.number().min(0, "Buffer time must be a positive number"),
   duration: z.coerce.number().min(15, "Duration must be at least 15 minutes"),
+  price: z.string().min(1, "Price is required"),
 });
 
 type ServiceFormData = z.infer<typeof serviceFormSchema>;
@@ -45,6 +46,7 @@ export default function ProviderServices() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
 
   const { data: services, isLoading } = useQuery<Service[]>({
     queryKey: [`/api/services/provider/${user?.id}`],
@@ -87,6 +89,7 @@ export default function ProviderServices() {
       });
       form.reset();
       setDialogOpen(false);
+      setEditingService(null);
     },
     onError: (error: Error) => {
       toast({
@@ -111,18 +114,30 @@ export default function ProviderServices() {
         title: "Service updated",
         description: "Your service has been updated successfully.",
       });
+      setDialogOpen(false);
+      setEditingService(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
   const onSubmit = (data: ServiceFormData) => {
-    createServiceMutation.mutate(data);
+    if (editingService) {
+      updateServiceMutation.mutate({ id: editingService.id, data });
+    } else {
+      createServiceMutation.mutate(data);
+    }
   };
 
-  const toggleAvailability = (serviceId: number, isAvailable: boolean) => {
-    updateServiceMutation.mutate({
-      id: serviceId,
-      data: { isAvailable },
-    });
+  const handleEdit = (service: Service) => {
+    setEditingService(service);
+    form.reset(service);
+    setDialogOpen(true);
   };
 
   return (
@@ -139,7 +154,7 @@ export default function ProviderServices() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
-                <DialogTitle>Add New Service</DialogTitle>
+                <DialogTitle>{editingService ? 'Edit Service' : 'Add New Service'}</DialogTitle>
               </DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -179,7 +194,7 @@ export default function ProviderServices() {
                         <FormItem>
                           <FormLabel>Price (₹)</FormLabel>
                           <FormControl>
-                            <Input {...field} type="number" />
+                            <Input {...field} type="number" min="0" step="0.01" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -221,7 +236,7 @@ export default function ProviderServices() {
                         <FormItem>
                           <FormLabel>Duration (minutes)</FormLabel>
                           <FormControl>
-                            <Input {...field} type="number" />
+                            <Input {...field} type="number" min="15" step="15" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -235,7 +250,7 @@ export default function ProviderServices() {
                         <FormItem>
                           <FormLabel>Buffer Time (minutes)</FormLabel>
                           <FormControl>
-                            <Input {...field} type="number" />
+                            <Input {...field} type="number" min="0" step="5" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -264,12 +279,12 @@ export default function ProviderServices() {
                   <div className="flex justify-end">
                     <Button
                       type="submit"
-                      disabled={createServiceMutation.isPending}
+                      disabled={createServiceMutation.isPending || updateServiceMutation.isPending}
                     >
-                      {createServiceMutation.isPending && (
+                      {(createServiceMutation.isPending || updateServiceMutation.isPending) && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      Create Service
+                      {editingService ? 'Update Service' : 'Create Service'}
                     </Button>
                   </div>
                 </form>
@@ -303,10 +318,7 @@ export default function ProviderServices() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
-                          form.reset(service);
-                          setDialogOpen(true);
-                        }}
+                        onClick={() => handleEdit(service)}
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
@@ -333,7 +345,12 @@ export default function ProviderServices() {
                       </div>
                       <Switch
                         checked={service.isAvailable}
-                        onCheckedChange={(checked) => toggleAvailability(service.id, checked)}
+                        onCheckedChange={(checked) =>
+                          updateServiceMutation.mutate({
+                            id: service.id,
+                            data: { isAvailable: checked },
+                          })
+                        }
                       />
                     </div>
                   </CardContent>
