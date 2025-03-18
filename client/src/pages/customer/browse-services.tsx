@@ -40,6 +40,8 @@ export default function BrowseServices() {
     queryKey: ["/api/services"],
   });
 
+  console.log("Available services:", services); // Debug log
+
   const filteredServices = services?.filter(service => 
     (selectedCategory === "All" || service.category === selectedCategory) &&
     (service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -109,7 +111,12 @@ export default function BrowseServices() {
                       </div>
 
                       <Link href={`/customer/service-details/${service.id}`}>
-                        <Button className="w-full">View Details</Button>
+                        <Button 
+                          className="w-full"
+                          onClick={() => console.log("Navigating to service:", service.id)} // Debug log
+                        >
+                          View Details
+                        </Button>
                       </Link>
                     </div>
                   </CardContent>
