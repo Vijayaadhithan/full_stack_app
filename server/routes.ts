@@ -61,10 +61,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(services);
   });
 
-  // Add this route after the existing service routes
+  // Update the services route to use getServices method
   app.get("/api/services", requireAuth, async (req, res) => {
-    // Get all services from storage
-    const services = Array.from(storage.services.values());
+    const services = await storage.getServices();
     res.json(services);
   });
 
@@ -231,7 +230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/cart", requireAuth, requireRole(["customer"]), async (req, res) => {
     const { productId, quantity } = req.body;
     await storage.addToCart(req.user!.id, productId, quantity);
-    res.sendStatus(200);
+    res.json({ success: true }); // Send proper JSON response
   });
 
   app.delete("/api/cart/:productId", requireAuth, requireRole(["customer"]), async (req, res) => {
@@ -248,7 +247,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/wishlist", requireAuth, requireRole(["customer"]), async (req, res) => {
     const { productId } = req.body;
     await storage.addToWishlist(req.user!.id, productId);
-    res.sendStatus(200);
+    res.json({ success: true }); // Send proper JSON response
   });
 
   app.delete("/api/wishlist/:productId", requireAuth, requireRole(["customer"]), async (req, res) => {

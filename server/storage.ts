@@ -35,6 +35,7 @@ export interface IStorage {
   getServicesByProvider(providerId: number): Promise<Service[]>;
   getServicesByCategory(category: string): Promise<Service[]>;
   updateService(id: number, service: Partial<Service>): Promise<Service>;
+  getServices(): Promise<Service[]>;
 
   // Booking operations
   createBooking(booking: InsertBooking): Promise<Booking>;
@@ -201,6 +202,10 @@ export class MemStorage implements IStorage {
     const updated = { ...existing, ...service };
     this.services.set(id, updated);
     return updated;
+  }
+
+  async getServices(): Promise<Service[]> {
+    return Array.from(this.services.values());
   }
 
   // Booking operations
@@ -529,6 +534,8 @@ export class MemStorage implements IStorage {
       email: "spa@example.com",
       address: "123 Main St, Mumbai",
       language: "en",
+      profilePicture: null,
+      paymentMethods: null
     });
 
     // Create sample services
@@ -543,7 +550,7 @@ export class MemStorage implements IStorage {
         isAvailable: true,
         bufferTime: 15,
         images: ["https://example.com/massage.jpg"],
-        location: { lat: 19.0760, lng: 72.8777 },
+        location: { lat: 19.0760, lng: 72.8777 }
       },
       {
         name: "Hair Styling",
@@ -555,8 +562,8 @@ export class MemStorage implements IStorage {
         isAvailable: true,
         bufferTime: 10,
         images: ["https://example.com/hairstyle.jpg"],
-        location: { lat: 19.0760, lng: 72.8777 },
-      },
+        location: { lat: 19.0760, lng: 72.8777 }
+      }
     ];
 
     for (const service of services) {
@@ -573,6 +580,8 @@ export class MemStorage implements IStorage {
       email: "fashion@example.com",
       address: "456 Market St, Delhi",
       language: "en",
+      profilePicture: null,
+      paymentMethods: null
     });
 
     // Create sample products
