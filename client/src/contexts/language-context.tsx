@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import * as React from 'react';
 import { translations } from '@/lib/translations';
 
 type Language = 'en' | 'hi' | 'ta';
@@ -9,14 +9,14 @@ type LanguageContextType = {
   t: (key: string) => string;
 };
 
-const LanguageContext = createContext<LanguageContextType | null>(null);
+const LanguageContext = React.createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguage] = useState<Language>('en');
+  const [language, setLanguage] = React.useState<Language>('en');
 
-  useEffect(() => {
+  React.useEffect(() => {
     const savedLang = localStorage.getItem('language') as Language;
-    if (savedLang) {
+    if (savedLang && ['en', 'hi', 'ta'].includes(savedLang)) {
       setLanguage(savedLang);
     }
   }, []);
@@ -38,7 +38,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useLanguage() {
-  const context = useContext(LanguageContext);
+  const context = React.useContext(LanguageContext);
   if (!context) {
     throw new Error('useLanguage must be used within a LanguageProvider');
   }
