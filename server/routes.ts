@@ -168,14 +168,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Service provider not found" });
       }
 
-      // Get reviews for the service
-      const reviews = await storage.getReviewsByService(serviceId);
-
       // Return combined data
       res.json({
         ...service,
-        provider,
-        reviews
+        provider: {
+          id: provider.id,
+          name: provider.name,
+          email: provider.email,
+          profilePicture: provider.profilePicture,
+          role: provider.role
+        }
       });
     } catch (error) {
       console.error("Error fetching service:", error);

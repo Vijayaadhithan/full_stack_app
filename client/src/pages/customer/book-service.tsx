@@ -3,8 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Service, User } from "@shared/schema";
@@ -53,11 +51,9 @@ function generateTimeSlots(
   while (currentSlot < endTime) {
     const slotEnd = addMinutes(currentSlot, duration);
 
-    // Check if slot overlaps with break time
     const isInBreakTime = isBreakTime(currentSlot, breakTimes) || 
                          isBreakTime(slotEnd, breakTimes);
 
-    // Check if slot overlaps with any existing booking
     const isOverlapping = existingBookings.some(booking => {
       return (
         (currentSlot >= booking.start && currentSlot < booking.end) ||
@@ -73,7 +69,6 @@ function generateTimeSlots(
       });
     }
 
-    // Add buffer time to the next slot
     currentSlot = addMinutes(slotEnd, bufferTime);
   }
 
@@ -81,25 +76,22 @@ function generateTimeSlots(
 }
 
 export default function BookService() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const { t } = useLanguage();
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>();
 
-  const { data: service, isLoading: serviceLoading } = useQuery<Service>({
-    queryKey: [`/api/services/${id}`],
-  });
-
-  const { data: provider } = useQuery<User>({
-    queryKey: [`/api/users/${service?.providerId}`],
-    enabled: !!service?.providerId,
+  // Fetch service with provider info
+  const { data: service, isLoading: serviceLoading } = useQuery<Service & { provider: User }>({
+    queryKey: [`/api/services/${id}`, 'with-provider'],
+    enabled: !!id,
   });
 
   // Get existing bookings for availability check
   const { data: existingBookings } = useQuery<{ start: Date; end: Date }[]>({
     queryKey: [`/api/services/${id}/bookings`, selectedDate.toISOString()],
-    enabled: !!service,
+    enabled: !!service && !!selectedDate,
   });
 
   // Generate available time slots
@@ -128,7 +120,6 @@ export default function BookService() {
       return res.json();
     },
     onSuccess: () => {
-      // Invalidate both bookings and notifications queries
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
@@ -167,18 +158,51 @@ export default function BookService() {
     );
   }
 
+  if (!service) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+          <h2 className="text-2xl font-bold mb-4">Service not found</h2>
+          <Button onClick={() => window.history.back()}>Go Back</Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="max-w-4xl mx-auto space-y-6"
+        className="max-w-4xl mx-auto space-y-6 p-6"
       >
         <Card>
           <CardHeader>
-            <CardTitle>{service?.name}</CardTitle>
+            <CardTitle>{service.name}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Service Provider Info */}
+            <div className="bg-muted/50 rounded-lg p-4">
+              <h3 className="font-semibold mb-2">Service Provider</h3>
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                  {service.provider?.profilePicture ? (
+                    <img
+                      src={service.provider.profilePicture}
+                      alt={service.provider.name}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-2xl">{service.provider?.name[0]}</span>
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium">{service.provider?.name}</p>
+                  <p className="text-sm text-muted-foreground">{service.provider?.email}</p>
+                </div>
+              </div>
+            </div>
+
             <div className="grid gap-6 md:grid-cols-2">
               <div>
                 <h3 className="font-semibold mb-2">{t('select_date')}</h3>
@@ -240,10 +264,11 @@ export default function BookService() {
               </div>
             </div>
 
-            {service && (
-              <div className="border-t pt-4">
-                <h3 className="font-semibold mb-2">{t('service_details')}</h3>
-                <div className="grid gap-2">
+            {/* Service Details */}
+            <div className="border-t pt-4">
+              <h3 className="font-semibold mb-2">{t('service_details')}</h3>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4" />
                     <span>{t('duration')}: {service.duration} {t('minutes')}</span>
@@ -253,8 +278,11 @@ export default function BookService() {
                     <span>{t('buffer_time')}: {service.bufferTime} {t('minutes')}</span>
                   </div>
                 </div>
+                <div>
+                  <p className="text-muted-foreground">{service.description}</p>
+                </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       </motion.div>
