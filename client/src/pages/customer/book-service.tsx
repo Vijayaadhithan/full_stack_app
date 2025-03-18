@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -15,7 +14,7 @@ import { useLanguage } from "@/contexts/language-context";
 import { motion } from "framer-motion";
 import { Clock, Calendar as CalendarIcon, AlertCircle } from "lucide-react";
 import { useState } from "react";
-import { addDays, format, parse, isAfter, isBefore, addMinutes } from "date-fns";
+import { addDays, format, parse, isAfter, isBefore, addMinutes, isWithinInterval } from "date-fns";
 
 type TimeSlot = {
   start: Date;
@@ -23,11 +22,20 @@ type TimeSlot = {
   available: boolean;
 };
 
+function isBreakTime(time: Date, breakTimes: Array<{ start: string; end: string }>) {
+  return breakTimes.some(breakTime => {
+    const breakStart = parse(breakTime.start, "HH:mm", time);
+    const breakEnd = parse(breakTime.end, "HH:mm", time);
+    return isWithinInterval(time, { start: breakStart, end: breakEnd });
+  });
+}
+
 function generateTimeSlots(
   date: Date,
   duration: number,
   bufferTime: number,
   workingHours: any,
+  breakTimes: Array<{ start: string; end: string }>,
   existingBookings: { start: Date; end: Date }[]
 ): TimeSlot[] {
   const dayOfWeek = format(date, 'EEEE').toLowerCase();
@@ -45,7 +53,11 @@ function generateTimeSlots(
   while (currentSlot < endTime) {
     const slotEnd = addMinutes(currentSlot, duration);
 
-    // Check if slot overlaps with any existing booking or break time
+    // Check if slot overlaps with break time
+    const isInBreakTime = isBreakTime(currentSlot, breakTimes) || 
+                         isBreakTime(slotEnd, breakTimes);
+
+    // Check if slot overlaps with any existing booking
     const isOverlapping = existingBookings.some(booking => {
       return (
         (currentSlot >= booking.start && currentSlot < booking.end) ||
@@ -53,7 +65,7 @@ function generateTimeSlots(
       );
     });
 
-    if (!isOverlapping) {
+    if (!isOverlapping && !isInBreakTime) {
       slots.push({
         start: currentSlot,
         end: slotEnd,
@@ -97,6 +109,7 @@ export default function BookService() {
         service.duration,
         service.bufferTime || 0,
         service.workingHours,
+        service.breakTime || [],
         existingBookings
       )
     : [];
@@ -110,12 +123,14 @@ export default function BookService() {
       const res = await apiRequest("POST", "/api/bookings", data);
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || "Failed to create booking");
+        throw new Error(error.message || t("booking_failed"));
       }
       return res.json();
     },
     onSuccess: () => {
+      // Invalidate both bookings and notifications queries
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
         title: t("booking_successful"),
         description: t("booking_confirmation_sent"),
@@ -170,7 +185,12 @@ export default function BookService() {
                 <Calendar
                   mode="single"
                   selected={selectedDate}
-                  onSelect={(date) => date && setSelectedDate(date)}
+                  onSelect={(date) => {
+                    if (date) {
+                      setSelectedDate(date);
+                      setSelectedTime(undefined); // Reset time when date changes
+                    }
+                  }}
                   disabled={(date) =>
                     isBefore(date, new Date()) ||
                     isAfter(date, addDays(new Date(), 30))
