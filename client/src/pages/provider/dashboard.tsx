@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -37,7 +38,7 @@ const item = {
   show: { opacity: 1, y: 0 }
 };
 
-// Form validation schema
+// Extended service form schema with availability settings
 const serviceFormSchema = z.object({
   name: z.string().min(1, "Service name is required"),
   description: z.string().min(1, "Description is required"),
@@ -45,6 +46,53 @@ const serviceFormSchema = z.object({
   price: z.string().min(1, "Price is required"),
   duration: z.number().min(15, "Duration must be at least 15 minutes"),
   isAvailable: z.boolean().default(true),
+  workingHours: z.object({
+    monday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    tuesday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    wednesday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    thursday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    friday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    saturday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    sunday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+  }),
+  breakTime: z.array(z.object({
+    start: z.string(),
+    end: z.string(),
+  })),
+  maxDailyBookings: z.number().min(1, "Must accept at least 1 booking per day"),
+  bufferTime: z.number().min(0, "Buffer time must be non-negative"),
+  location: z.object({
+    lat: z.number(),
+    lng: z.number(),
+  }),
 });
 
 type ServiceFormData = z.infer<typeof serviceFormSchema>;
@@ -55,6 +103,13 @@ export default function ProviderDashboard() {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
+  const [activeTab, setActiveTab] = useState("basic");
+
+  const defaultWorkingHours = {
+    isAvailable: true,
+    start: "09:00",
+    end: "17:00",
+  };
 
   const form = useForm<ServiceFormData>({
     resolver: zodResolver(serviceFormSchema),
@@ -65,6 +120,19 @@ export default function ProviderDashboard() {
       price: "",
       duration: 60,
       isAvailable: true,
+      workingHours: {
+        monday: defaultWorkingHours,
+        tuesday: defaultWorkingHours,
+        wednesday: defaultWorkingHours,
+        thursday: defaultWorkingHours,
+        friday: defaultWorkingHours,
+        saturday: defaultWorkingHours,
+        sunday: { ...defaultWorkingHours, isAvailable: false },
+      },
+      breakTime: [{ start: "13:00", end: "14:00" }],
+      maxDailyBookings: 8,
+      bufferTime: 15,
+      location: { lat: 19.076, lng: 72.8777 }, // Default to Mumbai coordinates
     },
   });
 
@@ -286,6 +354,12 @@ export default function ProviderDashboard() {
                             <span>Category</span>
                             <span>{service.category}</span>
                           </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Status</span>
+                            <span className={service.isAvailable ? "text-green-600" : "text-red-600"}>
+                              {service.isAvailable ? "Available" : "Unavailable"}
+                            </span>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -305,7 +379,7 @@ export default function ProviderDashboard() {
 
         {/* Service Creation/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[800px]">
             <DialogHeader>
               <DialogTitle>
                 {editingService ? 'Edit Service' : 'Add New Service'}
@@ -313,106 +387,258 @@ export default function ProviderDashboard() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Service Name</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="basic">Basic Info</TabsTrigger>
+                    <TabsTrigger value="availability">Availability</TabsTrigger>
+                    <TabsTrigger value="scheduling">Scheduling</TabsTrigger>
+                    <TabsTrigger value="location">Location</TabsTrigger>
+                  </TabsList>
 
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <TabsContent value="basic">
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Service Name</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Beauty & Wellness">Beauty & Wellness</SelectItem>
-                          <SelectItem value="Home Services">Home Services</SelectItem>
-                          <SelectItem value="Professional Services">Professional Services</SelectItem>
-                          <SelectItem value="Health & Fitness">Health & Fitness</SelectItem>
-                          <SelectItem value="Education & Training">Education & Training</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                      <FormField
+                        control={form.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="price"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Price (₹)</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="number" min="0" step="0.01" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                      <FormField
+                        control={form.control}
+                        name="category"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Category</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a category" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Beauty & Wellness">Beauty & Wellness</SelectItem>
+                                <SelectItem value="Home Services">Home Services</SelectItem>
+                                <SelectItem value="Professional Services">Professional Services</SelectItem>
+                                <SelectItem value="Health & Fitness">Health & Fitness</SelectItem>
+                                <SelectItem value="Education & Training">Education & Training</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                  <FormField
-                    control={form.control}
-                    name="duration"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Duration (minutes)</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="number" min="15" step="15" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="isAvailable"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel>Available for Booking</FormLabel>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="price"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Price (₹)</FormLabel>
+                              <FormControl>
+                                <Input {...field} type="number" min="0" step="0.01" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+
+                        <FormField
+                          control={form.control}
+                          name="duration"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Duration (minutes)</FormLabel>
+                              <FormControl>
+                                <Input {...field} type="number" min="15" step="15" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="availability">
+                    <div className="space-y-4">
+                      {Object.entries(form.getValues().workingHours).map(([day, hours]) => (
+                        <div key={day} className="flex items-center space-x-4 p-4 border rounded">
+                          <FormField
+                            control={form.control}
+                            name={`workingHours.${day}.isAvailable`}
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2">
+                                <FormControl>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <FormLabel className="capitalize">{day}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+
+                          <div className="flex-1 grid grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name={`workingHours.${day}.start`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Start Time</FormLabel>
+                                  <FormControl>
+                                    <Input type="time" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name={`workingHours.${day}.end`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>End Time</FormLabel>
+                                  <FormControl>
+                                    <Input type="time" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="scheduling">
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="maxDailyBookings"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Maximum Daily Bookings</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="1"
+                                {...field}
+                                onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="bufferTime"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Buffer Time Between Bookings (minutes)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="5"
+                                {...field}
+                                onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="isAvailable"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                              <FormLabel>Available for Booking</FormLabel>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="location">
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="location.lat"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Latitude</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.000001"
+                                {...field}
+                                onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="location.lng"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Longitude</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.000001"
+                                {...field}
+                                onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </TabsContent>
+                </Tabs>
 
                 <div className="flex justify-end">
                   <Button
