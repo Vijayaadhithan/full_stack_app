@@ -6,16 +6,26 @@ import { Service, User, Review } from "@shared/schema";
 import { Loader2, MapPin, Clock, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useParams, Link } from "wouter";
+import { format } from "date-fns";
 
 export default function ServiceProvider() {
   const { id } = useParams<{ id: string }>();
 
-  const { data: service, isLoading } = useQuery<Service>({
-    queryKey: [`/api/services/${id}`],
+  // Fetch service details with provider info
+  const { data: service, isLoading } = useQuery<Service & { provider: User }>({
+    queryKey: [`/api/services/${id}`, "with-provider"],
     enabled: !!id,
   });
 
-  if (isLoading) {
+  // Fetch reviews separately
+  const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
+    queryKey: [`/api/reviews/service/${id}`],
+    enabled: !!id,
+  });
+
+  const isPageLoading = isLoading || reviewsLoading;
+
+  if (isPageLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -29,17 +39,17 @@ export default function ServiceProvider() {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
-          <h2 className="text-2xl font-bold">Service not found</h2>
+          <h2 className="text-2xl font-bold mb-4">Service not found</h2>
           <Link href="/customer/browse-services">
-            <Button className="mt-4">Back to Services</Button>
+            <Button>Back to Services</Button>
           </Link>
         </div>
       </DashboardLayout>
     );
   }
 
-  const averageRating = service.reviews?.length
-    ? service.reviews.reduce((acc, review) => acc + review.rating, 0) / service.reviews.length
+  const averageRating = reviews?.length
+    ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length
     : 0;
 
   return (
@@ -50,6 +60,7 @@ export default function ServiceProvider() {
         className="max-w-4xl mx-auto space-y-6 p-6"
       >
         <div className="flex flex-col md:flex-row gap-6">
+          {/* Provider Info Card */}
           <motion.div className="md:w-1/3">
             <Card>
               <CardContent className="pt-6 space-y-4">
@@ -62,7 +73,7 @@ export default function ServiceProvider() {
                   <h2 className="text-2xl font-bold">{service.provider?.name}</h2>
                   <div className="flex items-center gap-1 text-yellow-500">
                     <Star className="h-4 w-4 fill-current" />
-                    <span>{averageRating.toFixed(1)} ({service.reviews?.length || 0} reviews)</span>
+                    <span>{averageRating.toFixed(1)} ({reviews?.length || 0} reviews)</span>
                   </div>
                   <p className="text-muted-foreground mt-2 flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
@@ -73,6 +84,7 @@ export default function ServiceProvider() {
             </Card>
           </motion.div>
 
+          {/* Service Details */}
           <motion.div className="md:w-2/3 space-y-6">
             <Card>
               <CardHeader>
@@ -101,16 +113,17 @@ export default function ServiceProvider() {
               </CardContent>
             </Card>
 
+            {/* Reviews Section */}
             <Card>
               <CardHeader>
                 <CardTitle>Reviews</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {!service.reviews?.length ? (
+                  {!reviews?.length ? (
                     <p className="text-center text-muted-foreground">No reviews yet</p>
                   ) : (
-                    service.reviews.map((review) => (
+                    reviews.map((review) => (
                       <div key={review.id} className="border-b pb-4 last:border-0">
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
@@ -120,7 +133,7 @@ export default function ServiceProvider() {
                               ))}
                             </div>
                             <span className="text-sm text-muted-foreground">
-                              {new Date(review.createdAt || '').toLocaleDateString()}
+                              {format(new Date(review.createdAt || ''), "MMM d, yyyy")}
                             </span>
                           </div>
                         </div>

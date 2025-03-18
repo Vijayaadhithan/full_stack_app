@@ -38,7 +38,6 @@ const item = {
   show: { opacity: 1, y: 0 }
 };
 
-// Update the schema first to fix the availability section
 const serviceFormSchema = z.object({
   name: z.string().min(1, "Service name is required"),
   description: z.string().min(1, "Description is required"),
@@ -498,59 +497,51 @@ export default function ProviderDashboard() {
                   </TabsContent>
 
                   <TabsContent value="availability">
-                    <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {Object.entries(form.getValues().workingHours).map(([day, _]) => (
-                        <div key={day} className="flex items-center space-x-4 p-4 border rounded">
-                          <FormField
-                            control={form.control}
-                            name={`workingHours.${day}.isAvailable`}
-                            render={({ field }) => (
-                              <FormItem className="flex items-center space-x-2">
-                                <FormControl>
-                                  <Switch
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                  />
-                                </FormControl>
-                                <FormLabel className="capitalize">{day}</FormLabel>
-                              </FormItem>
-                            )}
-                          />
-
-                          <div className="flex-1 grid grid-cols-2 gap-4">
+                        <div key={day} className="border rounded p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="capitalize font-medium">{day}</span>
+                            <FormField
+                              control={form.control}
+                              name={`workingHours.${day}.isAvailable`}
+                              render={({ field }) => (
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              )}
+                            />
+                          </div>
+                          <div className="space-y-2">
                             <FormField
                               control={form.control}
                               name={`workingHours.${day}.start`}
                               render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Start Time</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="time"
-                                      {...field}
-                                      onChange={(e) => field.onChange(e.target.value)}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm">From</span>
+                                  <Input
+                                    type="time"
+                                    {...field}
+                                    className="flex-1"
+                                    onChange={(e) => field.onChange(e.target.value)}
+                                  />
+                                </div>
                               )}
                             />
-
                             <FormField
                               control={form.control}
                               name={`workingHours.${day}.end`}
                               render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>End Time</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="time"
-                                      {...field}
-                                      onChange={(e) => field.onChange(e.target.value)}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm">To</span>
+                                  <Input
+                                    type="time"
+                                    {...field}
+                                    className="flex-1"
+                                    onChange={(e) => field.onChange(e.target.value)}
+                                  />
+                                </div>
                               )}
                             />
                           </div>
