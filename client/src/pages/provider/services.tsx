@@ -17,12 +17,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Edit2 } from "lucide-react";
 import { Service, insertServiceSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
 
-// Extended service form schema with availability
+// Service form schema with availability settings
 const serviceFormSchema = insertServiceSchema.extend({
   workingHours: z.object({
     monday: z.object({
@@ -194,96 +194,88 @@ export default function ProviderServices() {
   return (
     <DashboardLayout>
       <div className="p-6">
-        <div className="grid gap-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium">Active Services</h2>
-            <Button onClick={() => setDialogOpen(true)} variant="default" size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              {t('add_service')}
-            </Button>
-          </div>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center min-h-[400px]">
-              <Loader2 className="h-8 w-8 animate-spin" />
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-medium">Services Offered</h2>
+              <Button onClick={() => setDialogOpen(true)} variant="default" size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Service
+              </Button>
             </div>
-          ) : !services?.length ? (
-            <Card>
-              <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">{t('no_services_yet')}</p>
-                <Button
-                  className="mt-4"
-                  onClick={() => setDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  {t('add_service')}
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-6 md:grid-cols-2">
-              {services.map((service) => (
-                <Card key={service.id}>
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold">{service.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {service.description}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingService(service);
-                          form.reset({
-                            ...service,
-                            price: service.price.toString(),
-                          });
-                          setDialogOpen(true);
-                        }}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                    </div>
 
-                    <div className="mt-4 space-y-2">
-                      <div className="flex justify-between items-center text-sm">
-                        <span>{t('price')}</span>
-                        <span className="font-semibold">₹{service.price}</span>
+            {isLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : !services?.length ? (
+              <div className="text-center text-muted-foreground">
+                <p>No services added yet.</p>
+                <p className="mt-1">Click the Add Service button to create your first service.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {services.map((service) => (
+                  <Card key={service.id}>
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold">{service.name}</h3>
+                          <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setEditingService(service);
+                            form.reset({
+                              ...service,
+                              price: service.price.toString(),
+                            });
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>{t('duration')}</span>
-                        <span className="font-semibold">{service.duration} {t('minutes')}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>{t('category')}</span>
-                        <span className="font-semibold">{service.category}</span>
-                      </div>
-                    </div>
 
-                    <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <span className="text-sm font-medium">{t('availability')}</span>
+                      <div className="mt-4 space-y-2">
+                        <div className="flex justify-between items-center text-sm">
+                          <span>Price</span>
+                          <span className="font-semibold">₹{service.price}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span>Duration</span>
+                          <span>{service.duration} minutes</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span>Category</span>
+                          <span className="font-semibold">{service.category}</span>
+                        </div>
                       </div>
-                      <Switch
-                        checked={service.isAvailable}
-                        onCheckedChange={(checked) =>
-                          updateServiceMutation.mutate({
-                            id: service.id,
-                            data: { isAvailable: checked },
-                          })
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+                      <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                          <span className="text-sm font-medium">Availability</span>
+                        </div>
+                        <Switch
+                          checked={service.isAvailable}
+                          onCheckedChange={(checked) =>
+                            updateServiceMutation.mutate({
+                              id: service.id,
+                              data: { isAvailable: checked },
+                            })
+                          }
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[800px]">
           <DialogHeader>
