@@ -16,6 +16,9 @@ import ServiceProvider from "@/pages/customer/service-provider";
 import BookService from "@/pages/customer/book-service";
 import OrderDetails from "@/pages/customer/order-details";
 import ProviderDashboard from "@/pages/provider/dashboard";
+import ProviderProfile from "@/pages/provider/profile";
+import ProviderServices from "@/pages/provider/services";
+import ProviderBookings from "@/pages/provider/bookings";
 import ShopDashboard from "@/pages/shop/dashboard";
 import AdminDashboard from "@/pages/admin/dashboard";
 import NotFound from "@/pages/not-found";
@@ -33,7 +36,13 @@ function Router() {
       <ProtectedRoute path="/customer/service-provider/:id" component={ServiceProvider} />
       <ProtectedRoute path="/customer/book-service/:id" component={BookService} />
       <ProtectedRoute path="/customer/order/:id" component={OrderDetails} />
+
+      {/* Provider Routes */}
       <ProtectedRoute path="/provider" component={ProviderDashboard} />
+      <ProtectedRoute path="/provider/profile" component={ProviderProfile} />
+      <ProtectedRoute path="/provider/services" component={ProviderServices} />
+      <ProtectedRoute path="/provider/bookings" component={ProviderBookings} />
+
       <ProtectedRoute path="/shop" component={ShopDashboard} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />
       <Route path="/" component={AuthPage} />

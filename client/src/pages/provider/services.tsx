@@ -34,8 +34,8 @@ const item = {
 };
 
 const serviceFormSchema = insertServiceSchema.extend({
-  bufferTime: z.string().transform(val => parseInt(val)),
-  duration: z.string().transform(val => parseInt(val)),
+  bufferTime: z.coerce.number().min(0, "Buffer time must be a positive number"),
+  duration: z.coerce.number().min(15, "Duration must be at least 15 minutes"),
 });
 
 type ServiceFormData = z.infer<typeof serviceFormSchema>;
@@ -55,9 +55,9 @@ export default function ProviderServices() {
       name: "",
       description: "",
       price: "",
-      duration: "60",
+      duration: 60,
       category: "Beauty & Wellness",
-      bufferTime: "15",
+      bufferTime: 15,
       isAvailable: true,
       images: [],
       providerId: user?.id || null,
@@ -324,7 +324,7 @@ export default function ProviderServices() {
                         <span className="text-sm font-medium">Availability</span>
                       </div>
                       <Switch
-                        checked={service.isAvailable || false}
+                        checked={service.isAvailable}
                         onCheckedChange={(checked) => toggleAvailability(service.id, checked)}
                       />
                     </div>
