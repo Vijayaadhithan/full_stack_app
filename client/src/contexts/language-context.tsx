@@ -9,29 +9,54 @@ type LanguageContextType = {
   t: (key: string) => string;
 };
 
-const LanguageContext = React.createContext<LanguageContextType | undefined>(undefined);
+const defaultLanguage: Language = 'en';
+
+export const LanguageContext = React.createContext<LanguageContextType>({
+  language: defaultLanguage,
+  setLanguage: () => {},
+  t: (key) => key,
+});
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguage] = React.useState<Language>('en');
+  const [language, setLanguageState] = React.useState<Language>(defaultLanguage);
 
   React.useEffect(() => {
-    const savedLang = localStorage.getItem('language') as Language;
-    if (savedLang && ['en', 'hi', 'ta'].includes(savedLang)) {
-      setLanguage(savedLang);
+    try {
+      const savedLang = localStorage.getItem('language') as Language;
+      if (savedLang && ['en', 'hi', 'ta'].includes(savedLang)) {
+        setLanguageState(savedLang);
+      }
+    } catch (error) {
+      console.error('Error loading language from localStorage:', error);
     }
   }, []);
 
-  const handleSetLanguage = (lang: Language) => {
-    setLanguage(lang);
-    localStorage.setItem('language', lang);
-  };
+  const handleSetLanguage = React.useCallback((lang: Language) => {
+    try {
+      setLanguageState(lang);
+      localStorage.setItem('language', lang);
+    } catch (error) {
+      console.error('Error saving language to localStorage:', error);
+    }
+  }, []);
 
-  const t = (key: string): string => {
-    return translations[language]?.[key] || translations['en'][key] || key;
-  };
+  const t = React.useCallback((key: string): string => {
+    try {
+      return translations[language]?.[key] || translations['en'][key] || key;
+    } catch (error) {
+      console.error('Error in translation lookup:', error);
+      return key;
+    }
+  }, [language]);
+
+  const value = React.useMemo(() => ({
+    language,
+    setLanguage: handleSetLanguage,
+    t,
+  }), [language, handleSetLanguage, t]);
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage: handleSetLanguage, t }}>
+    <LanguageContext.Provider value={value}>
       {children}
     </LanguageContext.Provider>
   );
@@ -40,6 +65,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 export function useLanguage() {
   const context = React.useContext(LanguageContext);
   if (!context) {
+    console.error('useLanguage must be used within a LanguageProvider');
     throw new Error('useLanguage must be used within a LanguageProvider');
   }
   return context;

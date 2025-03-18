@@ -11,18 +11,25 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Notification } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLanguage } from "@/contexts/language-context";
 import { useState } from "react";
 
 export function NotificationsCenter() {
   const [open, setOpen] = useState(false);
+  const { t } = useLanguage();
 
   const { data: notifications } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
 
   const markAsReadMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("PATCH", `/api/notifications/${id}/read`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to mark notification as read");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -40,6 +47,8 @@ export function NotificationsCenter() {
         return "📦";
       case "return":
         return "↩️";
+      case "service":
+        return "🛠️";
       default:
         return "📬";
     }
@@ -59,38 +68,44 @@ export function NotificationsCenter() {
       </SheetTrigger>
       <SheetContent>
         <SheetHeader>
-          <SheetTitle>Notifications</SheetTitle>
+          <SheetTitle>{t('notifications')}</SheetTitle>
         </SheetHeader>
         <ScrollArea className="h-[calc(100vh-5rem)] mt-4">
           <div className="space-y-4 pr-4">
-            {notifications?.map((notification) => (
-              <div
-                key={notification.id}
-                className={`p-4 rounded-lg border ${
-                  notification.isRead ? "bg-background" : "bg-muted"
-                }`}
-                onClick={() => {
-                  if (!notification.isRead) {
-                    markAsReadMutation.mutate(notification.id);
-                  }
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">
-                    {getNotificationIcon(notification.type)}
-                  </span>
-                  <div>
-                    <h4 className="font-medium">{notification.title}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(notification.createdAt || '').toLocaleString()}
-                    </p>
+            {!notifications?.length ? (
+              <p className="text-center text-muted-foreground">{t('no_notifications')}</p>
+            ) : (
+              notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`p-4 rounded-lg border ${
+                    notification.isRead ? "bg-background" : "bg-muted"
+                  } cursor-pointer`}
+                  onClick={() => {
+                    if (!notification.isRead) {
+                      markAsReadMutation.mutate(notification.id);
+                    }
+                  }}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">
+                      {getNotificationIcon(notification.type)}
+                    </span>
+                    <div>
+                      <h4 className="font-medium">{t(notification.title)}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {t(notification.message)}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {notification.createdAt
+                          ? new Date(notification.createdAt).toLocaleString()
+                          : ''}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </ScrollArea>
       </SheetContent>

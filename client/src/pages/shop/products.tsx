@@ -7,13 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/contexts/language-context";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2, Package } from "lucide-react";
+import { Loader2, Plus, Edit2, Package, ImagePlus, AlertCircle } from "lucide-react";
 import { Product, insertProductSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
@@ -25,15 +27,25 @@ const productFormSchema = insertProductSchema.extend({
   minOrderQuantity: z.coerce.number().min(1, "Minimum order quantity must be at least 1"),
   maxOrderQuantity: z.coerce.number().optional(),
   lowStockThreshold: z.coerce.number().min(1, "Low stock threshold must be at least 1"),
+  specifications: z.record(z.string(), z.string()).optional(),
+  dimensions: z.object({
+    length: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }).optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 type ProductFormData = z.infer<typeof productFormSchema>;
 
 export default function ShopProducts() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [activeTab, setActiveTab] = useState("basic");
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
 
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: [`/api/products/shop/${user?.id}`],
@@ -55,8 +67,35 @@ export default function ShopProducts() {
       minOrderQuantity: 1,
       maxOrderQuantity: undefined,
       lowStockThreshold: 5,
+      specifications: {},
+      tags: [],
     },
   });
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files?.length) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('image', files[0]);
+
+      const res = await apiRequest("POST", "/api/upload", formData);
+      if (!res.ok) throw new Error("Failed to upload image");
+
+      const { url } = await res.json();
+      const currentImages = form.getValues('images') || [];
+      form.setValue('images', [...currentImages, url]);
+      setImageUploadError(null);
+    } catch (error) {
+      setImageUploadError("Failed to upload image. Please try again.");
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    const currentImages = form.getValues('images') || [];
+    form.setValue('images', currentImages.filter((_, i) => i !== index));
+  };
 
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
@@ -73,15 +112,15 @@ export default function ShopProducts() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/products/shop/${user?.id}`] });
       toast({
-        title: "Success",
-        description: "Product created successfully",
+        title: t("success"),
+        description: t("product_created_successfully"),
       });
       form.reset();
       setDialogOpen(false);
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: t("error"),
         description: error.message,
         variant: "destructive",
       });
@@ -100,15 +139,15 @@ export default function ShopProducts() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/products/shop/${user?.id}`] });
       toast({
-        title: "Success",
-        description: "Product updated successfully",
+        title: t("success"),
+        description: t("product_updated_successfully"),
       });
       setDialogOpen(false);
       setEditingProduct(null);
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: t("error"),
         description: error.message,
         variant: "destructive",
       });
@@ -127,190 +166,343 @@ export default function ShopProducts() {
     <ShopLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">My Products</h1>
+          <h1 className="text-2xl font-bold">{t('my_products')}</h1>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                Add New Product
+                {t('add_product')}
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-[800px]">
               <DialogHeader>
-                <DialogTitle>{editingProduct ? 'Edit Product' : 'Add New Product'}</DialogTitle>
+                <DialogTitle>
+                  {editingProduct ? t('edit_product') : t('add_product')}
+                </DialogTitle>
               </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Product Name</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
 
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="basic">{t('basic_info')}</TabsTrigger>
+                  <TabsTrigger value="inventory">{t('inventory')}</TabsTrigger>
+                  <TabsTrigger value="details">{t('details')}</TabsTrigger>
+                </TabsList>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="price"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Selling Price (₹)</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" min="0" step="0.01" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="mrp"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>MRP (₹)</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" min="0" step="0.01" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="category"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Category</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <TabsContent value="basic">
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('product_name')}</FormLabel>
                             <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select category" />
-                              </SelectTrigger>
+                              <Input {...field} />
                             </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Electronics">Electronics</SelectItem>
-                              <SelectItem value="Fashion">Fashion</SelectItem>
-                              <SelectItem value="Home">Home & Living</SelectItem>
-                              <SelectItem value="Beauty">Beauty & Personal Care</SelectItem>
-                              <SelectItem value="Books">Books & Stationery</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                    <FormField
-                      control={form.control}
-                      name="stock"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Stock Quantity</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" min="0" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                      <FormField
+                        control={form.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('product_description')}</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                    <FormField
-                      control={form.control}
-                      name="minOrderQuantity"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Minimum Order Quantity</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" min="1" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="price"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t('selling_price')} (₹)</FormLabel>
+                              <FormControl>
+                                <Input {...field} type="number" min="0" step="0.01" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                    <FormField
-                      control={form.control}
-                      name="maxOrderQuantity"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Maximum Order Quantity</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" min="1" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                        <FormField
+                          control={form.control}
+                          name="mrp"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t('mrp')} (₹)</FormLabel>
+                              <FormControl>
+                                <Input {...field} type="number" min="0" step="0.01" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                    <FormField
-                      control={form.control}
-                      name="lowStockThreshold"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Low Stock Alert Threshold</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" min="1" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                        <FormField
+                          control={form.control}
+                          name="category"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t('category')}</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder={t('select_category')} />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Electronics">{t('electronics')}</SelectItem>
+                                  <SelectItem value="Fashion">{t('fashion')}</SelectItem>
+                                  <SelectItem value="Home">{t('home_living')}</SelectItem>
+                                  <SelectItem value="Beauty">{t('beauty_personal_care')}</SelectItem>
+                                  <SelectItem value="Books">{t('books_stationery')}</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
 
-                  <FormField
-                    control={form.control}
-                    name="isAvailable"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                          <FormLabel>Available for Purchase</FormLabel>
+                      <div className="space-y-4">
+                        <FormLabel>{t('product_images')}</FormLabel>
+                        <div className="grid grid-cols-4 gap-4">
+                          {form.watch('images')?.map((image, index) => (
+                            <div key={index} className="relative">
+                              <img src={image} alt="" className="w-full h-24 object-cover rounded" />
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="absolute top-1 right-1"
+                                onClick={() => handleRemoveImage(index)}
+                              >
+                                <AlertCircle className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          <label className="border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer">
+                            <ImagePlus className="h-8 w-8 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground mt-2">{t('add_image')}</span>
+                            <input type="file" className="hidden" onChange={handleImageUpload} accept="image/*" />
+                          </label>
                         </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
+                        {imageUploadError && (
+                          <p className="text-sm text-destructive">{imageUploadError}</p>
+                        )}
+                      </div>
+                    </form>
+                  </Form>
+                </TabsContent>
 
-                  <div className="flex justify-end">
-                    <Button
-                      type="submit"
-                      disabled={createProductMutation.isPending || updateProductMutation.isPending}
-                    >
-                      {(createProductMutation.isPending || updateProductMutation.isPending) && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      {editingProduct ? 'Update Product' : 'Create Product'}
-                    </Button>
-                  </div>
-                </form>
-              </Form>
+                <TabsContent value="inventory">
+                  <Form {...form}>
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="stock"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('stock_quantity')}</FormLabel>
+                            <FormControl>
+                              <Input {...field} type="number" min="0" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="minOrderQuantity"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('minimum_order_quantity')}</FormLabel>
+                            <FormControl>
+                              <Input {...field} type="number" min="1" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="maxOrderQuantity"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('maximum_order_quantity')}</FormLabel>
+                            <FormControl>
+                              <Input {...field} type="number" min="1" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="lowStockThreshold"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('low_stock_alert_threshold')}</FormLabel>
+                            <FormControl>
+                              <Input {...field} type="number" min="1" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </Form>
+                </TabsContent>
+
+                <TabsContent value="details">
+                  <Form {...form}>
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="specifications"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('specifications')}</FormLabel>
+                            <div className="space-y-2">
+                              {Object.entries(field.value || {}).map(([key, value], index) => (
+                                <div key={index} className="grid grid-cols-2 gap-2">
+                                  <Input
+                                    placeholder={t('specification_key')}
+                                    value={key}
+                                    onChange={(e) => {
+                                      const newSpecs = { ...field.value };
+                                      delete newSpecs[key];
+                                      newSpecs[e.target.value] = value;
+                                      field.onChange(newSpecs);
+                                    }}
+                                  />
+                                  <Input
+                                    placeholder={t('specification_value')}
+                                    value={value}
+                                    onChange={(e) => {
+                                      field.onChange({
+                                        ...field.value,
+                                        [key]: e.target.value,
+                                      });
+                                    }}
+                                  />
+                                </div>
+                              ))}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  field.onChange({
+                                    ...field.value,
+                                    "": "",
+                                  })
+                                }
+                              >
+                                {t('add_specification')}
+                              </Button>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="dimensions"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('dimensions')} (cm)</FormLabel>
+                            <div className="grid grid-cols-3 gap-2">
+                              <Input
+                                placeholder={t('length')}
+                                type="number"
+                                value={field.value?.length || ""}
+                                onChange={(e) =>
+                                  field.onChange({
+                                    ...field.value,
+                                    length: parseFloat(e.target.value),
+                                  })
+                                }
+                              />
+                              <Input
+                                placeholder={t('width')}
+                                type="number"
+                                value={field.value?.width || ""}
+                                onChange={(e) =>
+                                  field.onChange({
+                                    ...field.value,
+                                    width: parseFloat(e.target.value),
+                                  })
+                                }
+                              />
+                              <Input
+                                placeholder={t('height')}
+                                type="number"
+                                value={field.value?.height || ""}
+                                onChange={(e) =>
+                                  field.onChange({
+                                    ...field.value,
+                                    height: parseFloat(e.target.value),
+                                  })
+                                }
+                              />
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="tags"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('tags')}</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder={t('enter_tags_comma_separated')}
+                                value={field.value?.join(", ") || ""}
+                                onChange={(e) =>
+                                  field.onChange(
+                                    e.target.value
+                                      .split(",")
+                                      .map((tag) => tag.trim())
+                                      .filter(Boolean)
+                                  )
+                                }
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </Form>
+                </TabsContent>
+              </Tabs>
+
+              <div className="flex justify-end mt-4">
+                <Button
+                  type="submit"
+                  disabled={form.formState.isSubmitting}
+                  onClick={form.handleSubmit(onSubmit)}
+                >
+                  {form.formState.isSubmitting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {editingProduct ? t('update_product') : t('create_product')}
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -322,7 +514,7 @@ export default function ShopProducts() {
         ) : !products?.length ? (
           <Card>
             <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">No products created yet</p>
+              <p className="text-muted-foreground">{t('no_products_created_yet')}</p>
             </CardContent>
           </Card>
         ) : (
@@ -352,7 +544,7 @@ export default function ShopProducts() {
 
                   <div className="mt-4 space-y-2">
                     <div className="flex justify-between items-center text-sm">
-                      <span>Price</span>
+                      <span>{t('price')}</span>
                       <div>
                         <span className="font-semibold">₹{product.price}</span>
                         {product.mrp > product.price && (
@@ -363,22 +555,22 @@ export default function ShopProducts() {
                       </div>
                     </div>
                     <div className="flex justify-between items-center text-sm">
-                      <span>Stock</span>
+                      <span>{t('stock')}</span>
                       <span className={`font-semibold ${
                         product.stock <= (product.lowStockThreshold || 5) ? 'text-red-500' : ''
                       }`}>
-                        {product.stock} units
+                        {product.stock} {t('units')}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
-                      <span>Category</span>
+                      <span>{t('category')}</span>
                       <span className="font-semibold">{product.category}</span>
                     </div>
                   </div>
 
                   <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <span className="text-sm font-medium">Availability</span>
+                      <span className="text-sm font-medium">{t('availability')}</span>
                     </div>
                     <Switch
                       checked={product.isAvailable}
