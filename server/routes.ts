@@ -147,10 +147,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const services = await storage.getServices();
       console.log("All services:", services); // Debug log
-      res.json(services);
+
+      // Map through services to include provider info
+      const servicesWithDetails = await Promise.all(services.map(async (service) => {
+        const provider = await storage.getUser(service.providerId);
+        const reviews = await storage.getReviewsByService(service.id);
+        const rating = reviews?.length 
+          ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length 
+          : null;
+
+        return {
+          ...service,
+          rating,
+          provider: provider ? {
+            id: provider.id,
+            name: provider.name,
+            profilePicture: provider.profilePicture,
+          } : null,
+        };
+      }));
+
+      res.json(servicesWithDetails);
     } catch (error) {
       console.error("Error fetching services:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch services" });
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch services" });
     }
   });
 
