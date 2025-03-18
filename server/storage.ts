@@ -391,8 +391,8 @@ export class MemStorage implements IStorage {
   // Availability and waitlist operations
   async checkAvailability(serviceId: number, date: Date): Promise<boolean> {
     const bookings = Array.from(this.bookings.values()).filter(
-      (booking) => 
-        booking.serviceId === serviceId && 
+      (booking) =>
+        booking.serviceId === serviceId &&
         booking.bookingDate.toDateString() === date.toDateString()
     );
 
@@ -415,6 +415,94 @@ export class MemStorage implements IStorage {
     const waitlist = Array.from(this.waitlist.get(serviceId)!.entries());
     const position = waitlist.findIndex(([id]) => id === customerId);
     return position === -1 ? -1 : position + 1;
+  }
+
+  async initializeSampleData() {
+    // Create a service provider
+    const provider = await this.createUser({
+      username: "serviceProvider1",
+      password: "password123",
+      role: "provider",
+      name: "Wellness Spa",
+      phone: "+91-9876543210",
+      email: "spa@example.com",
+      address: "123 Main St, Mumbai",
+      language: "en",
+    });
+
+    // Create sample services
+    const services = [
+      {
+        name: "Full Body Massage",
+        description: "60-minute relaxing massage therapy",
+        price: "1500",
+        duration: 60,
+        category: "Wellness",
+        providerId: provider.id,
+        isAvailable: true,
+        bufferTime: 15,
+        images: ["https://example.com/massage.jpg"],
+        location: { lat: 19.0760, lng: 72.8777 },
+      },
+      {
+        name: "Hair Styling",
+        description: "Professional hair styling and treatment",
+        price: "1000",
+        duration: 45,
+        category: "Beauty",
+        providerId: provider.id,
+        isAvailable: true,
+        bufferTime: 10,
+        images: ["https://example.com/hairstyle.jpg"],
+        location: { lat: 19.0760, lng: 72.8777 },
+      },
+    ];
+
+    for (const service of services) {
+      await this.createService(service);
+    }
+
+    // Create a shop owner
+    const shop = await this.createUser({
+      username: "shopowner1",
+      password: "password123",
+      role: "shop",
+      name: "Fashion Store",
+      phone: "+91-9876543211",
+      email: "fashion@example.com",
+      address: "456 Market St, Delhi",
+      language: "en",
+    });
+
+    // Create sample products
+    const products = [
+      {
+        name: "Designer T-Shirt",
+        description: "100% cotton premium t-shirt",
+        price: "999",
+        stock: 50,
+        category: "Clothing",
+        shopId: shop.id,
+        isAvailable: true,
+        images: ["https://example.com/tshirt.jpg"],
+        discount: "10",
+      },
+      {
+        name: "Leather Wallet",
+        description: "Genuine leather wallet with card slots",
+        price: "1499",
+        stock: 30,
+        category: "Accessories",
+        shopId: shop.id,
+        isAvailable: true,
+        images: ["https://example.com/wallet.jpg"],
+        discount: null,
+      },
+    ];
+
+    for (const product of products) {
+      await this.createProduct(product);
+    }
   }
 }
 
