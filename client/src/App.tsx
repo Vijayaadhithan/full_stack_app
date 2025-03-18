@@ -10,6 +10,7 @@ import CustomerDashboard from "@/pages/customer/dashboard";
 import BrowseServices from "@/pages/customer/browse-services";
 import BrowseProducts from "@/pages/customer/browse-products";
 import Cart from "@/pages/customer/cart";
+import Bookings from "@/pages/customer/bookings";
 import ProviderDashboard from "@/pages/provider/dashboard";
 import ShopDashboard from "@/pages/shop/dashboard";
 import AdminDashboard from "@/pages/admin/dashboard";
@@ -23,6 +24,7 @@ function Router() {
       <ProtectedRoute path="/customer/browse-services" component={BrowseServices} />
       <ProtectedRoute path="/customer/browse-products" component={BrowseProducts} />
       <ProtectedRoute path="/customer/cart" component={Cart} />
+      <ProtectedRoute path="/customer/bookings" component={Bookings} />
       <ProtectedRoute path="/provider" component={ProviderDashboard} />
       <ProtectedRoute path="/shop" component={ShopDashboard} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />
