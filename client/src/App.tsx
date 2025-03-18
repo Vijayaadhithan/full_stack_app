@@ -13,6 +13,7 @@ import Cart from "@/pages/customer/cart";
 import Bookings from "@/pages/customer/bookings";
 import ServiceProvider from "@/pages/customer/service-provider";
 import BookService from "@/pages/customer/book-service";
+import OrderDetails from "@/pages/customer/order-details";
 import ProviderDashboard from "@/pages/provider/dashboard";
 import ShopDashboard from "@/pages/shop/dashboard";
 import AdminDashboard from "@/pages/admin/dashboard";
@@ -29,6 +30,7 @@ function Router() {
       <ProtectedRoute path="/customer/bookings" component={Bookings} />
       <ProtectedRoute path="/customer/service-provider/:id" component={ServiceProvider} />
       <ProtectedRoute path="/customer/book-service/:id" component={BookService} />
+      <ProtectedRoute path="/customer/order/:id" component={OrderDetails} />
       <ProtectedRoute path="/provider" component={ProviderDashboard} />
       <ProtectedRoute path="/shop" component={ShopDashboard} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />

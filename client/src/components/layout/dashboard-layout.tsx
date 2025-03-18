@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { MainNav } from "@/components/navigation/main-nav";
+import { NotificationsCenter } from "@/components/notifications-center";
 import { motion } from "framer-motion";
 
 interface DashboardLayoutProps {
@@ -9,7 +10,10 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
-      <MainNav />
+      <div className="flex items-center justify-between px-4 border-b">
+        <MainNav />
+        <NotificationsCenter />
+      </div>
       <motion.main 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

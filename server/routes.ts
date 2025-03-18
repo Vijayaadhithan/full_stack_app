@@ -10,7 +10,10 @@ import {
   insertOrderSchema,
   insertOrderItemSchema,
   insertReviewSchema,
-  insertNotificationSchema
+  insertNotificationSchema,
+  insertReturnRequestSchema,
+  InsertReturnRequest,
+  ReturnRequest,
 } from "@shared/schema";
 import Razorpay from "razorpay";
 
@@ -357,6 +360,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
     })));
   });
 
+
+  // Return and refund routes
+  app.post("/api/orders/:orderId/return", requireAuth, requireRole(["customer"]), async (req, res) => {
+    const result = insertReturnRequestSchema.safeParse(req.body);
+    if (!result.success) return res.status(400).json(result.error);
+
+    const order = await storage.getOrder(parseInt(req.params.orderId));
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    if (order.status === "delivered") {
+      const returnRequest = await storage.createReturnRequest({
+        ...result.data,
+        orderId: order.id,
+        status: "pending",
+        customerId: req.user!.id,
+      });
+
+      // Create notification for return request
+      await storage.createNotification({
+        userId: order.customerId,
+        type: "return",
+        title: "Return Request Received",
+        message: "Your return request has been received and is being processed.",
+      });
+
+      res.status(201).json(returnRequest);
+    } else {
+      res.status(400).json({ message: "Order must be delivered before initiating return" });
+    }
+  });
+
+  app.post("/api/returns/:id/approve", requireAuth, requireRole(["shop"]), async (req, res) => {
+    const returnRequest = await storage.getReturnRequest(parseInt(req.params.id));
+    if (!returnRequest) return res.status(404).json({ message: "Return request not found" });
+
+    // Process refund through Razorpay
+    await storage.processRefund(returnRequest.id);
+
+    const updatedReturn = await storage.updateReturnRequest(returnRequest.id, {
+      status: "approved",
+    });
+
+    // Notify customer about approved return
+    const order = await storage.getOrder(returnRequest.orderId);
+    if (order) {
+      await storage.createNotification({
+        userId: order.customerId,
+        type: "return",
+        title: "Return Request Approved",
+        message: "Your return request has been approved. Refund will be processed shortly.",
+      });
+
+      // Send SMS notification
+      const customer = await storage.getUser(order.customerId);
+      if (customer) {
+        await storage.sendSMSNotification(
+          customer.phone,
+          "Your return request has been approved. Refund will be processed shortly."
+        );
+      }
+    }
+
+    res.json(updatedReturn);
+  });
+
+  // Order tracking routes
+  app.get("/api/orders/:id/timeline", requireAuth, async (req, res) => {
+    const timeline = await storage.getOrderTimeline(parseInt(req.params.id));
+    res.json(timeline);
+  });
+
+  app.patch("/api/orders/:id/status", requireAuth, requireRole(["shop"]), async (req, res) => {
+    const { status, trackingInfo } = req.body;
+    const order = await storage.updateOrderStatus(
+      parseInt(req.params.id),
+      status,
+      trackingInfo
+    );
+
+    // Create notification for status update
+    await storage.createNotification({
+      userId: order.customerId,
+      type: "order",
+      title: `Order ${status}`,
+      message: `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`,
+    });
+
+    // Send SMS notification for important status updates
+    if (["confirmed", "shipped", "delivered"].includes(status)) {
+      const customer = await storage.getUser(order.customerId);
+      if (customer) {
+        await storage.sendSMSNotification(
+          customer.phone,
+          `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`
+        );
+      }
+    }
+
+    res.json(order);
+  });
+
+  // Enhanced booking routes with notifications
+  app.post("/api/bookings/:id/confirm", requireAuth, requireRole(["provider"]), async (req, res) => {
+    const booking = await storage.updateBooking(parseInt(req.params.id), {
+      status: "confirmed",
+    });
+
+    // Send confirmation notifications
+    const customer = await storage.getUser(booking.customerId);
+    if (customer) {
+      // Create in-app notification
+      await storage.createNotification({
+        userId: customer.id,
+        type: "booking",
+        title: "Booking Confirmed",
+        message: `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`,
+      });
+
+      // Send SMS notification
+      await storage.sendSMSNotification(
+        customer.phone,
+        `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`
+      );
+
+      // Send email notification
+      await storage.sendEmailNotification(
+        customer.email,
+        "Booking Confirmation",
+        `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`
+      );
+    }
+
+    res.json(booking);
+  });
 
   const httpServer = createServer(app);
   return httpServer;

@@ -128,8 +128,9 @@ export const orderItems = pgTable("order_items", {
 export const returns = pgTable("returns", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").references(() => orders.id),
+  customerId: integer("customer_id").references(() => users.id),
   reason: text("reason").notNull(),
-  status: text("status").$type<"pending" | "approved" | "rejected" | "completed">().notNull(),
+  status: text("status").$type<"pending" | "approved" | "rejected" | "refunded" | "completed">().notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -175,3 +176,7 @@ export type InsertReview = z.infer<typeof insertReviewSchema>;
 export const insertNotificationSchema = createInsertSchema(notifications);
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+export const insertReturnRequestSchema = createInsertSchema(returns);
+export type ReturnRequest = typeof returns.$inferSelect;
+export type InsertReturnRequest = z.infer<typeof insertReturnRequestSchema>;

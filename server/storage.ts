@@ -8,10 +8,19 @@ import {
   Order, InsertOrder,
   OrderItem, InsertOrderItem,
   Review, InsertReview,
-  Notification
+  Notification, InsertNotification,
+  ReturnRequest, InsertReturnRequest
 } from "@shared/schema";
 
 const MemoryStore = createMemoryStore(session);
+
+export type OrderStatus = "pending" | "confirmed" | "cancelled" | "shipped" | "delivered";
+export interface OrderStatusUpdate {
+  orderId: number;
+  status: OrderStatus;
+  trackingInfo?: string;
+  timestamp: Date;
+}
 
 export interface IStorage {
   // User operations
@@ -80,6 +89,22 @@ export interface IStorage {
   joinWaitlist(customerId: number, serviceId: number, preferredDate: Date): Promise<void>;
   getWaitlistPosition(customerId: number, serviceId: number): Promise<number>;
 
+
+  // Return and refund operations
+  createReturnRequest(returnRequest: InsertReturnRequest): Promise<ReturnRequest>;
+  getReturnRequest(id: number): Promise<ReturnRequest | undefined>;
+  getReturnRequestsByOrder(orderId: number): Promise<ReturnRequest[]>;
+  updateReturnRequest(id: number, returnRequest: Partial<ReturnRequest>): Promise<ReturnRequest>;
+  processRefund(returnRequestId: number): Promise<void>;
+
+  // Enhanced notification operations
+  sendSMSNotification(phone: string, message: string): Promise<void>;
+  sendEmailNotification(email: string, subject: string, message: string): Promise<void>;
+
+  // Enhanced order tracking
+  updateOrderStatus(orderId: number, status: OrderStatus, trackingInfo?: string): Promise<Order>;
+  getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]>;
+
   sessionStore: session.Store;
 }
 
@@ -95,6 +120,8 @@ export class MemStorage implements IStorage {
   private cart: Map<number, Map<number, number>>; // customerId -> (productId -> quantity)
   private wishlist: Map<number, Set<number>>; // customerId -> Set of productIds
   private waitlist: Map<number, Map<number, Date>>; // serviceId -> (customerId -> preferredDate)
+  private returnRequests: Map<number, ReturnRequest>;
+  private orderStatusUpdates: Map<number, OrderStatusUpdate[]>;
   sessionStore: session.Store;
   private currentId: number;
 
@@ -110,6 +137,8 @@ export class MemStorage implements IStorage {
     this.cart = new Map();
     this.wishlist = new Map();
     this.waitlist = new Map();
+    this.returnRequests = new Map();
+    this.orderStatusUpdates = new Map();
     this.currentId = 1;
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
@@ -415,6 +444,78 @@ export class MemStorage implements IStorage {
     const waitlist = Array.from(this.waitlist.get(serviceId)!.entries());
     const position = waitlist.findIndex(([id]) => id === customerId);
     return position === -1 ? -1 : position + 1;
+  }
+
+  // Return and refund operations
+  async createReturnRequest(returnRequest: InsertReturnRequest): Promise<ReturnRequest> {
+    const id = this.currentId++;
+    const newReturnRequest = { ...returnRequest, id };
+    this.returnRequests.set(id, newReturnRequest);
+    return newReturnRequest;
+  }
+
+  async getReturnRequest(id: number): Promise<ReturnRequest | undefined> {
+    return this.returnRequests.get(id);
+  }
+
+  async getReturnRequestsByOrder(orderId: number): Promise<ReturnRequest[]> {
+    return Array.from(this.returnRequests.values()).filter(
+      (request) => request.orderId === orderId
+    );
+  }
+
+  async updateReturnRequest(id: number, returnRequest: Partial<ReturnRequest>): Promise<ReturnRequest> {
+    const existing = this.returnRequests.get(id);
+    if (!existing) throw new Error("Return request not found");
+    const updated = { ...existing, ...returnRequest };
+    this.returnRequests.set(id, updated);
+    return updated;
+  }
+
+  async processRefund(returnRequestId: number): Promise<void> {
+    const returnRequest = await this.getReturnRequest(returnRequestId);
+    if (!returnRequest) throw new Error("Return request not found");
+
+    // In a real implementation, this would integrate with Razorpay's refund API
+    returnRequest.status = "refunded";
+    this.returnRequests.set(returnRequestId, returnRequest);
+  }
+
+  // Enhanced notification operations
+  async sendSMSNotification(phone: string, message: string): Promise<void> {
+    // In a real implementation, this would integrate with an SMS service
+    console.log(`SMS to ${phone}: ${message}`);
+  }
+
+  async sendEmailNotification(email: string, subject: string, message: string): Promise<void> {
+    // In a real implementation, this would integrate with an email service
+    console.log(`Email to ${email}: ${subject} - ${message}`);
+  }
+
+  // Enhanced order tracking
+  async updateOrderStatus(orderId: number, status: OrderStatus, trackingInfo?: string): Promise<Order> {
+    const order = await this.getOrder(orderId);
+    if (!order) throw new Error("Order not found");
+
+    const statusUpdate = {
+      orderId,
+      status,
+      trackingInfo,
+      timestamp: new Date(),
+    };
+
+    if (!this.orderStatusUpdates.has(orderId)) {
+      this.orderStatusUpdates.set(orderId, []);
+    }
+    this.orderStatusUpdates.get(orderId)!.push(statusUpdate);
+
+    order.status = status;
+    this.orders.set(orderId, order);
+    return order;
+  }
+
+  async getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]> {
+    return this.orderStatusUpdates.get(orderId) || [];
   }
 
   async initializeSampleData() {
