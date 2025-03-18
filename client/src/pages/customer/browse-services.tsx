@@ -1,11 +1,11 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { motion } from "framer-motion";
-import { Search, MapPin, Star, Clock } from "lucide-react";
+import { Search, MapPin, Star, Clock, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Service } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
@@ -42,12 +42,11 @@ export default function BrowseServices() {
     queryKey: ["/api/services"],
   });
 
-  console.log("Fetched services:", services); // Debug log
-
   const filteredServices = services?.filter(service => 
     (selectedCategory === "All" || service.category === selectedCategory) &&
     (service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     service.description.toLowerCase().includes(searchQuery.toLowerCase()))
+     service.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
+    service.isAvailable
   );
 
   return (
@@ -82,54 +81,48 @@ export default function BrowseServices() {
           </Select>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {isLoading ? (
-            Array(6).fill(0).map((_, i) => (
-              <Card key={i} className="animate-pulse">
-                <CardHeader>
-                  <div className="h-6 bg-muted rounded w-3/4"></div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="h-4 bg-muted rounded"></div>
-                    <div className="h-4 bg-muted rounded w-5/6"></div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          ) : filteredServices?.map((service) => (
-            <motion.div key={service.id} variants={item}>
-              <Link href={`/customer/service-provider/${service.id}`}>
-                <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <CardTitle className="flex justify-between items-center">
-                      <span>{service.name}</span>
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <Star className="h-4 w-4 text-yellow-400 mr-1" />
-                        4.5
+        {isLoading ? (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
+        ) : !filteredServices?.length ? (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <p className="text-muted-foreground">No services found</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredServices.map((service) => (
+              <motion.div key={service.id} variants={item}>
+                <Link href={`/customer/service-provider/${service.id}`}>
+                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col gap-4">
+                        <div>
+                          <h3 className="font-semibold">{service.name}</h3>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {service.description}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            <span>{service.duration} mins</span>
+                          </div>
+                          <span className="font-semibold">₹{service.price}</span>
+                        </div>
+
+                        <Button className="w-full">View Details</Button>
                       </div>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      {service.description}
-                    </p>
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        <span>2.5 km away</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        <span>{service.duration} mins</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </motion.div>
     </DashboardLayout>
   );

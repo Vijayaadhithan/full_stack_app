@@ -44,57 +44,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Service routes
   app.post("/api/services", requireAuth, requireRole(["provider"]), async (req, res) => {
-    const result = insertServiceSchema.safeParse(req.body);
-    if (!result.success) return res.status(400).json(result.error);
+    try {
+      const result = insertServiceSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json(result.error);
 
-    const service = await storage.createService(result.data);
-    res.status(201).json(service);
+      const service = await storage.createService({
+        ...result.data,
+        providerId: req.user!.id,
+      });
+
+      console.log("Created service:", service); // Debug log
+      res.status(201).json(service);
+    } catch (error) {
+      console.error("Error creating service:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create service" });
+    }
   });
 
   app.get("/api/services/provider/:id", requireAuth, async (req, res) => {
-    const services = await storage.getServicesByProvider(parseInt(req.params.id));
-    res.json(services);
+    try {
+      const services = await storage.getServicesByProvider(parseInt(req.params.id));
+      console.log("Provider services:", services); // Debug log
+      res.json(services);
+    } catch (error) {
+      console.error("Error fetching provider services:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch services" });
+    }
   });
 
-  app.get("/api/services/category/:category", requireAuth, async (req, res) => {
-    const services = await storage.getServicesByCategory(req.params.category);
-    res.json(services);
-  });
-
-  // Update the services route to use getServices method
   app.get("/api/services", requireAuth, async (req, res) => {
-    const services = await storage.getServices();
-    res.json(services);
+    try {
+      const services = await storage.getServices();
+      console.log("All services:", services); // Debug log
+      res.json(services);
+    } catch (error) {
+      console.error("Error fetching services:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch services" });
+    }
   });
 
   app.get("/api/services/:id", requireAuth, async (req, res) => {
-    console.log(`Fetching service with id: ${req.params.id}`);
-    const serviceId = parseInt(req.params.id);
-    console.log(`Parsed service ID: ${serviceId}`);
+    try {
+      const serviceId = parseInt(req.params.id);
+      const service = await storage.getService(serviceId);
 
-    const service = await storage.getService(serviceId);
-    console.log(`Found service:`, service);
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
+      }
 
-    if (!service) {
-      return res.status(404).json({ message: "Service not found" });
+      console.log("Found service:", service); // Debug log
+      res.json(service);
+    } catch (error) {
+      console.error("Error fetching service:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch service" });
     }
-    res.json(service);
-  });
-
-  // Add this route for user details
-  app.get("/api/users/:id", requireAuth, async (req, res) => {
-    const user = await storage.getUser(parseInt(req.params.id));
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    res.json(user);
-  });
-
-
-  app.get("/api/products", requireAuth, async (req, res) => {
-    // Get all products from storage
-    const products = Array.from(storage.products.values());
-    res.json(products);
   });
 
   // Booking routes
@@ -533,6 +536,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     res.json(updatedReturn);
+  });
+
+  // Add this route for user details
+  app.get("/api/users/:id", requireAuth, async (req, res) => {
+    const user = await storage.getUser(parseInt(req.params.id));
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user);
+  });
+
+
+  app.get("/api/products", requireAuth, async (req, res) => {
+    // Get all products from storage
+    const products = Array.from(storage.products.values());
+    res.json(products);
   });
 
   const httpServer = createServer(app);
