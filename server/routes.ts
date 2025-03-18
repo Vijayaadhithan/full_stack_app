@@ -58,6 +58,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(services);
   });
 
+  // Add these new routes after the existing service routes
+  app.get("/api/services", requireAuth, async (req, res) => {
+    // Get all services from storage
+    const services = Array.from(storage.services.values());
+    res.json(services);
+  });
+
+  app.get("/api/products", requireAuth, async (req, res) => {
+    // Get all products from storage
+    const products = Array.from(storage.products.values());
+    res.json(products);
+  });
+
   // Booking routes
   app.post("/api/bookings", requireAuth, requireRole(["customer"]), async (req, res) => {
     const result = insertBookingSchema.safeParse(req.body);
