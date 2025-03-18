@@ -85,7 +85,7 @@ export function NotificationsCenter() {
                       {notification.message}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(notification.createdAt).toLocaleString()}
+                      {new Date(notification.createdAt || '').toLocaleString()}
                     </p>
                   </div>
                 </div>

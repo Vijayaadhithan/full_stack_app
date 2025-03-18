@@ -106,7 +106,35 @@ export interface IStorage {
   updateOrderStatus(orderId: number, status: OrderStatus, trackingInfo?: string): Promise<Order>;
   getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]>;
 
+  //Session store
   sessionStore: session.Store;
+
+  // Enhanced provider profile operations
+  updateProviderProfile(id: number, profile: Partial<User>): Promise<User>;
+  updateProviderAvailability(providerId: number, availability: {
+    days: string[];
+    hours: { start: string; end: string };
+    breaks: { start: string; end: string }[];
+  }): Promise<void>;
+  getProviderAvailability(providerId: number): Promise<{
+    days: string[];
+    hours: { start: string; end: string };
+    breaks: { start: string; end: string }[];
+  } | null>;
+
+  // Enhanced booking operations
+  updateBookingStatus(
+    id: number,
+    status: "pending" | "confirmed" | "completed" | "cancelled",
+    comment?: string
+  ): Promise<Booking>;
+  getBookingsByService(serviceId: number, date: Date): Promise<Booking[]>;
+  getProviderSchedule(providerId: number, date: Date): Promise<Booking[]>;
+
+  // Service completion and rating
+  completeService(bookingId: number): Promise<Booking>;
+  addBookingReview(bookingId: number, review: InsertReview): Promise<Review>;
+  respondToReview(reviewId: number, response: string): Promise<Review>;
 }
 
 export class MemStorage implements IStorage {
@@ -125,6 +153,11 @@ export class MemStorage implements IStorage {
   private orderStatusUpdates: Map<number, OrderStatusUpdate[]>;
   sessionStore: session.Store;
   private currentId: number;
+  private providerAvailability: Map<number, {
+    days: string[];
+    hours: { start: string; end: string };
+    breaks: { start: string; end: string }[];
+  }>;
 
   constructor() {
     this.users = new Map();
@@ -144,6 +177,7 @@ export class MemStorage implements IStorage {
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
     });
+    this.providerAvailability = new Map();
   }
 
   // User operations
@@ -524,6 +558,130 @@ export class MemStorage implements IStorage {
 
   async getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]> {
     return this.orderStatusUpdates.get(orderId) || [];
+  }
+
+  async updateProviderProfile(id: number, profile: Partial<User>): Promise<User> {
+    const existing = this.users.get(id);
+    if (!existing) throw new Error("Provider not found");
+    const updated = { ...existing, ...profile };
+    this.users.set(id, updated);
+    return updated;
+  }
+
+  async updateProviderAvailability(
+    providerId: number,
+    availability: {
+      days: string[];
+      hours: { start: string; end: string };
+      breaks: { start: string; end: string }[];
+    }
+  ): Promise<void> {
+    this.providerAvailability.set(providerId, availability);
+  }
+
+  async getProviderAvailability(providerId: number): Promise<{
+    days: string[];
+    hours: { start: string; end: string };
+    breaks: { start: string; end: string }[];
+  } | null> {
+    return this.providerAvailability.get(providerId) || null;
+  }
+
+  async updateBookingStatus(
+    id: number,
+    status: "pending" | "confirmed" | "completed" | "cancelled",
+    comment?: string
+  ): Promise<Booking> {
+    const booking = await this.getBooking(id);
+    if (!booking) throw new Error("Booking not found");
+
+    const updated = {
+      ...booking,
+      status,
+      statusComment: comment || null,
+    };
+
+    this.bookings.set(id, updated);
+
+    // Create notification for status update
+    const customer = await this.getUser(booking.customerId);
+    if (customer) {
+      await this.createNotification({
+        userId: customer.id,
+        type: "booking",
+        title: `Booking ${status}`,
+        message: comment || `Your booking has been ${status}.`,
+      });
+
+      // Send SMS for important status updates
+      if (["confirmed", "cancelled"].includes(status)) {
+        await this.sendSMSNotification(
+          customer.phone,
+          `Your booking has been ${status}. ${comment || ''}`
+        );
+      }
+    }
+
+    return updated;
+  }
+
+  async getBookingsByService(serviceId: number, date: Date): Promise<Booking[]> {
+    return Array.from(this.bookings.values()).filter(booking =>
+      booking.serviceId === serviceId &&
+      booking.bookingDate.toDateString() === date.toDateString()
+    );
+  }
+
+  async getProviderSchedule(providerId: number, date: Date): Promise<Booking[]> {
+    const services = await this.getServicesByProvider(providerId);
+    const serviceIds = services.map(s => s.id);
+
+    return Array.from(this.bookings.values()).filter(booking =>
+      serviceIds.includes(booking.serviceId) &&
+      booking.bookingDate.toDateString() === date.toDateString()
+    );
+  }
+
+  async completeService(bookingId: number): Promise<Booking> {
+    return this.updateBookingStatus(bookingId, "completed", "Service completed successfully");
+  }
+
+  async addBookingReview(bookingId: number, review: InsertReview): Promise<Review> {
+    const booking = await this.getBooking(bookingId);
+    if (!booking) throw new Error("Booking not found");
+
+    const newReview = await this.createReview({
+      ...review,
+      bookingId,
+      serviceId: booking.serviceId,
+    });
+
+    // Notify provider about new review
+    const service = await this.getService(booking.serviceId);
+    if (service) {
+      await this.createNotification({
+        userId: service.providerId,
+        type: "review",
+        title: "New Review Received",
+        message: `You received a ${newReview.rating}-star review for ${service.name}.`,
+      });
+    }
+
+    return newReview;
+  }
+
+  async respondToReview(reviewId: number, response: string): Promise<Review> {
+    const review = await this.reviews.get(reviewId);
+    if (!review) throw new Error("Review not found");
+
+    const updated = {
+      ...review,
+      providerResponse: response,
+      respondedAt: new Date(),
+    };
+
+    this.reviews.set(reviewId, updated);
+    return updated;
   }
 
   async initializeSampleData() {

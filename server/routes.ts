@@ -401,6 +401,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
+  // Enhanced booking routes with notifications
+  app.post("/api/bookings/:id/confirm", requireAuth, requireRole(["provider"]), async (req, res) => {
+    const booking = await storage.updateBooking(parseInt(req.params.id), {
+      status: "confirmed",
+    });
+
+    // Send confirmation notifications
+    const customer = await storage.getUser(booking.customerId);
+    if (customer) {
+      // Create in-app notification
+      await storage.createNotification({
+        userId: customer.id,
+        type: "booking",
+        title: "Booking Confirmed",
+        message: `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`,
+      });
+
+      // Send SMS notification
+      await storage.sendSMSNotification(
+        customer.phone,
+        `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`
+      );
+
+      // Send email notification
+      await storage.sendEmailNotification(
+        customer.email,
+        "Booking Confirmation",
+        `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`
+      );
+    }
+
+    res.json(booking);
+  });
+
+  // Order tracking routes
+  app.get("/api/orders/:id/timeline", requireAuth, async (req, res) => {
+    const timeline = await storage.getOrderTimeline(parseInt(req.params.id));
+    res.json(timeline);
+  });
+
+  app.patch("/api/orders/:id/status", requireAuth, requireRole(["shop"]), async (req, res) => {
+    const { status, trackingInfo } = req.body;
+    const order = await storage.updateOrderStatus(
+      parseInt(req.params.id),
+      status,
+      trackingInfo
+    );
+
+    // Create notification for status update
+    await storage.createNotification({
+      userId: order.customerId,
+      type: "order",
+      title: `Order ${status}`,
+      message: `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`,
+    });
+
+    // Send SMS notification for important status updates
+    if (["confirmed", "shipped", "delivered"].includes(status)) {
+      const customer = await storage.getUser(order.customerId);
+      if (customer) {
+        await storage.sendSMSNotification(
+          customer.phone,
+          `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`
+        );
+      }
+    }
+
+    res.json(order);
+  });
+
   // Return and refund routes
   app.post("/api/orders/:orderId/return", requireAuth, requireRole(["customer"]), async (req, res) => {
     const result = insertReturnRequestSchema.safeParse(req.body);
@@ -463,76 +533,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     res.json(updatedReturn);
-  });
-
-  // Order tracking routes
-  app.get("/api/orders/:id/timeline", requireAuth, async (req, res) => {
-    const timeline = await storage.getOrderTimeline(parseInt(req.params.id));
-    res.json(timeline);
-  });
-
-  app.patch("/api/orders/:id/status", requireAuth, requireRole(["shop"]), async (req, res) => {
-    const { status, trackingInfo } = req.body;
-    const order = await storage.updateOrderStatus(
-      parseInt(req.params.id),
-      status,
-      trackingInfo
-    );
-
-    // Create notification for status update
-    await storage.createNotification({
-      userId: order.customerId,
-      type: "order",
-      title: `Order ${status}`,
-      message: `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`,
-    });
-
-    // Send SMS notification for important status updates
-    if (["confirmed", "shipped", "delivered"].includes(status)) {
-      const customer = await storage.getUser(order.customerId);
-      if (customer) {
-        await storage.sendSMSNotification(
-          customer.phone,
-          `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`
-        );
-      }
-    }
-
-    res.json(order);
-  });
-
-  // Enhanced booking routes with notifications
-  app.post("/api/bookings/:id/confirm", requireAuth, requireRole(["provider"]), async (req, res) => {
-    const booking = await storage.updateBooking(parseInt(req.params.id), {
-      status: "confirmed",
-    });
-
-    // Send confirmation notifications
-    const customer = await storage.getUser(booking.customerId);
-    if (customer) {
-      // Create in-app notification
-      await storage.createNotification({
-        userId: customer.id,
-        type: "booking",
-        title: "Booking Confirmed",
-        message: `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`,
-      });
-
-      // Send SMS notification
-      await storage.sendSMSNotification(
-        customer.phone,
-        `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`
-      );
-
-      // Send email notification
-      await storage.sendEmailNotification(
-        customer.email,
-        "Booking Confirmation",
-        `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`
-      );
-    }
-
-    res.json(booking);
   });
 
   const httpServer = createServer(app);

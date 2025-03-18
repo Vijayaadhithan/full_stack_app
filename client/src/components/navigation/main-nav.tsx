@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Home, LogOut, User, ShoppingCart, Heart } from "lucide-react";
 import { Link } from "wouter";
+import { NotificationsCenter } from "@/components/notifications-center";
 
 export function MainNav() {
   const { user, logoutMutation } = useAuth();
@@ -34,6 +35,7 @@ export function MainNav() {
         )}
 
         <div className="ml-auto flex items-center space-x-4">
+          <NotificationsCenter />
           <div className="flex items-center gap-2">
             <User className="h-5 w-5" />
             <span>{user?.name}</span>
