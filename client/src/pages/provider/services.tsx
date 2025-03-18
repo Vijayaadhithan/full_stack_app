@@ -123,7 +123,6 @@ export default function ProviderServices() {
 
   const createServiceMutation = useMutation({
     mutationFn: async (data: ServiceFormData) => {
-      console.log("Creating service with data:", data);
       const res = await apiRequest("POST", "/api/services", {
         ...data,
         providerId: user?.id,
@@ -144,7 +143,6 @@ export default function ProviderServices() {
       setDialogOpen(false);
     },
     onError: (error: Error) => {
-      console.error("Service creation error:", error);
       toast({
         title: t("error"),
         description: error.message,
@@ -155,7 +153,6 @@ export default function ProviderServices() {
 
   const updateServiceMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<ServiceFormData> }) => {
-      console.log("Updating service with data:", data);
       const res = await apiRequest("PATCH", `/api/services/${id}`, data);
       if (!res.ok) {
         const error = await res.json();
@@ -173,7 +170,6 @@ export default function ProviderServices() {
       setEditingService(null);
     },
     onError: (error: Error) => {
-      console.error("Service update error:", error);
       toast({
         title: t("error"),
         description: error.message,
@@ -183,7 +179,6 @@ export default function ProviderServices() {
   });
 
   const onSubmit = (data: ServiceFormData) => {
-    console.log("Form submission data:", data);
     if (editingService) {
       updateServiceMutation.mutate({ id: editingService.id, data });
     } else {
@@ -194,12 +189,12 @@ export default function ProviderServices() {
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6">
-        {/* First section - Statistics Cards */}
+        {/* Stats Section */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-6">
               <div className="space-y-1">
-                <h3 className="text-2xl font-bold">0</h3>
+                <h3 className="text-2xl font-bold">{services?.length || 0}</h3>
                 <p className="text-sm text-muted-foreground">Active Services</p>
               </div>
             </CardContent>
@@ -207,74 +202,82 @@ export default function ProviderServices() {
           {/* Other stat cards */}
         </div>
 
-        {/* Services Section */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-medium">Services Offered</h2>
-              <Button onClick={() => setDialogOpen(true)} variant="default" size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Service
-              </Button>
+        {/* Services List Section */}
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold">Services Offered</h2>
+            <Button onClick={() => setDialogOpen(true)} variant="default">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Service
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <Loader2 className="h-8 w-8 animate-spin" />
             </div>
-
-            {isLoading ? (
-              <div className="flex items-center justify-center h-32">
-                <Loader2 className="h-8 w-8 animate-spin" />
-              </div>
-            ) : !services?.length ? (
-              <div className="text-center text-muted-foreground">
-                <p>No services added yet.</p>
-                <p className="mt-1">Click the Add Service button to create your first service.</p>
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                {services.map((service) => (
-                  <Card key={service.id}>
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-semibold">{service.name}</h3>
-                          <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setEditingService(service);
-                            form.reset({
-                              ...service,
-                              price: service.price.toString(),
-                            });
-                            setDialogOpen(true);
-                          }}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
+          ) : !services?.length ? (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <p className="text-muted-foreground">No services added yet.</p>
+                <Button
+                  className="mt-4"
+                  onClick={() => setDialogOpen(true)}
+                  variant="outline"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Your First Service
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {services.map((service) => (
+                <Card key={service.id}>
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-semibold">{service.name}</h3>
+                        <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingService(service);
+                          form.reset({
+                            ...service,
+                            price: service.price.toString(),
+                          });
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                    </div>
 
-                      <div className="mt-4 space-y-2">
-                        <div className="flex justify-between items-center text-sm">
-                          <span>Price</span>
-                          <span className="font-semibold">₹{service.price}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span>Duration</span>
-                          <span>{service.duration} minutes</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span>Category</span>
-                          <span className="font-semibold">{service.category}</span>
-                        </div>
+                    <div className="mt-4 space-y-2">
+                      <div className="flex justify-between items-center text-sm">
+                        <span>Price</span>
+                        <span className="font-semibold">₹{service.price}</span>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                      <div className="flex justify-between items-center text-sm">
+                        <span>Duration</span>
+                        <span>{service.duration} minutes</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span>Category</span>
+                        <span>{service.category}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
 
+        {/* Service Creation/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="sm:max-w-[800px]">
             <DialogHeader>
