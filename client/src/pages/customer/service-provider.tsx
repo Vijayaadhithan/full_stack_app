@@ -24,7 +24,6 @@ const item = {
 
 export default function ServiceProvider() {
   const { id } = useParams();
-  console.log("Service ID from params:", id); // Debug log
 
   // Fetch service details
   const { data: service, isLoading: serviceLoading } = useQuery<Service>({
@@ -32,15 +31,11 @@ export default function ServiceProvider() {
     enabled: !!id,
   });
 
-  console.log("Fetched service:", service); // Debug log
-
   // Fetch provider details once we have service data
   const { data: provider, isLoading: providerLoading } = useQuery<User>({
     queryKey: [`/api/users/${service?.providerId}`],
     enabled: !!service?.providerId,
   });
-
-  console.log("Fetched provider:", provider); // Debug log
 
   // Fetch reviews for the service
   const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
@@ -145,7 +140,7 @@ export default function ServiceProvider() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {reviews?.length === 0 ? (
+                  {!reviews?.length ? (
                     <p className="text-center text-muted-foreground">No reviews yet</p>
                   ) : reviews?.map((review) => (
                     <div key={review.id} className="border-b pb-4 last:border-0">
@@ -162,10 +157,10 @@ export default function ServiceProvider() {
                         </div>
                       </div>
                       <p className="text-sm">{review.review}</p>
-                      {review.providerReply && (
+                      {review.providerResponse && (
                         <div className="mt-2 pl-4 border-l-2">
                           <p className="text-sm text-muted-foreground">
-                            <span className="font-semibold">Response:</span> {review.providerReply}
+                            <span className="font-semibold">Response:</span> {review.providerResponse}
                           </p>
                         </div>
                       )}
