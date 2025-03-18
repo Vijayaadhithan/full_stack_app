@@ -27,8 +27,8 @@ function Router() {
       <ProtectedRoute path="/customer/browse-products" component={BrowseProducts} />
       <ProtectedRoute path="/customer/cart" component={Cart} />
       <ProtectedRoute path="/customer/bookings" component={Bookings} />
-      <ProtectedRoute path="/customer/service/:id" component={ServiceProvider} />
-      <ProtectedRoute path="/customer/book/:id" component={BookService} />
+      <ProtectedRoute path="/customer/service-provider/:id" component={ServiceProvider} />
+      <ProtectedRoute path="/customer/book-service/:id" component={BookService} />
       <ProtectedRoute path="/provider" component={ProviderDashboard} />
       <ProtectedRoute path="/shop" component={ShopDashboard} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />

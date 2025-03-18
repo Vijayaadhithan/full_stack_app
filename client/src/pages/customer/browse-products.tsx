@@ -8,7 +8,7 @@ import { Product } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { Search, ShoppingCart, Heart, Star } from "lucide-react";
+import { Search, ShoppingCart, Heart } from "lucide-react";
 import { useState } from "react";
 
 const container = {
