@@ -412,6 +412,13 @@ export default function ProviderServices() {
           <Card>
             <CardContent className="p-6 text-center">
               <p className="text-muted-foreground">{t('no_services_yet')}</p>
+              <Button
+                className="mt-4"
+                onClick={() => setDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {t('add_service')}
+              </Button>
             </CardContent>
           </Card>
         ) : (
