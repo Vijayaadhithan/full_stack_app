@@ -5,6 +5,7 @@ import { Tutorial } from "@/components/onboarding/tutorial";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Calendar, ShoppingBag, ClipboardList } from "lucide-react";
+import { Link } from "wouter";
 
 const container = {
   hidden: { opacity: 0 },
@@ -57,45 +58,51 @@ export default function CustomerDashboard() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <motion.div variants={item}>
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Book Services
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>Find and book services from our providers</p>
-              </CardContent>
-            </Card>
+            <Link href="/customer/browse-services">
+              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Book Services
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p>Find and book services from our providers</p>
+                </CardContent>
+              </Card>
+            </Link>
           </motion.div>
 
           <motion.div variants={item}>
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ShoppingBag className="h-5 w-5" />
-                  Shop Products
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>Browse and purchase products from our shops</p>
-              </CardContent>
-            </Card>
+            <Link href="/customer/browse-products">
+              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShoppingBag className="h-5 w-5" />
+                    Shop Products
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p>Browse and purchase products from our shops</p>
+                </CardContent>
+              </Card>
+            </Link>
           </motion.div>
 
           <motion.div variants={item}>
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ClipboardList className="h-5 w-5" />
-                  My Bookings
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>View and manage your service bookings</p>
-              </CardContent>
-            </Card>
+            <Link href="/customer/bookings">
+              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ClipboardList className="h-5 w-5" />
+                    My Bookings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p>View and manage your service bookings</p>
+                </CardContent>
+              </Card>
+            </Link>
           </motion.div>
         </div>
       </motion.div>
