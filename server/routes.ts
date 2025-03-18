@@ -76,28 +76,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const result = insertBookingSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json(result.error);
 
-    // Check service availability
-    const isAvailable = await storage.checkAvailability(result.data.serviceId, new Date(result.data.bookingDate));
+    const { serviceId, date, time, isRecurring, recurringPattern, recurringDuration } = req.body;
+
+    // Get service details for validation
+    const service = await storage.getService(serviceId);
+    if (!service) return res.status(404).json({ message: "Service not found" });
+
+    // Parse the booking date and time
+    const bookingDateTime = new Date(`${date}T${time}`);
+
+    // Check availability for the initial booking
+    const isAvailable = await storage.checkAvailability(serviceId, bookingDateTime);
     if (!isAvailable) {
       return res.status(400).json({ message: "Service not available at selected time" });
     }
 
-    // Create Razorpay order
-    const service = await storage.getService(result.data.serviceId);
-    if (!service) return res.status(404).json({ message: "Service not found" });
+    // If recurring, validate all future dates
+    if (isRecurring && recurringPattern) {
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 90); // 90 days ahead
 
+      let futureDates: Date[] = [];
+      if (recurringPattern === "weekly") {
+        for (let i = 1; i < recurringDuration; i++) {
+          const futureDate = new Date(bookingDateTime);
+          futureDate.setDate(futureDate.getDate() + (i * 7));
+          futureDates.push(futureDate);
+        }
+      } else if (recurringPattern === "monthly") {
+        for (let i = 1; i < recurringDuration; i++) {
+          const futureDate = new Date(bookingDateTime);
+          futureDate.setMonth(futureDate.getMonth() + i);
+          futureDates.push(futureDate);
+        }
+      }
+
+      // Check availability for all future dates
+      for (const futureDate of futureDates) {
+        const isAvailable = await storage.checkAvailability(serviceId, futureDate);
+        if (!isAvailable) {
+          return res.status(400).json({
+            message: "Some recurring slots are not available",
+            date: futureDate,
+          });
+        }
+      }
+    }
+
+    // Create Razorpay order
     const order = await razorpay.orders.create({
       amount: parseInt(service.price) * 100, // Convert to paisa
       currency: "INR",
       receipt: `booking_${Date.now()}`,
     });
 
+    // Create the initial booking
     const booking = await storage.createBooking({
       ...result.data,
       razorpayOrderId: order.id,
       status: "pending",
       paymentStatus: "pending",
+      isRecurring: isRecurring || false,
+      recurringPattern: recurringPattern || null,
     });
+
+    // If recurring, create future bookings
+    if (isRecurring && recurringPattern && recurringDuration) {
+      const futureDates = Array.from({ length: recurringDuration - 1 }, (_, i) => {
+        const date = new Date(bookingDateTime);
+        if (recurringPattern === "weekly") {
+          date.setDate(date.getDate() + ((i + 1) * 7));
+        } else {
+          date.setMonth(date.getMonth() + (i + 1));
+        }
+        return date;
+      });
+
+      for (const futureDate of futureDates) {
+        await storage.createBooking({
+          ...result.data,
+          bookingDate: futureDate,
+          status: "pending",
+          paymentStatus: "pending",
+          isRecurring: true,
+          recurringPattern,
+        });
+      }
+    }
 
     res.status(201).json({ booking, order });
   });
@@ -276,6 +341,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const orders = await storage.getOrdersByShop(req.user!.id);
     res.json(orders);
   });
+
+  // Add an endpoint to get service availability
+  app.get("/api/services/:id/bookings", requireAuth, async (req, res) => {
+    const { date } = req.query;
+    const serviceId = parseInt(req.params.id);
+
+    const service = await storage.getService(serviceId);
+    if (!service) return res.status(404).json({ message: "Service not found" });
+
+    const bookings = await storage.getBookingsByService(serviceId, new Date(date as string));
+    res.json(bookings.map(booking => ({
+      start: booking.bookingDate,
+      end: new Date(booking.bookingDate.getTime() + (service.duration + (service.bufferTime || 0)) * 60000),
+    })));
+  });
+
 
   const httpServer = createServer(app);
   return httpServer;

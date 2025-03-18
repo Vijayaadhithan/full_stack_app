@@ -14,13 +14,48 @@ import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { Clock, Calendar as CalendarIcon, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
-import { addDays, format, parse, isAfter, isBefore, addMinutes } from "date-fns";
+import { addDays, format, parse, isAfter, isBefore, addMinutes, eachWeekOfInterval, eachMonthOfInterval } from "date-fns";
 
 type TimeSlot = {
   start: Date;
   end: Date;
   available: boolean;
 };
+
+function generateTimeSlots(
+  date: Date,
+  duration: number,
+  bufferTime: number,
+  existingBookings: { start: Date; end: Date }[]
+): TimeSlot[] {
+  const slots: TimeSlot[] = [];
+  const startOfDay = new Date(date.setHours(9, 0, 0, 0)); // Start at 9 AM
+  const endOfDay = new Date(date.setHours(17, 0, 0, 0)); // End at 5 PM
+
+  let currentSlot = startOfDay;
+  while (currentSlot < endOfDay) {
+    const slotEnd = addMinutes(currentSlot, duration);
+
+    // Check if slot overlaps with any existing booking
+    const isOverlapping = existingBookings.some(booking => {
+      return (
+        (currentSlot >= booking.start && currentSlot < booking.end) ||
+        (slotEnd > booking.start && slotEnd <= booking.end)
+      );
+    });
+
+    slots.push({
+      start: currentSlot,
+      end: slotEnd,
+      available: !isOverlapping,
+    });
+
+    // Add buffer time to the next slot
+    currentSlot = addMinutes(slotEnd, bufferTime);
+  }
+
+  return slots;
+}
 
 export default function BookService() {
   const { id } = useParams();
@@ -29,6 +64,7 @@ export default function BookService() {
   const [selectedTime, setSelectedTime] = useState<string>();
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringPattern, setRecurringPattern] = useState<"weekly" | "monthly">();
+  const [recurringDuration, setRecurringDuration] = useState<number>(4); // Number of occurrences
   const [joinWaitlist, setJoinWaitlist] = useState(false);
 
   const { data: service, isLoading: serviceLoading } = useQuery<Service>({
@@ -40,10 +76,21 @@ export default function BookService() {
     enabled: !!service?.providerId,
   });
 
-  const { data: availability } = useQuery<TimeSlot[]>({
-    queryKey: [`/api/services/${id}/availability`, selectedDate.toISOString()],
+  // Get existing bookings for availability check
+  const { data: existingBookings } = useQuery<{ start: Date; end: Date }[]>({
+    queryKey: [`/api/services/${id}/bookings`, selectedDate.toISOString()],
     enabled: !!service,
   });
+
+  // Generate available time slots
+  const timeSlots = service && existingBookings
+    ? generateTimeSlots(
+        selectedDate,
+        service.duration,
+        service.bufferTime || 0,
+        existingBookings
+      )
+    : [];
 
   const bookingMutation = useMutation({
     mutationFn: async (data: {
@@ -52,6 +99,7 @@ export default function BookService() {
       time: string;
       isRecurring: boolean;
       recurringPattern?: string;
+      recurringDuration?: number;
     }) => {
       const res = await apiRequest("POST", "/api/bookings", data);
       return res.json();
@@ -89,7 +137,7 @@ export default function BookService() {
     if (!selectedTime || !service) return;
 
     const dateTime = parse(selectedTime, "HH:mm", selectedDate);
-    
+
     if (joinWaitlist) {
       waitlistMutation.mutate({
         serviceId: service.id,
@@ -98,12 +146,41 @@ export default function BookService() {
       return;
     }
 
+    // For recurring bookings, validate all future dates
+    if (isRecurring && recurringPattern) {
+      const endDate = addDays(new Date(), 90); // Allow booking up to 90 days in advance
+      const dates = recurringPattern === "weekly"
+        ? eachWeekOfInterval({ start: selectedDate, end: endDate }).slice(0, recurringDuration)
+        : eachMonthOfInterval({ start: selectedDate, end: endDate }).slice(0, recurringDuration);
+
+      // Check availability for all recurring dates
+      const allDatesAvailable = dates.every(date => {
+        const slots = generateTimeSlots(
+          date,
+          service.duration,
+          service.bufferTime || 0,
+          existingBookings || []
+        );
+        return slots.some(slot => format(slot.start, "HH:mm") === selectedTime && slot.available);
+      });
+
+      if (!allDatesAvailable) {
+        toast({
+          title: "Booking not available",
+          description: "Some of your requested recurring dates are not available. Please choose different dates or join the waitlist.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     bookingMutation.mutate({
       serviceId: service.id,
       date: selectedDate.toISOString(),
       time: selectedTime,
       isRecurring,
       recurringPattern,
+      recurringDuration: isRecurring ? recurringDuration : undefined,
     });
   };
 
@@ -138,7 +215,7 @@ export default function BookService() {
                   onSelect={(date) => date && setSelectedDate(date)}
                   disabled={(date) =>
                     isBefore(date, new Date()) ||
-                    isAfter(date, addDays(new Date(), 30))
+                    isAfter(date, addDays(new Date(), 90))
                   }
                 />
               </div>
@@ -147,7 +224,7 @@ export default function BookService() {
                 <div>
                   <Label>Available Time Slots</Label>
                   <div className="grid grid-cols-2 gap-2 mt-2">
-                    {availability?.map((slot) => (
+                    {timeSlots.map((slot) => (
                       <Button
                         key={slot.start.toISOString()}
                         variant={
@@ -178,24 +255,47 @@ export default function BookService() {
                   </div>
 
                   {isRecurring && (
-                    <Select
-                      value={recurringPattern}
-                      onValueChange={(value: "weekly" | "monthly") =>
-                        setRecurringPattern(value)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select recurring pattern" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-4">
+                      <Select
+                        value={recurringPattern}
+                        onValueChange={(value: "weekly" | "monthly") =>
+                          setRecurringPattern(value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select recurring pattern" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <div className="space-y-2">
+                        <Label>Number of occurrences</Label>
+                        <Select
+                          value={recurringDuration.toString()}
+                          onValueChange={(value) =>
+                            setRecurringDuration(parseInt(value))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select duration" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[4, 8, 12].map((weeks) => (
+                              <SelectItem key={weeks} value={weeks.toString()}>
+                                {weeks} {recurringPattern === "weekly" ? "weeks" : "months"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                {!availability?.some((slot) => slot.available) && (
+                {!timeSlots.some((slot) => slot.available) && (
                   <div className="flex items-center space-x-2">
                     <Switch
                       checked={joinWaitlist}
