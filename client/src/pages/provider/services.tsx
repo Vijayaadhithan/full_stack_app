@@ -74,7 +74,6 @@ export default function ProviderServices() {
       });
       form.reset();
       setDialogOpen(false);
-      setEditingService(null);
     },
     onError: (error: Error) => {
       toast({
@@ -118,12 +117,6 @@ export default function ProviderServices() {
     } else {
       createServiceMutation.mutate(data);
     }
-  };
-
-  const handleEdit = (service: Service) => {
-    setEditingService(service);
-    form.reset(service);
-    setDialogOpen(true);
   };
 
   return (
