@@ -8,6 +8,8 @@ import { ProtectedRoute } from "./lib/protected-route";
 import AuthPage from "@/pages/auth-page";
 import CustomerDashboard from "@/pages/customer/dashboard";
 import BrowseServices from "@/pages/customer/browse-services";
+import BrowseProducts from "@/pages/customer/browse-products";
+import Cart from "@/pages/customer/cart";
 import ProviderDashboard from "@/pages/provider/dashboard";
 import ShopDashboard from "@/pages/shop/dashboard";
 import AdminDashboard from "@/pages/admin/dashboard";
@@ -19,6 +21,8 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/customer" component={CustomerDashboard} />
       <ProtectedRoute path="/customer/browse-services" component={BrowseServices} />
+      <ProtectedRoute path="/customer/browse-products" component={BrowseProducts} />
+      <ProtectedRoute path="/customer/cart" component={Cart} />
       <ProtectedRoute path="/provider" component={ProviderDashboard} />
       <ProtectedRoute path="/shop" component={ShopDashboard} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />
