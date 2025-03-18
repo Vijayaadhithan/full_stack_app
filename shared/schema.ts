@@ -28,6 +28,22 @@ export type ShopProfile = {
   returnPolicy?: string;
 };
 
+// Add working hours type
+export type WorkingHours = {
+  monday: { isAvailable: boolean; start: string; end: string; };
+  tuesday: { isAvailable: boolean; start: string; end: string; };
+  wednesday: { isAvailable: boolean; start: string; end: string; };
+  thursday: { isAvailable: boolean; start: string; end: string; };
+  friday: { isAvailable: boolean; start: string; end: string; };
+  saturday: { isAvailable: boolean; start: string; end: string; };
+  sunday: { isAvailable: boolean; start: string; end: string; };
+};
+
+export type BreakTime = {
+  start: string;
+  end: string;
+};
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -43,6 +59,7 @@ export const users = pgTable("users", {
   shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
 });
 
+// Update services table with new availability fields
 export const services = pgTable("services", {
   id: serial("id").primaryKey(),
   providerId: integer("provider_id").references(() => users.id),
@@ -54,7 +71,10 @@ export const services = pgTable("services", {
   category: text("category").notNull(),
   images: text("images").array(),
   location: jsonb("location").$type<{ lat: number; lng: number }>(),
-  bufferTime: integer("buffer_time").default(0), // in minutes
+  bufferTime: integer("buffer_time").default(15), // in minutes
+  workingHours: jsonb("working_hours").$type<WorkingHours>(),
+  breakTime: jsonb("break_time").$type<BreakTime[]>(),
+  maxDailyBookings: integer("max_daily_bookings").default(10),
 });
 
 export const serviceAvailability = pgTable("service_availability", {
@@ -251,11 +271,55 @@ export const insertUserSchema = createInsertSchema(users);
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
-export const insertServiceSchema = createInsertSchema(services);
+// Update service schema validation
+export const insertServiceSchema = createInsertSchema(services).extend({
+  workingHours: z.object({
+    monday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    tuesday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    wednesday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    thursday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    friday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    saturday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+    sunday: z.object({
+      isAvailable: z.boolean(),
+      start: z.string(),
+      end: z.string(),
+    }),
+  }),
+  breakTime: z.array(z.object({
+    start: z.string(),
+    end: z.string(),
+  })),
+  maxDailyBookings: z.number().min(1, "Must accept at least 1 booking per day"),
+});
+
 export type Service = typeof services.$inferSelect;
 export type InsertService = z.infer<typeof insertServiceSchema>;
 
-// Update the types
 export const insertBookingSchema = createInsertSchema(bookings);
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
@@ -272,7 +336,6 @@ export const insertOrderItemSchema = createInsertSchema(orderItems);
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 
-// Update the types
 export const insertReviewSchema = createInsertSchema(reviews);
 export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;

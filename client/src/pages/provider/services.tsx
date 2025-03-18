@@ -19,6 +19,7 @@ import { Loader2, Plus, Edit2, Clock, Calendar } from "lucide-react";
 import { Service, insertServiceSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
+import { ServiceAvailabilityForm } from "@/components/service-availability-form";
 
 // Extended service form schema with availability
 const serviceFormSchema = insertServiceSchema.extend({
@@ -186,46 +187,6 @@ export default function ProviderServices() {
     }
   };
 
-  const renderWorkingHours = (day: keyof ServiceFormData["workingHours"]) => {
-    const { workingHours } = form.getValues();
-    return (
-      <div key={day} className="mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <label htmlFor={`${day}-available`}>{t(`day.${day}`)}</label>
-          <Switch
-            id={`${day}-available`}
-            checked={workingHours[day].isAvailable}
-            onCheckedChange={(value) => form.setValue(`workingHours.${day}.isAvailable`, value)}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor={`${day}-start`}>{t('start_time')}</label>
-            <Input type="time" id={`${day}-start`} {...form.register(`workingHours.${day}.start`)} />
-          </div>
-          <div>
-            <label htmlFor={`${day}-end`}>{t('end_time')}</label>
-            <Input type="time" id={`${day}-end`} {...form.register(`workingHours.${day}.end`)} />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderBreakTime = () => {
-    const { breakTime } = form.getValues();
-    return (
-      <div>
-        {breakTime.map((time, index) => (
-          <div key={index} className="grid grid-cols-2 gap-4 mb-2">
-            <Input type="time" {...form.register(`breakTime.${index}.start`)} />
-            <Input type="time" {...form.register(`breakTime.${index}.end`)} />
-          </div>
-        ))}
-        <Button onClick={() => form.setValue('breakTime', [...breakTime, { start: '', end: ''}])}>Add break time</Button>
-      </div>
-    );
-  };
 
   return (
     <DashboardLayout>
@@ -376,26 +337,32 @@ export default function ProviderServices() {
 
                 <TabsContent value="availability">
                   <Form {...form}>
-                    {Object.keys(form.getValues().workingHours).map(day => renderWorkingHours(day as keyof ServiceFormData["workingHours"]))}
-                    {renderBreakTime()}
+                    <ServiceAvailabilityForm form={form} />
                   </Form>
                 </TabsContent>
 
                 <TabsContent value="scheduling">
                   <Form {...form}>
-                    <FormField
-                      control={form.control}
-                      name="maxDailyBookings"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t('max_daily_bookings')}</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" min="1" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="maxDailyBookings"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('max_daily_bookings')}</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="1"
+                                {...field}
+                                onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   </Form>
                 </TabsContent>
               </Tabs>
