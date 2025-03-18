@@ -19,6 +19,7 @@ import {
   insertBlockedTimeSlotSchema, // Added import
 } from "@shared/schema";
 import Razorpay from "razorpay";
+import crypto from 'crypto';
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_1234567890",
@@ -168,6 +169,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Service provider not found" });
       }
 
+      // Get reviews for the service
+      const reviews = await storage.getReviewsByService(serviceId);
+
       // Return combined data
       res.json({
         ...service,
@@ -177,7 +181,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: provider.email,
           profilePicture: provider.profilePicture,
           role: provider.role
-        }
+        },
+        reviews: reviews || []
       });
     } catch (error) {
       console.error("Error fetching service:", error);
@@ -275,124 +280,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Booking routes
   app.post("/api/bookings", requireAuth, requireRole(["customer"]), async (req, res) => {
-    const result = insertBookingSchema.safeParse(req.body);
-    if (!result.success) return res.status(400).json(result.error);
+    try {
+      const { serviceId, date, time } = req.body;
 
-    const { serviceId, date, time, isRecurring, recurringPattern, recurringDuration } = req.body;
-
-    // Get service details for validation
-    const service = await storage.getService(serviceId);
-    if (!service) return res.status(404).json({ message: "Service not found" });
-
-    // Parse the booking date and time
-    const bookingDateTime = new Date(`${date}T${time}`);
-
-    // Check availability for the initial booking
-    const isAvailable = await storage.checkAvailability(serviceId, bookingDateTime);
-    if (!isAvailable) {
-      return res.status(400).json({ message: "Service not available at selected time" });
-    }
-
-    // If recurring, validate all future dates
-    if (isRecurring && recurringPattern) {
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 90); // 90 days ahead
-
-      let futureDates: Date[] = [];
-      if (recurringPattern === "weekly") {
-        for (let i = 1; i < recurringDuration; i++) {
-          const futureDate = new Date(bookingDateTime);
-          futureDate.setDate(futureDate.getDate() + (i * 7));
-          futureDates.push(futureDate);
-        }
-      } else if (recurringPattern === "monthly") {
-        for (let i = 1; i < recurringDuration; i++) {
-          const futureDate = new Date(bookingDateTime);
-          futureDate.setMonth(futureDate.getMonth() + i);
-          futureDates.push(futureDate);
-        }
+      // Get service details
+      const service = await storage.getService(serviceId);
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
       }
 
-      // Check availability for all future dates
-      for (const futureDate of futureDates) {
-        const isAvailable = await storage.checkAvailability(serviceId, futureDate);
-        if (!isAvailable) {
-          return res.status(400).json({
-            message: "Some recurring slots are not available",
-            date: futureDate,
-          });
-        }
-      }
-    }
-
-    // Create Razorpay order
-    const order = await razorpay.orders.create({
-      amount: parseInt(service.price) * 100, // Convert to paisa
-      currency: "INR",
-      receipt: `booking_${Date.now()}`,
-    });
-
-    // Create the initial booking
-    const booking = await storage.createBooking({
-      ...result.data,
-      razorpayOrderId: order.id,
-      status: "pending",
-      paymentStatus: "pending",
-      isRecurring: isRecurring || false,
-      recurringPattern: recurringPattern || null,
-    });
-
-    // If recurring, create future bookings
-    if (isRecurring && recurringPattern && recurringDuration) {
-      const futureDates = Array.from({ length: recurringDuration - 1 }, (_, i) => {
-        const date = new Date(bookingDateTime);
-        if (recurringPattern === "weekly") {
-          date.setDate(date.getDate() + ((i + 1) * 7));
-        } else {
-          date.setMonth(date.getMonth() + (i + 1));
-        }
-        return date;
+      // Create Razorpay order
+      const amount = parseInt(service.price);
+      const order = await razorpay.orders.create({
+        amount: amount * 100, // Convert to paisa
+        currency: "INR",
+        receipt: `booking_${Date.now()}`,
       });
 
-      for (const futureDate of futureDates) {
-        await storage.createBooking({
-          ...result.data,
-          bookingDate: futureDate,
-          status: "pending",
-          paymentStatus: "pending",
-          isRecurring: true,
-          recurringPattern,
-        });
-      }
-    }
+      // Create booking record
+      const booking = await storage.createBooking({
+        customerId: req.user!.id,
+        serviceId,
+        bookingDate: new Date(`${date}T${time}`),
+        status: "pending",
+        paymentStatus: "pending",
+        razorpayOrderId: order.id,
+      });
 
-    res.status(201).json({ booking, order });
+      // Create notification for provider
+      await storage.createNotification({
+        userId: service.providerId,
+        type: "booking_request",
+        title: "New Booking Request",
+        message: `You have a new booking request for ${service.name}`,
+      });
+
+      res.status(201).json({ booking, order });
+    } catch (error) {
+      console.error("Error creating booking:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create booking" });
+    }
+  });
+
+  app.patch("/api/bookings/:id/status", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const { status, rejectionReason } = req.body;
+      const bookingId = parseInt(req.params.id);
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to update this booking" });
+      }
+
+      // Update booking status
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        status,
+        rejectionReason: status === "rejected" ? rejectionReason : null,
+      });
+
+      // Create notification for customer
+      const notificationMessage = status === "rejected"
+        ? `Your booking for ${service.name} was rejected. Reason: ${rejectionReason}`
+        : `Your booking for ${service.name} was ${status}`;
+
+      await storage.createNotification({
+        userId: booking.customerId,
+        type: "booking_update",
+        title: `Booking ${status}`,
+        message: notificationMessage,
+      });
+
+      res.json(updatedBooking);
+    } catch (error) {
+      console.error("Error updating booking status:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update booking status" });
+    }
   });
 
   app.post("/api/bookings/:id/payment", requireAuth, requireRole(["customer"]), async (req, res) => {
-    const { razorpayPaymentId } = req.body;
-    const booking = await storage.updateBooking(parseInt(req.params.id), {
-      razorpayPaymentId,
-      status: "confirmed",
-      paymentStatus: "paid",
-    });
+    try {
+      const { razorpayPaymentId, razorpaySignature } = req.body;
+      const bookingId = parseInt(req.params.id);
 
-    // Create notification
-    await storage.createNotification({
-      userId: booking.customerId,
-      type: "booking",
-      title: "Booking Confirmed",
-      message: "Your booking has been confirmed successfully.",
-    });
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
 
-    res.json(booking);
+      // Verify payment signature
+      const body = booking.razorpayOrderId + "|" + razorpayPaymentId;
+      const expectedSignature = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+        .update(body.toString())
+        .digest("hex");
+
+      if (expectedSignature !== razorpaySignature) {
+        return res.status(400).json({ message: "Invalid payment signature" });
+      }
+
+      // Update booking payment status
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        paymentStatus: "paid",
+        razorpayPaymentId,
+      });
+
+      // Notify provider about payment
+      const service = await storage.getService(booking.serviceId);
+      if (service) {
+        await storage.createNotification({
+          userId: service.providerId,
+          type: "payment",
+          title: "Payment Received",
+          message: `Payment received for booking #${booking.id}`,
+        });
+      }
+
+      res.json(updatedBooking);
+    } catch (error) {
+      console.error("Error verifying payment:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to verify payment" });
+    }
   });
 
   app.get("/api/bookings/customer", requireAuth, requireRole(["customer"]), async (req, res) => {
     const bookings = await storage.getBookingsByCustomer(req.user!.id);
     res.json(bookings);
   });
-
   app.post("/api/waitlist", requireAuth, requireRole(["customer"]), async (req, res) => {
     const { serviceId, preferredDate } = req.body;
     await storage.joinWaitlist(req.user!.id, serviceId, new Date(preferredDate));

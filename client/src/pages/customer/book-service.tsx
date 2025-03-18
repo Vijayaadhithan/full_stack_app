@@ -2,17 +2,23 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useParams } from "wouter";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Service, User } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/language-context";
 import { motion } from "framer-motion";
-import { Clock, Calendar as CalendarIcon, AlertCircle } from "lucide-react";
-import { useState } from "react";
-import { addDays, format, parse, isAfter, isBefore, addMinutes, isWithinInterval } from "date-fns";
+import { Loader2, MapPin, Clock, Star, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { format, addDays, isBefore, isAfter, addMinutes, isWithinInterval, parse } from "date-fns";
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 type TimeSlot = {
   start: Date;
@@ -81,9 +87,11 @@ export default function BookService() {
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>();
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [order, setOrder] = useState<any>(null);
 
   // Fetch service with provider info
-  const { data: service, isLoading: serviceLoading } = useQuery<Service & { provider: User }>({
+  const { data: service, isLoading: serviceLoading } = useQuery<Service & { provider: User, reviews: any[] }>({
     queryKey: [`/api/services/${id}`, 'with-provider'],
     enabled: !!id,
   });
@@ -119,13 +127,9 @@ export default function BookService() {
       }
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-      toast({
-        title: t("booking_successful"),
-        description: t("booking_confirmation_sent"),
-      });
+    onSuccess: (data) => {
+      setOrder(data.order);
+      setPaymentDialogOpen(true);
     },
     onError: (error: Error) => {
       toast({
@@ -139,8 +143,6 @@ export default function BookService() {
   const handleBooking = () => {
     if (!selectedTime || !service) return;
 
-    const dateTime = parse(selectedTime, "HH:mm", selectedDate);
-
     bookingMutation.mutate({
       serviceId: service.id,
       date: selectedDate.toISOString(),
@@ -148,11 +150,70 @@ export default function BookService() {
     });
   };
 
+  useEffect(() => {
+    if (order) {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => {
+        const options = {
+          key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+          amount: order.amount,
+          currency: order.currency,
+          name: service?.name,
+          description: `Booking for ${service?.name}`,
+          order_id: order.id,
+          handler: async (response: any) => {
+            try {
+              const res = await apiRequest("POST", `/api/bookings/${order.booking.id}/payment`, {
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              });
+
+              if (res.ok) {
+                queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+                toast({
+                  title: t("booking_successful"),
+                  description: t("booking_confirmation_sent"),
+                });
+                setPaymentDialogOpen(false);
+              } else {
+                throw new Error("Payment verification failed");
+              }
+            } catch (error) {
+              toast({
+                title: t("payment_failed"),
+                description: error instanceof Error ? error.message : "Payment verification failed",
+                variant: "destructive",
+              });
+            }
+          },
+          prefill: {
+            name: service?.provider?.name,
+            email: service?.provider?.email,
+          },
+          theme: {
+            color: "#10B981",
+          },
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+      };
+      document.body.appendChild(script);
+
+      return () => {
+        document.body.removeChild(script);
+      };
+    }
+  }, [order]);
+
   if (serviceLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
-          <span className="loading loading-spinner" />
+          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       </DashboardLayout>
     );
@@ -163,11 +224,17 @@ export default function BookService() {
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
           <h2 className="text-2xl font-bold mb-4">Service not found</h2>
-          <Button onClick={() => window.history.back()}>Go Back</Button>
+          <Link href="/customer/browse-services">
+            <Button>Back to Services</Button>
+          </Link>
         </div>
       </DashboardLayout>
     );
   }
+
+  const averageRating = service.reviews?.length
+    ? service.reviews.reduce((acc, review) => acc + review.rating, 0) / service.reviews.length
+    : 0;
 
   return (
     <DashboardLayout>
@@ -181,7 +248,7 @@ export default function BookService() {
             <CardTitle>{service.name}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Service Provider Info */}
+            {/* Provider Info */}
             <div className="bg-muted/50 rounded-lg p-4">
               <h3 className="font-semibold mb-2">Service Provider</h3>
               <div className="flex items-center gap-4">
@@ -198,7 +265,10 @@ export default function BookService() {
                 </div>
                 <div>
                   <p className="font-medium">{service.provider?.name}</p>
-                  <p className="text-sm text-muted-foreground">{service.provider?.email}</p>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
+                    <span>{averageRating.toFixed(1)} ({service.reviews?.length || 0} reviews)</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -212,7 +282,7 @@ export default function BookService() {
                   onSelect={(date) => {
                     if (date) {
                       setSelectedDate(date);
-                      setSelectedTime(undefined); // Reset time when date changes
+                      setSelectedTime(undefined);
                     }
                   }}
                   disabled={(date) =>
@@ -256,10 +326,9 @@ export default function BookService() {
                   disabled={!selectedTime || bookingMutation.isPending}
                 >
                   {bookingMutation.isPending ? (
-                    <span className="loading loading-spinner" />
-                  ) : (
-                    t('book_service')
-                  )}
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
+                  {t('book_service')}
                 </Button>
               </div>
             </div>
@@ -274,18 +343,59 @@ export default function BookService() {
                     <span>{t('duration')}: {service.duration} {t('minutes')}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CalendarIcon className="h-4 w-4" />
-                    <span>{t('buffer_time')}: {service.bufferTime} {t('minutes')}</span>
+                    <MapPin className="h-4 w-4" />
+                    <span>{t('location')}: {service.location ? `${service.location.lat}, ${service.location.lng}` : 'Not specified'}</span>
                   </div>
                 </div>
                 <div>
                   <p className="text-muted-foreground">{service.description}</p>
+                  <p className="mt-2 font-semibold">₹{service.price}</p>
                 </div>
               </div>
             </div>
+
+            {/* Reviews Section */}
+            {service.reviews && service.reviews.length > 0 && (
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-4">Customer Reviews</h3>
+                <div className="space-y-4">
+                  {service.reviews.map((review) => (
+                    <div key={review.id} className="border rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="flex text-yellow-500">
+                          {Array.from({ length: review.rating }).map((_, i) => (
+                            <Star key={i} className="h-4 w-4 fill-current" />
+                          ))}
+                        </div>
+                        <span className="text-sm text-muted-foreground">
+                          {format(new Date(review.createdAt), "MMM d, yyyy")}
+                        </span>
+                      </div>
+                      <p className="text-sm">{review.review}</p>
+                      {review.providerReply && (
+                        <div className="mt-2 pl-4 border-l-2">
+                          <p className="text-sm text-muted-foreground">
+                            <span className="font-medium">Provider response:</span> {review.providerReply}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
+
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete your booking</DialogTitle>
+          </DialogHeader>
+          <p>Please wait while we initialize the payment...</p>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
