@@ -24,13 +24,6 @@ import { ServiceAvailabilityCalendar } from "@/components/service-availability-c
 
 // Extended service form schema with availability
 const serviceFormSchema = insertServiceSchema.extend({
-  price: z.string().min(1, "Price is required"),
-  duration: z.coerce.number().min(15, "Duration must be at least 15 minutes"),
-  bufferTime: z.coerce.number().min(0, "Buffer time must be non-negative"),
-  location: z.object({
-    lat: z.number(),
-    lng: z.number(),
-  }).nullable(),
   workingHours: z.object({
     monday: z.object({
       isAvailable: z.boolean(),
@@ -73,6 +66,13 @@ const serviceFormSchema = insertServiceSchema.extend({
     end: z.string(),
   })),
   maxDailyBookings: z.number().min(1, "Must accept at least 1 booking per day"),
+  bufferTime: z.number().min(0, "Buffer time must be non-negative"),
+  duration: z.number().min(15, "Duration must be at least 15 minutes"),
+  price: z.string().min(1, "Price is required"),
+  location: z.object({
+    lat: z.number(),
+    lng: z.number(),
+  }).nullable(),
 });
 
 type ServiceFormData = z.infer<typeof serviceFormSchema>;
@@ -101,14 +101,11 @@ export default function ProviderServices() {
     defaultValues: {
       name: "",
       description: "",
+      category: "",
       price: "",
       duration: 60,
-      category: "",
       bufferTime: 15,
       isAvailable: true,
-      images: [],
-      providerId: user?.id || 0,
-      location: { lat: 19.076, lng: 72.8777 }, // Default to Mumbai coordinates
       workingHours: {
         monday: defaultWorkingHours,
         tuesday: defaultWorkingHours,
@@ -116,15 +113,18 @@ export default function ProviderServices() {
         thursday: defaultWorkingHours,
         friday: defaultWorkingHours,
         saturday: defaultWorkingHours,
-        sunday: defaultWorkingHours,
+        sunday: { ...defaultWorkingHours, isAvailable: false },
       },
       breakTime: [{ start: "13:00", end: "14:00" }],
       maxDailyBookings: 8,
+      location: { lat: 19.076, lng: 72.8777 }, // Default to Mumbai coordinates
+
     },
   });
 
   const createServiceMutation = useMutation({
     mutationFn: async (data: ServiceFormData) => {
+      console.log("Creating service with data:", data); // Debug log
       const res = await apiRequest("POST", "/api/services", {
         ...data,
         providerId: user?.id,
@@ -138,15 +138,16 @@ export default function ProviderServices() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
       toast({
-        title: "Success",
-        description: "Service created successfully",
+        title: t("success"),
+        description: t("service_created_successfully"),
       });
       form.reset();
       setDialogOpen(false);
     },
     onError: (error: Error) => {
+      console.error("Service creation error:", error); // Debug log
       toast({
-        title: "Error",
+        title: t("error"),
         description: error.message,
         variant: "destructive",
       });
@@ -155,6 +156,7 @@ export default function ProviderServices() {
 
   const updateServiceMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<ServiceFormData> }) => {
+      console.log("Updating service with data:", data); // Debug log
       const res = await apiRequest("PATCH", `/api/services/${id}`, data);
       if (!res.ok) {
         const error = await res.json();
@@ -165,15 +167,16 @@ export default function ProviderServices() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
       toast({
-        title: "Success",
-        description: "Service updated successfully",
+        title: t("success"),
+        description: t("service_updated_successfully"),
       });
       setDialogOpen(false);
       setEditingService(null);
     },
     onError: (error: Error) => {
+      console.error("Service update error:", error); // Debug log
       toast({
-        title: "Error",
+        title: t("error"),
         description: error.message,
         variant: "destructive",
       });
@@ -181,13 +184,13 @@ export default function ProviderServices() {
   });
 
   const onSubmit = (data: ServiceFormData) => {
+    console.log("Form submission data:", data); // Debug log
     if (editingService) {
       updateServiceMutation.mutate({ id: editingService.id, data });
     } else {
       createServiceMutation.mutate(data);
     }
   };
-
 
   return (
     <DashboardLayout>
@@ -208,54 +211,40 @@ export default function ProviderServices() {
                 </DialogTitle>
               </DialogHeader>
 
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="basic">{t('basic_info')}</TabsTrigger>
-                  <TabsTrigger value="availability">{t('availability')}</TabsTrigger>
-                  <TabsTrigger value="scheduling">{t('scheduling')}</TabsTrigger>
-                  <TabsTrigger value="calendar">{t('calendar')}</TabsTrigger>
-                </TabsList>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="basic">{t('basic_info')}</TabsTrigger>
+                      <TabsTrigger value="availability">{t('availability')}</TabsTrigger>
+                      <TabsTrigger value="scheduling">{t('scheduling')}</TabsTrigger>
+                      <TabsTrigger value="calendar">{t('calendar')}</TabsTrigger>
+                    </TabsList>
 
-                <TabsContent value="basic">
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('service_name')}</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="description"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('service_description')}</FormLabel>
-                            <FormControl>
-                              <Textarea {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="grid gap-4 md:grid-cols-2">
+                    <TabsContent value="basic">
+                      <div className="space-y-4">
                         <FormField
                           control={form.control}
-                          name="price"
+                          name="name"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>{t('service_price')} (₹)</FormLabel>
+                              <FormLabel>{t('service_name')}</FormLabel>
                               <FormControl>
-                                <Input {...field} type="number" min="0" step="0.01" />
+                                <Input {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="description"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t('service_description')}</FormLabel>
+                              <FormControl>
+                                <Textarea {...field} />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -287,14 +276,75 @@ export default function ProviderServices() {
                           )}
                         />
 
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <FormField
+                            control={form.control}
+                            name="price"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t('service_price')} (₹)</FormLabel>
+                                <FormControl>
+                                  <Input {...field} type="number" min="0" step="0.01" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="duration"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t('service_duration')} ({t('minutes')})</FormLabel>
+                                <FormControl>
+                                  <Input {...field} type="number" min="15" step="15" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
                         <FormField
                           control={form.control}
-                          name="duration"
+                          name="isAvailable"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel>{t('available_for_booking')}</FormLabel>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="availability">
+                      <ServiceAvailabilityForm form={form} />
+                    </TabsContent>
+
+                    <TabsContent value="scheduling">
+                      <div className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="maxDailyBookings"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>{t('service_duration')} ({t('minutes')})</FormLabel>
+                              <FormLabel>{t('max_daily_bookings')}</FormLabel>
                               <FormControl>
-                                <Input {...field} type="number" min="15" step="15" />
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -308,94 +358,50 @@ export default function ProviderServices() {
                             <FormItem>
                               <FormLabel>{t('buffer_time')} ({t('minutes')})</FormLabel>
                               <FormControl>
-                                <Input {...field} type="number" min="0" step="5" />
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="5"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
                       </div>
+                    </TabsContent>
 
-                      <FormField
-                        control={form.control}
-                        name="isAvailable"
-                        render={({ field }) => (
-                          <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                            <div className="space-y-0.5">
-                              <FormLabel>{t('available_for_booking')}</FormLabel>
-                            </div>
-                            <FormControl>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </form>
-                  </Form>
-                </TabsContent>
+                    <TabsContent value="calendar">
+                      {editingService && (
+                        <ServiceAvailabilityCalendar
+                          serviceId={editingService.id}
+                          workingHours={form.getValues().workingHours}
+                          breakTime={form.getValues().breakTime}
+                        />
+                      )}
+                      {!editingService && (
+                        <p className="text-center text-muted-foreground py-4">
+                          {t('save_service_to_manage_calendar')}
+                        </p>
+                      )}
+                    </TabsContent>
+                  </Tabs>
 
-                <TabsContent value="availability">
-                  <Form {...form}>
-                    <ServiceAvailabilityForm form={form} />
-                  </Form>
-                </TabsContent>
-
-                <TabsContent value="scheduling">
-                  <Form {...form}>
-                    <div className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="maxDailyBookings"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('max_daily_bookings')}</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                min="1"
-                                {...field}
-                                onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </Form>
-                </TabsContent>
-
-                <TabsContent value="calendar">
-                  {editingService && (
-                    <ServiceAvailabilityCalendar
-                      serviceId={editingService.id}
-                      workingHours={form.getValues().workingHours}
-                      breakTime={form.getValues().breakTime}
-                    />
-                  )}
-                  {!editingService && (
-                    <p className="text-center text-muted-foreground py-4">
-                      {t('save_service_to_manage_calendar')}
-                    </p>
-                  )}
-                </TabsContent>
-              </Tabs>
-
-              <div className="flex justify-end mt-4">
-                <Button
-                  type="submit"
-                  disabled={form.formState.isSubmitting}
-                  onClick={form.handleSubmit(onSubmit)}
-                >
-                  {form.formState.isSubmitting && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {editingService ? t('update_service') : t('create_service')}
-                </Button>
-              </div>
+                  <div className="flex justify-end mt-4">
+                    <Button
+                      type="submit"
+                      disabled={form.formState.isSubmitting}
+                    >
+                      {form.formState.isSubmitting && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      {editingService ? t('update_service') : t('create_service')}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
             </DialogContent>
           </Dialog>
         </div>

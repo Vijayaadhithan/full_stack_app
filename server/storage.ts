@@ -22,6 +22,21 @@ export interface OrderStatusUpdate {
   timestamp: Date;
 }
 
+interface BlockedTimeSlot {
+  id: number;
+  serviceId: number;
+  date: Date;
+  startTime: string;
+  endTime: string;
+}
+
+interface InsertBlockedTimeSlot {
+  serviceId: number;
+  date: Date;
+  startTime: string;
+  endTime: string;
+}
+
 export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
@@ -135,6 +150,17 @@ export interface IStorage {
   completeService(bookingId: number): Promise<Booking>;
   addBookingReview(bookingId: number, review: InsertReview): Promise<Review>;
   respondToReview(reviewId: number, response: string): Promise<Review>;
+
+  // Add new methods for blocked time slots
+  getBlockedTimeSlots(serviceId: number): Promise<BlockedTimeSlot[]>;
+  createBlockedTimeSlot(data: InsertBlockedTimeSlot): Promise<BlockedTimeSlot>;
+  deleteBlockedTimeSlot(slotId: number): Promise<void>;
+  getOverlappingBookings(
+    serviceId: number,
+    date: Date,
+    startTime: string,
+    endTime: string
+  ): Promise<Booking[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -151,6 +177,7 @@ export class MemStorage implements IStorage {
   private waitlist: Map<number, Map<number, Date>>; // serviceId -> (customerId -> preferredDate)
   private returnRequests: Map<number, ReturnRequest>;
   private orderStatusUpdates: Map<number, OrderStatusUpdate[]>;
+  private blockedTimeSlots: Map<number, BlockedTimeSlot[]>; // Add new map for blocked slots
   sessionStore: session.Store;
   private currentId: number;
   private providerAvailability: Map<number, {
@@ -178,6 +205,7 @@ export class MemStorage implements IStorage {
       checkPeriod: 86400000,
     });
     this.providerAvailability = new Map();
+    this.blockedTimeSlots = new Map(); // Initialize the new map
   }
 
   // User operations
@@ -682,6 +710,63 @@ export class MemStorage implements IStorage {
 
     this.reviews.set(reviewId, updated);
     return updated;
+  }
+
+  // Add new methods for blocked time slots
+  async getBlockedTimeSlots(serviceId: number): Promise<BlockedTimeSlot[]> {
+    return this.blockedTimeSlots.get(serviceId) || [];
+  }
+
+  async createBlockedTimeSlot(data: InsertBlockedTimeSlot): Promise<BlockedTimeSlot> {
+    const id = this.currentId++;
+    const newSlot = { ...data, id };
+
+    if (!this.blockedTimeSlots.has(data.serviceId)) {
+      this.blockedTimeSlots.set(data.serviceId, []);
+    }
+    this.blockedTimeSlots.get(data.serviceId)!.push(newSlot);
+
+    return newSlot;
+  }
+
+  async deleteBlockedTimeSlot(slotId: number): Promise<void> {
+    for (const [serviceId, slots] of this.blockedTimeSlots.entries()) {
+      const index = slots.findIndex(slot => slot.id === slotId);
+      if (index !== -1) {
+        slots.splice(index, 1);
+        return;
+      }
+    }
+  }
+
+  async getOverlappingBookings(
+    serviceId: number,
+    date: Date,
+    startTime: string,
+    endTime: string
+  ): Promise<Booking[]> {
+    const bookings = Array.from(this.bookings.values()).filter(
+      booking =>
+        booking.serviceId === serviceId &&
+        booking.bookingDate.toDateString() === date.toDateString()
+    );
+
+    const bookingStart = new Date(`${date.toDateString()} ${startTime}`);
+    const bookingEnd = new Date(`${date.toDateString()} ${endTime}`);
+
+    return bookings.filter(booking => {
+      const existingStart = new Date(booking.bookingDate);
+      const service = this.services.get(booking.serviceId);
+      if (!service) return false;
+
+      const existingEnd = new Date(existingStart.getTime() + service.duration * 60000);
+
+      return (
+        (bookingStart >= existingStart && bookingStart < existingEnd) ||
+        (bookingEnd > existingStart && bookingEnd <= existingEnd) ||
+        (bookingStart <= existingStart && bookingEnd >= existingEnd)
+      );
+    });
   }
 
   async initializeSampleData() {

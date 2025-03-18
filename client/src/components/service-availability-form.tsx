@@ -14,13 +14,30 @@ interface ServiceAvailabilityFormProps {
 
 export function ServiceAvailabilityForm({ form }: ServiceAvailabilityFormProps) {
   const { t } = useLanguage();
-  const [showBreakTime, setShowBreakTime] = useState(false);
 
   const weekDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
+  // Initialize working hours if not set
+  if (!form.getValues('workingHours')) {
+    const defaultWorkingHours = weekDays.reduce((acc, day) => ({
+      ...acc,
+      [day]: {
+        isAvailable: day !== 'sunday',
+        start: '09:00',
+        end: '17:00'
+      }
+    }), {});
+    form.setValue('workingHours', defaultWorkingHours);
+  }
+
+  // Initialize break time if not set
+  if (!form.getValues('breakTime')) {
+    form.setValue('breakTime', []);
+  }
+
   const handleAddBreakTime = () => {
     const currentBreakTime = form.getValues('breakTime') || [];
-    form.setValue('breakTime', [...currentBreakTime, { start: '', end: '' }]);
+    form.setValue('breakTime', [...currentBreakTime, { start: '13:00', end: '14:00' }]);
   };
 
   const handleRemoveBreakTime = (index: number) => {
