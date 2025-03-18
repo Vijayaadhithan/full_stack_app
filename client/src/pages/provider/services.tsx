@@ -194,295 +194,296 @@ export default function ProviderServices() {
   return (
     <DashboardLayout>
       <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">{t('my_services')}</h1>
-          <Button onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            {t('add_service')}
-          </Button>
-        </div>
-
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="sm:max-w-[800px]">
-            <DialogHeader>
-              <DialogTitle>
-                {editingService ? t('edit_service') : t('add_service')}
-              </DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="basic">{t('basic_info')}</TabsTrigger>
-                    <TabsTrigger value="availability">{t('availability')}</TabsTrigger>
-                    <TabsTrigger value="scheduling">{t('scheduling')}</TabsTrigger>
-                    <TabsTrigger value="calendar">{t('calendar')}</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="basic">
-                    <div className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('service_name')}</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="description"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('service_description')}</FormLabel>
-                            <FormControl>
-                              <Textarea {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="category"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('service_category')}</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder={t('select_category')} />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="Beauty & Wellness">{t('beauty_wellness')}</SelectItem>
-                                <SelectItem value="Home Services">{t('home_services')}</SelectItem>
-                                <SelectItem value="Professional Services">{t('professional_services')}</SelectItem>
-                                <SelectItem value="Health & Fitness">{t('health_fitness')}</SelectItem>
-                                <SelectItem value="Education & Training">{t('education_training')}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <FormField
-                          control={form.control}
-                          name="price"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>{t('service_price')} (₹)</FormLabel>
-                              <FormControl>
-                                <Input {...field} type="number" min="0" step="0.01" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="duration"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>{t('service_duration')} ({t('minutes')})</FormLabel>
-                              <FormControl>
-                                <Input {...field} type="number" min="15" step="15" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <FormField
-                        control={form.control}
-                        name="isAvailable"
-                        render={({ field }) => (
-                          <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                            <div className="space-y-0.5">
-                              <FormLabel>{t('available_for_booking')}</FormLabel>
-                            </div>
-                            <FormControl>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="availability">
-                    <ServiceAvailabilityForm form={form} />
-                  </TabsContent>
-
-                  <TabsContent value="scheduling">
-                    <div className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="maxDailyBookings"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('max_daily_bookings')}</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                min="1"
-                                {...field}
-                                onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="bufferTime"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('buffer_time')} ({t('minutes')})</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="5"
-                                {...field}
-                                onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="calendar">
-                    {editingService && (
-                      <ServiceAvailabilityCalendar
-                        serviceId={editingService.id}
-                        workingHours={form.getValues().workingHours}
-                        breakTime={form.getValues().breakTime}
-                      />
-                    )}
-                    {!editingService && (
-                      <p className="text-center text-muted-foreground py-4">
-                        {t('save_service_to_manage_calendar')}
-                      </p>
-                    )}
-                  </TabsContent>
-                </Tabs>
-
-                <div className="flex justify-end mt-4">
-                  <Button
-                    type="submit"
-                    disabled={form.formState.isSubmitting}
-                  >
-                    {form.formState.isSubmitting && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    {editingService ? t('update_service') : t('create_service')}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <Loader2 className="h-8 w-8 animate-spin" />
+        <div className="grid gap-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium">Active Services</h2>
+            <Button onClick={() => setDialogOpen(true)} variant="default" size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              {t('add_service')}
+            </Button>
           </div>
-        ) : !services?.length ? (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">{t('no_services_yet')}</p>
-              <Button
-                className="mt-4"
-                onClick={() => setDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                {t('add_service')}
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            {services.map((service) => (
-              <Card key={service.id}>
-                <CardContent className="p-6">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold">{service.name}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {service.description}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setEditingService(service);
-                        form.reset({
-                          ...service,
-                          price: service.price.toString(),
-                        });
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                  </div>
 
-                  <div className="mt-4 space-y-2">
-                    <div className="flex justify-between items-center text-sm">
-                      <span>{t('price')}</span>
-                      <span className="font-semibold">₹{service.price}</span>
+          {isLoading ? (
+            <div className="flex items-center justify-center min-h-[400px]">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : !services?.length ? (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <p className="text-muted-foreground">{t('no_services_yet')}</p>
+                <Button
+                  className="mt-4"
+                  onClick={() => setDialogOpen(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t('add_service')}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2">
+              {services.map((service) => (
+                <Card key={service.id}>
+                  <CardContent className="p-6">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-semibold">{service.name}</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {service.description}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingService(service);
+                          form.reset({
+                            ...service,
+                            price: service.price.toString(),
+                          });
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span>{t('duration')}</span>
-                      <span className="font-semibold">{service.duration} {t('minutes')}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span>{t('category')}</span>
-                      <span className="font-semibold">{service.category}</span>
-                    </div>
-                  </div>
 
-                  <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <span className="text-sm font-medium">{t('availability')}</span>
+                    <div className="mt-4 space-y-2">
+                      <div className="flex justify-between items-center text-sm">
+                        <span>{t('price')}</span>
+                        <span className="font-semibold">₹{service.price}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span>{t('duration')}</span>
+                        <span className="font-semibold">{service.duration} {t('minutes')}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span>{t('category')}</span>
+                        <span className="font-semibold">{service.category}</span>
+                      </div>
                     </div>
-                    <Switch
-                      checked={service.isAvailable}
-                      onCheckedChange={(checked) =>
-                        updateServiceMutation.mutate({
-                          id: service.id,
-                          data: { isAvailable: checked },
-                        })
-                      }
+
+                    <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <span className="text-sm font-medium">{t('availability')}</span>
+                      </div>
+                      <Switch
+                        checked={service.isAvailable}
+                        onCheckedChange={(checked) =>
+                          updateServiceMutation.mutate({
+                            id: service.id,
+                            data: { isAvailable: checked },
+                          })
+                        }
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-[800px]">
+          <DialogHeader>
+            <DialogTitle>
+              {editingService ? t('edit_service') : t('add_service')}
+            </DialogTitle>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="basic">{t('basic_info')}</TabsTrigger>
+                  <TabsTrigger value="availability">{t('availability')}</TabsTrigger>
+                  <TabsTrigger value="scheduling">{t('scheduling')}</TabsTrigger>
+                  <TabsTrigger value="calendar">{t('calendar')}</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="basic">
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('service_name')}</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('service_description')}</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('service_category')}</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder={t('select_category')} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="Beauty & Wellness">{t('beauty_wellness')}</SelectItem>
+                              <SelectItem value="Home Services">{t('home_services')}</SelectItem>
+                              <SelectItem value="Professional Services">{t('professional_services')}</SelectItem>
+                              <SelectItem value="Health & Fitness">{t('health_fitness')}</SelectItem>
+                              <SelectItem value="Education & Training">{t('education_training')}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="price"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('service_price')} (₹)</FormLabel>
+                            <FormControl>
+                              <Input {...field} type="number" min="0" step="0.01" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="duration"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('service_duration')} ({t('minutes')})</FormLabel>
+                            <FormControl>
+                              <Input {...field} type="number" min="15" step="15" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="isAvailable"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                          <div className="space-y-0.5">
+                            <FormLabel>{t('available_for_booking')}</FormLabel>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
                     />
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+                </TabsContent>
+
+                <TabsContent value="availability">
+                  <ServiceAvailabilityForm form={form} />
+                </TabsContent>
+
+                <TabsContent value="scheduling">
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="maxDailyBookings"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('max_daily_bookings')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="1"
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="bufferTime"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('buffer_time')} ({t('minutes')})</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="5"
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="calendar">
+                  {editingService && (
+                    <ServiceAvailabilityCalendar
+                      serviceId={editingService.id}
+                      workingHours={form.getValues().workingHours}
+                      breakTime={form.getValues().breakTime}
+                    />
+                  )}
+                  {!editingService && (
+                    <p className="text-center text-muted-foreground py-4">
+                      {t('save_service_to_manage_calendar')}
+                    </p>
+                  )}
+                </TabsContent>
+              </Tabs>
+
+              <div className="flex justify-end mt-4">
+                <Button
+                  type="submit"
+                  disabled={form.formState.isSubmitting}
+                >
+                  {form.formState.isSubmitting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {editingService ? t('update_service') : t('create_service')}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
