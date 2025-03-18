@@ -163,6 +163,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Service not found" });
       }
 
+      if (!service.providerId) {
+        return res.status(400).json({ message: "Invalid service provider" });
+      }
+
       // Get the provider details
       const provider = await storage.getUser(service.providerId);
       if (!provider) {
@@ -172,9 +176,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get reviews for the service
       const reviews = await storage.getReviewsByService(serviceId);
 
+      // Calculate average rating
+      const rating = reviews?.length 
+        ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length 
+        : null;
+
       // Return combined data
       res.json({
         ...service,
+        rating,
         provider: {
           id: provider.id,
           name: provider.name,
@@ -186,7 +196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Error fetching service:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch service" });
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch service" });
     }
   });
 

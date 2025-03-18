@@ -43,8 +43,7 @@ export default function BrowseServices() {
   const filteredServices = services?.filter(service => 
     (selectedCategory === "All" || service.category === selectedCategory) &&
     (service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     service.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
-    service.isAvailable
+     service.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (

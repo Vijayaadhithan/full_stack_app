@@ -8,11 +8,22 @@ import { motion } from "framer-motion";
 import { Loader2, MapPin, Clock, Star } from "lucide-react";
 import { format } from "date-fns";
 
+type ServiceWithDetails = Service & {
+  provider: User;
+  rating: number | null;
+  reviews: Array<{
+    id: number;
+    rating: number;
+    review: string;
+    createdAt: string;
+    providerReply?: string;
+  }>;
+};
+
 export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
 
-  // Fetch service details including provider and reviews
-  const { data: service, isLoading } = useQuery<Service & { provider: User }>({
+  const { data: service, isLoading } = useQuery<ServiceWithDetails>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
   });
@@ -76,7 +87,7 @@ export default function ServiceDetails() {
                   <p className="font-medium">{service.provider?.name}</p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
-                    <span>{service.rating?.toFixed(1) || "N/A"}</span>
+                    <span>{service.rating?.toFixed(1) || "N/A"} ({service.reviews?.length || 0} reviews)</span>
                   </div>
                 </div>
               </div>
@@ -99,6 +110,37 @@ export default function ServiceDetails() {
                 <p className="mt-2 font-semibold">₹{service.price}</p>
               </div>
             </div>
+
+            {/* Reviews Section */}
+            {service.reviews && service.reviews.length > 0 && (
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-4">Customer Reviews</h3>
+                <div className="space-y-4">
+                  {service.reviews.map((review) => (
+                    <div key={review.id} className="border rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="flex text-yellow-500">
+                          {Array.from({ length: review.rating }).map((_, i) => (
+                            <Star key={i} className="h-4 w-4 fill-current" />
+                          ))}
+                        </div>
+                        <span className="text-sm text-muted-foreground">
+                          {format(new Date(review.createdAt), "MMM d, yyyy")}
+                        </span>
+                      </div>
+                      <p className="text-sm">{review.review}</p>
+                      {review.providerReply && (
+                        <div className="mt-2 pl-4 border-l-2">
+                          <p className="text-sm text-muted-foreground">
+                            <span className="font-medium">Provider response:</span> {review.providerReply}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
