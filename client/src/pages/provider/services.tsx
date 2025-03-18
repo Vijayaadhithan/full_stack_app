@@ -14,25 +14,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Edit2, Clock } from "lucide-react";
-import { motion } from "framer-motion";
 import { Service, insertServiceSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
-
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-};
-
-const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
-};
 
 const serviceFormSchema = insertServiceSchema.extend({
   bufferTime: z.coerce.number().min(0, "Buffer time must be a positive number"),
@@ -64,7 +48,7 @@ export default function ProviderServices() {
       bufferTime: 15,
       isAvailable: true,
       images: [],
-      providerId: user?.id || null,
+      providerId: user?.id || 0,
       location: null,
     },
   });
@@ -77,15 +61,16 @@ export default function ProviderServices() {
         providerId: user?.id,
       });
       if (!res.ok) {
-        throw new Error("Failed to create service");
+        const error = await res.json();
+        throw new Error(error.message || "Failed to create service");
       }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
       toast({
-        title: "Service created",
-        description: "Your service has been created successfully.",
+        title: "Success",
+        description: "Service created successfully",
       });
       form.reset();
       setDialogOpen(false);
@@ -104,15 +89,16 @@ export default function ProviderServices() {
     mutationFn: async ({ id, data }: { id: number; data: Partial<ServiceFormData> }) => {
       const res = await apiRequest("PATCH", `/api/services/${id}`, data);
       if (!res.ok) {
-        throw new Error("Failed to update service");
+        const error = await res.json();
+        throw new Error(error.message || "Failed to update service");
       }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
       toast({
-        title: "Service updated",
-        description: "Your service has been updated successfully.",
+        title: "Success",
+        description: "Service updated successfully",
       });
       setDialogOpen(false);
       setEditingService(null);
@@ -207,10 +193,7 @@ export default function ProviderServices() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Category</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select category" />
@@ -297,67 +280,70 @@ export default function ProviderServices() {
           <div className="flex items-center justify-center min-h-[400px]">
             <Loader2 className="h-8 w-8 animate-spin" />
           </div>
+        ) : !services?.length ? (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <p className="text-muted-foreground">No services created yet</p>
+            </CardContent>
+          </Card>
         ) : (
-          <motion.div
-            variants={container}
-            initial="hidden"
-            animate="show"
-            className="grid gap-6 md:grid-cols-2"
-          >
-            {services?.map((service) => (
-              <motion.div key={service.id} variants={item}>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold">{service.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {service.description}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(service)}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
+          <div className="grid gap-6 md:grid-cols-2">
+            {services.map((service) => (
+              <Card key={service.id}>
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-semibold">{service.name}</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {service.description}
+                      </p>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setEditingService(service);
+                        form.reset(service);
+                        setDialogOpen(true);
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                  </div>
 
-                    <div className="mt-4 space-y-2">
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Price</span>
-                        <span className="font-semibold">₹{service.price}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Duration</span>
-                        <span className="font-semibold">{service.duration} mins</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Category</span>
-                        <span className="font-semibold">{service.category}</span>
-                      </div>
+                  <div className="mt-4 space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span>Price</span>
+                      <span className="font-semibold">₹{service.price}</span>
                     </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span>Duration</span>
+                      <span className="font-semibold">{service.duration} mins</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span>Category</span>
+                      <span className="font-semibold">{service.category}</span>
+                    </div>
+                  </div>
 
-                    <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <span className="text-sm font-medium">Availability</span>
-                      </div>
-                      <Switch
-                        checked={service.isAvailable}
-                        onCheckedChange={(checked) =>
-                          updateServiceMutation.mutate({
-                            id: service.id,
-                            data: { isAvailable: checked },
-                          })
-                        }
-                      />
+                  <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <span className="text-sm font-medium">Availability</span>
                     </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
+                    <Switch
+                      checked={service.isAvailable}
+                      onCheckedChange={(checked) =>
+                        updateServiceMutation.mutate({
+                          id: service.id,
+                          data: { isAvailable: checked },
+                        })
+                      }
+                    />
+                  </div>
+                </CardContent>
+              </Card>
             ))}
-          </motion.div>
+          </div>
         )}
       </div>
     </DashboardLayout>

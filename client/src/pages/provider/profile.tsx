@@ -7,10 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/hooks/use-auth";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { z } from "zod";
 
 const profileSchema = z.object({
@@ -19,10 +19,10 @@ const profileSchema = z.object({
   email: z.string().email("Valid email is required"),
   address: z.string().min(1, "Address is required"),
   bio: z.string().min(10, "Bio should be at least 10 characters"),
-  qualifications: z.string(),
-  experience: z.string(),
-  workingHours: z.string(),
-  languages: z.string(),
+  qualifications: z.string().optional(),
+  experience: z.string().optional(),
+  workingHours: z.string().optional(),
+  languages: z.string().optional(),
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -38,19 +38,22 @@ export default function ProviderProfile() {
       phone: user?.phone || "",
       email: user?.email || "",
       address: user?.address || "",
-      bio: "",
-      qualifications: "",
-      experience: "",
-      workingHours: "",
-      languages: "",
+      bio: user?.bio || "",
+      qualifications: user?.qualifications || "",
+      experience: user?.experience || "",
+      workingHours: user?.workingHours || "",
+      languages: user?.languages || "",
     },
   });
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
-      const res = await apiRequest("PATCH", `/api/users/${user?.id}`, data);
+      if (!user?.id) throw new Error("User not found");
+
+      const res = await apiRequest("PATCH", `/api/users/${user.id}`, data);
       if (!res.ok) {
-        throw new Error("Failed to update profile");
+        const error = await res.json();
+        throw new Error(error.message || "Failed to update profile");
       }
       return res.json();
     },
@@ -106,7 +109,7 @@ export default function ProviderProfile() {
                       <FormItem>
                         <FormLabel>Phone</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} type="tel" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

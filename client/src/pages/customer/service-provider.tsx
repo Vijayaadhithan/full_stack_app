@@ -3,51 +3,31 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Service, User, Review } from "@shared/schema";
-import { Loader2, MapPin, Clock, Star, Calendar } from "lucide-react";
+import { Loader2, MapPin, Clock, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useParams, Link } from "wouter";
 
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-};
-
-const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
+type ServiceWithDetails = {
+  id: number;
+  name: string;
+  description: string;
+  price: string;
+  duration: number;
+  category: string;
+  isAvailable: boolean;
+  provider: User;
+  reviews: Review[];
 };
 
 export default function ServiceProvider() {
   const { id } = useParams();
 
-  // Fetch service details
-  const { data: service, isLoading: serviceLoading } = useQuery<Service>({
+  const { data: service, isLoading } = useQuery<ServiceWithDetails>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
   });
 
-  // Fetch provider details once we have service data
-  const { data: provider, isLoading: providerLoading } = useQuery<User>({
-    queryKey: [`/api/users/${service?.providerId}`],
-    enabled: !!service?.providerId,
-  });
-
-  // Fetch reviews for the service
-  const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
-    queryKey: [`/api/reviews/service/${id}`],
-    enabled: !!id,
-  });
-
-  const averageRating = reviews?.length 
-    ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length
-    : 0;
-
-  if (serviceLoading || providerLoading || reviewsLoading) {
+  if (isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -57,7 +37,7 @@ export default function ServiceProvider() {
     );
   }
 
-  if (!service || !provider) {
+  if (!service) {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -70,66 +50,65 @@ export default function ServiceProvider() {
     );
   }
 
+  const averageRating = service.reviews?.length
+    ? service.reviews.reduce((acc, review) => acc + review.rating, 0) / service.reviews.length
+    : 0;
+
   return (
     <DashboardLayout>
       <motion.div
-        variants={container}
-        initial="hidden"
-        animate="show"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         className="max-w-4xl mx-auto space-y-6"
       >
         <div className="flex flex-col md:flex-row gap-6">
-          <motion.div variants={item} className="md:w-1/3">
+          <motion.div className="md:w-1/3">
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <div className="flex flex-col items-center text-center">
                   <img
-                    src={provider.profilePicture || "https://via.placeholder.com/128"}
-                    alt={provider.name || "Provider"}
+                    src={service.provider.profilePicture || "https://via.placeholder.com/128"}
+                    alt={service.provider.name}
                     className="h-32 w-32 rounded-full object-cover mb-4"
                   />
-                  <h2 className="text-2xl font-bold">{provider.name || "Unknown Provider"}</h2>
+                  <h2 className="text-2xl font-bold">{service.provider.name}</h2>
                   <div className="flex items-center gap-1 text-yellow-500">
                     <Star className="h-4 w-4 fill-current" />
-                    <span>{averageRating.toFixed(1)} ({reviews?.length} reviews)</span>
+                    <span>{averageRating.toFixed(1)} ({service.reviews?.length} reviews)</span>
                   </div>
                   <p className="text-muted-foreground mt-2 flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
-                    {provider.address || "Address not available"}
+                    {service.provider.address || "Address not available"}
                   </p>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
 
-          <motion.div variants={item} className="md:w-2/3 space-y-6">
+          <motion.div className="md:w-2/3 space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Service Details</CardTitle>
+                <CardTitle>{service.name}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="p-4 border rounded-lg">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-semibold">{service.name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {service.description}
-                      </p>
+                <div className="space-y-4">
+                  <p className="text-muted-foreground">{service.description}</p>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      <span>{service.duration} minutes</span>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold">₹{service.price}</p>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        {service.duration} mins
-                      </p>
-                    </div>
+                    <span className="text-xl font-bold">₹{service.price}</span>
                   </div>
-                  <Link href={`/customer/book-service/${service.id}`}>
-                    <Button className="w-full">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Book Now
+                  {service.isAvailable ? (
+                    <Link href={`/customer/book-service/${service.id}`}>
+                      <Button className="w-full">Book Now</Button>
+                    </Link>
+                  ) : (
+                    <Button className="w-full" disabled>
+                      Currently Unavailable
                     </Button>
-                  </Link>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -140,32 +119,34 @@ export default function ServiceProvider() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {!reviews?.length ? (
+                  {!service.reviews?.length ? (
                     <p className="text-center text-muted-foreground">No reviews yet</p>
-                  ) : reviews?.map((review) => (
-                    <div key={review.id} className="border-b pb-4 last:border-0">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex text-yellow-500">
-                            {Array.from({ length: review.rating }).map((_, i) => (
-                              <Star key={i} className="h-4 w-4 fill-current" />
-                            ))}
+                  ) : (
+                    service.reviews.map((review) => (
+                      <div key={review.id} className="border-b pb-4 last:border-0">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex text-yellow-500">
+                              {Array.from({ length: review.rating }).map((_, i) => (
+                                <Star key={i} className="h-4 w-4 fill-current" />
+                              ))}
+                            </div>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date(review.createdAt || '').toLocaleDateString()}
+                            </span>
                           </div>
-                          <span className="text-sm text-muted-foreground">
-                            {new Date(review.createdAt || '').toLocaleDateString()}
-                          </span>
                         </div>
+                        <p className="text-sm">{review.review}</p>
+                        {review.providerResponse && (
+                          <div className="mt-2 pl-4 border-l-2">
+                            <p className="text-sm text-muted-foreground">
+                              <span className="font-semibold">Response:</span> {review.providerResponse}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm">{review.review}</p>
-                      {review.providerResponse && (
-                        <div className="mt-2 pl-4 border-l-2">
-                          <p className="text-sm text-muted-foreground">
-                            <span className="font-semibold">Response:</span> {review.providerResponse}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>

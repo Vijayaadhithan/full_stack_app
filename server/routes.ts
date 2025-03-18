@@ -51,9 +51,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const service = await storage.createService({
         ...result.data,
         providerId: req.user!.id,
+        isAvailable: true, // Default to available
       });
 
-      console.log("Created service:", service); // Debug log
+      console.log("Created service:", service);
       res.status(201).json(service);
     } catch (error) {
       console.error("Error creating service:", error);
@@ -92,8 +93,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Service not found" });
       }
 
-      console.log("Found service:", service); // Debug log
-      res.json(service);
+      // Get the provider details
+      const provider = await storage.getUser(service.providerId);
+      if (!provider) {
+        return res.status(404).json({ message: "Service provider not found" });
+      }
+
+      // Get reviews for the service
+      const reviews = await storage.getReviewsByService(serviceId);
+
+      // Return combined data
+      res.json({
+        ...service,
+        provider,
+        reviews
+      });
     } catch (error) {
       console.error("Error fetching service:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch service" });
@@ -545,6 +559,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "User not found" });
     }
     res.json(user);
+  });
+
+  app.patch("/api/users/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+      if (userId !== req.user!.id) {
+        return res.status(403).json({ message: "Can only update own profile" });
+      }
+
+      const updatedUser = await storage.updateUser(userId, req.body);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update user" });
+    }
   });
 
 
