@@ -14,16 +14,17 @@ import {
   insertReturnRequestSchema,
   InsertReturnRequest,
   ReturnRequest,
+  insertProductReviewSchema,
+  insertPromotionSchema,
 } from "@shared/schema";
 import Razorpay from "razorpay";
 
-// Update the Razorpay initialization section
 const razorpay = new Razorpay({
-  key_id: "rzp_test_1234567890",  // Test mode key
-  key_secret: "secret_test_1234567890" // Test mode secret
+  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_1234567890",
+  key_secret: process.env.RAZORPAY_KEY_SECRET || "secret_test_1234567890"
 });
 
-function requireAuth(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
+function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
     return res.status(401).send("Unauthorized");
   }
@@ -31,7 +32,7 @@ function requireAuth(req: Express.Request, res: Express.Response, next: Express.
 }
 
 function requireRole(roles: string[]) {
-  return (req: Express.Request, res: Express.Response, next: Express.NextFunction) => {
+  return (req: any, res: any, next: any) => {
     if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).send("Forbidden");
     }
@@ -41,6 +42,73 @@ function requireRole(roles: string[]) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
+
+  // Shop Profile Management
+  app.patch("/api/users/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+      if (userId !== req.user!.id) {
+        return res.status(403).json({ message: "Can only update own profile" });
+      }
+
+      const updatedUser = await storage.updateUser(userId, req.body);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update user" });
+    }
+  });
+
+  // Product Management
+  app.post("/api/products", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      const result = insertProductSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json(result.error);
+
+      const product = await storage.createProduct({
+        ...result.data,
+        shopId: req.user!.id,
+      });
+
+      console.log("Created product:", product);
+      res.status(201).json(product);
+    } catch (error) {
+      console.error("Error creating product:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create product" });
+    }
+  });
+
+  app.get("/api/products/shop/:id", requireAuth, async (req, res) => {
+    try {
+      const products = await storage.getProductsByShop(parseInt(req.params.id));
+      console.log("Shop products:", products);
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching shop products:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch products" });
+    }
+  });
+
+  app.patch("/api/products/:id", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      const product = await storage.getProduct(productId);
+
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      if (product.shopId !== req.user!.id) {
+        return res.status(403).json({ message: "Can only update own products" });
+      }
+
+      const updatedProduct = await storage.updateProduct(productId, req.body);
+      res.json(updatedProduct);
+    } catch (error) {
+      console.error("Error updating product:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update product" });
+    }
+  });
 
   // Service routes
   app.post("/api/services", requireAuth, requireRole(["provider"]), async (req, res) => {
@@ -333,7 +401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendStatus(200);
   });
 
-  // Order routes with better error handling
+  // Order Management
   app.post("/api/orders", requireAuth, requireRole(["customer"]), async (req, res) => {
     try {
       const result = insertOrderSchema.safeParse(req.body);
@@ -459,33 +527,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/orders/:id/status", requireAuth, requireRole(["shop"]), async (req, res) => {
-    const { status, trackingInfo } = req.body;
-    const order = await storage.updateOrderStatus(
-      parseInt(req.params.id),
-      status,
-      trackingInfo
-    );
+    try {
+      const { status, trackingInfo } = req.body;
+      const order = await storage.updateOrderStatus(
+        parseInt(req.params.id),
+        status,
+        trackingInfo
+      );
 
-    // Create notification for status update
-    await storage.createNotification({
-      userId: order.customerId,
-      type: "order",
-      title: `Order ${status}`,
-      message: `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`,
-    });
+      // Create notification for status update
+      await storage.createNotification({
+        userId: order.customerId,
+        type: "order",
+        title: `Order ${status}`,
+        message: `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`,
+      });
 
-    // Send SMS notification for important status updates
-    if (["confirmed", "shipped", "delivered"].includes(status)) {
-      const customer = await storage.getUser(order.customerId);
-      if (customer) {
-        await storage.sendSMSNotification(
-          customer.phone,
-          `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`
-        );
+      // Send SMS notification for important status updates
+      if (["confirmed", "shipped", "delivered"].includes(status)) {
+        const customer = await storage.getUser(order.customerId);
+        if (customer) {
+          await storage.sendSMSNotification(
+            customer.phone,
+            `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`
+          );
+        }
       }
-    }
 
-    res.json(order);
+      res.json(order);
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update order status" });
+    }
   });
 
   // Return and refund routes
@@ -519,37 +592,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/returns/:id/approve", requireAuth, requireRole(["shop"]), async (req, res) => {
-    const returnRequest = await storage.getReturnRequest(parseInt(req.params.id));
-    if (!returnRequest) return res.status(404).json({ message: "Return request not found" });
+    try {
+      const returnRequest = await storage.getReturnRequest(parseInt(req.params.id));
+      if (!returnRequest) return res.status(404).json({ message: "Return request not found" });
 
-    // Process refund through Razorpay
-    await storage.processRefund(returnRequest.id);
+      // Process refund through Razorpay
+      await storage.processRefund(returnRequest.id);
 
-    const updatedReturn = await storage.updateReturnRequest(returnRequest.id, {
-      status: "approved",
-    });
-
-    // Notify customer about approved return
-    const order = await storage.getOrder(returnRequest.orderId);
-    if (order) {
-      await storage.createNotification({
-        userId: order.customerId,
-        type: "return",
-        title: "Return Request Approved",
-        message: "Your return request has been approved. Refund will be processed shortly.",
+      const updatedReturn = await storage.updateReturnRequest(returnRequest.id, {
+        status: "approved",
       });
 
-      // Send SMS notification
-      const customer = await storage.getUser(order.customerId);
-      if (customer) {
-        await storage.sendSMSNotification(
-          customer.phone,
-          "Your return request has been approved. Refund will be processed shortly."
-        );
-      }
-    }
+      // Notify customer about approved return
+      const order = await storage.getOrder(returnRequest.orderId);
+      if (order) {
+        await storage.createNotification({
+          userId: order.customerId,
+          type: "return",
+          title: "Return Request Approved",
+          message: "Your return request has been approved. Refund will be processed shortly.",
+        });
 
-    res.json(updatedReturn);
+        // Send SMS notification
+        const customer = await storage.getUser(order.customerId);
+        if (customer) {
+          await storage.sendSMSNotification(
+            customer.phone,
+            "Your return request has been approved. Refund will be processed shortly."
+          );
+        }
+      }
+
+      res.json(updatedReturn);
+    } catch (error) {
+      console.error("Error approving return:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to approve return" });
+    }
   });
 
   // Add this route for user details
@@ -581,6 +659,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Get all products from storage
     const products = Array.from(storage.products.values());
     res.json(products);
+  });
+
+  // Product Reviews
+  app.get("/api/reviews/product/:id", requireAuth, async (req, res) => {
+    try {
+      const reviews = await storage.getProductReviews(parseInt(req.params.id));
+      res.json(reviews);
+    } catch (error) {
+      console.error("Error fetching product reviews:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch reviews" });
+    }
+  });
+
+  app.post("/api/reviews/product/:id/reply", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      const { reply } = req.body;
+      const review = await storage.replyToProductReview(parseInt(req.params.id), reply);
+      res.json(review);
+    } catch (error) {
+      console.error("Error replying to review:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to reply to review" });
+    }
+  });
+
+  // Promotions Management
+  app.post("/api/promotions", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      const result = insertPromotionSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json(result.error);
+
+      const promotion = await storage.createPromotion({
+        ...result.data,
+        shopId: req.user!.id,
+      });
+
+      res.status(201).json(promotion);
+    } catch (error) {
+      console.error("Error creating promotion:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create promotion" });
+    }
+  });
+
+  app.get("/api/promotions/shop/:id", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      const promotions = await storage.getPromotionsByShop(parseInt(req.params.id));
+      res.json(promotions);
+    } catch (error) {
+      console.error("Error fetching promotions:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch promotions" });
+    }
   });
 
   const httpServer = createServer(app);

@@ -8,6 +8,26 @@ export type PaymentMethod = {
   details: Record<string, string>;
 };
 
+// Enhanced shop profile fields
+export type ShopProfile = {
+  shopName: string;
+  description: string;
+  businessType: string;
+  gstin?: string;
+  bankDetails?: {
+    accountNumber: string;
+    ifscCode: string;
+    accountHolderName: string;
+  };
+  workingHours: {
+    from: string;
+    to: string;
+    days: string[];
+  };
+  shippingPolicy?: string;
+  returnPolicy?: string;
+};
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -20,6 +40,7 @@ export const users = pgTable("users", {
   language: text("language").default("en"),
   profilePicture: text("profile_picture"),
   paymentMethods: jsonb("payment_methods").$type<PaymentMethod[]>(),
+  shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
 });
 
 export const services = pgTable("services", {
@@ -79,17 +100,29 @@ export const reviews = pgTable("reviews", {
   providerReply: text("provider_reply"),
 });
 
+// Enhanced product schema with inventory tracking
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   shopId: integer("shop_id").references(() => users.id),
   name: text("name").notNull(),
   description: text("description").notNull(),
   price: decimal("price").notNull(),
+  mrp: decimal("mrp").notNull(),
   stock: integer("stock").notNull(),
   category: text("category").notNull(),
   images: text("images").array(),
-  discount: decimal("discount"),
   isAvailable: boolean("is_available").default(true),
+  sku: text("sku"),
+  barcode: text("barcode"),
+  weight: decimal("weight"),
+  dimensions: jsonb("dimensions").$type<{ length: number; width: number; height: number }>(),
+  specifications: jsonb("specifications").$type<Record<string, string>>(),
+  tags: text("tags").array(),
+  minOrderQuantity: integer("min_order_quantity").default(1),
+  maxOrderQuantity: integer("max_order_quantity"),
+  lowStockThreshold: integer("low_stock_threshold"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const cart = pgTable("cart", {
@@ -105,34 +138,104 @@ export const wishlist = pgTable("wishlist", {
   productId: integer("product_id").references(() => products.id),
 });
 
+// Enhanced orders schema
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => users.id),
   shopId: integer("shop_id").references(() => users.id),
-  status: text("status").$type<"pending" | "confirmed" | "shipped" | "delivered" | "cancelled">().notNull(),
+  status: text("status").$type<"pending" | "confirmed" | "processing" | "packed" | "shipped" | "delivered" | "cancelled" | "returned">().notNull(),
   paymentStatus: text("payment_status").$type<"pending" | "paid" | "refunded">().notNull(),
   total: decimal("total").notNull(),
+  subTotal: decimal("sub_total").notNull(),
+  tax: decimal("tax"),
+  shipping: decimal("shipping"),
+  discount: decimal("discount"),
+  promotionCode: text("promotion_code"),
+  shippingAddress: jsonb("shipping_address").notNull(),
+  billingAddress: jsonb("billing_address").notNull(),
+  trackingNumber: text("tracking_number"),
+  trackingUrl: text("tracking_url"),
+  notes: text("notes"),
   orderDate: timestamp("order_date").notNull(),
   razorpayOrderId: text("razorpay_order_id"),
   razorpayPaymentId: text("razorpay_payment_id"),
 });
 
+// Add order history for status tracking
+export const orderHistory = pgTable("order_history", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").references(() => orders.id),
+  status: text("status").notNull(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow(),
+  createdBy: integer("created_by").references(() => users.id),
+});
+
+// Enhanced order items schema
 export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").references(() => orders.id),
   productId: integer("product_id").references(() => products.id),
   quantity: integer("quantity").notNull(),
   price: decimal("price").notNull(),
+  total: decimal("total").notNull(),
+  discount: decimal("discount"),
+  status: text("status").$type<"ordered" | "cancelled" | "returned">().default("ordered"),
 });
 
+// Enhanced returns schema
 export const returns = pgTable("returns", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").references(() => orders.id),
+  orderItemId: integer("order_item_id").references(() => orderItems.id),
   customerId: integer("customer_id").references(() => users.id),
   reason: text("reason").notNull(),
-  status: text("status").$type<"pending" | "approved" | "rejected" | "refunded" | "completed">().notNull(),
+  description: text("description"),
+  status: text("status").$type<"requested" | "approved" | "rejected" | "received" | "refunded" | "completed">().notNull(),
+  refundAmount: decimal("refund_amount"),
+  refundStatus: text("refund_status").$type<"pending" | "processed" | "failed">(),
+  refundId: text("refund_id"),
+  images: text("images").array(),
   createdAt: timestamp("created_at").defaultNow(),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: integer("resolved_by").references(() => users.id),
 });
+
+// Product reviews schema
+export const productReviews = pgTable("product_reviews", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").references(() => products.id),
+  customerId: integer("customer_id").references(() => users.id),
+  orderId: integer("order_id").references(() => orders.id),
+  rating: integer("rating").notNull(),
+  review: text("review"),
+  images: text("images").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+  shopReply: text("shop_reply"),
+  repliedAt: timestamp("replied_at"),
+  isVerifiedPurchase: boolean("is_verified_purchase").default(false),
+});
+
+// Promotions schema
+export const promotions = pgTable("promotions", {
+  id: serial("id").primaryKey(),
+  shopId: integer("shop_id").references(() => users.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: text("type").$type<"percentage" | "fixed_amount">().notNull(),
+  value: decimal("value").notNull(),
+  code: text("code").unique(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  minPurchase: decimal("min_purchase"),
+  maxDiscount: decimal("max_discount"),
+  usageLimit: integer("usage_limit"),
+  usedCount: integer("used_count").default(0),
+  isActive: boolean("is_active").default(true),
+  applicableProducts: integer("applicable_products").array(),
+  excludedProducts: integer("excluded_products").array(),
+});
+
 
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
@@ -180,3 +283,11 @@ export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export const insertReturnRequestSchema = createInsertSchema(returns);
 export type ReturnRequest = typeof returns.$inferSelect;
 export type InsertReturnRequest = z.infer<typeof insertReturnRequestSchema>;
+
+export const insertPromotionSchema = createInsertSchema(promotions);
+export type Promotion = typeof promotions.$inferSelect;
+export type InsertPromotion = z.infer<typeof insertPromotionSchema>;
+
+export const insertProductReviewSchema = createInsertSchema(productReviews);
+export type ProductReview = typeof productReviews.$inferSelect;
+export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
