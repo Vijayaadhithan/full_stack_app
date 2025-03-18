@@ -1,13 +1,26 @@
+import { useState } from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Loader2, Plus, Calendar, Star, Bell, Settings, Users, Clock } from "lucide-react";
+import { Loader2, Plus, Calendar, Star, Bell, Settings, Users, Clock, Edit2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Booking, Review, Service } from "@shared/schema";
 import { format, isAfter } from "date-fns";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+import { useLanguage } from "@/contexts/language-context";
 
 const container = {
   hidden: { opacity: 0 },
@@ -24,8 +37,36 @@ const item = {
   show: { opacity: 1, y: 0 }
 };
 
+// Form validation schema
+const serviceFormSchema = z.object({
+  name: z.string().min(1, "Service name is required"),
+  description: z.string().min(1, "Description is required"),
+  category: z.string().min(1, "Category is required"),
+  price: z.string().min(1, "Price is required"),
+  duration: z.number().min(15, "Duration must be at least 15 minutes"),
+  isAvailable: z.boolean().default(true),
+});
+
+type ServiceFormData = z.infer<typeof serviceFormSchema>;
+
 export default function ProviderDashboard() {
   const { user } = useAuth();
+  const { t } = useLanguage();
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
+
+  const form = useForm<ServiceFormData>({
+    resolver: zodResolver(serviceFormSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      category: "",
+      price: "",
+      duration: 60,
+      isAvailable: true,
+    },
+  });
 
   const { data: services, isLoading: servicesLoading } = useQuery<Service[]>({
     queryKey: [`/api/services/provider/${user?.id}`],
@@ -58,6 +99,71 @@ export default function ProviderDashboard() {
     )
     ?.sort((a, b) => new Date(a.bookingDate).getTime() - new Date(b.bookingDate).getTime())
     ?.slice(0, 5);
+
+  const createServiceMutation = useMutation({
+    mutationFn: async (data: ServiceFormData) => {
+      const res = await apiRequest("POST", "/api/services", {
+        ...data,
+        providerId: user?.id,
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to create service");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
+      toast({
+        title: "Success",
+        description: "Service created successfully",
+      });
+      form.reset();
+      setDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateServiceMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<ServiceFormData> }) => {
+      const res = await apiRequest("PATCH", `/api/services/${id}`, data);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to update service");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
+      toast({
+        title: "Success",
+        description: "Service updated successfully",
+      });
+      setDialogOpen(false);
+      setEditingService(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: ServiceFormData) => {
+    if (editingService) {
+      updateServiceMutation.mutate({ id: editingService.id, data });
+    } else {
+      createServiceMutation.mutate(data);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -121,12 +227,10 @@ export default function ProviderDashboard() {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle>Services Offered</CardTitle>
-                <Link href="/provider/services">
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Service
-                  </Button>
-                </Link>
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Service
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -137,22 +241,38 @@ export default function ProviderDashboard() {
               ) : !services?.length ? (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-4">No services added yet</p>
-                  <Link href="/provider/services">
-                    <Button variant="outline">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Your First Service
-                    </Button>
-                  </Link>
+                  <Button variant="outline" onClick={() => setDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Your First Service
+                  </Button>
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   {services.slice(0, 4).map((service) => (
                     <Card key={service.id}>
                       <CardContent className="p-4">
-                        <h3 className="font-semibold">{service.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {service.description}
-                        </p>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold">{service.name}</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {service.description}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setEditingService(service);
+                              form.reset({
+                                ...service,
+                                price: service.price.toString(),
+                              });
+                              setDialogOpen(true);
+                            }}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                         <div className="mt-4 space-y-2">
                           <div className="flex justify-between text-sm">
                             <span>Price</span>
@@ -161,6 +281,10 @@ export default function ProviderDashboard() {
                           <div className="flex justify-between text-sm">
                             <span>Duration</span>
                             <span>{service.duration} minutes</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Category</span>
+                            <span>{service.category}</span>
                           </div>
                         </div>
                       </CardContent>
@@ -178,6 +302,133 @@ export default function ProviderDashboard() {
             </CardContent>
           </Card>
         </motion.div>
+
+        {/* Service Creation/Edit Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>
+                {editingService ? 'Edit Service' : 'Add New Service'}
+              </DialogTitle>
+            </DialogHeader>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Service Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Beauty & Wellness">Beauty & Wellness</SelectItem>
+                          <SelectItem value="Home Services">Home Services</SelectItem>
+                          <SelectItem value="Professional Services">Professional Services</SelectItem>
+                          <SelectItem value="Health & Fitness">Health & Fitness</SelectItem>
+                          <SelectItem value="Education & Training">Education & Training</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="price"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Price (₹)</FormLabel>
+                        <FormControl>
+                          <Input {...field} type="number" min="0" step="0.01" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="duration"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Duration (minutes)</FormLabel>
+                        <FormControl>
+                          <Input {...field} type="number" min="15" step="15" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="isAvailable"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel>Available for Booking</FormLabel>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    disabled={form.formState.isSubmitting}
+                  >
+                    {form.formState.isSubmitting && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {editingService ? 'Update Service' : 'Create Service'}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
 
         <div className="grid gap-6 md:grid-cols-2">
           <motion.div variants={item}>
