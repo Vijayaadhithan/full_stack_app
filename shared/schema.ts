@@ -67,18 +67,35 @@ export const serviceAvailability = pgTable("service_availability", {
   maxBookings: integer("max_bookings").default(1),
 });
 
+// Update the bookings table
 export const bookings = pgTable("bookings", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => users.id),
   serviceId: integer("service_id").references(() => services.id),
   bookingDate: timestamp("booking_date").notNull(),
-  status: text("status").$type<"pending" | "confirmed" | "completed" | "cancelled">().notNull(),
+  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled">().notNull(),
   paymentStatus: text("payment_status").$type<"pending" | "paid" | "refunded">().notNull(),
-  isRecurring: boolean("is_recurring").default(false),
-  recurringPattern: text("recurring_pattern"),
+  rejectionReason: text("rejection_reason"),
+  rescheduleDate: timestamp("reschedule_date"),
   comments: text("comments"),
+  eReceiptId: text("e_receipt_id"),
+  eReceiptUrl: text("e_receipt_url"),
+  eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
   razorpayOrderId: text("razorpay_order_id"),
   razorpayPaymentId: text("razorpay_payment_id"),
+});
+
+// Update the reviews table to link with e-receipt
+export const reviews = pgTable("reviews", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => users.id),
+  serviceId: integer("service_id").references(() => services.id),
+  bookingId: integer("booking_id").references(() => bookings.id),
+  rating: integer("rating").notNull(),
+  review: text("review"),
+  createdAt: timestamp("created_at").defaultNow(),
+  providerReply: text("provider_reply"),
+  isVerifiedService: boolean("is_verified_service").default(false),
 });
 
 export const waitlist = pgTable("waitlist", {
@@ -90,17 +107,6 @@ export const waitlist = pgTable("waitlist", {
   notificationSent: boolean("notification_sent").default(false),
 });
 
-export const reviews = pgTable("reviews", {
-  id: serial("id").primaryKey(),
-  customerId: integer("customer_id").references(() => users.id),
-  serviceId: integer("service_id").references(() => services.id),
-  rating: integer("rating").notNull(),
-  review: text("review"),
-  createdAt: timestamp("created_at").defaultNow(),
-  providerReply: text("provider_reply"),
-});
-
-// Enhanced product schema with inventory tracking
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   shopId: integer("shop_id").references(() => users.id),
@@ -138,7 +144,6 @@ export const wishlist = pgTable("wishlist", {
   productId: integer("product_id").references(() => products.id),
 });
 
-// Enhanced orders schema
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => users.id),
@@ -161,7 +166,6 @@ export const orders = pgTable("orders", {
   razorpayPaymentId: text("razorpay_payment_id"),
 });
 
-// Add order history for status tracking
 export const orderHistory = pgTable("order_history", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").references(() => orders.id),
@@ -171,7 +175,6 @@ export const orderHistory = pgTable("order_history", {
   createdBy: integer("created_by").references(() => users.id),
 });
 
-// Enhanced order items schema
 export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").references(() => orders.id),
@@ -183,7 +186,6 @@ export const orderItems = pgTable("order_items", {
   status: text("status").$type<"ordered" | "cancelled" | "returned">().default("ordered"),
 });
 
-// Enhanced returns schema
 export const returns = pgTable("returns", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").references(() => orders.id),
@@ -201,7 +203,6 @@ export const returns = pgTable("returns", {
   resolvedBy: integer("resolved_by").references(() => users.id),
 });
 
-// Product reviews schema
 export const productReviews = pgTable("product_reviews", {
   id: serial("id").primaryKey(),
   productId: integer("product_id").references(() => products.id),
@@ -216,7 +217,6 @@ export const productReviews = pgTable("product_reviews", {
   isVerifiedPurchase: boolean("is_verified_purchase").default(false),
 });
 
-// Promotions schema
 export const promotions = pgTable("promotions", {
   id: serial("id").primaryKey(),
   shopId: integer("shop_id").references(() => users.id),
@@ -235,7 +235,6 @@ export const promotions = pgTable("promotions", {
   applicableProducts: integer("applicable_products").array(),
   excludedProducts: integer("excluded_products").array(),
 });
-
 
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
@@ -256,6 +255,7 @@ export const insertServiceSchema = createInsertSchema(services);
 export type Service = typeof services.$inferSelect;
 export type InsertService = z.infer<typeof insertServiceSchema>;
 
+// Update the types
 export const insertBookingSchema = createInsertSchema(bookings);
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
@@ -272,6 +272,7 @@ export const insertOrderItemSchema = createInsertSchema(orderItems);
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 
+// Update the types
 export const insertReviewSchema = createInsertSchema(reviews);
 export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;

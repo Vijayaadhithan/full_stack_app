@@ -1,5 +1,5 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
@@ -13,15 +13,19 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2, Clock } from "lucide-react";
+import { Loader2, Plus, Edit2 } from "lucide-react";
 import { Service, insertServiceSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
 
 const serviceFormSchema = insertServiceSchema.extend({
-  bufferTime: z.coerce.number().min(0, "Buffer time must be a positive number"),
-  duration: z.coerce.number().min(15, "Duration must be at least 15 minutes"),
   price: z.string().min(1, "Price is required"),
+  duration: z.coerce.number().min(15, "Duration must be at least 15 minutes"),
+  bufferTime: z.coerce.number().min(0, "Buffer time must be non-negative"),
+  location: z.object({
+    lat: z.number(),
+    lng: z.number(),
+  }).nullable(),
 });
 
 type ServiceFormData = z.infer<typeof serviceFormSchema>;
@@ -44,18 +48,17 @@ export default function ProviderServices() {
       description: "",
       price: "",
       duration: 60,
-      category: "Beauty & Wellness",
+      category: "",
       bufferTime: 15,
       isAvailable: true,
       images: [],
       providerId: user?.id || 0,
-      location: null,
+      location: { lat: 19.076, lng: 72.8777 }, // Default to Mumbai coordinates
     },
   });
 
   const createServiceMutation = useMutation({
     mutationFn: async (data: ServiceFormData) => {
-      console.log("Creating service with data:", data);
       const res = await apiRequest("POST", "/api/services", {
         ...data,
         providerId: user?.id,
@@ -296,7 +299,10 @@ export default function ProviderServices() {
                       size="icon"
                       onClick={() => {
                         setEditingService(service);
-                        form.reset(service);
+                        form.reset({
+                          ...service,
+                          price: service.price.toString(),
+                        });
                         setDialogOpen(true);
                       }}
                     >
