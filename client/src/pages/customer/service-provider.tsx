@@ -25,27 +25,43 @@ const item = {
 export default function ServiceProvider() {
   const { id } = useParams();
 
-  const { data: provider, isLoading: providerLoading } = useQuery<User>({
-    queryKey: [`/api/users/${id}`],
+  const { data: service, isLoading: serviceLoading } = useQuery<Service>({
+    queryKey: [`/api/services/${id}`],
+    enabled: !!id,
   });
 
-  const { data: services, isLoading: servicesLoading } = useQuery<Service[]>({
-    queryKey: [`/api/services/provider/${id}`],
+  const { data: provider, isLoading: providerLoading } = useQuery<User>({
+    queryKey: [`/api/users/${service?.providerId}`],
+    enabled: !!service?.providerId,
   });
 
   const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
-    queryKey: [`/api/reviews/provider/${id}`],
+    queryKey: [`/api/reviews/service/${id}`],
+    enabled: !!id,
   });
 
   const averageRating = reviews?.length 
     ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length
     : 0;
 
-  if (providerLoading || servicesLoading || reviewsLoading) {
+  if (serviceLoading || providerLoading || reviewsLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!service || !provider) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+          <h2 className="text-2xl font-bold">Service not found</h2>
+          <Link href="/customer/browse-services">
+            <Button className="mt-4">Back to Services</Button>
+          </Link>
         </div>
       </DashboardLayout>
     );
@@ -86,38 +102,31 @@ export default function ServiceProvider() {
           <motion.div variants={item} className="md:w-2/3 space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Services Offered</CardTitle>
+                <CardTitle>Service Details</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4">
-                  {services?.map((service) => (
-                    <div
-                      key={service.id}
-                      className="p-4 border rounded-lg hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h3 className="font-semibold">{service.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {service.description}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">₹{service.price}</p>
-                          <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            {service.duration} mins
-                          </p>
-                        </div>
-                      </div>
-                      <Link href={`/customer/book-service/${service.id}`}>
-                        <Button className="w-full">
-                          <Calendar className="h-4 w-4 mr-2" />
-                          Book Now
-                        </Button>
-                      </Link>
+                <div className="p-4 border rounded-lg">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-semibold">{service.name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {service.description}
+                      </p>
                     </div>
-                  ))}
+                    <div className="text-right">
+                      <p className="font-semibold">₹{service.price}</p>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        {service.duration} mins
+                      </p>
+                    </div>
+                  </div>
+                  <Link href={`/customer/book-service/${service.id}`}>
+                    <Button className="w-full">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Book Now
+                    </Button>
+                  </Link>
                 </div>
               </CardContent>
             </Card>
@@ -138,7 +147,7 @@ export default function ServiceProvider() {
                             ))}
                           </div>
                           <span className="text-sm text-muted-foreground">
-                            {new Date(review.createdAt).toLocaleDateString()}
+                            {new Date(review.createdAt || '').toLocaleDateString()}
                           </span>
                         </div>
                       </div>

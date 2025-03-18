@@ -61,12 +61,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(services);
   });
 
-  // Add these new routes after the existing service routes
+  // Add this route after the existing service routes
   app.get("/api/services", requireAuth, async (req, res) => {
     // Get all services from storage
     const services = Array.from(storage.services.values());
     res.json(services);
   });
+
+  app.get("/api/services/:id", requireAuth, async (req, res) => {
+    const service = await storage.getService(parseInt(req.params.id));
+    if (!service) {
+      return res.status(404).json({ message: "Service not found" });
+    }
+    res.json(service);
+  });
+
+  // Add this route for user details
+  app.get("/api/users/:id", requireAuth, async (req, res) => {
+    const user = await storage.getUser(parseInt(req.params.id));
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user);
+  });
+
 
   app.get("/api/products", requireAuth, async (req, res) => {
     // Get all products from storage

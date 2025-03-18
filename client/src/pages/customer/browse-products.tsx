@@ -1,5 +1,5 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -41,6 +41,10 @@ export default function BrowseProducts() {
         productId,
         quantity: 1,
       });
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -50,11 +54,22 @@ export default function BrowseProducts() {
         description: "Product has been added to your cart.",
       });
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add product to cart",
+        variant: "destructive",
+      });
+    },
   });
 
   const addToWishlistMutation = useMutation({
     mutationFn: async (productId: number) => {
       const res = await apiRequest("POST", "/api/wishlist", { productId });
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -64,11 +79,19 @@ export default function BrowseProducts() {
         description: "Product has been added to your wishlist.",
       });
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add product to wishlist",
+        variant: "destructive",
+      });
+    },
   });
 
   const filteredProducts = products?.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.description.toLowerCase().includes(searchQuery.toLowerCase())
+    (!selectedCategory || product.category === selectedCategory) &&
+    (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -138,13 +161,14 @@ export default function BrowseProducts() {
                           size="icon"
                           variant="outline"
                           onClick={() => addToWishlistMutation.mutate(product.id)}
+                          disabled={addToWishlistMutation.isPending}
                         >
                           <Heart className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
                           onClick={() => addToCartMutation.mutate(product.id)}
-                          disabled={!product.isAvailable}
+                          disabled={!product.isAvailable || addToCartMutation.isPending}
                         >
                           <ShoppingCart className="h-4 w-4" />
                         </Button>

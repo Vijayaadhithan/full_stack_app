@@ -97,7 +97,7 @@ export default function BrowseServices() {
             ))
           ) : filteredServices?.map((service) => (
             <motion.div key={service.id} variants={item}>
-              <Link href={`/customer/services/${service.id}`}>
+              <Link href={`/customer/service-provider/${service.id}`}>
                 <Card className="cursor-pointer hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <CardTitle className="flex justify-between items-center">
