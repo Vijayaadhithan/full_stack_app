@@ -176,41 +176,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/services/:id", requireAuth, async (req, res) => {
     try {
-      console.log("Fetching service with ID:", req.params.id); // Debug log
       const serviceId = parseInt(req.params.id);
-      const service = await storage.getService(serviceId);
-      console.log("Found service:", service); // Debug log
+      console.log("Attempting to fetch service with ID:", serviceId);
 
-      if (!service) {
-        console.log("Service not found"); // Debug log
-        return res.status(404).json({ message: "Service not found" });
+      if (isNaN(serviceId)) {
+        console.log("Invalid service ID format");
+        return res.status(400).json({ message: "Invalid service ID format" });
       }
 
-      if (!service.providerId) {
-        console.log("Invalid service provider"); // Debug log
-        return res.status(400).json({ message: "Invalid service provider" });
+      const service = await storage.getService(serviceId);
+      console.log("Service from storage:", service);
+
+      if (!service) {
+        console.log("Service not found in storage");
+        return res.status(404).json({ message: "Service not found" });
       }
 
       // Get the provider details
       const provider = await storage.getUser(service.providerId);
-      console.log("Found provider:", provider); // Debug log
+      console.log("Provider details:", provider);
 
       if (!provider) {
-        console.log("Service provider not found"); // Debug log
+        console.log("Provider not found");
         return res.status(404).json({ message: "Service provider not found" });
       }
 
-      // Get reviews for the service
+      // Get reviews and calculate rating
       const reviews = await storage.getReviewsByService(serviceId);
-      console.log("Found reviews:", reviews); // Debug log
-
-      // Calculate average rating
       const rating = reviews?.length 
         ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length 
         : null;
 
-      // Return combined data
-      const response = {
+      const responseData = {
         ...service,
         rating,
         provider: {
@@ -218,14 +215,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: provider.name,
           email: provider.email,
           profilePicture: provider.profilePicture,
-          role: provider.role
         },
         reviews: reviews || []
       };
-      console.log("Sending response:", response); // Debug log
-      res.json(response);
+
+      console.log("Sending response data:", responseData);
+      res.json(responseData);
     } catch (error) {
-      console.error("Error fetching service:", error);
+      console.error("Error in /api/services/:id:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch service" });
     }
   });

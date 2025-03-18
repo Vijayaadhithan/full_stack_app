@@ -11,7 +11,7 @@ type ServiceDetails = Service & {
   provider: {
     id: number;
     name: string;
-    email: string; // Added email field
+    email: string;
     profilePicture?: string;
   };
   rating: number | null;
@@ -25,16 +25,19 @@ type ServiceDetails = Service & {
 
 export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
-  console.log("Service ID:", id); // Debug log
+  console.log("Service ID from params:", id);
 
   const { data: service, isLoading, error } = useQuery<ServiceDetails>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
+    retry: 1,
+    onError: (error) => {
+      console.error("Error fetching service:", error);
+    },
+    onSuccess: (data) => {
+      console.log("Successfully fetched service:", data);
+    }
   });
-
-  console.log("Service Data:", service); // Debug log
-  console.log("Loading:", isLoading); // Debug log
-  console.log("Error:", error); // Debug log
 
   if (isLoading) {
     return (
