@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Loader2, Package, Calendar, Star, Bell, Settings, Users, Clock } from "lucide-react";
+import { Loader2, Plus, Calendar, Star, Bell, Settings, Users, Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { Booking, Review, Service } from "@shared/schema";
 
@@ -41,24 +41,13 @@ export default function ProviderDashboard() {
     enabled: !!user?.id,
   });
 
-  const { data: notifications, isLoading: notificationsLoading } = useQuery<Notification[]>({
-    queryKey: [`/api/notifications/user/${user?.id}`],
-    enabled: !!user?.id,
-  });
-
-  const isLoading = servicesLoading || bookingsLoading || reviewsLoading || notificationsLoading;
+  const isLoading = servicesLoading || bookingsLoading || reviewsLoading;
 
   const activeServices = services?.filter(service => service.isAvailable)?.length || 0;
   const pendingBookings = bookings?.filter(booking => booking.status === "pending")?.length || 0;
   const averageRating = reviews?.length
     ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length
     : 0;
-  const unreadNotifications = notifications?.filter(notification => !notification.isRead)?.length || 0;
-
-  const upcomingBookings = bookings
-    ?.filter(booking => booking.status === "confirmed")
-    ?.sort((a, b) => new Date(a.bookingDate).getTime() - new Date(b.bookingDate).getTime())
-    ?.slice(0, 5);
 
   return (
     <DashboardLayout>
@@ -66,7 +55,7 @@ export default function ProviderDashboard() {
         variants={container}
         initial="hidden"
         animate="show"
-        className="space-y-6"
+        className="p-6 space-y-6"
       >
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Welcome, {user?.name}</h1>
@@ -83,7 +72,7 @@ export default function ProviderDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Active Services</CardTitle>
-                <Package className="h-4 w-4 text-muted-foreground" />
+                <Calendar className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{activeServices}</div>
@@ -114,19 +103,71 @@ export default function ProviderDashboard() {
               </CardContent>
             </Card>
           </motion.div>
-
-          <motion.div variants={item}>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Notifications</CardTitle>
-                <Bell className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{unreadNotifications}</div>
-              </CardContent>
-            </Card>
-          </motion.div>
         </div>
+
+        {/* Services Section */}
+        <motion.div variants={item}>
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Services Offered</CardTitle>
+                <Link href="/provider/services">
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Service
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : !services?.length ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground mb-4">No services added yet</p>
+                  <Link href="/provider/services">
+                    <Button variant="outline">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Your First Service
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {services.slice(0, 4).map((service) => (
+                    <Card key={service.id}>
+                      <CardContent className="p-4">
+                        <h3 className="font-semibold">{service.name}</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {service.description}
+                        </p>
+                        <div className="mt-4 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span>Price</span>
+                            <span className="font-medium">₹{service.price}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Duration</span>
+                            <span>{service.duration} minutes</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+              {services && services.length > 4 && (
+                <div className="mt-4 text-center">
+                  <Link href="/provider/services">
+                    <Button variant="outline">View All Services</Button>
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
 
         <div className="grid gap-6 md:grid-cols-2">
           <motion.div variants={item}>
