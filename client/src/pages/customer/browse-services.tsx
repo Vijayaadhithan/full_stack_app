@@ -42,6 +42,8 @@ export default function BrowseServices() {
     queryKey: ["/api/services"],
   });
 
+  console.log("Fetched services:", services); // Debug log
+
   const filteredServices = services?.filter(service => 
     (selectedCategory === "All" || service.category === selectedCategory) &&
     (service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

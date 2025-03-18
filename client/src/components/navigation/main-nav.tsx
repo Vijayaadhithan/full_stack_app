@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, LogOut, User } from "lucide-react";
+import { Home, LogOut, User, ShoppingCart, Heart } from "lucide-react";
 import { Link } from "wouter";
 
 export function MainNav() {
@@ -15,6 +15,23 @@ export function MainNav() {
             Dashboard
           </Button>
         </Link>
+
+        {user?.role === "customer" && (
+          <div className="ml-4 flex items-center space-x-2">
+            <Link href="/customer/cart">
+              <Button variant="ghost" className="flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5" />
+                Cart
+              </Button>
+            </Link>
+            <Link href="/customer/wishlist">
+              <Button variant="ghost" className="flex items-center gap-2">
+                <Heart className="h-5 w-5" />
+                Wishlist
+              </Button>
+            </Link>
+          </div>
+        )}
 
         <div className="ml-auto flex items-center space-x-4">
           <div className="flex items-center gap-2">

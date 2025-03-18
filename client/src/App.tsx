@@ -10,6 +10,7 @@ import CustomerDashboard from "@/pages/customer/dashboard";
 import BrowseServices from "@/pages/customer/browse-services";
 import BrowseProducts from "@/pages/customer/browse-products";
 import Cart from "@/pages/customer/cart";
+import Wishlist from "@/pages/customer/wishlist";
 import Bookings from "@/pages/customer/bookings";
 import ServiceProvider from "@/pages/customer/service-provider";
 import BookService from "@/pages/customer/book-service";
@@ -27,6 +28,7 @@ function Router() {
       <ProtectedRoute path="/customer/browse-services" component={BrowseServices} />
       <ProtectedRoute path="/customer/browse-products" component={BrowseProducts} />
       <ProtectedRoute path="/customer/cart" component={Cart} />
+      <ProtectedRoute path="/customer/wishlist" component={Wishlist} />
       <ProtectedRoute path="/customer/bookings" component={Bookings} />
       <ProtectedRoute path="/customer/service-provider/:id" component={ServiceProvider} />
       <ProtectedRoute path="/customer/book-service/:id" component={BookService} />

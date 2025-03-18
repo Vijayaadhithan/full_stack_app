@@ -538,6 +538,8 @@ export class MemStorage implements IStorage {
       paymentMethods: null
     });
 
+    console.log("Created provider:", provider);
+
     // Create sample services
     const services = [
       {
@@ -567,7 +569,8 @@ export class MemStorage implements IStorage {
     ];
 
     for (const service of services) {
-      await this.createService(service);
+      const createdService = await this.createService(service);
+      console.log("Created service:", createdService);
     }
 
     // Create a shop owner

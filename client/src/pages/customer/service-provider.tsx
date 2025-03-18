@@ -24,16 +24,21 @@ const item = {
 
 export default function ServiceProvider() {
   const { id } = useParams();
+  console.log("Service ID from params:", id); // Debug log
 
   const { data: service, isLoading: serviceLoading } = useQuery<Service>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
   });
 
+  console.log("Fetched service:", service); // Debug log
+
   const { data: provider, isLoading: providerLoading } = useQuery<User>({
     queryKey: [`/api/users/${service?.providerId}`],
     enabled: !!service?.providerId,
   });
+
+  console.log("Fetched provider:", provider); // Debug log
 
   const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
     queryKey: [`/api/reviews/service/${id}`],
@@ -137,7 +142,9 @@ export default function ServiceProvider() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {reviews?.map((review) => (
+                  {reviews?.length === 0 ? (
+                    <p className="text-center text-muted-foreground">No reviews yet</p>
+                  ) : reviews?.map((review) => (
                     <div key={review.id} className="border-b pb-4 last:border-0">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">

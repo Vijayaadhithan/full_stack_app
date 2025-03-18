@@ -68,7 +68,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/services/:id", requireAuth, async (req, res) => {
-    const service = await storage.getService(parseInt(req.params.id));
+    console.log(`Fetching service with id: ${req.params.id}`);
+    const serviceId = parseInt(req.params.id);
+    console.log(`Parsed service ID: ${serviceId}`);
+
+    const service = await storage.getService(serviceId);
+    console.log(`Found service:`, service);
+
     if (!service) {
       return res.status(404).json({ message: "Service not found" });
     }
