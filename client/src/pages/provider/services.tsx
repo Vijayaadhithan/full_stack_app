@@ -2,8 +2,6 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ServiceAvailabilityForm } from "@/components/service-availability-form";
-import { ServiceAvailabilityCalendar } from "@/components/service-availability-calendar";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -188,94 +186,106 @@ export default function ProviderServices() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
-        {/* Stats Section */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="container mx-auto p-6">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <Card>
-            <CardContent className="p-6">
-              <div className="space-y-1">
-                <h3 className="text-2xl font-bold">{services?.length || 0}</h3>
-                <p className="text-sm text-muted-foreground">Active Services</p>
-              </div>
+            <CardContent className="flex flex-col p-6">
+              <span className="text-2xl font-bold">{services?.length || 0}</span>
+              <span className="text-sm text-muted-foreground">Active Services</span>
             </CardContent>
           </Card>
-          {/* Other stat cards */}
+          <Card>
+            <CardContent className="flex flex-col p-6">
+              <span className="text-2xl font-bold">0</span>
+              <span className="text-sm text-muted-foreground">Pending Bookings</span>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex flex-col p-6">
+              <span className="text-2xl font-bold">0.0</span>
+              <span className="text-sm text-muted-foreground">Average Rating</span>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex flex-col p-6">
+              <span className="text-2xl font-bold">0</span>
+              <span className="text-sm text-muted-foreground">Notifications</span>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Services List Section */}
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">Services Offered</h2>
-            <Button onClick={() => setDialogOpen(true)} variant="default">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Service
-            </Button>
-          </div>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 className="h-8 w-8 animate-spin" />
+        {/* Services Section */}
+        <Card className="mt-6">
+          <CardContent className="p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold">Services Offered</h2>
+              <Button onClick={() => setDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Service
+              </Button>
             </div>
-          ) : !services?.length ? (
-            <Card>
-              <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">No services added yet.</p>
-                <Button
-                  className="mt-4"
-                  onClick={() => setDialogOpen(true)}
-                  variant="outline"
-                >
+
+            {isLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : !services?.length ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground mb-4">No services added yet</p>
+                <Button variant="outline" onClick={() => setDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Your First Service
                 </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {services.map((service) => (
-                <Card key={service.id}>
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold">{service.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {services.map((service) => (
+                  <Card key={service.id} className="bg-card">
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold">{service.name}</h3>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {service.description}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setEditingService(service);
+                            form.reset({
+                              ...service,
+                              price: service.price.toString(),
+                            });
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingService(service);
-                          form.reset({
-                            ...service,
-                            price: service.price.toString(),
-                          });
-                          setDialogOpen(true);
-                        }}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Price</span>
-                        <span className="font-semibold">₹{service.price}</span>
+                      <div className="mt-4 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Price</span>
+                          <span className="font-medium">₹{service.price}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Duration</span>
+                          <span>{service.duration} minutes</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Category</span>
+                          <span>{service.category}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Duration</span>
-                        <span>{service.duration} minutes</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Category</span>
-                        <span>{service.category}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Service Creation/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
