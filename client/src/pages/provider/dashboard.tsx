@@ -38,7 +38,7 @@ const item = {
   show: { opacity: 1, y: 0 }
 };
 
-// Extended service form schema with availability settings
+// Update the schema first to fix the availability section
 const serviceFormSchema = z.object({
   name: z.string().min(1, "Service name is required"),
   description: z.string().min(1, "Description is required"),
@@ -48,45 +48,45 @@ const serviceFormSchema = z.object({
   isAvailable: z.boolean().default(true),
   workingHours: z.object({
     monday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
+      isAvailable: z.boolean().default(true),
+      start: z.string().min(1, "Start time is required"),
+      end: z.string().min(1, "End time is required"),
     }),
     tuesday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
+      isAvailable: z.boolean().default(true),
+      start: z.string().min(1, "Start time is required"),
+      end: z.string().min(1, "End time is required"),
     }),
     wednesday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
+      isAvailable: z.boolean().default(true),
+      start: z.string().min(1, "Start time is required"),
+      end: z.string().min(1, "End time is required"),
     }),
     thursday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
+      isAvailable: z.boolean().default(true),
+      start: z.string().min(1, "Start time is required"),
+      end: z.string().min(1, "End time is required"),
     }),
     friday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
+      isAvailable: z.boolean().default(true),
+      start: z.string().min(1, "Start time is required"),
+      end: z.string().min(1, "End time is required"),
     }),
     saturday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
+      isAvailable: z.boolean().default(true),
+      start: z.string().min(1, "Start time is required"),
+      end: z.string().min(1, "End time is required"),
     }),
     sunday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
+      isAvailable: z.boolean().default(false),
+      start: z.string().min(1, "Start time is required"),
+      end: z.string().min(1, "End time is required"),
     }),
   }),
   breakTime: z.array(z.object({
-    start: z.string(),
-    end: z.string(),
-  })),
+    start: z.string().min(1, "Start time is required"),
+    end: z.string().min(1, "End time is required"),
+  })).optional().default([]),
   maxDailyBookings: z.number().min(1, "Must accept at least 1 booking per day"),
   bufferTime: z.number().min(0, "Buffer time must be non-negative"),
   location: z.object({
@@ -161,8 +161,8 @@ export default function ProviderDashboard() {
 
   // Filter and sort upcoming bookings
   const upcomingBookings = bookings
-    ?.filter(booking => 
-      booking.status === "confirmed" && 
+    ?.filter(booking =>
+      booking.status === "confirmed" &&
       isAfter(new Date(booking.bookingDate), new Date())
     )
     ?.sort((a, b) => new Date(a.bookingDate).getTime() - new Date(b.bookingDate).getTime())
@@ -225,11 +225,26 @@ export default function ProviderDashboard() {
     },
   });
 
-  const onSubmit = (data: ServiceFormData) => {
-    if (editingService) {
-      updateServiceMutation.mutate({ id: editingService.id, data });
-    } else {
-      createServiceMutation.mutate(data);
+  const onSubmit = async (data: ServiceFormData) => {
+    try {
+      if (editingService) {
+        await updateServiceMutation.mutateAsync({ id: editingService.id, data });
+      } else {
+        await createServiceMutation.mutateAsync(data);
+      }
+      // After successful creation/update
+      queryClient.invalidateQueries({ queryKey: ["/api/services"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/services/provider"] });
+      setDialogOpen(false);
+      form.reset();
+      setEditingService(null);
+    } catch (error) {
+      console.error("Service submission error:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save service",
+        variant: "destructive",
+      });
     }
   };
 
@@ -484,7 +499,7 @@ export default function ProviderDashboard() {
 
                   <TabsContent value="availability">
                     <div className="space-y-4">
-                      {Object.entries(form.getValues().workingHours).map(([day, hours]) => (
+                      {Object.entries(form.getValues().workingHours).map(([day, _]) => (
                         <div key={day} className="flex items-center space-x-4 p-4 border rounded">
                           <FormField
                             control={form.control}
@@ -510,7 +525,11 @@ export default function ProviderDashboard() {
                                 <FormItem>
                                   <FormLabel>Start Time</FormLabel>
                                   <FormControl>
-                                    <Input type="time" {...field} />
+                                    <Input
+                                      type="time"
+                                      {...field}
+                                      onChange={(e) => field.onChange(e.target.value)}
+                                    />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -524,7 +543,11 @@ export default function ProviderDashboard() {
                                 <FormItem>
                                   <FormLabel>End Time</FormLabel>
                                   <FormControl>
-                                    <Input type="time" {...field} />
+                                    <Input
+                                      type="time"
+                                      {...field}
+                                      onChange={(e) => field.onChange(e.target.value)}
+                                    />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -576,21 +599,38 @@ export default function ProviderDashboard() {
                           </FormItem>
                         )}
                       />
+                      <FormField
+                        control={form.control}
+                        name="breakTime.0.start"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Break Start Time</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="time"
+                                {...field}
+                                onChange={(e) => field.onChange(e.target.value)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
                       <FormField
                         control={form.control}
-                        name="isAvailable"
+                        name="breakTime.0.end"
                         render={({ field }) => (
-                          <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                            <div className="space-y-0.5">
-                              <FormLabel>Available for Booking</FormLabel>
-                            </div>
+                          <FormItem>
+                            <FormLabel>Break End Time</FormLabel>
                             <FormControl>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
+                              <Input
+                                type="time"
+                                {...field}
+                                onChange={(e) => field.onChange(e.target.value)}
                               />
                             </FormControl>
+                            <FormMessage />
                           </FormItem>
                         )}
                       />
