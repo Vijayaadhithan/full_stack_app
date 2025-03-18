@@ -24,6 +24,10 @@ import ShopDashboard from "@/pages/shop/dashboard";
 import ShopProfile from "@/pages/shop/profile";
 import ShopProducts from "@/pages/shop/products";
 import ShopOrders from "@/pages/shop/orders";
+import ShopInventory from "@/pages/shop/inventory";
+import ShopPromotions from "@/pages/shop/promotions";
+import ShopReviews from "@/pages/shop/reviews";
+import ShopAnalytics from "@/pages/shop/analytics";
 import AdminDashboard from "@/pages/admin/dashboard";
 import NotFound from "@/pages/not-found";
 
@@ -55,6 +59,10 @@ function Router() {
       <ProtectedRoute path="/shop/profile" component={ShopProfile} />
       <ProtectedRoute path="/shop/products" component={ShopProducts} />
       <ProtectedRoute path="/shop/orders" component={ShopOrders} />
+      <ProtectedRoute path="/shop/inventory" component={ShopInventory} />
+      <ProtectedRoute path="/shop/promotions" component={ShopPromotions} />
+      <ProtectedRoute path="/shop/reviews" component={ShopReviews} />
+      <ProtectedRoute path="/shop/analytics" component={ShopAnalytics} />
 
       <ProtectedRoute path="/admin" component={AdminDashboard} />
       <Route path="/" component={AuthPage} />

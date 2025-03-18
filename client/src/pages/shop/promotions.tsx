@@ -1,80 +1,77 @@
 import { ShopLayout } from "@/components/layout/shop-layout";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2, Package } from "lucide-react";
-import { Product, insertProductSchema } from "@shared/schema";
+import { Loader2, Plus, Edit2, Calendar } from "lucide-react";
+import { Promotion, insertPromotionSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
 
-const productFormSchema = insertProductSchema.extend({
-  price: z.string().min(1, "Price is required"),
-  mrp: z.string().min(1, "MRP is required"),
-  stock: z.coerce.number().min(0, "Stock must be a positive number"),
-  minOrderQuantity: z.coerce.number().min(1, "Minimum order quantity must be at least 1"),
-  maxOrderQuantity: z.coerce.number().optional(),
-  lowStockThreshold: z.coerce.number().min(1, "Low stock threshold must be at least 1"),
+const promotionFormSchema = insertPromotionSchema.extend({
+  startDate: z.string().min(1, "Start date is required"),
+  endDate: z.string().optional(),
+  value: z.string().min(1, "Value is required"),
 });
 
-type ProductFormData = z.infer<typeof productFormSchema>;
+type PromotionFormData = z.infer<typeof promotionFormSchema>;
 
-export default function ShopProducts() {
+export default function ShopPromotions() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null);
 
-  const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: [`/api/products/shop/${user?.id}`],
+  const { data: promotions, isLoading } = useQuery<Promotion[]>({
+    queryKey: [`/api/promotions/shop/${user?.id}`],
     enabled: !!user?.id,
   });
 
-  const form = useForm<ProductFormData>({
-    resolver: zodResolver(productFormSchema),
+  const form = useForm<PromotionFormData>({
+    resolver: zodResolver(promotionFormSchema),
     defaultValues: {
       name: "",
       description: "",
-      price: "",
-      mrp: "",
-      stock: 0,
-      category: "",
-      isAvailable: true,
-      images: [],
+      type: "percentage",
+      value: "",
+      code: "",
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: "",
+      minPurchase: "0",
+      maxDiscount: "0",
+      usageLimit: 0,
+      isActive: true,
       shopId: user?.id || 0,
-      minOrderQuantity: 1,
-      maxOrderQuantity: undefined,
-      lowStockThreshold: 5,
     },
   });
 
-  const createProductMutation = useMutation({
-    mutationFn: async (data: ProductFormData) => {
-      const res = await apiRequest("POST", "/api/products", {
+  const createPromotionMutation = useMutation({
+    mutationFn: async (data: PromotionFormData) => {
+      const res = await apiRequest("POST", "/api/promotions", {
         ...data,
         shopId: user?.id,
       });
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || "Failed to create product");
+        throw new Error(error.message || "Failed to create promotion");
       }
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/products/shop/${user?.id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/promotions/shop/${user?.id}`] });
       toast({
         title: "Success",
-        description: "Product created successfully",
+        description: "Promotion created successfully",
       });
       form.reset();
       setDialogOpen(false);
@@ -88,23 +85,23 @@ export default function ShopProducts() {
     },
   });
 
-  const updateProductMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<ProductFormData> }) => {
-      const res = await apiRequest("PATCH", `/api/products/${id}`, data);
+  const updatePromotionMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<PromotionFormData> }) => {
+      const res = await apiRequest("PATCH", `/api/promotions/${id}`, data);
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || "Failed to update product");
+        throw new Error(error.message || "Failed to update promotion");
       }
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/products/shop/${user?.id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/promotions/shop/${user?.id}`] });
       toast({
         title: "Success",
-        description: "Product updated successfully",
+        description: "Promotion updated successfully",
       });
       setDialogOpen(false);
-      setEditingProduct(null);
+      setEditingPromotion(null);
     },
     onError: (error: Error) => {
       toast({
@@ -115,11 +112,11 @@ export default function ShopProducts() {
     },
   });
 
-  const onSubmit = (data: ProductFormData) => {
-    if (editingProduct) {
-      updateProductMutation.mutate({ id: editingProduct.id, data });
+  const onSubmit = (data: PromotionFormData) => {
+    if (editingPromotion) {
+      updatePromotionMutation.mutate({ id: editingPromotion.id, data });
     } else {
-      createProductMutation.mutate(data);
+      createPromotionMutation.mutate(data);
     }
   };
 
@@ -127,17 +124,17 @@ export default function ShopProducts() {
     <ShopLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">My Products</h1>
+          <h1 className="text-2xl font-bold">Promotions & Discounts</h1>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                Add New Product
+                Create Promotion
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
-                <DialogTitle>{editingProduct ? 'Edit Product' : 'Add New Product'}</DialogTitle>
+                <DialogTitle>{editingPromotion ? 'Edit Promotion' : 'Create Promotion'}</DialogTitle>
               </DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -146,7 +143,7 @@ export default function ShopProducts() {
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Product Name</FormLabel>
+                        <FormLabel>Promotion Name</FormLabel>
                         <FormControl>
                           <Input {...field} />
                         </FormControl>
@@ -172,50 +169,19 @@ export default function ShopProducts() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <FormField
                       control={form.control}
-                      name="price"
+                      name="type"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Selling Price (₹)</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" min="0" step="0.01" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="mrp"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>MRP (₹)</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" min="0" step="0.01" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="category"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Category</FormLabel>
+                          <FormLabel>Discount Type</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select category" />
+                                <SelectValue placeholder="Select type" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="Electronics">Electronics</SelectItem>
-                              <SelectItem value="Fashion">Fashion</SelectItem>
-                              <SelectItem value="Home">Home & Living</SelectItem>
-                              <SelectItem value="Beauty">Beauty & Personal Care</SelectItem>
-                              <SelectItem value="Books">Books & Stationery</SelectItem>
+                              <SelectItem value="percentage">Percentage</SelectItem>
+                              <SelectItem value="fixed_amount">Fixed Amount</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -225,10 +191,10 @@ export default function ShopProducts() {
 
                     <FormField
                       control={form.control}
-                      name="stock"
+                      name="value"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Stock Quantity</FormLabel>
+                          <FormLabel>Discount Value</FormLabel>
                           <FormControl>
                             <Input {...field} type="number" min="0" />
                           </FormControl>
@@ -239,12 +205,12 @@ export default function ShopProducts() {
 
                     <FormField
                       control={form.control}
-                      name="minOrderQuantity"
+                      name="code"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Minimum Order Quantity</FormLabel>
+                          <FormLabel>Promotion Code</FormLabel>
                           <FormControl>
-                            <Input {...field} type="number" min="1" />
+                            <Input {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -253,12 +219,12 @@ export default function ShopProducts() {
 
                     <FormField
                       control={form.control}
-                      name="maxOrderQuantity"
+                      name="usageLimit"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Maximum Order Quantity</FormLabel>
+                          <FormLabel>Usage Limit</FormLabel>
                           <FormControl>
-                            <Input {...field} type="number" min="1" />
+                            <Input {...field} type="number" min="0" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -267,12 +233,26 @@ export default function ShopProducts() {
 
                     <FormField
                       control={form.control}
-                      name="lowStockThreshold"
+                      name="startDate"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Low Stock Alert Threshold</FormLabel>
+                          <FormLabel>Start Date</FormLabel>
                           <FormControl>
-                            <Input {...field} type="number" min="1" />
+                            <Input {...field} type="date" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="endDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>End Date</FormLabel>
+                          <FormControl>
+                            <Input {...field} type="date" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -282,11 +262,11 @@ export default function ShopProducts() {
 
                   <FormField
                     control={form.control}
-                    name="isAvailable"
+                    name="isActive"
                     render={({ field }) => (
                       <FormItem className="flex items-center justify-between rounded-lg border p-4">
                         <div className="space-y-0.5">
-                          <FormLabel>Available for Purchase</FormLabel>
+                          <FormLabel>Active</FormLabel>
                         </div>
                         <FormControl>
                           <Switch
@@ -301,12 +281,12 @@ export default function ShopProducts() {
                   <div className="flex justify-end">
                     <Button
                       type="submit"
-                      disabled={createProductMutation.isPending || updateProductMutation.isPending}
+                      disabled={createPromotionMutation.isPending || updatePromotionMutation.isPending}
                     >
-                      {(createProductMutation.isPending || updateProductMutation.isPending) && (
+                      {(createPromotionMutation.isPending || updatePromotionMutation.isPending) && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      {editingProduct ? 'Update Product' : 'Create Product'}
+                      {editingPromotion ? 'Update Promotion' : 'Create Promotion'}
                     </Button>
                   </div>
                 </form>
@@ -319,30 +299,30 @@ export default function ShopProducts() {
           <div className="flex items-center justify-center min-h-[400px]">
             <Loader2 className="h-8 w-8 animate-spin" />
           </div>
-        ) : !products?.length ? (
+        ) : !promotions?.length ? (
           <Card>
             <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">No products created yet</p>
+              <p className="text-muted-foreground">No promotions created yet</p>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {products.map((product) => (
-              <Card key={product.id}>
+          <div className="grid gap-6 md:grid-cols-2">
+            {promotions.map((promotion) => (
+              <Card key={promotion.id}>
                 <CardContent className="p-6">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-semibold">{product.name}</h3>
+                      <h3 className="font-semibold">{promotion.name}</h3>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {product.description}
+                        {promotion.description}
                       </p>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        setEditingProduct(product);
-                        form.reset(product);
+                        setEditingPromotion(promotion);
+                        form.reset(promotion);
                         setDialogOpen(true);
                       }}
                     >
@@ -352,40 +332,34 @@ export default function ShopProducts() {
 
                   <div className="mt-4 space-y-2">
                     <div className="flex justify-between items-center text-sm">
-                      <span>Price</span>
-                      <div>
-                        <span className="font-semibold">₹{product.price}</span>
-                        {product.mrp > product.price && (
-                          <span className="ml-2 line-through text-muted-foreground">
-                            ₹{product.mrp}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span>Stock</span>
-                      <span className={`font-semibold ${
-                        product.stock <= (product.lowStockThreshold || 5) ? 'text-red-500' : ''
-                      }`}>
-                        {product.stock} units
+                      <span>Discount</span>
+                      <span className="font-semibold">
+                        {promotion.type === 'percentage' ? `${promotion.value}%` : `₹${promotion.value}`}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
-                      <span>Category</span>
-                      <span className="font-semibold">{product.category}</span>
+                      <span>Code</span>
+                      <span className="font-semibold">{promotion.code}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span>Period</span>
+                      <span className="font-semibold">
+                        {new Date(promotion.startDate).toLocaleDateString()} - 
+                        {promotion.endDate ? new Date(promotion.endDate).toLocaleDateString() : 'No end date'}
+                      </span>
                     </div>
                   </div>
 
                   <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <span className="text-sm font-medium">Availability</span>
+                      <span className="text-sm font-medium">Status</span>
                     </div>
                     <Switch
-                      checked={product.isAvailable}
+                      checked={promotion.isActive}
                       onCheckedChange={(checked) =>
-                        updateProductMutation.mutate({
-                          id: product.id,
-                          data: { isAvailable: checked },
+                        updatePromotionMutation.mutate({
+                          id: promotion.id,
+                          data: { isActive: checked },
                         })
                       }
                     />
