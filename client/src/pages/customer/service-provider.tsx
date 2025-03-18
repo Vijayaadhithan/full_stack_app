@@ -7,22 +7,10 @@ import { Loader2, MapPin, Clock, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useParams, Link } from "wouter";
 
-type ServiceWithDetails = {
-  id: number;
-  name: string;
-  description: string;
-  price: string;
-  duration: number;
-  category: string;
-  isAvailable: boolean;
-  provider: User;
-  reviews: Review[];
-};
-
 export default function ServiceProvider() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
 
-  const { data: service, isLoading } = useQuery<ServiceWithDetails>({
+  const { data: service, isLoading } = useQuery<Service>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
   });
@@ -59,7 +47,7 @@ export default function ServiceProvider() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="max-w-4xl mx-auto space-y-6"
+        className="max-w-4xl mx-auto space-y-6 p-6"
       >
         <div className="flex flex-col md:flex-row gap-6">
           <motion.div className="md:w-1/3">
@@ -67,18 +55,18 @@ export default function ServiceProvider() {
               <CardContent className="pt-6 space-y-4">
                 <div className="flex flex-col items-center text-center">
                   <img
-                    src={service.provider.profilePicture || "https://via.placeholder.com/128"}
-                    alt={service.provider.name}
+                    src={service.provider?.profilePicture || "https://via.placeholder.com/128"}
+                    alt={service.provider?.name}
                     className="h-32 w-32 rounded-full object-cover mb-4"
                   />
-                  <h2 className="text-2xl font-bold">{service.provider.name}</h2>
+                  <h2 className="text-2xl font-bold">{service.provider?.name}</h2>
                   <div className="flex items-center gap-1 text-yellow-500">
                     <Star className="h-4 w-4 fill-current" />
-                    <span>{averageRating.toFixed(1)} ({service.reviews?.length} reviews)</span>
+                    <span>{averageRating.toFixed(1)} ({service.reviews?.length || 0} reviews)</span>
                   </div>
                   <p className="text-muted-foreground mt-2 flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
-                    {service.provider.address || "Address not available"}
+                    {service.provider?.address || "Address not available"}
                   </p>
                 </div>
               </CardContent>
@@ -137,10 +125,10 @@ export default function ServiceProvider() {
                           </div>
                         </div>
                         <p className="text-sm">{review.review}</p>
-                        {review.providerResponse && (
+                        {review.providerReply && (
                           <div className="mt-2 pl-4 border-l-2">
                             <p className="text-sm text-muted-foreground">
-                              <span className="font-semibold">Response:</span> {review.providerResponse}
+                              <span className="font-semibold">Response:</span> {review.providerReply}
                             </p>
                           </div>
                         )}
