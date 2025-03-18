@@ -235,18 +235,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Cart routes
   app.post("/api/cart", requireAuth, requireRole(["customer"]), async (req, res) => {
     const { productId, quantity } = req.body;
-    await storage.addToCart(req.user!.id, productId, quantity);
-    res.json({ success: true }); // Send proper JSON response
+    try {
+      await storage.addToCart(req.user!.id, productId, quantity);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to add to cart" });
+    }
   });
 
   app.delete("/api/cart/:productId", requireAuth, requireRole(["customer"]), async (req, res) => {
-    await storage.removeFromCart(req.user!.id, parseInt(req.params.productId));
-    res.sendStatus(200);
+    try {
+      await storage.removeFromCart(req.user!.id, parseInt(req.params.productId));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to remove from cart" });
+    }
   });
 
   app.get("/api/cart", requireAuth, requireRole(["customer"]), async (req, res) => {
-    const cart = await storage.getCart(req.user!.id);
-    res.json(cart);
+    try {
+      const cart = await storage.getCart(req.user!.id);
+      res.json(cart);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to get cart" });
+    }
   });
 
   // Wishlist routes
@@ -304,39 +316,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendStatus(200);
   });
 
-  // Order routes
+  // Order routes with better error handling
   app.post("/api/orders", requireAuth, requireRole(["customer"]), async (req, res) => {
-    const result = insertOrderSchema.safeParse(req.body);
-    if (!result.success) return res.status(400).json(result.error);
+    try {
+      const result = insertOrderSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json(result.error);
 
-    // Create Razorpay order
-    const order = await razorpay.orders.create({
-      amount: parseInt(result.data.total) * 100, // Convert to paisa
-      currency: "INR",
-      receipt: `order_${Date.now()}`,
-    });
-
-    const newOrder = await storage.createOrder({
-      ...result.data,
-      customerId: req.user!.id,
-      razorpayOrderId: order.id,
-      status: "pending",
-      paymentStatus: "pending",
-    });
-
-    // Create order items
-    const { items } = req.body;
-    for (const item of items) {
-      await storage.createOrderItem({
-        orderId: newOrder.id,
-        ...item,
+      // Create Razorpay order
+      const order = await razorpay.orders.create({
+        amount: parseInt(result.data.total) * 100, // Convert to paisa
+        currency: "INR",
+        receipt: `order_${Date.now()}`,
       });
+
+      const newOrder = await storage.createOrder({
+        ...result.data,
+        customerId: req.user!.id,
+        razorpayOrderId: order.id,
+        status: "pending",
+        paymentStatus: "pending",
+      });
+
+      // Create order items
+      const { items } = req.body;
+      for (const item of items) {
+        await storage.createOrderItem({
+          orderId: newOrder.id,
+          ...item,
+        });
+      }
+
+      // Clear cart after order creation
+      await storage.clearCart(req.user!.id);
+
+      res.status(201).json({ order: newOrder, razorpayOrder: order });
+    } catch (error) {
+      console.error("Order creation error:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create order" });
     }
-
-    // Clear cart after order creation
-    await storage.clearCart(req.user!.id);
-
-    res.status(201).json({ order: newOrder, razorpayOrder: order });
   });
 
   app.post("/api/orders/:id/payment", requireAuth, requireRole(["customer"]), async (req, res) => {

@@ -181,7 +181,10 @@ export class MemStorage implements IStorage {
   }
 
   async getService(id: number): Promise<Service | undefined> {
-    return this.services.get(id);
+    console.log("Getting service with ID:", id);
+    const service = this.services.get(id);
+    console.log("Found service:", service);
+    return service;
   }
 
   async getServicesByProvider(providerId: number): Promise<Service[]> {
@@ -568,9 +571,11 @@ export class MemStorage implements IStorage {
       }
     ];
 
+    const createdServices = [];
     for (const service of services) {
       const createdService = await this.createService(service);
       console.log("Created service:", createdService);
+      createdServices.push(createdService);
     }
 
     // Create a shop owner
