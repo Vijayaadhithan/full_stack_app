@@ -176,25 +176,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/services/:id", requireAuth, async (req, res) => {
     try {
+      console.log("Fetching service with ID:", req.params.id); // Debug log
       const serviceId = parseInt(req.params.id);
       const service = await storage.getService(serviceId);
+      console.log("Found service:", service); // Debug log
 
       if (!service) {
+        console.log("Service not found"); // Debug log
         return res.status(404).json({ message: "Service not found" });
       }
 
       if (!service.providerId) {
+        console.log("Invalid service provider"); // Debug log
         return res.status(400).json({ message: "Invalid service provider" });
       }
 
       // Get the provider details
       const provider = await storage.getUser(service.providerId);
+      console.log("Found provider:", provider); // Debug log
+
       if (!provider) {
+        console.log("Service provider not found"); // Debug log
         return res.status(404).json({ message: "Service provider not found" });
       }
 
       // Get reviews for the service
       const reviews = await storage.getReviewsByService(serviceId);
+      console.log("Found reviews:", reviews); // Debug log
 
       // Calculate average rating
       const rating = reviews?.length 
@@ -202,7 +210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : null;
 
       // Return combined data
-      res.json({
+      const response = {
         ...service,
         rating,
         provider: {
@@ -213,7 +221,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: provider.role
         },
         reviews: reviews || []
-      });
+      };
+      console.log("Sending response:", response); // Debug log
+      res.json(response);
     } catch (error) {
       console.error("Error fetching service:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch service" });
