@@ -7,6 +7,7 @@ import { Link } from "wouter";
 import { Loader2, Plus, Calendar, Star, Bell, Settings, Users, Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { Booking, Review, Service } from "@shared/schema";
+import { format, isAfter } from "date-fns";
 
 const container = {
   hidden: { opacity: 0 },
@@ -48,6 +49,15 @@ export default function ProviderDashboard() {
   const averageRating = reviews?.length
     ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length
     : 0;
+
+  // Filter and sort upcoming bookings
+  const upcomingBookings = bookings
+    ?.filter(booking => 
+      booking.status === "confirmed" && 
+      isAfter(new Date(booking.bookingDate), new Date())
+    )
+    ?.sort((a, b) => new Date(a.bookingDate).getTime() - new Date(b.bookingDate).getTime())
+    ?.slice(0, 5);
 
   return (
     <DashboardLayout>
@@ -185,11 +195,11 @@ export default function ProviderDashboard() {
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-8 w-8 animate-spin" />
                   </div>
-                ) : upcomingBookings?.length === 0 ? (
+                ) : !upcomingBookings?.length ? (
                   <p className="text-center text-muted-foreground py-8">No upcoming bookings</p>
                 ) : (
                   <div className="space-y-4">
-                    {upcomingBookings?.map((booking) => (
+                    {upcomingBookings.map((booking) => (
                       <div
                         key={booking.id}
                         className="flex items-center justify-between p-4 border rounded-lg"
@@ -199,14 +209,14 @@ export default function ProviderDashboard() {
                           <div>
                             <p className="font-medium">{booking.service?.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {new Date(booking.bookingDate).toLocaleDateString()}
+                              {format(new Date(booking.bookingDate), "MMMM d, yyyy")}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">
-                            {new Date(booking.bookingDate).toLocaleTimeString()}
+                            {format(new Date(booking.bookingDate), "h:mm a")}
                           </span>
                         </div>
                       </div>
@@ -232,11 +242,11 @@ export default function ProviderDashboard() {
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-8 w-8 animate-spin" />
                   </div>
-                ) : reviews?.length === 0 ? (
+                ) : !reviews?.length ? (
                   <p className="text-center text-muted-foreground py-8">No reviews yet</p>
                 ) : (
                   <div className="space-y-4">
-                    {reviews?.slice(0, 5).map((review) => (
+                    {reviews.slice(0, 5).map((review) => (
                       <div
                         key={review.id}
                         className="p-4 border rounded-lg"
@@ -248,7 +258,7 @@ export default function ProviderDashboard() {
                         </div>
                         <p className="text-sm">{review.review}</p>
                         <p className="text-xs text-muted-foreground mt-2">
-                          {new Date(review.createdAt || '').toLocaleDateString()}
+                          {format(new Date(review.createdAt || ''), "MMMM d, yyyy")}
                         </p>
                       </div>
                     ))}
