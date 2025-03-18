@@ -90,30 +90,30 @@ export default function BrowseServices() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredServices.map((service) => (
               <motion.div key={service.id} variants={item}>
-                <Link href={`/customer/service-details/${service.id}`}>
-                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex flex-col gap-4">
-                        <div>
-                          <h3 className="font-semibold">{service.name}</h3>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {service.description}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4" />
-                            <span>{service.duration} mins</span>
-                          </div>
-                          <span className="font-semibold">₹{service.price}</span>
-                        </div>
-
-                        <Button className="w-full">View Details</Button>
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col gap-4">
+                      <div>
+                        <h3 className="font-semibold">{service.name}</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {service.description}
+                        </p>
                       </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          <span>{service.duration} mins</span>
+                        </div>
+                        <span className="font-semibold">₹{service.price}</span>
+                      </div>
+
+                      <Link href={`/customer/service-details/${service.id}`}>
+                        <Button className="w-full">View Details</Button>
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
               </motion.div>
             ))}
           </div>
