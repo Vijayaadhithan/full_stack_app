@@ -137,8 +137,32 @@ export const translations = {
     'write_review':'Write Review',
     'your_rating':'Your Rating',
     'your_review':'Your Review',
-    'reply_to_review':'Reply to Review'
+    'reply_to_review':'Reply to Review',
 
+    // Calendar and Availability
+    'calendar': 'Calendar',
+    'block_time_slot': 'Block Time Slot',
+    'time_slot_blocked': 'Time slot blocked successfully',
+    'time_slot_unblocked': 'Time slot unblocked successfully',
+    'availability_calendar': 'Availability Calendar',
+    'working_hours': 'Working Hours',
+    'break_time': 'Break Time',
+    'start_time': 'Start Time',
+    'end_time': 'End Time',
+    'add_break': 'Add Break',
+    'block_reason_placeholder': 'Enter reason for blocking this time slot',
+    'not_working_day': 'Not a working day',
+    'save_service_to_manage_calendar': 'Save service first to manage calendar',
+    'blocked_slots': 'Blocked Slots',
+    'day': {
+      'monday': 'Monday',
+      'tuesday': 'Tuesday',
+      'wednesday': 'Wednesday',
+      'thursday': 'Thursday',
+      'friday': 'Friday',
+      'saturday': 'Saturday',
+      'sunday': 'Sunday'
+    },
   },
   hi: {
     // Common
@@ -153,100 +177,99 @@ export const translations = {
     'edit': 'संपादित करें',
     'delete': 'हटाएं',
     'submit': 'जमा करें',
-    'success': 'सफल', // Add Hindi translation
-    'error': 'त्रुटि', // Add Hindi translation
-    'loading': 'लोड हो रहा है...', // Add Hindi translation
+    'success': 'सफल', 
+    'error': 'त्रुटि', 
+    'loading': 'लोड हो रहा है...', 
     // Add Hindi translations for all the above keys
 
     // Shop Management
-    'my_products': 'मेरे उत्पाद', // Add Hindi translation
+    'my_products': 'मेरे उत्पाद', 
     'add_product': 'उत्पाद जोड़ें',
     'edit_product': 'उत्पाद संपादित करें',
     'product_name': 'उत्पाद का नाम',
     'product_description': 'विवरण',
-    'selling_price': 'विक्रय मूल्य', // Add Hindi translation
-    'mrp': 'एमआरपी', // Add Hindi translation
-    'stock_quantity': 'स्टॉक मात्रा', // Add Hindi translation
-    'minimum_order_quantity': 'न्यूनतम आदेश मात्रा', // Add Hindi translation
-    'maximum_order_quantity': 'अधिकतम आदेश मात्रा', // Add Hindi translation
-    'low_stock_alert_threshold': 'कम स्टॉक चेतावनी सीमा', // Add Hindi translation
-    'product_images': 'उत्पाद चित्र', // Add Hindi translation
-    'add_image': 'चित्र जोड़ें', // Add Hindi translation
-    'specifications': 'विशेष विवरण', // Add Hindi translation
-    'specification_key': 'विशिष्टता का नाम', // Add Hindi translation
-    'specification_value': 'मान', // Add Hindi translation
-    'add_specification': 'विशिष्टता जोड़ें', // Add Hindi translation
-    'dimensions': 'आयाम', // Add Hindi translation
-    'length': 'लम्बाई', // Add Hindi translation
-    'width': 'चौड़ाई', // Add Hindi translation
-    'height': 'ऊँचाई', // Add Hindi translation
-    'tags': 'टैग', // Add Hindi translation
-    'enter_tags_comma_separated': 'टैग दर्ज करें (अल्पविराम से अलग)', // Add Hindi translation
-    'product_created_successfully': 'उत्पाद सफलतापूर्वक बनाया गया', // Add Hindi translation
-    'product_updated_successfully': 'उत्पाद सफलतापूर्वक अपडेट किया गया', // Add Hindi translation
-    'units': 'इकाइयाँ', // Add Hindi translation
-    'availability': 'उपलब्धता', // Add Hindi translation
-    'available_for_booking': 'बुकिंग के लिए उपलब्ध', // Add Hindi translation
+    'selling_price': 'विक्रय मूल्य', 
+    'mrp': 'एमआरपी', 
+    'stock_quantity': 'स्टॉक मात्रा', 
+    'minimum_order_quantity': 'न्यूनतम आदेश मात्रा', 
+    'maximum_order_quantity': 'अधिकतम आदेश मात्रा', 
+    'low_stock_alert_threshold': 'कम स्टॉक चेतावनी सीमा', 
+    'product_images': 'उत्पाद चित्र', 
+    'add_image': 'चित्र जोड़ें', 
+    'specifications': 'विशेष विवरण', 
+    'specification_key': 'विशिष्टता का नाम', 
+    'specification_value': 'मान', 
+    'add_specification': 'विशिष्टता जोड़ें', 
+    'dimensions': 'आयाम', 
+    'length': 'लम्बाई', 
+    'width': 'चौड़ाई', 
+    'height': 'ऊँचाई', 
+    'tags': 'टैग', 
+    'enter_tags_comma_separated': 'टैग दर्ज करें (अल्पविराम से अलग)', 
+    'product_created_successfully': 'उत्पाद सफलतापूर्वक बनाया गया', 
+    'product_updated_successfully': 'उत्पाद सफलतापूर्वक अपडेट किया गया', 
+    'units': 'इकाइयाँ', 
+    'availability': 'उपलब्धता', 
+    'available_for_booking': 'बुकिंग के लिए उपलब्ध', 
 
 
     // Service Provider
-    'my_services': 'मेरी सेवाएँ', // Add Hindi translation
+    'my_services': 'मेरी सेवाएँ', 
     'add_service': 'सेवा जोड़ें',
     'edit_service': 'सेवा संपादित करें',
     'service_name': 'सेवा का नाम',
-    'service_description': 'सेवा विवरण', // Add Hindi translation
+    'service_description': 'सेवा विवरण', 
     'service_duration': 'अवधि',
     'service_price': 'मूल्य',
-    'buffer_time': 'बफ़र समय', // Add Hindi translation
-    'minutes': 'मिनट', // Add Hindi translation
+    'buffer_time': 'बफ़र समय', 
+    'minutes': 'मिनट', 
     'service_category': 'श्रेणी',
-    'beauty_wellness': 'सौंदर्य और कल्याण', // Add Hindi translation
-    'home_services': 'घरेलू सेवाएँ', // Add Hindi translation
-    'professional_services': 'पेशेवर सेवाएँ', // Add Hindi translation
-    'health_fitness': 'स्वास्थ्य और फिटनेस', // Add Hindi translation
-    'education_training': 'शिक्षा और प्रशिक्षण', // Add Hindi translation
-    'basic_info': 'मूल जानकारी', // Add Hindi translation
-    'availability': 'उपलब्धता', // Add Hindi translation
-    'scheduling': 'शेड्यूलिंग', // Add Hindi translation
-    'max_daily_bookings': 'अधिकतम दैनिक बुकिंग', // Add Hindi translation
-    'service_created_successfully': 'सेवा सफलतापूर्वक बनाई गई', // Add Hindi translation
-    'service_updated_successfully': 'सेवा सफलतापूर्वक अपडेट की गई', // Add Hindi translation
+    'beauty_wellness': 'सौंदर्य और कल्याण', 
+    'home_services': 'घरेलू सेवाएँ', 
+    'professional_services': 'पेशेवर सेवाएँ', 
+    'health_fitness': 'स्वास्थ्य और फिटनेस', 
+    'education_training': 'शिक्षा और प्रशिक्षण', 
+    'basic_info': 'मूल जानकारी', 
+    'availability': 'उपलब्धता', 
+    'scheduling': 'शेड्यूलिंग', 
+    'max_daily_bookings': 'अधिकतम दैनिक बुकिंग', 
+    'service_created_successfully': 'सेवा सफलतापूर्वक बनाई गई', 
+    'service_updated_successfully': 'सेवा सफलतापूर्वक अपडेट की गई', 
 
     // Order Management
-    'order_management': 'ऑर्डर प्रबंधन', // Add Hindi translation
+    'order_management': 'ऑर्डर प्रबंधन', 
     'orders': 'ऑर्डर',
-    'returns': 'वापसी', // Add Hindi translation
+    'returns': 'वापसी', 
     'order': 'ऑर्डर',
-    'update_status': 'स्थिति अद्यतन करें', // Add Hindi translation
-    'update_order_status': 'ऑर्डर स्थिति अद्यतन करें', // Add Hindi translation
-    'select_status': 'स्थिति चुनें', // Add Hindi translation
-    'order_status_updated': 'ऑर्डर स्थिति सफलतापूर्वक अद्यतन की गई', // Add Hindi translation
-    'customer_details': 'ग्राहक विवरण', // Add Hindi translation
-    'order_items': 'ऑर्डर आइटम', // Add Hindi translation
-    'tracking_info': 'ट्रैकिंग जानकारी', // Add Hindi translation
-    'cancellation_reason': 'रद्द करने का कारण', // Add Hindi translation
-    'no_orders': 'कोई ऑर्डर नहीं मिला', // Add Hindi translation
-    'confirmed': 'पुष्टि की गई', // Add Hindi translation
-    'packed': 'पैक किया गया', // Add Hindi translation
-    'dispatched': 'प्रेषित', // Add Hindi translation
-    'delivered': 'डिलीवर किया गया', // Add Hindi translation
-    'cancelled': 'रद्द किया गया', // Add Hindi translation
+    'update_status': 'स्थिति अद्यतन करें', 
+    'update_order_status': 'ऑर्डर स्थिति अद्यतन करें', 
+    'select_status': 'स्थिति चुनें', 
+    'order_status_updated': 'ऑर्डर स्थिति सफलतापूर्वक अद्यतन की गई', 
+    'customer_details': 'ग्राहक विवरण', 
+    'order_items': 'ऑर्डर आइटम', 
+    'tracking_info': 'ट्रैकिंग जानकारी', 
+    'cancellation_reason': 'रद्द करने का कारण', 
+    'no_orders': 'कोई ऑर्डर नहीं मिला', 
+    'confirmed': 'पुष्टि की गई', 
+    'packed': 'पैक किया गया', 
+    'dispatched': 'प्रेषित', 
+    'delivered': 'डिलीवर किया गया', 
+    'cancelled': 'रद्द किया गया', 
 
     // Returns & Refunds
-    'return_request': 'वापसी अनुरोध', // Add Hindi translation
-    'approve_return': 'वापसी को मंज़ूर करें', // Add Hindi translation
-    'reject_return': 'वापसी को अस्वीकार करें', // Add Hindi translation
-    'return_request_processed': 'वापसी अनुरोध सफलतापूर्वक संसाधित किया गया', // Add Hindi translation
-    'no_return_requests': 'कोई वापसी अनुरोध नहीं', // Add Hindi translation
-    'reason': 'कारण', // Add Hindi translation
-    'description': 'वर्णन', // Add Hindi translation
-    'status': 'स्थिति', // Add Hindi translation
+    'return_request': 'वापसी अनुरोध', 
+    'approve_return': 'वापसी को मंज़ूर करें', 
+    'reject_return': 'वापसी को अस्वीकार करें', 
+    'return_request_processed': 'वापसी अनुरोध सफलतापूर्वक संसाधित किया गया', 
+    'no_return_requests': 'कोई वापसी अनुरोध नहीं', 
+    'reason': 'कारण', 
+    'description': 'वर्णन', 
+    'status': 'स्थिति', 
 
     // Notifications
-    'notifications': 'सूचनाएँ', // Add Hindi translation
-    'no_notifications': 'कोई सूचना नहीं', // Add Hindi translation
-    'mark_as_read': 'पढ़ा हुआ चिह्नित करें', // Add Hindi translation
-
+    'notifications': 'सूचनाएँ', 
+    'no_notifications': 'कोई सूचना नहीं', 
+    'mark_as_read': 'पढ़ा हुआ चिह्नित करें', 
 
     // Navigation
     'dashboard': 'डैशबोर्ड',
@@ -281,7 +304,32 @@ export const translations = {
     'write_review':'समीक्षा लिखें',
     'your_rating':'आपकी रेटिंग',
     'your_review':'आपकी समीक्षा',
-    'reply_to_review':'समीक्षा का जवाब दें'
+    'reply_to_review':'समीक्षा का जवाब दें',
+
+    // Calendar and Availability
+    'calendar': 'कैलेंडर',
+    'block_time_slot': 'समय स्लॉट ब्लॉक करें',
+    'time_slot_blocked': 'समय स्लॉट सफलतापूर्वक ब्लॉक किया गया',
+    'time_slot_unblocked': 'समय स्लॉट सफलतापूर्वक अनब्लॉक किया गया',
+    'availability_calendar': 'उपलब्धता कैलेंडर',
+    'working_hours': 'कार्य समय',
+    'break_time': 'विश्राम समय',
+    'start_time': 'प्रारंभ समय',
+    'end_time': 'समाप्ति समय',
+    'add_break': 'विश्राम जोड़ें',
+    'block_reason_placeholder': 'इस समय स्लॉट को ब्लॉक करने का कारण दर्ज करें',
+    'not_working_day': 'काम का दिन नहीं है',
+    'save_service_to_manage_calendar': 'कैलेंडर प्रबंधन के लिए पहले सेवा सहेजें',
+    'blocked_slots': 'ब्लॉक किए गए स्लॉट',
+    'day': {
+      'monday': 'सोमवार',
+      'tuesday': 'मंगलवार',
+      'wednesday': 'बुधवार',
+      'thursday': 'गुरुवार',
+      'friday': 'शुक्रवार',
+      'saturday': 'शनिवार',
+      'sunday': 'रविवार'
+    },
   },
   ta: {
     // Common
@@ -296,100 +344,99 @@ export const translations = {
     'edit': 'திருத்து',
     'delete': 'நீக்கு',
     'submit': 'சமர்ப்பி',
-    'success': 'வெற்றி', // Add Tamil translation
-    'error': 'தவறு', // Add Tamil translation
-    'loading': 'ஏற்றுகொள்ளுதல்...', // Add Tamil translation
+    'success': 'வெற்றி', 
+    'error': 'தவறு', 
+    'loading': 'ஏற்றுகொள்ளுதல்...', 
     // Add Tamil translations for all the above keys
 
     // Shop Management
-    'my_products': 'எனது பொருட்கள்', // Add Tamil translation
+    'my_products': 'எனது பொருட்கள்', 
     'add_product': 'பொருள் சேர்',
     'edit_product': 'பொருளைத் திருத்து',
     'product_name': 'பொருளின் பெயர்',
     'product_description': 'விளக்கம்',
-    'selling_price': 'விற்பனை விலை', // Add Tamil translation
-    'mrp': 'அதிகபட்ச சில்லறை விலை', // Add Tamil translation
-    'stock_quantity': 'சரக்கு அளவு', // Add Tamil translation
-    'minimum_order_quantity': 'குறைந்தபட்ச ஆர்டர் அளவு', // Add Tamil translation
-    'maximum_order_quantity': 'அதிகபட்ச ஆர்டர் அளவு', // Add Tamil translation
-    'low_stock_alert_threshold': 'குறைந்த சரக்கு எச்சரிக்கை வரம்பு', // Add Tamil translation
-    'product_images': 'பொருள் படங்கள்', // Add Tamil translation
-    'add_image': 'படம் சேர்க்க', // Add Tamil translation
-    'specifications': 'விவரக்குறிப்புகள்', // Add Tamil translation
-    'specification_key': 'விவரக்குறிப்பு பெயர்', // Add Tamil translation
-    'specification_value': 'மதிப்பு', // Add Tamil translation
-    'add_specification': 'விவரக்குறிப்பு சேர்க்க', // Add Tamil translation
-    'dimensions': 'பரிமாணங்கள்', // Add Tamil translation
-    'length': 'நீளம்', // Add Tamil translation
-    'width': 'அகலம்', // Add Tamil translation
-    'height': 'உயரம்', // Add Tamil translation
-    'tags': 'டேக்குகள்', // Add Tamil translation
-    'enter_tags_comma_separated': 'டேக்குகளை உள்ளிடவும் (கமா பிரித்தது)', // Add Tamil translation
-    'product_created_successfully': 'பொருள் வெற்றிகரமாக உருவாக்கப்பட்டது', // Add Tamil translation
-    'product_updated_successfully': 'பொருள் வெற்றிகரமாக புதுப்பிக்கப்பட்டது', // Add Tamil translation
-    'units': 'அலகுகள்', // Add Tamil translation
-    'availability': 'கிடைக்கும் தன்மை', // Add Tamil translation
-    'available_for_booking': 'டேக்குகள்', // Add Tamil translation
+    'selling_price': 'விற்பனை விலை', 
+    'mrp': 'அதிகபட்ச சில்லறை விலை', 
+    'stock_quantity': 'சரக்கு அளவு', 
+    'minimum_order_quantity': 'குறைந்தபட்ச ஆர்டர் அளவு', 
+    'maximum_order_quantity': 'அதிகபட்ச ஆர்டர் அளவு', 
+    'low_stock_alert_threshold': 'குறைந்த சரக்கு எச்சரிக்கை வரம்பு', 
+    'product_images': 'பொருள் படங்கள்', 
+    'add_image': 'படம் சேர்க்க', 
+    'specifications': 'விவரக்குறிப்புகள்', 
+    'specification_key': 'விவரக்குறிப்பு பெயர்', 
+    'specification_value': 'மதிப்பு', 
+    'add_specification': 'விவரக்குறிப்பு சேர்க்க', 
+    'dimensions': 'பரிமாணங்கள்', 
+    'length': 'நீளம்', 
+    'width': 'அகலம்', 
+    'height': 'உயரம்', 
+    'tags': 'டேக்குகள்', 
+    'enter_tags_comma_separated': 'டேக்குகளை உள்ளிடவும் (கமா பிரித்தது)', 
+    'product_created_successfully': 'பொருள் வெற்றிகரமாக உருவாக்கப்பட்டது', 
+    'product_updated_successfully': 'பொருள் வெற்றிகரமாக புதுப்பிக்கப்பட்டது', 
+    'units': 'அலகுகள்', 
+    'availability': 'கிடைக்கும் தன்மை', 
+    'available_for_booking': 'டேக்குகள்', 
 
 
     // Service Provider
-    'my_services': 'எனது சேவைகள்', // Add Tamil translation
+    'my_services': 'எனது சேவைகள்', 
     'add_service': 'சேவை சேர்',
     'edit_service': 'சேவையைத் திருத்து',
     'service_name': 'சேவையின் பெயர்',
-    'service_description': 'சேவை விளக்கம்', // Add Tamil translation
+    'service_description': 'சேவை விளக்கம்', 
     'service_duration': 'கால அளவு',
     'service_price': 'விலை',
-    'buffer_time': 'பஃபர் நேரம்', // Add Tamil translation
-    'minutes': 'நிமிடங்கள்', // Add Tamil translation
+    'buffer_time': 'பஃபர் நேரம்', 
+    'minutes': 'நிமிடங்கள்', 
     'service_category': 'வகை',
-    'beauty_wellness': 'அழகு மற்றும் ஆரோக்கியம்', // Add Tamil translation
-    'home_services': 'வீட்டு சேவைகள்', // Add Tamil translation
-    'professional_services': 'தொழில்முறை சேவைகள்', // Add Tamil translation
-    'health_fitness': 'சுகாதாரம் மற்றும் உடற்பயிற்சி', // Add Tamil translation
-    'education_training': 'கல்வி மற்றும் பயிற்சி', // Add Tamil translation
-    'basic_info': 'அடிப்படை தகவல்', // Add Tamil translation
-    'availability': 'கிடைக்கும் தன்மை', // Add Tamil translation
-    'scheduling': 'அட்டவணை', // Add Tamil translation
-    'max_daily_bookings': 'அதிகபட்ச தினசரி முன்பதிவுகள்', // Add Tamil translation
-    'service_created_successfully': 'சேவை வெற்றிகரமாக உருவாக்கப்பட்டது', // Add Tamil translation
-    'service_updated_successfully': 'சேவை வெற்றிகரமாக புதுப்பிக்கப்பட்டது', // Add Tamil translation
+    'beauty_wellness': 'அழகு மற்றும் ஆரோக்கியம்', 
+    'home_services': 'வீட்டு சேவைகள்', 
+    'professional_services': 'தொழில்முறை சேவைகள்', 
+    'health_fitness': 'சுகாதாரம் மற்றும் உடற்பயிற்சி', 
+    'education_training': 'கல்வி மற்றும் பயிற்சி', 
+    'basic_info': 'அடிப்படை தகவல்', 
+    'availability': 'கிடைக்கும் தன்மை', 
+    'scheduling': 'அட்டவணை', 
+    'max_daily_bookings': 'அதிகபட்ச தினசரி முன்பதிவுகள்', 
+    'service_created_successfully': 'சேவை வெற்றிகரமாக உருவாக்கப்பட்டது', 
+    'service_updated_successfully': 'சேவை வெற்றிகரமாக புதுப்பிக்கப்பட்டது', 
 
     // Order Management
-    'order_management': 'ஆர்டர் மேலாண்மை', // Add Tamil translation
+    'order_management': 'ஆர்டர் மேலாண்மை', 
     'orders': 'ஆர்டர்கள்',
-    'returns': 'திரும்பப் பெறுதல்', // Add Tamil translation
+    'returns': 'திரும்பப் பெறுதல்', 
     'order': 'ஆர்டர்',
-    'update_status': 'நிலையைப் புதுப்பிக்கவும்', // Add Tamil translation
-    'update_order_status': 'ஆர்டர் நிலையைப் புதுப்பிக்கவும்', // Add Tamil translation
-    'select_status': 'நிலையைத் தேர்ந்தெடு', // Add Tamil translation
-    'order_status_updated': 'ஆர்டர் நிலை வெற்றிகரமாக புதுப்பிக்கப்பட்டது', // Add Tamil translation
-    'customer_details': 'வாடிக்கையாளர் விவரங்கள்', // Add Tamil translation
-    'order_items': 'ஆர்டர் பொருட்கள்', // Add Tamil translation
-    'tracking_info': 'கண்காணிப்பு தகவல்', // Add Tamil translation
-    'cancellation_reason': 'ரத்து செய்யும் காரணம்', // Add Tamil translation
-    'no_orders': 'எந்த ஆர்டர்களும் இல்லை', // Add Tamil translation
-    'confirmed': 'உறுதிப்படுத்தப்பட்டது', // Add Tamil translation
-    'packed': 'பேக் செய்யப்பட்டது', // Add Tamil translation
-    'dispatched': 'அனுப்பப்பட்டது', // Add Tamil translation
-    'delivered': 'சேர்ந்தது', // Add Tamil translation
-    'cancelled': 'ரத்து செய்யப்பட்டது', // Add Tamil translation
+    'update_status': 'நிலையைப் புதுப்பிக்கவும்', 
+    'update_order_status': 'ஆர்டர் நிலையைப் புதுப்பிக்கவும்', 
+    'select_status': 'நிலையைத் தேர்ந்தெடு', 
+    'order_status_updated': 'ஆர்டர் நிலை வெற்றிகரமாக புதுப்பிக்கப்பட்டது', 
+    'customer_details': 'வாடிக்கையாளர் விவரங்கள்', 
+    'order_items': 'ஆர்டர் பொருட்கள்', 
+    'tracking_info': 'கண்காணிப்பு தகவல்', 
+    'cancellation_reason': 'ரத்து செய்யும் காரணம்', 
+    'no_orders': 'எந்த ஆர்டர்களும் இல்லை', 
+    'confirmed': 'உறுதிப்படுத்தப்பட்டது', 
+    'packed': 'பேக் செய்யப்பட்டது', 
+    'dispatched': 'அனுப்பப்பட்டது', 
+    'delivered': 'சேர்ந்தது', 
+    'cancelled': 'ரத்து செய்யப்பட்டது', 
 
     // Returns & Refunds
-    'return_request': 'திரும்பப் பெறுதல் கோரிக்கை', // Add Tamil translation
-    'approve_return': 'திரும்பப் பெறுதலை ஏற்க', // Add Tamil translation
-    'reject_return': 'திரும்பப் பெறுதலை நிராகரி', // Add Tamil translation
-    'return_request_processed': 'திரும்பப் பெறுதல் கோரிக்கை வெற்றிகரமாகச் செயலாக்கப்பட்டது', // Add Tamil translation
-    'no_return_requests': 'எந்தத் திரும்பப் பெறுதல் கோரிக்கைகளும் இல்லை', // Add Tamil translation
-    'reason': 'காரணம்', // Add Tamil translation
-    'description': 'விளக்கம்', // Add Tamil translation
-    'status': 'நிலை', // Add Tamil translation
+    'return_request': 'திரும்பப் பெறுதல் கோரிக்கை', 
+    'approve_return': 'திரும்பப் பெறுதலை ஏற்க', 
+    'reject_return': 'திரும்பப் பெறுதலை நிராகரி', 
+    'return_request_processed': 'திரும்பப் பெறுதல் கோரிக்கை வெற்றிகரமாகச் செயலாக்கப்பட்டது', 
+    'no_return_requests': 'எந்தத் திரும்பப் பெறுதல் கோரிக்கைகளும் இல்லை', 
+    'reason': 'காரணம்', 
+    'description': 'விளக்கம்', 
+    'status': 'நிலை', 
 
     // Notifications
-    'notifications': 'அறிவிப்புகள்', // Add Tamil translation
-    'no_notifications': 'எந்த அறிவிப்புகளும் இல்லை', // Add Tamil translation
-    'mark_as_read': 'படித்ததாகக் குறிக்கவும்', // Add Tamil translation
-
+    'notifications': 'அறிவிப்புகள்', 
+    'no_notifications': 'எந்த அறிவிப்புகளும் இல்லை', 
+    'mark_as_read': 'படித்ததாகக் குறிக்கவும்', 
 
     // Navigation
     'dashboard': 'டாஷ்போர்டு',
@@ -424,6 +471,31 @@ export const translations = {
     'write_review':'விமர்சனம் எழுது',
     'your_rating':'உங்கள் மதிப்பீடு',
     'your_review':'உங்கள் விமர்சனம்',
-    'reply_to_review':'விமர்சனத்திற்கு பதிலளி'
-  },
+    'reply_to_review':'விமர்சனத்திற்கு பதிலளி',
+
+    // Calendar and Availability
+    'calendar': 'நாட்காட்டி',
+    'block_time_slot': 'நேர நேரத்தை தடுக்கவும்',
+    'time_slot_blocked': 'நேர நேரம் வெற்றிகரமாக தடுக்கப்பட்டது',
+    'time_slot_unblocked': 'நேர நேரம் வெற்றிகரமாக திறக்கப்பட்டது',
+    'availability_calendar': 'கிடைக்கும் நாட்காட்டி',
+    'working_hours': 'வேலை நேரம்',
+    'break_time': 'இடைவேளை நேரம்',
+    'start_time': 'தொடக்க நேரம்',
+    'end_time': 'முடிவு நேரம்',
+    'add_break': 'இடைவேளை சேர்க்கவும்',
+    'block_reason_placeholder': 'இந்த நேர நேரத்தை தடுப்பதற்கான காரணத்தை உள்ளிடவும்',
+    'not_working_day': 'வேலை நாள் அல்ல',
+    'save_service_to_manage_calendar': 'நாட்காட்டியை நிர்வகிக்க முதலில் சேவையை சேமிக்கவும்',
+    'blocked_slots': 'தடுக்கப்பட்ட நேரங்கள்',
+    'day': {
+      'monday': 'திங்கள்',
+      'tuesday': 'செவ்வாய்',
+      'wednesday': 'புதன்',
+      'thursday': 'வியாழன்',
+      'friday': 'வெள்ளி',
+      'saturday': 'சனி',
+      'sunday': 'ஞாயிறு'
+    },
+  }
 };

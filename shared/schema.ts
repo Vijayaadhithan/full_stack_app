@@ -44,6 +44,17 @@ export type BreakTime = {
   end: string;
 };
 
+export type BlockedTimeSlot = {
+  id: number;
+  serviceId: number;
+  date: string;
+  startTime: string;
+  endTime: string;
+  reason?: string;
+  isRecurring: boolean;
+  recurringEndDate?: string;
+};
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -266,6 +277,18 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const blockedTimeSlots = pgTable("blocked_time_slots", {
+  id: serial("id").primaryKey(),
+  serviceId: integer("service_id").references(() => services.id),
+  date: timestamp("date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  reason: text("reason"),
+  isRecurring: boolean("is_recurring").default(false),
+  recurringEndDate: timestamp("recurring_end_date"),
+});
+
+
 // Generate insert schemas and types
 export const insertUserSchema = createInsertSchema(users);
 export type User = typeof users.$inferSelect;
@@ -355,3 +378,7 @@ export type InsertPromotion = z.infer<typeof insertPromotionSchema>;
 export const insertProductReviewSchema = createInsertSchema(productReviews);
 export type ProductReview = typeof productReviews.$inferSelect;
 export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
+
+export const insertBlockedTimeSlotSchema = createInsertSchema(blockedTimeSlots);
+export type InsertBlockedTimeSlot = z.infer<typeof insertBlockedTimeSlotSchema>;
+export type BlockedTimeSlot = typeof blockedTimeSlots.$inferSelect;

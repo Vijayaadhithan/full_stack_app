@@ -20,6 +20,7 @@ import { Service, insertServiceSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
 import { ServiceAvailabilityForm } from "@/components/service-availability-form";
+import { ServiceAvailabilityCalendar } from "@/components/service-availability-calendar";
 
 // Extended service form schema with availability
 const serviceFormSchema = insertServiceSchema.extend({
@@ -208,10 +209,11 @@ export default function ProviderServices() {
               </DialogHeader>
 
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="basic">{t('basic_info')}</TabsTrigger>
                   <TabsTrigger value="availability">{t('availability')}</TabsTrigger>
                   <TabsTrigger value="scheduling">{t('scheduling')}</TabsTrigger>
+                  <TabsTrigger value="calendar">{t('calendar')}</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="basic">
@@ -364,6 +366,21 @@ export default function ProviderServices() {
                       />
                     </div>
                   </Form>
+                </TabsContent>
+
+                <TabsContent value="calendar">
+                  {editingService && (
+                    <ServiceAvailabilityCalendar
+                      serviceId={editingService.id}
+                      workingHours={form.getValues().workingHours}
+                      breakTime={form.getValues().breakTime}
+                    />
+                  )}
+                  {!editingService && (
+                    <p className="text-center text-muted-foreground py-4">
+                      {t('save_service_to_manage_calendar')}
+                    </p>
+                  )}
                 </TabsContent>
               </Tabs>
 

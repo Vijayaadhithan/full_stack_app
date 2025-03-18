@@ -16,6 +16,7 @@ import {
   ReturnRequest,
   insertProductReviewSchema,
   insertPromotionSchema,
+  insertBlockedTimeSlotSchema, // Added import
 } from "@shared/schema";
 import Razorpay from "razorpay";
 
@@ -179,6 +180,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching service:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch service" });
+    }
+  });
+
+  // Add these endpoints after the existing service routes
+  app.get("/api/services/:id/blocked-slots", requireAuth, async (req, res) => {
+    try {
+      const serviceId = parseInt(req.params.id);
+      const service = await storage.getService(serviceId);
+
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+
+      const blockedSlots = await storage.getBlockedTimeSlots(serviceId);
+      res.json(blockedSlots);
+    } catch (error) {
+      console.error("Error fetching blocked slots:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch blocked slots" });
+    }
+  });
+
+  app.post("/api/services/:id/block-time", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const serviceId = parseInt(req.params.id);
+      const service = await storage.getService(serviceId);
+
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+
+      if (service.providerId !== req.user!.id) {
+        return res.status(403).json({ message: "Can only block time slots for own services" });
+      }
+
+      const result = insertBlockedTimeSlotSchema.safeParse({
+        ...req.body,
+        serviceId
+      });
+
+      if (!result.success) {
+        return res.status(400).json(result.error);
+      }
+
+      const blockedSlot = await storage.createBlockedTimeSlot(result.data);
+
+      // Create notification for existing bookings that might be affected
+      const overlappingBookings = await storage.getOverlappingBookings(
+        serviceId,
+        new Date(result.data.date),
+        result.data.startTime,
+        result.data.endTime
+      );
+
+      for (const booking of overlappingBookings) {
+        await storage.createNotification({
+          userId: booking.customerId,
+          type: "service",
+          title: "Service Unavailable",
+          message: "A service you booked has become unavailable for the scheduled time. Please reschedule.",
+        });
+      }
+
+      res.status(201).json(blockedSlot);
+    } catch (error) {
+      console.error("Error blocking time slot:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to block time slot" });
+    }
+  });
+
+  app.delete("/api/services/:serviceId/blocked-slots/:slotId", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const serviceId = parseInt(req.params.serviceId);
+      const slotId = parseInt(req.params.slotId);
+
+      const service = await storage.getService(serviceId);
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+
+      if (service.providerId !== req.user!.id) {
+        return res.status(403).json({ message: "Can only unblock time slots for own services" });
+      }
+
+      await storage.deleteBlockedTimeSlot(slotId);
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("Error unblocking time slot:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to unblock time slot" });
     }
   });
 
