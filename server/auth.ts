@@ -6,6 +6,8 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
+import dotenv from 'dotenv';
+dotenv.config(); 
 
 declare global {
   namespace Express {
@@ -40,6 +42,14 @@ export function setupAuth(app: Express) {
   app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || 'fallback-secret',
+      resave: false,
+      saveUninitialized: false,
+      // Optionally set 'cookie', 'store', etc.
+    })
+  );
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
