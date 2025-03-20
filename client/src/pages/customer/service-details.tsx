@@ -33,6 +33,7 @@ export default function ServiceDetails() {
     retry: false,
     onError: (error) => {
       console.error("Error fetching service:", error);
+      console.error("Query key:", ["/api/services", id]);
     },
     onSuccess: (data) => {
       console.log("Successfully fetched service:", data);

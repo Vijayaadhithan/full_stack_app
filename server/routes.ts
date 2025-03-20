@@ -61,6 +61,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all shops
+  app.get("/api/shops", requireAuth, async (req, res) => {
+    try {
+      // Get all users with role "shop"
+      const allUsers = await Promise.all(
+        Array.from({ length: 100 }, (_, i) => i + 1).map(async (id) => {
+          try {
+            return await storage.getUser(id);
+          } catch {
+            return null;
+          }
+        })
+      );
+      
+      const shops = allUsers
+        .filter((user): user is NonNullable<typeof user> => !!user && user.role === "shop");
+      
+      res.json(shops);
+    } catch (error) {
+      console.error("Error fetching shops:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch shops" });
+    }
+  });
+
+  // Get user by ID
+  app.get("/api/users/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+      console.log("[API] /api/users/:id - Received request for user ID:", userId);
+      console.log("[API] /api/users/:id - Raw ID parameter:", req.params.id);
+      
+      if (isNaN(userId)) {
+        console.log("[API] /api/users/:id - Invalid user ID format");
+        return res.status(400).json({ message: "Invalid user ID format" });
+      }
+      
+      const user = await storage.getUser(userId);
+      console.log("[API] /api/users/:id - User from storage:", user);
+      
+      if (!user) {
+        console.log("[API] /api/users/:id - User not found");
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(user);
+    } catch (error) {
+      console.error("[API] Error in /api/users/:id:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch user" });
+    }
+  });
+
   // Product Management
   app.post("/api/products", requireAuth, requireRole(["shop"]), async (req, res) => {
     try {
@@ -143,6 +194,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Add PATCH endpoint for updating services
+  app.patch("/api/services/:id", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const serviceId = parseInt(req.params.id);
+      console.log("[API] /api/services/:id PATCH - Received request for service ID:", serviceId);
+      console.log("[API] /api/services/:id PATCH - Request body:", req.body);
+      
+      if (isNaN(serviceId)) {
+        console.log("[API] /api/services/:id PATCH - Invalid service ID format");
+        return res.status(400).json({ message: "Invalid service ID format" });
+      }
+      
+      const service = await storage.getService(serviceId);
+      
+      if (!service) {
+        console.log("[API] /api/services/:id PATCH - Service not found");
+        return res.status(404).json({ message: "Service not found" });
+      }
+      
+      if (service.providerId !== req.user!.id) {
+        console.log("[API] /api/services/:id PATCH - Not authorized");
+        return res.status(403).json({ message: "Can only update own services" });
+      }
+      
+      const updatedService = await storage.updateService(serviceId, req.body);
+      console.log("[API] /api/services/:id PATCH - Updated service:", updatedService);
+      res.json(updatedService);
+    } catch (error) {
+      console.error("[API] Error updating service:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update service" });
+    }
+  });
+
   app.get("/api/services", requireAuth, async (req, res) => {
     try {
       const services = await storage.getServices();
@@ -177,27 +261,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/services/:id", requireAuth, async (req, res) => {
     try {
       const serviceId = parseInt(req.params.id);
-      console.log("Attempting to fetch service with ID:", serviceId);
+      console.log("[API] /api/services/:id - Received request for service ID:", serviceId);
+      console.log("[API] /api/services/:id - Raw ID parameter:", req.params.id);
 
       if (isNaN(serviceId)) {
-        console.log("Invalid service ID format");
+        console.log("[API] /api/services/:id - Invalid service ID format");
         return res.status(400).json({ message: "Invalid service ID format" });
       }
 
       const service = await storage.getService(serviceId);
-      console.log("Service from storage:", service);
+      console.log("[API] /api/services/:id - Service from storage:", service);
 
       if (!service) {
-        console.log("Service not found in storage");
+        console.log("[API] /api/services/:id - Service not found in storage");
         return res.status(404).json({ message: "Service not found" });
       }
 
       // Get the provider details
       const provider = await storage.getUser(service.providerId);
-      console.log("Provider details:", provider);
+      console.log("[API] /api/services/:id - Provider details:", provider);
 
       if (!provider) {
-        console.log("Provider not found");
+        console.log("[API] /api/services/:id - Provider not found");
         return res.status(404).json({ message: "Service provider not found" });
       }
 
@@ -219,10 +304,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reviews: reviews || []
       };
 
-      console.log("Sending response data:", responseData);
+      console.log("[API] /api/services/:id - Sending response data:", responseData);
       res.json(responseData);
     } catch (error) {
-      console.error("Error in /api/services/:id:", error);
+      console.error("[API] Error in /api/services/:id:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch service" });
     }
   });

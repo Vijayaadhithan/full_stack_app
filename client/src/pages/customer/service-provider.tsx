@@ -10,17 +10,31 @@ import { format } from "date-fns";
 
 export default function ServiceProvider() {
   const { id } = useParams<{ id: string }>();
+  console.log("ServiceProvider component - Service ID from params:", id);
 
   // Fetch service details with provider info
-  const { data: service, isLoading } = useQuery<Service & { provider: User }>({
-    queryKey: [`/api/services/${id}`, "with-provider"],
+  const { data: service, isLoading, error } = useQuery<Service & { provider: User }>({  
+    queryKey: [`/api/services/${id}`],
     enabled: !!id,
+    onError: (error) => {
+      console.error("Error fetching service:", error);
+      console.error("Query key:", [`/api/services/${id}`]);
+    },
+    onSuccess: (data) => {
+      console.log("Successfully fetched service data:", data);
+    }
   });
 
   // Fetch reviews separately
   const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
     queryKey: [`/api/reviews/service/${id}`],
     enabled: !!id,
+    onError: (error) => {
+      console.error("Error fetching reviews:", error);
+    },
+    onSuccess: (data) => {
+      console.log("Successfully fetched reviews data:", data);
+    }
   });
 
   const isPageLoading = isLoading || reviewsLoading;

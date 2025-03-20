@@ -8,8 +8,9 @@ import { Product } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { Search, ShoppingCart, Heart } from "lucide-react";
+import { Search, ShoppingCart, Heart, Store } from "lucide-react";
 import { useState } from "react";
+import { Link } from "wouter";
 
 const container = {
   hidden: { opacity: 0 },
@@ -30,7 +31,26 @@ export default function BrowseProducts() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>();
-
+  
+  // Redirect to browse shops page
+  return (
+    <DashboardLayout>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
+        <h2 className="text-2xl font-bold">Browse Shops First</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          To provide a better shopping experience, please browse our shops first and then view their products.
+        </p>
+        <Link href="/customer/browse-shops">
+          <Button size="lg">
+            <Store className="mr-2 h-5 w-5" />
+            Browse Shops
+          </Button>
+        </Link>
+      </div>
+    </DashboardLayout>
+  );
+  
+  /* Original implementation commented out
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ["/api/products", selectedCategory],
   });
@@ -183,4 +203,5 @@ export default function BrowseProducts() {
       </motion.div>
     </DashboardLayout>
   );
+  */
 }

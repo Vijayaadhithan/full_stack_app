@@ -210,7 +210,10 @@ export class MemStorage implements IStorage {
 
   // User operations
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    console.log("[Storage] getUser - Looking for user with ID:", id);
+    const user = this.users.get(id);
+    console.log("[Storage] getUser - Found user:", user);
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
@@ -243,9 +246,10 @@ export class MemStorage implements IStorage {
   }
 
   async getService(id: number): Promise<Service | undefined> {
-    console.log("Getting service with ID:", id);
+    console.log("[Storage] getService - Looking for service with ID:", id);
+    console.log("[Storage] getService - Available services:", Array.from(this.services.entries()));
     const service = this.services.get(id);
-    console.log("Found service:", service);
+    console.log("[Storage] getService - Found service:", service);
     return service;
   }
 
@@ -867,4 +871,8 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Import the PostgreSQL storage implementation
+import { PostgresStorage } from './pg-storage';
+
+// Use PostgreSQL storage for persistence instead of in-memory storage
+export const storage = new PostgresStorage();
