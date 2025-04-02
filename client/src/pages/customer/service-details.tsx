@@ -28,12 +28,12 @@ export default function ServiceDetails() {
   console.log("Service ID from params:", id);
 
   const { data: service, isLoading, error } = useQuery<ServiceDetails>({
-    queryKey: ["/api/services", id],
+    queryKey: [`/api/services/${id}`],
     enabled: !!id,
     retry: false,
     onError: (error) => {
       console.error("Error fetching service:", error);
-      console.error("Query key:", ["/api/services", id]);
+      console.error("Query key:", [`/api/services/${id}`]);
     },
     onSuccess: (data) => {
       console.log("Successfully fetched service:", data);

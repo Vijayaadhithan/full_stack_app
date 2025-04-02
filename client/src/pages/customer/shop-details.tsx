@@ -35,11 +35,11 @@ export default function ShopDetails() {
   const [selectedCategory, setSelectedCategory] = useState<string>();
 
   const { data: shop, isLoading: shopLoading, error: shopError } = useQuery<User>({    
-    queryKey: ["/api/users", id],
+    queryKey: [`/api/users/${id}`],
     enabled: !!id,
     onError: (error) => {
       console.error("Error fetching shop:", error);
-      console.error("Query key:", ["/api/users", id]);
+      console.error("Query key:", [`/api/users/${id}`]);
     },
     onSuccess: (data) => {
       console.log("Successfully fetched shop data:", data);
@@ -47,7 +47,7 @@ export default function ShopDetails() {
   });
 
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({    
-    queryKey: ["/api/products/shop", id],
+    queryKey: [`/api/products/shop/${id}`],
     enabled: !!id,
     onError: (error) => {
       console.error("Error fetching shop products:", error);

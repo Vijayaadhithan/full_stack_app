@@ -84,7 +84,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch shops" });
     }
   });
+  // GET /api/shops/:id
+app.get("/api/shops/:id", requireAuth, async (req, res) => {
+  try {
+    const shopId = parseInt(req.params.id, 10);
+    console.log("[API] /api/shops/:id - Received request for shop ID:", shopId);
+    console.log("[API] /api/shops/:id - Raw ID parameter:", req.params.id);
+    
+    if (isNaN(shopId)) {
+      console.log("[API] /api/shops/:id - Invalid shop ID format");
+      return res.status(400).json({ message: "Invalid shop ID format" });
+    }
 
+    const user = await storage.getUser(shopId);
+    console.log("[API] /api/shops/:id - Shop from storage:", user);
+    
+    if (!user) {
+      console.log("[API] /api/shops/:id - Shop not found in storage");
+      return res.status(404).json({ message: "Shop not found" });
+    }
+    
+    if (user.role !== "shop") {
+      console.log("[API] /api/shops/:id - User found but not a shop");
+      return res.status(404).json({ message: "Shop not found" });
+    }
+
+    return res.json(user);
+  } catch (error) {
+    console.error("Error fetching shop:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+  
   // Get user by ID
   app.get("/api/users/:id", requireAuth, async (req, res) => {
     try {
@@ -269,6 +300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid service ID format" });
       }
 
+      // Check if service exists in storage
       const service = await storage.getService(serviceId);
       console.log("[API] /api/services/:id - Service from storage:", service);
 
@@ -340,4 +372,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (service.providerId !== req.user!.id) {
-        return res.status(403).json
+      return res.status(403).json({ message: "Can only block time for own services" });
+    }
+    const result = insertBlockedTimeSlotSchema.safeParse(req.body);
+    if (!result.success) {
+      return res.status(400).json(result.error);
+    }
+
+    const blockedSlot = await storage.createBlockedTimeSlot({
+      ...result.data,
+      serviceId
+    });
+
+    res.status(201).json(blockedSlot);
+  } catch (error) {
+    console.error("Error blocking time slot:", error);
+    res.status(400).json({ message: error instanceof Error ? error.message : "Failed to block time slot" });
+  }
+});}
