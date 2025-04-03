@@ -3,20 +3,53 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useLanguage } from "@/contexts/language-context";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, Plus } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Loader2, Plus, Trash2, Edit2 } from "lucide-react";
 import { Service } from "@shared/schema";
 import { useState } from "react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 export default function ProviderServices() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: services, isLoading } = useQuery<Service[]>({
     queryKey: [`/api/services/provider/${user?.id}`],
     enabled: !!user?.id,
   });
+  
+  const deleteServiceMutation = useMutation({
+    mutationFn: async (serviceId: number) => {
+      const res = await apiRequest("DELETE", `/api/services/${serviceId}`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to delete service");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
+      toast({
+        title: "Service deleted",
+        description: "Your service has been deleted successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const handleDeleteService = (serviceId: number) => {
+    deleteServiceMutation.mutate(serviceId);
+  };
 
   return (
     <DashboardLayout>
@@ -78,7 +111,39 @@ export default function ProviderServices() {
                   <Card key={service.id} className="bg-card">
                     <CardContent className="p-4">
                       <div className="flex flex-col">
-                        <h3 className="font-semibold">{service.name}</h3>
+                        <div className="flex justify-between items-start">
+                          <h3 className="font-semibold">{service.name}</h3>
+                          <div className="flex space-x-2">
+                            <Button variant="ghost" size="icon" onClick={() => setDialogOpen(true)}>
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete your
+                                    service and remove it from our servers.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => handleDeleteService(service.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
                         <p className="text-sm text-muted-foreground mt-1">
                           {service.description}
                         </p>

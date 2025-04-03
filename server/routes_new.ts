@@ -194,6 +194,32 @@ app.get("/api/shops/:id", requireAuth, async (req, res) => {
     }
   });
 
+  app.delete("/api/products/:id", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      console.log(`Delete product request received for ID: ${req.params.id}`);
+      const productId = parseInt(req.params.id);
+      const product = await storage.getProduct(productId);
+
+      if (!product) {
+        console.log(`Product with ID ${productId} not found`);
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      if (product.shopId !== req.user!.id) {
+        console.log(`Unauthorized delete attempt for product ${productId} by user ${req.user!.id}`);
+        return res.status(403).json({ message: "Can only delete own products" });
+      }
+
+      console.log(`Deleting product with ID: ${productId}`);
+      await storage.deleteProduct(productId);
+      console.log(`Product ${productId} deleted successfully`);
+      res.status(200).json({ message: "Product deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete product" });
+    }
+  });
+
   // Service routes
   app.post("/api/services", requireAuth, requireRole(["provider"]), async (req, res) => {
     try {
@@ -244,6 +270,37 @@ app.get("/api/shops/:id", requireAuth, async (req, res) => {
     } catch (error) {
       console.error("[API] Error updating service:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update service" });
+    }
+  });
+
+  app.delete("/api/services/:id", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const serviceId = parseInt(req.params.id);
+      console.log("[API] /api/services/:id DELETE - Received request for service ID:", serviceId);
+      
+      if (isNaN(serviceId)) {
+        console.log("[API] /api/services/:id DELETE - Invalid service ID format");
+        return res.status(400).json({ message: "Invalid service ID format" });
+      }
+      
+      const service = await storage.getService(serviceId);
+      
+      if (!service) {
+        console.log("[API] /api/services/:id DELETE - Service not found");
+        return res.status(404).json({ message: "Service not found" });
+      }
+      
+      if (service.providerId !== req.user!.id) {
+        console.log("[API] /api/services/:id DELETE - Not authorized");
+        return res.status(403).json({ message: "Can only delete own services" });
+      }
+      
+      await storage.deleteService(serviceId);
+      console.log("[API] /api/services/:id DELETE - Service deleted successfully");
+      res.status(200).json({ message: "Service deleted successfully" });
+    } catch (error) {
+      console.error("[API] Error deleting service:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete service" });
     }
   });
 

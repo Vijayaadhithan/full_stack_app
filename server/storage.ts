@@ -50,6 +50,7 @@ export interface IStorage {
   getServicesByProvider(providerId: number): Promise<Service[]>;
   getServicesByCategory(category: string): Promise<Service[]>;
   updateService(id: number, service: Partial<Service>): Promise<Service>;
+  deleteService(id: number): Promise<void>;
   getServices(): Promise<Service[]>;
 
   // Booking operations
@@ -65,6 +66,7 @@ export interface IStorage {
   getProductsByShop(shopId: number): Promise<Product[]>;
   getProductsByCategory(category: string): Promise<Product[]>;
   updateProduct(id: number, product: Partial<Product>): Promise<Product>;
+  deleteProduct(id: number): Promise<void>;
 
   // Cart operations
   addToCart(customerId: number, productId: number, quantity: number): Promise<void>;
@@ -273,6 +275,12 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteService(id: number): Promise<void> {
+    const existing = this.services.get(id);
+    if (!existing) throw new Error("Service not found");
+    this.services.delete(id);
+  }
+
   async getServices(): Promise<Service[]> {
     return Array.from(this.services.values());
   }
@@ -332,6 +340,12 @@ export class MemStorage implements IStorage {
     return Array.from(this.products.values()).filter(
       (product) => product.category === category,
     );
+  }
+
+  async deleteProduct(id: number): Promise<void> {
+    const existing = this.products.get(id);
+    if (!existing) throw new Error("Product not found");
+    this.products.delete(id);
   }
 
   async updateProduct(id: number, product: Partial<Product>): Promise<Product> {

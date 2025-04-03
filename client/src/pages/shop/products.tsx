@@ -2,6 +2,7 @@ import { ShopLayout } from "@/components/layout/shop-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,7 +16,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2, Package, ImagePlus, AlertCircle } from "lucide-react";
+import { Loader2, Plus, Edit2, Package, ImagePlus, AlertCircle, Trash2 } from "lucide-react";
 import { Product, insertProductSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
@@ -153,6 +154,52 @@ export default function ShopProducts() {
       });
     },
   });
+
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId: number) => {
+      try {
+        console.log(`Attempting to delete product with ID: ${productId}`);
+        
+        // Use the apiRequest utility function for consistency with other mutations
+        const res = await apiRequest("DELETE", `/api/products/${productId}`);
+        
+        console.log(`Delete product response status: ${res.status}`);
+        
+        // For successful responses, try to parse JSON
+        try {
+          const data = await res.json();
+          console.log('Response data:', data);
+          return data;
+        } catch (parseError) {
+          console.log('Response cannot be parsed as JSON, returning default success message');
+          return { message: "Product deleted successfully" };
+        }
+      } catch (error) {
+        console.error("Delete product error:", error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      // Force refetch the products query to update the UI
+      queryClient.invalidateQueries({ queryKey: [`/api/products/shop/${user?.id}`] });
+      toast({
+        title: t("success"),
+        description: t("product_deleted_successfully"),
+      });
+    },
+    onError: (error: Error) => {
+      console.error("Delete product mutation error:", error);
+      toast({
+        title: t("error"),
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteProduct = (productId: number) => {
+    deleteProductMutation.mutate(productId);
+  };
 
   const onSubmit = (data: ProductFormData) => {
     if (editingProduct) {
@@ -493,11 +540,11 @@ export default function ShopProducts() {
 
               <div className="flex justify-end mt-4">
                 <Button
-                  type="submit"
-                  disabled={form.formState.isSubmitting}
+                  type="button"
+                  disabled={form.formState.isSubmitting || updateProductMutation.isPending || createProductMutation.isPending}
                   onClick={form.handleSubmit(onSubmit)}
                 >
-                  {form.formState.isSubmitting && (
+                  {(form.formState.isSubmitting || updateProductMutation.isPending || createProductMutation.isPending) && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   {editingProduct ? t('update_product') : t('create_product')}
@@ -529,17 +576,48 @@ export default function ShopProducts() {
                         {product.description}
                       </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setEditingProduct(product);
-                        form.reset(product);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingProduct(product);
+                          form.reset({
+                            ...product,
+                            price: product.price.toString(),
+                            mrp: product.mrp.toString()
+                          });
+                          setActiveTab("basic");
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{t("delete_product_confirmation")}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {t("delete_product_warning")}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+                            <AlertDialogAction 
+                              onClick={() => handleDeleteProduct(product.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {t("delete")}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
 
                   <div className="mt-4 space-y-2">

@@ -91,8 +91,8 @@ export default function BookService() {
   const [order, setOrder] = useState<any>(null);
 
   // Fetch service with provider info
-  const { data: service, isLoading: serviceLoading } = useQuery<Service & { provider: User, reviews: any[] }>({
-    queryKey: [`/api/services/${id}`, 'with-provider'],
+  const { data: service, isLoading: serviceLoading } = useQuery<Service & { provider: User, reviews: any[] }>({    
+    queryKey: [`/api/services/${id}`],
     enabled: !!id,
   });
 

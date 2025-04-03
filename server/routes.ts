@@ -892,6 +892,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(products);
   });
 
+  app.delete("/api/products/:id", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      console.log(`Delete product request received for ID: ${req.params.id}`);
+      const productId = parseInt(req.params.id);
+      const product = await storage.getProduct(productId);
+
+      if (!product) {
+        console.log(`Product with ID ${productId} not found`);
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      if (product.shopId !== req.user!.id) {
+        console.log(`Unauthorized delete attempt for product ${productId} by user ${req.user!.id}`);
+        return res.status(403).json({ message: "Can only delete own products" });
+      }
+
+      console.log(`Deleting product with ID: ${productId}`);
+      await storage.deleteProduct(productId);
+      console.log(`Product ${productId} deleted successfully`);
+      res.status(200).json({ message: "Product deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete product" });
+    }
+  });
+
   // Product Reviews
   app.get("/api/reviews/product/:id", requireAuth, async (req, res) => {
     try {

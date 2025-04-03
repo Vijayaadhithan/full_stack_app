@@ -101,6 +101,14 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async deleteService(id: number): Promise<void> {
+    const result = await db.delete(services)
+      .where(eq(services.id, id))
+      .returning();
+    
+    if (!result[0]) throw new Error("Service not found");
+  }
+
   async getServices(): Promise<Service[]> {
     return await db.select().from(services);
   }
@@ -178,39 +186,117 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async deleteProduct(id: number): Promise<void> {
+    const result = await db.delete(products)
+      .where(eq(products.id, id))
+      .returning();
+    
+    if (!result[0]) throw new Error("Product not found");
+  }
+
   // Implement remaining methods from IStorage interface
   // These are placeholders that would need to be properly implemented
   
   // Cart operations
   async addToCart(customerId: number, productId: number, quantity: number): Promise<void> {
-    // Implementation would use the cart table
+    // Check if the product exists in the cart already
+    const existingItem = await db
+      .select()
+      .from(cart)
+      .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
+
+    if (existingItem.length > 0) {
+      // Update quantity if item already exists
+      await db
+        .update(cart)
+        .set({ quantity })
+        .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
+    } else {
+      // Insert new item if it doesn't exist
+      await db.insert(cart).values({
+        customerId,
+        productId,
+        quantity,
+      });
+    }
   }
 
   async removeFromCart(customerId: number, productId: number): Promise<void> {
-    // Implementation would use the cart table
+    await db
+      .delete(cart)
+      .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
   }
 
   async getCart(customerId: number): Promise<{ product: Product; quantity: number }[]> {
-    // Implementation would join cart and products tables
-    return [];
+    const cartItems = await db
+      .select()
+      .from(cart)
+      .where(eq(cart.customerId, customerId));
+
+    const result = [];
+    for (const item of cartItems) {
+      const productResult = await db
+        .select()
+        .from(products)
+        .where(eq(products.id, item.productId));
+
+      if (productResult.length > 0) {
+        result.push({
+          product: productResult[0],
+          quantity: item.quantity,
+        });
+      }
+    }
+
+    return result;
   }
 
   async clearCart(customerId: number): Promise<void> {
-    // Implementation would delete from cart table
+    await db.delete(cart).where(eq(cart.customerId, customerId));
   }
 
   // Wishlist operations
   async addToWishlist(customerId: number, productId: number): Promise<void> {
-    // Implementation would use the wishlist table
+    // Check if the product already exists in the wishlist
+    const existingItem = await db
+      .select()
+      .from(wishlist)
+      .where(and(eq(wishlist.customerId, customerId), eq(wishlist.productId, productId)));
+
+    // Only add if it doesn't already exist
+    if (existingItem.length === 0) {
+      await db.insert(wishlist).values({
+        customerId,
+        productId,
+      });
+    }
   }
 
   async removeFromWishlist(customerId: number, productId: number): Promise<void> {
-    // Implementation would use the wishlist table
+    await db
+      .delete(wishlist)
+      .where(and(eq(wishlist.customerId, customerId), eq(wishlist.productId, productId)));
   }
 
   async getWishlist(customerId: number): Promise<Product[]> {
-    // Implementation would join wishlist and products tables
-    return [];
+    const wishlistItems = await db
+      .select()
+      .from(wishlist)
+      .where(eq(wishlist.customerId, customerId));
+
+    const result: Product[] = [];
+    for (const item of wishlistItems) {
+      const productResult = await db
+        .select()
+        .from(products)
+        .where(eq(products.id, item.productId));
+
+      if (productResult.length > 0) {
+        result.push(productResult[0]);
+      }
+    }
+
+    return result;
   }
 
   // Order operations
