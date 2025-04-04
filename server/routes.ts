@@ -17,7 +17,10 @@ import {
   insertProductReviewSchema,
   insertPromotionSchema,
   insertBlockedTimeSlotSchema, // Added import
+  promotions, // Import promotions table for direct updates
 } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { db } from "./db";
 import Razorpay from "razorpay";
 import crypto from 'crypto';
 
@@ -908,10 +911,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Can only delete own products" });
       }
 
-      console.log(`Deleting product with ID: ${productId}`);
-      await storage.deleteProduct(productId);
-      console.log(`Product ${productId} deleted successfully`);
-      res.status(200).json({ message: "Product deleted successfully" });
+      try {
+        // First, remove the product from all carts to avoid foreign key constraint violations
+        console.log(`Removing product ${productId} from all carts before deletion`);
+        await storage.removeProductFromAllCarts(productId);
+        
+        // Then delete the product
+        console.log(`Deleting product with ID: ${productId}`);
+        await storage.deleteProduct(productId);
+        console.log(`Product ${productId} deleted successfully`);
+        res.status(200).json({ message: "Product deleted successfully" });
+      } catch (deleteError) {
+        console.error(`Error during product deletion process: ${deleteError}`);
+        res.status(400).json({ 
+          message: deleteError instanceof Error ? 
+            deleteError.message : 
+            "Failed to delete product. It may be referenced in orders or other records."
+        });
+      }
     } catch (error) {
       console.error("Error deleting product:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete product" });
@@ -965,6 +982,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching promotions:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch promotions" });
+    }
+  });
+  
+  app.patch("/api/promotions/:id", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      const promotionId = parseInt(req.params.id);
+      
+      // Get the existing promotion to check ownership
+      const existingPromotions = await storage.getPromotionsByShop(req.user!.id);
+      const promotion = existingPromotions.find(p => p.id === promotionId);
+      
+      if (!promotion) {
+        return res.status(404).json({ message: "Promotion not found or you don't have permission to update it" });
+      }
+      
+      // Update the promotion using the same storage method as other entities
+      const result = await db.update(promotions)
+        .set(req.body)
+        .where(eq(promotions.id, promotionId))
+        .returning();
+      
+      if (!result[0]) {
+        return res.status(404).json({ message: "Failed to update promotion" });
+      }
+      
+      res.json(result[0]);
+    } catch (error) {
+      console.error("Error updating promotion:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update promotion" });
     }
   });
 

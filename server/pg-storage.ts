@@ -11,8 +11,9 @@ import {
   Review, InsertReview,
   Notification, InsertNotification,
   ReturnRequest, InsertReturnRequest,
+  Promotion, InsertPromotion,
   users, services, bookings, products, orders, orderItems, reviews, notifications,
-  cart, wishlist, returnRequests
+  cart, wishlist, returnRequests, promotions
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
 import { eq, and } from "drizzle-orm";
@@ -186,12 +187,52 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async removeProductFromAllCarts(productId: number): Promise<void> {
+    console.log(`Removing product ID ${productId} from all carts`);
+    try {
+      // Delete all cart entries that reference this product
+      await db.delete(cart).where(eq(cart.productId, productId));
+      console.log(`Successfully removed product ID ${productId} from all carts`);
+    } catch (error) {
+      console.error(`Error removing product ${productId} from carts:`, error);
+      throw new Error(`Failed to remove product from carts: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async removeProductFromAllWishlists(productId: number): Promise<void> {
+    console.log(`Removing product ID ${productId} from all wishlists`);
+    try {
+      // Delete all wishlist entries that reference this product
+      await db.delete(wishlist).where(eq(wishlist.productId, productId));
+      console.log(`Successfully removed product ID ${productId} from all wishlists`);
+    } catch (error) {
+      console.error(`Error removing product ${productId} from wishlists:`, error);
+      throw new Error(`Failed to remove product from wishlists: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   async deleteProduct(id: number): Promise<void> {
-    const result = await db.delete(products)
-      .where(eq(products.id, id))
-      .returning();
+    // First check if the product exists
+    const productExists = await db.select().from(products).where(eq(products.id, id));
+    if (productExists.length === 0) throw new Error("Product not found");
     
-    if (!result[0]) throw new Error("Product not found");
+    try {
+      // First remove the product from all carts and wishlists to avoid foreign key constraint violations
+      await this.removeProductFromAllCarts(id);
+      await this.removeProductFromAllWishlists(id);
+      
+      // Then delete the product
+      const result = await db.delete(products)
+        .where(eq(products.id, id))
+        .returning();
+      
+      if (!result[0]) throw new Error("Product not found");
+      
+      console.log(`Successfully deleted product ID ${id}`);
+    } catch (error) {
+      console.error(`Error deleting product ${id}:`, error);
+      throw new Error(`Failed to delete product: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // Implement remaining methods from IStorage interface
@@ -316,6 +357,16 @@ export class PostgresStorage implements IStorage {
 
   async getOrdersByShop(shopId: number): Promise<Order[]> {
     return await db.select().from(orders).where(eq(orders.shopId, shopId));
+  }
+
+  // Promotion operations
+  async createPromotion(promotion: InsertPromotion): Promise<Promotion> {
+    const result = await db.insert(promotions).values(promotion).returning();
+    return result[0];
+  }
+
+  async getPromotionsByShop(shopId: number): Promise<Promotion[]> {
+    return await db.select().from(promotions).where(eq(promotions.shopId, shopId));
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {

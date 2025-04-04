@@ -9,7 +9,8 @@ import {
   OrderItem, InsertOrderItem,
   Review, InsertReview,
   Notification, InsertNotification,
-  ReturnRequest, InsertReturnRequest
+  ReturnRequest, InsertReturnRequest,
+  Promotion, InsertPromotion
 } from "@shared/schema";
 
 const MemoryStore = createMemoryStore(session);
@@ -67,6 +68,7 @@ export interface IStorage {
   getProductsByCategory(category: string): Promise<Product[]>;
   updateProduct(id: number, product: Partial<Product>): Promise<Product>;
   deleteProduct(id: number): Promise<void>;
+  removeProductFromAllCarts(productId: number): Promise<void>;
 
   // Cart operations
   addToCart(customerId: number, productId: number, quantity: number): Promise<void>;
@@ -101,6 +103,10 @@ export interface IStorage {
   getNotificationsByUser(userId: number): Promise<Notification[]>;
   markNotificationAsRead(id: number): Promise<void>;
   deleteNotification(id: number): Promise<void>;
+
+  // Promotion operations
+  createPromotion(promotion: InsertPromotion): Promise<Promotion>;
+  getPromotionsByShop(shopId: number): Promise<Promotion[]>;
 
   // Additional booking operations
   checkAvailability(serviceId: number, date: Date): Promise<boolean>;
@@ -346,6 +352,16 @@ export class MemStorage implements IStorage {
     const existing = this.products.get(id);
     if (!existing) throw new Error("Product not found");
     this.products.delete(id);
+  }
+
+  async removeProductFromAllCarts(productId: number): Promise<void> {
+    // Iterate through all customer carts
+    for (const [customerId, customerCart] of this.cart.entries()) {
+      // Remove the product if it exists in this customer's cart
+      if (customerCart.has(productId)) {
+        customerCart.delete(productId);
+      }
+    }
   }
 
   async updateProduct(id: number, product: Partial<Product>): Promise<Product> {

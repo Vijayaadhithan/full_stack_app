@@ -1,5 +1,5 @@
 import { ShopLayout } from "@/components/layout/shop-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
@@ -13,15 +13,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2, Calendar } from "lucide-react";
+import { Loader2, Plus, Edit2 } from "lucide-react";
 import { Promotion, insertPromotionSchema } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
+
+// Simplified promotion form schema with better date handling
 
 const promotionFormSchema = insertPromotionSchema.extend({
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().optional(),
   value: z.string().min(1, "Value is required"),
+  // Simplified schema without complex validations
 });
 
 type PromotionFormData = z.infer<typeof promotionFormSchema>;
@@ -47,13 +50,21 @@ export default function ShopPromotions() {
       code: "",
       startDate: new Date().toISOString().split('T')[0],
       endDate: "",
-      minPurchase: "0",
-      maxDiscount: "0",
       usageLimit: 0,
       isActive: true,
       shopId: user?.id || 0,
     },
   });
+  
+  // Reset form when editing promotion
+  const resetFormWithPromotion = (promotion: Promotion) => {
+    form.reset({
+      ...promotion,
+      startDate: new Date(promotion.startDate).toISOString().split('T')[0],
+      endDate: promotion.endDate ? new Date(promotion.endDate).toISOString().split('T')[0] : "",
+      value: String(promotion.value),
+    });
+  };
 
   const createPromotionMutation = useMutation({
     mutationFn: async (data: PromotionFormData) => {
@@ -113,10 +124,24 @@ export default function ShopPromotions() {
   });
 
   const onSubmit = (data: PromotionFormData) => {
+    // Simplified data formatting
+    const formattedData = {
+      ...data,
+      // Convert string values to appropriate types
+      value: String(data.value),
+      usageLimit: Number(data.usageLimit),
+      // Convert date strings to Date objects
+      startDate: new Date(data.startDate),
+      // Handle optional end date
+      endDate: data.endDate && data.endDate.trim() !== "" ? new Date(data.endDate) : null
+    };
+    
+    console.log('Submitting promotion with data:', formattedData);
+    
     if (editingPromotion) {
-      updatePromotionMutation.mutate({ id: editingPromotion.id, data });
+      updatePromotionMutation.mutate({ id: editingPromotion.id, data: formattedData });
     } else {
-      createPromotionMutation.mutate(data);
+      createPromotionMutation.mutate(formattedData);
     }
   };
 
@@ -167,7 +192,8 @@ export default function ShopPromotions() {
                   />
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <FormField
+                     {/* Simplified form with core fields */}
+                      <FormField
                       control={form.control}
                       name="type"
                       render={({ field }) => (
@@ -202,7 +228,9 @@ export default function ShopPromotions() {
                         </FormItem>
                       )}
                     />
-
+                  </div>
+                  
+                  <div className="grid gap-4 md:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="code"
@@ -224,13 +252,15 @@ export default function ShopPromotions() {
                         <FormItem>
                           <FormLabel>Usage Limit</FormLabel>
                           <FormControl>
-                            <Input {...field} type="number" min="0" />
+                            <Input {...field} type="number" min="0" onChange={(e) => field.onChange(Number(e.target.value))} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-
+                  </div>
+                  
+                  <div className="grid gap-4 md:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="startDate"
@@ -250,7 +280,7 @@ export default function ShopPromotions() {
                       name="endDate"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>End Date</FormLabel>
+                          <FormLabel>End Date (Optional)</FormLabel>
                           <FormControl>
                             <Input {...field} type="date" />
                           </FormControl>
@@ -322,7 +352,7 @@ export default function ShopPromotions() {
                       size="icon"
                       onClick={() => {
                         setEditingPromotion(promotion);
-                        form.reset(promotion);
+                        resetFormWithPromotion(promotion);
                         setDialogOpen(true);
                       }}
                     >
