@@ -158,7 +158,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Can only update own products" });
       }
 
-      const updatedProduct = await storage.updateProduct(productId, req.body);
+      // Import and use the updateProductSchema for validation
+      const { updateProductSchema } = await import("../shared/updateProductSchema");
+      
+      // Validate the request body against the schema
+      const result = updateProductSchema.safeParse(req.body);
+      
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: "Invalid product data", 
+          errors: result.error.errors 
+        });
+      }
+
+      // Only pass the validated data to the storage layer
+      const updatedProduct = await storage.updateProduct(productId, result.data);
       res.json(updatedProduct);
     } catch (error) {
       console.error("Error updating product:", error);
@@ -960,12 +974,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Promotions Management
   app.post("/api/promotions", requireAuth, requireRole(["shop"]), async (req, res) => {
     try {
-      const result = insertPromotionSchema.safeParse(req.body);
+      // Define a Zod schema for the promotion with expiryDays
+      const promotionWithExpirySchema = z.object({
+        name: z.string().min(1, "Promotion name is required"),
+        description: z.string().optional(),
+        type: z.enum(["percentage", "fixed_amount"]),
+        value: z.coerce.number().min(0, "Discount value must be positive"),
+        code: z.string().optional(),
+        usageLimit: z.coerce.number().min(0).default(0),
+        isActive: z.boolean().default(true),
+        shopId: z.coerce.number().optional(),
+        expiryDays: z.coerce.number().min(0).default(0)
+      });
+      
+      // Validate the request body
+      const result = promotionWithExpirySchema.safeParse(req.body);
       if (!result.success) return res.status(400).json(result.error);
+      
+      // Extract validated data
+      const { expiryDays, ...promotionData } = result.data;
+      
+      // Set startDate to current time
+      const startDate = new Date();
+      
+      // Calculate endDate based on expiryDays
+      let endDate = null;
+      if (expiryDays > 0) {
+        const calculatedEndDate = new Date();
+        calculatedEndDate.setDate(calculatedEndDate.getDate() + expiryDays);
+        endDate = calculatedEndDate;
+      }
+
+      console.log('Creating promotion with calculated dates:', { 
+        startDate, 
+        endDate, 
+        expiryDays 
+      });
 
       const promotion = await storage.createPromotion({
-        ...result.data,
+        ...promotionData,
         shopId: req.user!.id,
+        startDate,
+        endDate,
       });
 
       res.status(201).json(promotion);
@@ -997,17 +1047,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Promotion not found or you don't have permission to update it" });
       }
       
+      // Define a Zod schema for the promotion update with expiryDays
+      const promotionUpdateSchema = z.object({
+        name: z.string().min(1, "Promotion name is required").optional(),
+        description: z.string().optional(),
+        type: z.enum(["percentage", "fixed_amount"]).optional(),
+        value: z.coerce.number().min(0, "Discount value must be positive").optional(),
+        code: z.string().optional(),
+        usageLimit: z.coerce.number().min(0).optional(),
+        isActive: z.boolean().optional(),
+        expiryDays: z.coerce.number().min(0).optional()
+      });
+      
+      // Validate the request body
+      const result = promotionUpdateSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json(result.error);
+      
+      // Extract validated data
+      const { expiryDays, ...updateData } = result.data;
+      
+      // Always set startDate to current time for updates
+      updateData.startDate = new Date();
+      
+      // Calculate endDate based on expiryDays
+      if (expiryDays !== undefined) {
+        if (expiryDays === 0) {
+          updateData.endDate = null;
+        } else {
+          const calculatedEndDate = new Date();
+          calculatedEndDate.setDate(calculatedEndDate.getDate() + expiryDays);
+          updateData.endDate = calculatedEndDate;
+        }
+      }
+      
       // Update the promotion using the same storage method as other entities
-      const result = await db.update(promotions)
-        .set(req.body)
+      const updatedResult = await db.update(promotions)
+        .set(updateData)
         .where(eq(promotions.id, promotionId))
         .returning();
       
-      if (!result[0]) {
+      if (!updatedResult[0]) {
         return res.status(404).json({ message: "Failed to update promotion" });
       }
       
-      res.json(result[0]);
+      res.json(updatedResult[0]);
     } catch (error) {
       console.error("Error updating promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update promotion" });

@@ -186,7 +186,21 @@ app.get("/api/shops/:id", requireAuth, async (req, res) => {
         return res.status(403).json({ message: "Can only update own products" });
       }
 
-      const updatedProduct = await storage.updateProduct(productId, req.body);
+      // Import and use the updateProductSchema for validation
+      const { updateProductSchema } = await import("../shared/updateProductSchema");
+      
+      // Validate the request body against the schema
+      const result = updateProductSchema.safeParse(req.body);
+      
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: "Invalid product data", 
+          errors: result.error.errors 
+        });
+      }
+
+      // Only pass the validated data to the storage layer
+      const updatedProduct = await storage.updateProduct(productId, result.data);
       res.json(updatedProduct);
     } catch (error) {
       console.error("Error updating product:", error);

@@ -30,7 +30,7 @@ import ShopProfile from "@/pages/shop/profile";
 import ShopProducts from "@/pages/shop/products";
 import ShopOrders from "@/pages/shop/orders";
 import ShopInventory from "@/pages/shop/inventory";
-import ShopPromotions from "@/pages/shop/promotions";
+import ShopPromotions from "@/pages/shop/ShopPromotions";
 import ShopReviews from "@/pages/shop/reviews";
 import ShopAnalytics from "@/pages/shop/analytics";
 import AdminDashboard from "@/pages/admin/dashboard";
