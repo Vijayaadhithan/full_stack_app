@@ -151,6 +151,39 @@ export function registerPromotionRoutes(app: Express) {
     }
   });
 
+  // Get active promotions for a shop (for customers at checkout)
+  app.get("/api/promotions/active/:shopId", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const shopId = parseInt(req.params.shopId);
+      const now = new Date();
+
+      // Get all active and non-expired promotions for the shop
+      const activePromotions = await db.select()
+        .from(promotions)
+        .where(
+          and(
+            eq(promotions.shopId, shopId),
+            eq(promotions.isActive, true),
+            lte(promotions.startDate, now),
+            or(
+              isNull(promotions.endDate),
+              gte(promotions.endDate, now)
+            )
+          )
+        );
+
+      // Filter out promotions that have reached their usage limit
+      const validPromotions = activePromotions.filter(promo => {
+        return !promo.usageLimit || promo.usedCount < promo.usageLimit;
+      });
+
+      res.json(validPromotions);
+    } catch (error) {
+      console.error("Error fetching active promotions:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch active promotions" });
+    }
+  });
+
   // Validate and apply a promotion code
   app.post("/api/promotions/validate", requireAuth, requireRole(["customer"]), async (req, res) => {
     try {
@@ -260,24 +293,45 @@ export function registerPromotionRoutes(app: Express) {
     }
   });
 
-  // Apply a promotion and increment usage count
+  // Apply a promotion to an order (called during checkout)
   app.post("/api/promotions/:id/apply", requireAuth, requireRole(["customer"]), async (req, res) => {
     try {
       const promotionId = parseInt(req.params.id);
-      
-      // Update the used count
-      const updatedPromotion = await db.update(promotions)
-        .set({
-          usedCount: sql`${promotions.usedCount} + 1`
-        })
-        .where(eq(promotions.id, promotionId))
-        .returning();
+      const { orderId } = req.body;
 
-      if (!updatedPromotion.length) {
+      if (!orderId) {
+        return res.status(400).json({ message: "Order ID is required" });
+      }
+
+      // Get the promotion
+      const promotionResult = await db.select().from(promotions).where(eq(promotions.id, promotionId));
+      if (!promotionResult.length) {
         return res.status(404).json({ message: "Promotion not found" });
       }
 
-      res.json({ success: true, promotion: updatedPromotion[0] });
+      const promotion = promotionResult[0];
+
+      // Check if promotion is still valid
+      const now = new Date();
+      if (
+        !promotion.isActive ||
+        promotion.startDate > now ||
+        (promotion.endDate && promotion.endDate < now)
+      ) {
+        return res.status(400).json({ message: "Promotion is not active or has expired" });
+      }
+
+      // Check usage limit
+      if (promotion.usageLimit && promotion.usedCount >= promotion.usageLimit) {
+        return res.status(400).json({ message: "This promotion has reached its usage limit" });
+      }
+
+      // Increment the used count
+      await db.update(promotions)
+        .set({ usedCount: (promotion.usedCount || 0) + 1 })
+        .where(eq(promotions.id, promotionId));
+
+      res.json({ message: "Promotion applied successfully" });
     } catch (error) {
       console.error("Error applying promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to apply promotion" });

@@ -24,10 +24,22 @@ import { db } from "./db";
 import Razorpay from "razorpay";
 import crypto from 'crypto';
 
+// Check if Razorpay is properly configured with valid keys
+const isRazorpayConfigured = 
+  process.env.RAZORPAY_KEY_ID && 
+  process.env.RAZORPAY_KEY_ID !== "your-razorpay-key" && 
+  process.env.RAZORPAY_KEY_SECRET && 
+  process.env.RAZORPAY_KEY_SECRET !== "your-razorpay-secret";
+
+// Initialize Razorpay with proper error handling
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_1234567890",
   key_secret: process.env.RAZORPAY_KEY_SECRET || "secret_test_1234567890"
 });
+
+// Log Razorpay configuration status
+console.log(`Razorpay configuration status: ${isRazorpayConfigured ? 'Configured' : 'Not properly configured'}`);
+
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -652,31 +664,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Order Management
   app.post("/api/orders", requireAuth, requireRole(["customer"]), async (req, res) => {
     try {
-      const result = insertOrderSchema.safeParse(req.body);
-      if (!result.success) return res.status(400).json(result.error);
-
-      // Create Razorpay order
-      const order = await razorpay.orders.create({
-        amount: parseInt(result.data.total) * 100, // Convert to paisa
-        currency: "INR",
-        receipt: `order_${Date.now()}`,
+      const orderSchema = z.object({
+        items: z.array(z.object({
+          productId: z.number(),
+          quantity: z.number().min(1),
+          price: z.string().or(z.number()),
+        })),
+        total: z.string().or(z.number()),
+        subtotal: z.string().or(z.number()).optional(),
+        discount: z.string().or(z.number()).optional(),
+        promotionId: z.number().optional(),
       });
 
+      const result = orderSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json(result.error);
+
+      const { items, total, subtotal, discount, promotionId } = result.data;
+
+      // Validate that all products exist and have sufficient stock
+      for (const item of items) {
+        const product = await storage.getProduct(item.productId);
+        if (!product) {
+          return res.status(400).json({ message: `Product with ID ${item.productId} not found` });
+        }
+        if (product.stock < item.quantity) {
+          return res.status(400).json({ message: `Insufficient stock for product: ${product.name}` });
+        }
+      }
+
+      // Get the shop ID from the first product
+      const firstProduct = await storage.getProduct(items[0].productId);
+      const shopId = firstProduct.shopId;
+
+      // If a promotion is applied, verify it's valid
+      let promotionCode = null;
+      if (promotionId) {
+        const promotionResult = await db.select().from(promotions).where(eq(promotions.id, promotionId));
+        if (!promotionResult.length) {
+          return res.status(400).json({ message: "Invalid promotion" });
+        }
+        
+        const promotion = promotionResult[0];
+        
+        // Verify promotion belongs to the shop
+        if (promotion.shopId !== shopId) {
+          return res.status(400).json({ message: "Promotion does not apply to this shop" });
+        }
+        
+        // Verify promotion is active and not expired
+        const now = new Date();
+        if (
+          !promotion.isActive ||
+          promotion.startDate > now ||
+          (promotion.endDate && promotion.endDate < now)
+        ) {
+          return res.status(400).json({ message: "Promotion is not active or has expired" });
+        }
+        
+        // Verify usage limit
+        if (promotion.usageLimit && promotion.usedCount >= promotion.usageLimit) {
+          return res.status(400).json({ message: "This promotion has reached its usage limit" });
+        }
+        
+        promotionCode = promotion.code || null;
+      }
+
+      // Create Razorpay order
+      let order;
+      try {
+        // Check if Razorpay is properly configured
+        if (!isRazorpayConfigured) {
+          console.error("Razorpay is not properly configured. Please check your API keys.");
+          return res.status(500).json({ message: "Payment gateway not configured. Please contact the administrator." });
+        }
+        
+        order = await razorpay.orders.create({
+          amount: parseInt(total.toString()) * 100, // Convert to paisa
+          currency: "INR",
+          receipt: `order_${Date.now()}`,
+        });
+      } catch (error) {
+        console.error("Razorpay order creation error:", error);
+        return res.status(500).json({ message: "Failed to create payment order. Please try again later." });
+      }
+
       const newOrder = await storage.createOrder({
-        ...result.data,
         customerId: req.user!.id,
-        razorpayOrderId: order.id,
+        shopId,
         status: "pending",
         paymentStatus: "pending",
+        total: parseFloat(total.toString()),
+        subTotal: subtotal ? parseFloat(subtotal.toString()) : parseFloat(total.toString()),
+        discount: discount ? parseFloat(discount.toString()) : 0,
+        promotionCode,
+        razorpayOrderId: order.id,
+        orderDate: new Date(),
+        shippingAddress: req.user!.address || "",
+        billingAddress: req.user!.address || "",
       });
 
       // Create order items
-      const { items } = req.body;
       for (const item of items) {
         await storage.createOrderItem({
           orderId: newOrder.id,
-          ...item,
+          productId: item.productId,
+          quantity: item.quantity,
+          price: parseFloat(item.price.toString()),
+          total: parseFloat(item.price.toString()) * item.quantity,
         });
+
+        // Update product stock
+        await storage.updateProductStock(item.productId, item.quantity);
       }
 
       // Clear cart after order creation

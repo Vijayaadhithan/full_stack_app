@@ -385,6 +385,24 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  // Update product stock when an order is placed
+  async updateProductStock(productId: number, quantity: number): Promise<void> {
+    // Get the current product
+    const productResult = await db.select().from(products).where(eq(products.id, productId));
+    if (!productResult.length) throw new Error(`Product with ID ${productId} not found`);
+    
+    const product = productResult[0];
+    const currentStock = product.stock;
+    const newStock = currentStock - quantity;
+    
+    if (newStock < 0) throw new Error(`Insufficient stock for product ID ${productId}`);
+    
+    // Update the product stock
+    await db.update(products)
+      .set({ stock: newStock })
+      .where(eq(products.id, productId));
+  }
+
   async getOrderItemsByOrder(orderId: number): Promise<OrderItem[]> {
     return await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
   }
