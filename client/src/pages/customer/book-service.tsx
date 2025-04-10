@@ -28,8 +28,21 @@ type TimeSlot = {
 
 function isBreakTime(time: Date, breakTimes: Array<{ start: string; end: string }>) {
   return breakTimes.some(breakTime => {
-    const breakStart = parse(breakTime.start, "HH:mm", time);
-    const breakEnd = parse(breakTime.end, "HH:mm", time);
+    // Ensure break times are in HH:mm format
+    const formattedStart = breakTime.start.includes(':') ? breakTime.start : `${breakTime.start}:00`;
+    const formattedEnd = breakTime.end.includes(':') ? breakTime.end : `${breakTime.end}:00`;
+    
+    console.log(`Checking break time: ${formattedStart} - ${formattedEnd} against slot time: ${format(time, 'HH:mm')}`);
+    
+    const breakStart = parse(formattedStart, "HH:mm", time);
+    const breakEnd = parse(formattedEnd, "HH:mm", time);
+    
+    // Log if we have invalid dates
+    if (isNaN(breakStart.getTime()) || isNaN(breakEnd.getTime())) {
+      console.error(`Invalid break time format: ${formattedStart} - ${formattedEnd}`);
+      return false;
+    }
+    
     return isWithinInterval(time, { start: breakStart, end: breakEnd });
   });
 }
@@ -42,16 +55,73 @@ function generateTimeSlots(
   breakTimes: Array<{ start: string; end: string }>,
   existingBookings: { start: Date; end: Date }[]
 ): TimeSlot[] {
+  // Get day of week in lowercase (monday, tuesday, etc.) to match workingHours keys exactly
   const dayOfWeek = format(date, 'EEEE').toLowerCase();
   const daySchedule = workingHours[dayOfWeek];
 
-  if (!daySchedule?.isAvailable) {
+  console.log('Generating time slots for:', {
+    date: format(date, 'yyyy-MM-dd'),
+    dayOfWeek,
+    daySchedule,
+    workingHoursKeys: workingHours ? Object.keys(workingHours) : 'undefined'
+  });
+
+  // Check if day schedule exists and is available
+  if (!daySchedule) {
+    console.error(`Day schedule not found for ${dayOfWeek}. Available keys:`, workingHours ? Object.keys(workingHours) : 'undefined');
     return [];
   }
 
+  if (!daySchedule.isAvailable) {
+    console.log(`Day ${dayOfWeek} is marked as not available`);
+    return [];
+  }
+
+  // Ensure time format is HH:mm
+  const formatTimeString = (timeStr: string): string => {
+    if (!timeStr) return "00:00";
+    // If already in HH:mm format, return as is
+    if (timeStr.includes(':')) return timeStr;
+    // If it's in 12-hour format with AM/PM, convert to 24-hour
+    if (timeStr.toLowerCase().includes('am') || timeStr.toLowerCase().includes('pm')) {
+      // This is a simplification - a real implementation would properly convert 12h to 24h
+      console.warn(`Time format appears to be 12-hour: ${timeStr}. Should be in 24-hour format (HH:mm).`);
+      return timeStr; // Return as is for now, but log a warning
+    }
+    // If it's just a number, assume it's hours and add :00
+    return `${timeStr}:00`;
+  };
+
+  const formattedStart = formatTimeString(daySchedule.start);
+  const formattedEnd = formatTimeString(daySchedule.end);
+
+  console.log(`Using formatted time range: ${formattedStart} - ${formattedEnd}`);
+
   const slots: TimeSlot[] = [];
-  const startTime = parse(daySchedule.start, "HH:mm", date);
-  const endTime = parse(daySchedule.end, "HH:mm", date);
+  const startTime = parse(formattedStart, "HH:mm", date);
+  const endTime = parse(formattedEnd, "HH:mm", date);
+
+  console.log('Parsed time range:', {
+    startTime: startTime.toString(),
+    endTime: endTime.toString(),
+    isStartValid: !isNaN(startTime.getTime()),
+    isEndValid: !isNaN(endTime.getTime()),
+    rawStart: daySchedule.start,
+    rawEnd: daySchedule.end
+  });
+
+  // If either time is invalid, return empty slots
+  if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+    console.error('Invalid time format. Cannot generate time slots.');
+    return [];
+  }
+
+  // Log existing bookings for debugging
+  console.log(`Existing bookings for ${format(date, 'yyyy-MM-dd')}:`, 
+    existingBookings.map(b => `${format(b.start, 'HH:mm')} - ${format(b.end, 'HH:mm')}`));
+  
+  // Log break times for debugging
+  console.log('Break times:', breakTimes);
 
   let currentSlot = startTime;
   while (currentSlot < endTime) {
@@ -61,10 +131,15 @@ function generateTimeSlots(
                          isBreakTime(slotEnd, breakTimes);
 
     const isOverlapping = existingBookings.some(booking => {
-      return (
+      const overlaps = (
         (currentSlot >= booking.start && currentSlot < booking.end) ||
-        (slotEnd > booking.start && slotEnd <= booking.end)
+        (slotEnd > booking.start && slotEnd <= booking.end) ||
+        (currentSlot <= booking.start && slotEnd >= booking.end)
       );
+      if (overlaps) {
+        console.log(`Slot ${format(currentSlot, 'HH:mm')} - ${format(slotEnd, 'HH:mm')} overlaps with booking ${format(booking.start, 'HH:mm')} - ${format(booking.end, 'HH:mm')}`);
+      }
+      return overlaps;
     });
 
     if (!isOverlapping && !isInBreakTime) {
@@ -73,11 +148,14 @@ function generateTimeSlots(
         end: slotEnd,
         available: true,
       });
+    } else {
+      console.log(`Slot ${format(currentSlot, 'HH:mm')} - ${format(slotEnd, 'HH:mm')} is not available. Break time: ${isInBreakTime}, Overlapping: ${isOverlapping}`);
     }
 
     currentSlot = addMinutes(slotEnd, bufferTime);
   }
 
+  console.log(`Generated ${slots.length} available time slots for ${format(date, 'yyyy-MM-dd')}`);
   return slots;
 }
 
@@ -97,10 +175,16 @@ export default function BookService() {
   });
 
   // Get existing bookings for availability check
-  const { data: existingBookings } = useQuery<{ start: Date; end: Date }[]>({
+  const { data: existingBookingsRaw } = useQuery<{ start: string; end: string }[]>({
     queryKey: [`/api/services/${id}/bookings`, selectedDate.toISOString()],
     enabled: !!service && !!selectedDate,
   });
+  
+  // Parse the dates from strings to Date objects
+  const existingBookings = existingBookingsRaw?.map(booking => ({
+    start: new Date(booking.start),
+    end: new Date(booking.end)
+  })) || [];
 
   // Generate available time slots
   const timeSlots = service && existingBookings
@@ -283,11 +367,13 @@ export default function BookService() {
                     if (date) {
                       setSelectedDate(date);
                       setSelectedTime(undefined);
+                      console.log(`Selected date: ${format(date, 'yyyy-MM-dd')}`);
                     }
                   }}
                   disabled={(date) =>
-                    isBefore(date, new Date()) ||
-                    isAfter(date, addDays(new Date(), 30))
+                    // Only disable dates in the past
+                    isBefore(date, new Date())
+                    // No upper limit on future dates - can book any date in the future
                   }
                 />
               </div>
