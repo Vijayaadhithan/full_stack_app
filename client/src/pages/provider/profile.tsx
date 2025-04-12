@@ -10,8 +10,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Edit, Save } from "lucide-react";
 import { z } from "zod";
+import { useState, useEffect } from "react";
 
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -30,6 +31,8 @@ type ProfileFormData = z.infer<typeof profileSchema>;
 export default function ProviderProfile() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [editMode, setEditMode] = useState(false);
+  const [profileData, setProfileData] = useState<ProfileFormData | null>(null);
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -45,6 +48,34 @@ export default function ProviderProfile() {
       languages: user?.languages || "",
     },
   });
+  
+  // Update form when user data changes
+  useEffect(() => {
+    if (user) {
+      form.reset({
+        name: user.name || "",
+        phone: user.phone || "",
+        email: user.email || "",
+        address: user.address || "",
+        bio: user.bio || "",
+        qualifications: user.qualifications || "",
+        experience: user.experience || "",
+        workingHours: user.workingHours || "",
+        languages: user.languages || "",
+      });
+      setProfileData({
+        name: user.name || "",
+        phone: user.phone || "",
+        email: user.email || "",
+        address: user.address || "",
+        bio: user.bio || "",
+        qualifications: user.qualifications || "",
+        experience: user.experience || "",
+        workingHours: user.workingHours || "",
+        languages: user.languages || "",
+      });
+    }
+  }, [user, form]);
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
@@ -57,8 +88,10 @@ export default function ProviderProfile() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setProfileData(form.getValues());
+      setEditMode(false);
       toast({
         title: "Profile updated",
         description: "Your profile has been updated successfully.",
@@ -75,6 +108,14 @@ export default function ProviderProfile() {
 
   const onSubmit = (data: ProfileFormData) => {
     updateProfileMutation.mutate(data);
+  };
+  
+  const toggleEditMode = () => {
+    if (editMode) {
+      // If we're exiting edit mode without saving, reset form to current profile data
+      form.reset(profileData || undefined);
+    }
+    setEditMode(!editMode);
   };
 
   return (
@@ -159,47 +200,85 @@ export default function ProviderProfile() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="bio"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bio</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} placeholder="Tell us about yourself and your services" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {editMode ? (
+                  <FormField
+                    control={form.control}
+                    name="bio"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bio</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} placeholder="Tell us about yourself and your services" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-sm font-medium">Bio</h3>
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={toggleEditMode}
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="p-3 bg-muted rounded-md whitespace-pre-wrap">
+                      {profileData?.bio || "No bio information provided."}
+                    </div>
+                  </div>
+                )}
 
-                <FormField
-                  control={form.control}
-                  name="qualifications"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Qualifications</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} placeholder="List your relevant qualifications and certifications" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {editMode ? (
+                  <FormField
+                    control={form.control}
+                    name="qualifications"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Qualifications</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} placeholder="List your relevant qualifications and certifications" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Qualifications</h3>
+                    <div className="p-3 bg-muted rounded-md whitespace-pre-wrap">
+                      {profileData?.qualifications || "No qualifications provided."}
+                    </div>
+                  </div>
+                )}
 
-                <FormField
-                  control={form.control}
-                  name="experience"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Experience</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} placeholder="Describe your work experience" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {editMode ? (
+                  <FormField
+                    control={form.control}
+                    name="experience"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Experience</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} placeholder="Describe your work experience" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Experience</h3>
+                    <div className="p-3 bg-muted rounded-md whitespace-pre-wrap">
+                      {profileData?.experience || "No experience information provided."}
+                    </div>
+                  </div>
+                )}
 
                 <FormField
                   control={form.control}
@@ -215,16 +294,37 @@ export default function ProviderProfile() {
                   )}
                 />
 
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    disabled={updateProfileMutation.isPending}
-                  >
-                    {updateProfileMutation.isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Save Changes
-                  </Button>
+                <div className="flex justify-end gap-2">
+                  {editMode ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={toggleEditMode}
+                        disabled={updateProfileMutation.isPending}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={updateProfileMutation.isPending}
+                      >
+                        {updateProfileMutation.isPending && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={toggleEditMode}
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit Profile
+                    </Button>
+                  )}
                 </div>
               </form>
             </Form>
