@@ -3,6 +3,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Loader2, Plus, Calendar, Star, Bell, Settings, Users, Clock, Edit2 } from "lucide-react";
+import { Loader2, Plus, Calendar, Star, Bell, Settings, Users, Clock, Edit2, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Booking, Review, Service } from "@shared/schema";
 import { format, isAfter } from "date-fns";
@@ -224,6 +225,31 @@ export default function ProviderDashboard() {
    },
  });
 
+ const deleteServiceMutation = useMutation({
+   mutationFn: async (serviceId: number) => {
+     const res = await apiRequest("DELETE", `/api/services/${serviceId}`);
+     if (!res.ok) {
+       const error = await res.json();
+       throw new Error(error.message || "Failed to delete service");
+     }
+     return res.json();
+   },
+   onSuccess: () => {
+     queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
+     toast({
+       title: "Success",
+       description: "Service deleted successfully",
+     });
+   },
+   onError: (error: Error) => {
+     toast({
+       title: "Error",
+       description: error.message,
+       variant: "destructive",
+     });
+   },
+ });
+
  const onSubmit = async (data: ServiceFormData) => {
    try {
      if (editingService) {
@@ -350,20 +376,47 @@ export default function ProviderDashboard() {
                              {service.description}
                            </p>
                          </div>
-                         <Button
-                           variant="ghost"
-                           size="icon"
-                           onClick={() => {
-                             setEditingService(service);
-                             form.reset({
-                               ...service,
-                               price: service.price.toString(),
-                             });
-                             setDialogOpen(true);
-                           }}
-                         >
-                           <Edit2 className="h-4 w-4" />
-                         </Button>
+                         <div className="flex space-x-2">
+                           <Button
+                             variant="ghost"
+                             size="icon"
+                             onClick={() => {
+                               setEditingService(service);
+                               form.reset({
+                                 ...service,
+                                 price: service.price.toString(),
+                               });
+                               setDialogOpen(true);
+                             }}
+                           >
+                             <Edit2 className="h-4 w-4" />
+                           </Button>
+                           <AlertDialog>
+                             <AlertDialogTrigger asChild>
+                               <Button variant="ghost" size="icon">
+                                 <Trash2 className="h-4 w-4 text-destructive" />
+                               </Button>
+                             </AlertDialogTrigger>
+                             <AlertDialogContent>
+                               <AlertDialogHeader>
+                                 <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                 <AlertDialogDescription>
+                                   This action cannot be undone. This will permanently delete your
+                                   service and remove it from our servers.
+                                 </AlertDialogDescription>
+                               </AlertDialogHeader>
+                               <AlertDialogFooter>
+                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                 <AlertDialogAction 
+                                   onClick={() => deleteServiceMutation.mutate(service.id)}
+                                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                 >
+                                   Delete
+                                 </AlertDialogAction>
+                               </AlertDialogFooter>
+                             </AlertDialogContent>
+                           </AlertDialog>
+                         </div>
                        </div>
                        <div className="mt-4 space-y-2">
                          <div className="flex justify-between text-sm">

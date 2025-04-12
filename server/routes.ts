@@ -429,6 +429,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Add endpoint to delete a service
+  app.delete("/api/services/:id", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const serviceId = parseInt(req.params.id);
+      console.log("[API] /api/services/:id DELETE - Received request for service ID:", serviceId);
+      
+      if (isNaN(serviceId)) {
+        console.log("[API] /api/services/:id DELETE - Invalid service ID format");
+        return res.status(400).json({ message: "Invalid service ID format" });
+      }
+      
+      const service = await storage.getService(serviceId);
+      
+      if (!service) {
+        console.log("[API] /api/services/:id DELETE - Service not found");
+        return res.status(404).json({ message: "Service not found" });
+      }
+      
+      if (service.providerId !== req.user!.id) {
+        console.log("[API] /api/services/:id DELETE - Not authorized");
+        return res.status(403).json({ message: "Can only delete own services" });
+      }
+      
+      await storage.deleteService(serviceId);
+      console.log("[API] /api/services/:id DELETE - Service deleted successfully");
+      res.status(200).json({ message: "Service deleted successfully" });
+    } catch (error) {
+      console.error("[API] Error deleting service:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete service" });
+    }
+  });
+
   // Booking routes
   app.post("/api/bookings", requireAuth, requireRole(["customer"]), async (req, res) => {
     try {

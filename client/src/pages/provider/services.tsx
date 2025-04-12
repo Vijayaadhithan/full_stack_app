@@ -114,7 +114,8 @@ export default function ProviderServices() {
                         <div className="flex justify-between items-start">
                           <h3 className="font-semibold">{service.name}</h3>
                           <div className="flex space-x-2">
-                            <Button variant="ghost" size="icon" onClick={() => setDialogOpen(true)}>
+                            <Button variant="ghost" size="icon" onClick={() => setDialogOpen(true)}
+                              className="flex items-center justify-center">
                               <Edit2 className="h-4 w-4" />
                             </Button>
                             <AlertDialog>
