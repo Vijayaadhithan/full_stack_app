@@ -10,11 +10,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Edit, Save } from "lucide-react";
 import { z } from "zod";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimePicker } from "@/components/ui/time-picker";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useState, useEffect } from "react";
 
 const daysOfWeek = [
   "Monday",
@@ -50,6 +51,8 @@ type ShopProfileFormData = z.infer<typeof shopProfileSchema>;
 export default function ShopProfile() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [editMode, setEditMode] = useState(false);
+  const [profileData, setProfileData] = useState<ShopProfileFormData | null>(null);
 
   const form = useForm<ShopProfileFormData>({
     resolver: zodResolver(shopProfileSchema),
@@ -72,14 +75,42 @@ export default function ShopProfile() {
       returnPolicy: user?.shopProfile?.returnPolicy || "",
     },
   });
+  
+  // Update form and profile data when user data changes
+  useEffect(() => {
+    if (user?.shopProfile) {
+      const shopData = {
+        shopName: user.shopProfile.shopName || "",
+        description: user.shopProfile.description || "",
+        businessType: user.shopProfile.businessType || "",
+        gstin: user.shopProfile.gstin || "",
+        bankDetails: user.shopProfile.bankDetails || {
+          accountNumber: "",
+          ifscCode: "",
+          accountHolderName: "",
+        },
+        workingHours: user.shopProfile.workingHours || {
+          from: "09:00",
+          to: "18:00",
+          days: [],
+        },
+        shippingPolicy: user.shopProfile.shippingPolicy || "",
+        returnPolicy: user.shopProfile.returnPolicy || "",
+      };
+      form.reset(shopData);
+      setProfileData(shopData);
+    }
+  }, [user, form]);
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: ShopProfileFormData) => {
       if (!user?.id) throw new Error("User not found");
 
+      console.log("Updating shop profile with data:", data);
       const res = await apiRequest("PATCH", `/api/users/${user.id}`, {
         shopProfile: data,
       });
+      console.log("Shop profile update response:", res);
       
       if (!res.ok) {
         const error = await res.json();
@@ -90,6 +121,8 @@ export default function ShopProfile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setProfileData(form.getValues());
+      setEditMode(false);
       toast({
         title: "Success",
         description: "Shop profile updated successfully",
@@ -107,12 +140,29 @@ export default function ShopProfile() {
   const onSubmit = (data: ShopProfileFormData) => {
     updateProfileMutation.mutate(data);
   };
+  
+  const toggleEditMode = () => {
+    if (editMode) {
+      // If we're exiting edit mode without saving, reset form to current profile data
+      form.reset(profileData || undefined);
+    }
+    setEditMode(!editMode);
+  };
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Shop Profile</h1>
+          {!editMode && (
+            <Button
+              type="button"
+              onClick={toggleEditMode}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Profile
+            </Button>
+          )}
         </div>
 
         <Card>
@@ -130,7 +180,7 @@ export default function ShopProfile() {
                       <FormItem>
                         <FormLabel>Shop Name</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} disabled={!editMode} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -146,6 +196,7 @@ export default function ShopProfile() {
                         <Select
                           onValueChange={field.onChange}
                           defaultValue={field.value}
+                          disabled={!editMode}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -172,7 +223,7 @@ export default function ShopProfile() {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea {...field} rows={4} />
+                        <Textarea {...field} rows={4} disabled={!editMode} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -186,7 +237,7 @@ export default function ShopProfile() {
                     <FormItem>
                       <FormLabel>GSTIN (optional)</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} disabled={!editMode} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -203,7 +254,7 @@ export default function ShopProfile() {
                         <FormItem>
                           <FormLabel>Account Number</FormLabel>
                           <FormControl>
-                            <Input {...field} type="text" />
+                            <Input {...field} type="text" disabled={!editMode} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -217,7 +268,7 @@ export default function ShopProfile() {
                         <FormItem>
                           <FormLabel>IFSC Code</FormLabel>
                           <FormControl>
-                            <Input {...field} />
+                            <Input {...field} disabled={!editMode} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -231,7 +282,7 @@ export default function ShopProfile() {
                         <FormItem>
                           <FormLabel>Account Holder Name</FormLabel>
                           <FormControl>
-                            <Input {...field} />
+                            <Input {...field} disabled={!editMode} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -253,6 +304,7 @@ export default function ShopProfile() {
                             <Input
                               {...field}
                               type="time"
+                              disabled={!editMode}
                             />
                           </FormControl>
                           <FormMessage />
@@ -270,6 +322,7 @@ export default function ShopProfile() {
                             <Input
                               {...field}
                               type="time"
+                              disabled={!editMode}
                             />
                           </FormControl>
                           <FormMessage />
@@ -290,6 +343,7 @@ export default function ShopProfile() {
                               <Checkbox
                                 checked={form.watch("workingHours.days").includes(day)}
                                 onCheckedChange={(checked) => {
+                                  if (!editMode) return;
                                   const days = form.watch("workingHours.days");
                                   if (checked) {
                                     form.setValue("workingHours.days", [...days, day]);
@@ -300,6 +354,7 @@ export default function ShopProfile() {
                                     );
                                   }
                                 }}
+                                disabled={!editMode}
                               />
                               <span className="text-sm">{day}</span>
                             </div>
@@ -319,7 +374,7 @@ export default function ShopProfile() {
                       <FormItem>
                         <FormLabel>Shipping Policy (optional)</FormLabel>
                         <FormControl>
-                          <Textarea {...field} rows={4} />
+                          <Textarea {...field} rows={4} disabled={!editMode} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -333,7 +388,7 @@ export default function ShopProfile() {
                       <FormItem>
                         <FormLabel>Return Policy (optional)</FormLabel>
                         <FormControl>
-                          <Textarea {...field} rows={4} />
+                          <Textarea {...field} rows={4} disabled={!editMode} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -341,16 +396,29 @@ export default function ShopProfile() {
                   />
                 </div>
 
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    disabled={updateProfileMutation.isPending}
-                  >
-                    {updateProfileMutation.isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Save Changes
-                  </Button>
+                <div className="flex justify-end gap-2">
+                  {editMode ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={toggleEditMode}
+                        disabled={updateProfileMutation.isPending}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={updateProfileMutation.isPending}
+                      >
+                        {updateProfileMutation.isPending && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               </form>
             </Form>

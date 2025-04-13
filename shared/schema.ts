@@ -68,6 +68,12 @@ export const users = pgTable("users", {
   profilePicture: text("profile_picture"),
   paymentMethods: jsonb("payment_methods").$type<PaymentMethod[]>(),
   shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
+  // Provider profile fields
+  bio: text("bio"),
+  qualifications: text("qualifications"),
+  experience: text("experience"),
+  workingHours: text("working_hours"),
+  languages: text("languages"),
 });
 
 // Update services table with new availability fields

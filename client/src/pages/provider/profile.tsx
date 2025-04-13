@@ -81,23 +81,34 @@ export default function ProviderProfile() {
     mutationFn: async (data: ProfileFormData) => {
       if (!user?.id) throw new Error("User not found");
 
+      console.log("Updating profile with data:", data);
       const res = await apiRequest("PATCH", `/api/users/${user.id}`, data);
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to update profile");
       }
-      return res.json();
+      const updatedUser = await res.json();
+      console.log("Profile update response:", updatedUser);
+      return updatedUser;
     },
-    onSuccess: (data) => {
+    onSuccess: (updatedUser) => {
+      // Directly update the cache with the new user data
+      queryClient.setQueryData(["/api/user"], updatedUser);
+      
+      // Also invalidate the query to ensure fresh data on next fetch
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      
+      // Update local state
       setProfileData(form.getValues());
       setEditMode(false);
+      
       toast({
         title: "Profile updated",
         description: "Your profile has been updated successfully.",
       });
     },
     onError: (error: Error) => {
+      console.error("Profile update error:", error);
       toast({
         title: "Error",
         description: error.message,
@@ -107,7 +118,17 @@ export default function ProviderProfile() {
   });
 
   const onSubmit = (data: ProfileFormData) => {
-    updateProfileMutation.mutate(data);
+    updateProfileMutation.mutate({
+      name: data.name,
+      phone: data.phone,
+      email: data.email,
+      address: data.address,
+      bio: data.bio,
+      qualifications: data.qualifications,
+      experience: data.experience,
+      workingHours: data.workingHours,
+      languages: data.languages
+    });
   };
   
   const toggleEditMode = () => {
@@ -121,6 +142,18 @@ export default function ProviderProfile() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Profile Settings</h1>
+          {!editMode && (
+            <Button
+              type="button"
+              onClick={toggleEditMode}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Profile
+            </Button>
+          )}
+        </div>
         <Card>
           <CardHeader>
             <CardTitle>Profile Settings</CardTitle>
@@ -136,7 +169,7 @@ export default function ProviderProfile() {
                       <FormItem>
                         <FormLabel>Name</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} disabled={!editMode} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -150,7 +183,7 @@ export default function ProviderProfile() {
                       <FormItem>
                         <FormLabel>Phone</FormLabel>
                         <FormControl>
-                          <Input {...field} type="tel" />
+                          <Input {...field} type="tel" disabled={!editMode} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -164,7 +197,7 @@ export default function ProviderProfile() {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input {...field} type="email" />
+                          <Input {...field} type="email" disabled={!editMode} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -178,7 +211,7 @@ export default function ProviderProfile() {
                       <FormItem>
                         <FormLabel>Languages</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="e.g., English, Hindi, Tamil" />
+                          <Input {...field} placeholder="e.g., English, Hindi, Tamil" disabled={!editMode} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -193,92 +226,54 @@ export default function ProviderProfile() {
                     <FormItem>
                       <FormLabel>Address</FormLabel>
                       <FormControl>
-                        <Textarea {...field} />
+                        <Textarea {...field} disabled={!editMode} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
-                {editMode ? (
-                  <FormField
-                    control={form.control}
-                    name="bio"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bio</FormLabel>
-                        <FormControl>
-                          <Textarea {...field} placeholder="Tell us about yourself and your services" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-sm font-medium">Bio</h3>
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={toggleEditMode}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit
-                      </Button>
-                    </div>
-                    <div className="p-3 bg-muted rounded-md whitespace-pre-wrap">
-                      {profileData?.bio || "No bio information provided."}
-                    </div>
-                  </div>
-                )}
+                <FormField
+                  control={form.control}
+                  name="bio"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bio</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} placeholder="Tell us about yourself and your services" disabled={!editMode} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                {editMode ? (
-                  <FormField
-                    control={form.control}
-                    name="qualifications"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Qualifications</FormLabel>
-                        <FormControl>
-                          <Textarea {...field} placeholder="List your relevant qualifications and certifications" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Qualifications</h3>
-                    <div className="p-3 bg-muted rounded-md whitespace-pre-wrap">
-                      {profileData?.qualifications || "No qualifications provided."}
-                    </div>
-                  </div>
-                )}
+                <FormField
+                  control={form.control}
+                  name="qualifications"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Qualifications</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} placeholder="List your relevant qualifications and certifications" disabled={!editMode} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                {editMode ? (
-                  <FormField
-                    control={form.control}
-                    name="experience"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Experience</FormLabel>
-                        <FormControl>
-                          <Textarea {...field} placeholder="Describe your work experience" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Experience</h3>
-                    <div className="p-3 bg-muted rounded-md whitespace-pre-wrap">
-                      {profileData?.experience || "No experience information provided."}
-                    </div>
-                  </div>
-                )}
+                <FormField
+                  control={form.control}
+                  name="experience"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Experience</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} placeholder="Describe your work experience" disabled={!editMode} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
@@ -287,7 +282,7 @@ export default function ProviderProfile() {
                     <FormItem>
                       <FormLabel>Working Hours</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="e.g., Mon-Fri: 9 AM - 6 PM" />
+                        <Input {...field} placeholder="e.g., Mon-Fri: 9 AM - 6 PM" disabled={!editMode} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -316,15 +311,7 @@ export default function ProviderProfile() {
                         Save Changes
                       </Button>
                     </>
-                  ) : (
-                    <Button
-                      type="button"
-                      onClick={toggleEditMode}
-                    >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit Profile
-                    </Button>
-                  )}
+                  ) : null}
                 </div>
               </form>
             </Form>

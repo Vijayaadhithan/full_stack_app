@@ -68,13 +68,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Can only update own profile" });
       }
 
+      console.log("[API] Updating user profile:", { userId, data: req.body });
+      
+      // Update the user in the database
       const updatedUser = await storage.updateUser(userId, req.body);
+      
+      // Update the user in the session
+      if (req.user) {
+        Object.assign(req.user, updatedUser);
+      }
+      
+      console.log("[API] Updated user profile:", updatedUser);
       res.json(updatedUser);
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update user" });
     }
   });
+
 
   // Get all shops
   app.get("/api/shops", requireAuth, async (req, res) => {
