@@ -76,7 +76,7 @@ export const users = pgTable("users", {
   languages: text("languages"),
 });
 
-// Update services table with new availability fields
+// Update services table with new availability fields and soft deletion
 export const services = pgTable("services", {
   id: serial("id").primaryKey(),
   providerId: integer("provider_id").references(() => users.id),
@@ -85,6 +85,7 @@ export const services = pgTable("services", {
   price: decimal("price").notNull(),
   duration: integer("duration").notNull(), // in minutes
   isAvailable: boolean("is_available").default(true),
+  isDeleted: boolean("is_deleted").default(false), // Add soft deletion flag
   category: text("category").notNull(),
   images: text("images").array(),
   location: jsonb("location").$type<{ lat: number; lng: number }>(),
@@ -110,7 +111,7 @@ export const bookings = pgTable("bookings", {
   customerId: integer("customer_id").references(() => users.id),
   serviceId: integer("service_id").references(() => services.id),
   bookingDate: timestamp("booking_date").notNull(),
-  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled">().notNull(),
+  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired">().notNull(),
   paymentStatus: text("payment_status").$type<"pending" | "paid" | "refunded">().notNull(),
   rejectionReason: text("rejection_reason"),
   rescheduleDate: timestamp("reschedule_date"),
@@ -120,7 +121,27 @@ export const bookings = pgTable("bookings", {
   eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
   razorpayOrderId: text("razorpay_order_id"),
   razorpayPaymentId: text("razorpay_payment_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
 });
+
+// Booking history table to track status changes
+export const bookingHistory = pgTable("booking_history", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").references(() => bookings.id),
+  status: text("status").notNull().default("pending"),
+  changedAt: timestamp("changed_at").defaultNow(),
+  changedBy: integer("changed_by").references(() => users.id),
+  comments: text("comments"),
+});
+
+// Sessions table for express-session storage
+export const sessions = pgTable("sessions", {
+  sid: text("sid").$type<string>("varchar").primaryKey(),
+  sess: jsonb("sess").$type<any>("json").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
+});
+
 
 // Update the reviews table to link with e-receipt
 export const reviews = pgTable("reviews", {
@@ -155,6 +176,7 @@ export const products = pgTable("products", {
   category: text("category").notNull(),
   images: text("images").array(),
   isAvailable: boolean("is_available").default(true),
+  isDeleted: boolean("is_deleted").default(false), // Add soft deletion flag
   sku: text("sku"),
   barcode: text("barcode"),
   weight: decimal("weight"),

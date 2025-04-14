@@ -24,6 +24,41 @@ import { db } from "./db";
 import Razorpay from "razorpay";
 import crypto from 'crypto';
 
+// Helper function to validate and parse date and time
+function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null {
+  try {
+    // Validate date format (YYYY-MM-DD)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      console.error("Invalid date format. Expected YYYY-MM-DD");
+      return null;
+    }
+    
+    // Validate time format (HH:MM)
+    if (!/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(timeStr)) {
+      console.error("Invalid time format. Expected HH:MM");
+      return null;
+    }
+    
+    // Create a valid date object
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    
+    // Month is 0-indexed in JavaScript Date
+    const date = new Date(year, month - 1, day, hours, minutes);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.error("Invalid date/time combination");
+      return null;
+    }
+    
+    return date;
+  } catch (error) {
+    console.error("Error parsing date/time:", error);
+    return null;
+  }
+}
+
 // Check if Razorpay is properly configured with valid keys
 const isRazorpayConfigured = 
   process.env.RAZORPAY_KEY_ID && 
@@ -59,6 +94,154 @@ function requireRole(roles: string[]) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
+
+  // Booking Notification System
+  // Get pending booking requests for a provider
+  app.get("/api/bookings/provider/pending", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const providerId = req.user!.id;
+      const pendingBookings = await storage.getPendingBookingRequestsForProvider(providerId);
+      
+      // Fetch service details for each booking
+      const bookingsWithService = await Promise.all(
+        pendingBookings.map(async (booking) => {
+          const service = await storage.getService(booking.serviceId);
+          return { ...booking, service };
+        })
+      );
+      
+      res.json(bookingsWithService);
+    } catch (error) {
+      console.error("Error fetching pending bookings:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch pending bookings" });
+    }
+  });
+
+  // Accept or reject a booking request
+  app.patch("/api/bookings/:id", requireAuth, async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.id);
+      const { status, comments, changedBy } = req.body;
+      
+      console.log(`[API] Updating booking ${bookingId} status to ${status}`);
+      
+      // Validate the booking exists
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      // For providers: verify they own the service being booked
+      if (req.user!.role === "provider") {
+        const service = await storage.getService(booking.serviceId);
+        if (!service || service.providerId !== req.user!.id) {
+          return res.status(403).json({ message: "You can only manage bookings for your own services" });
+        }
+      }
+      
+      // For customers: verify they own the booking
+      if (req.user!.role === "customer" && booking.customerId !== req.user!.id) {
+        return res.status(403).json({ message: "You can only manage your own bookings" });
+      }
+      
+      // Update the booking
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        status,
+        comments,
+        changedBy: changedBy || req.user!.id,
+      });
+      
+      // Create notification for the customer
+      if (status === "accepted" || status === "rejected") {
+        await storage.createNotification({
+          userId: booking.customerId,
+          type: "booking",
+          title: `Booking ${status === "accepted" ? "Accepted" : "Rejected"}`,
+          message: `Your booking request has been ${status === "accepted" ? "accepted" : "rejected"}${comments ? `: ${comments}` : "."}`,
+          isRead: false,
+        });
+      }
+      
+      res.json(updatedBooking);
+    } catch (error) {
+      console.error("Error updating booking:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update booking" });
+    }
+  });
+
+  // Get booking requests with status for a customer
+  app.get("/api/bookings/customer/requests", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const customerId = req.user!.id;
+      const bookingRequests = await storage.getBookingRequestsWithStatusForCustomer(customerId);
+      
+      // Fetch service details for each booking
+      const bookingsWithService = await Promise.all(
+        bookingRequests.map(async (booking) => {
+          const service = await storage.getService(booking.serviceId);
+          return { ...booking, service };
+        })
+      );
+      
+      res.json(bookingsWithService);
+    } catch (error) {
+      console.error("Error fetching booking requests:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking requests" });
+    }
+  });
+
+  // Get booking history for a customer
+  app.get("/api/bookings/customer/history", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const customerId = req.user!.id;
+      const bookingHistory = await storage.getBookingHistoryForCustomer(customerId);
+      
+      // Fetch service details for each booking
+      const bookingsWithService = await Promise.all(
+        bookingHistory.map(async (booking) => {
+          const service = await storage.getService(booking.serviceId);
+          return { ...booking, service };
+        })
+      );
+      
+      res.json(bookingsWithService);
+    } catch (error) {
+      console.error("Error fetching booking history:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking history" });
+    }
+  });
+
+  // Get booking history for a provider
+  app.get("/api/bookings/provider/history", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const providerId = req.user!.id;
+      const bookingHistory = await storage.getBookingHistoryForProvider(providerId);
+      
+      // Fetch service details for each booking
+      const bookingsWithService = await Promise.all(
+        bookingHistory.map(async (booking) => {
+          const service = await storage.getService(booking.serviceId);
+          return { ...booking, service };
+        })
+      );
+      
+      res.json(bookingsWithService);
+    } catch (error) {
+      console.error("Error fetching booking history:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking history" });
+    }
+  });
+
+  // Process expired bookings (can be called by a scheduled job)
+  app.post("/api/bookings/process-expired", requireAuth, requireRole(["admin"]), async (req, res) => {
+    try {
+      await storage.processExpiredBookings();
+      res.json({ message: "Expired bookings processed successfully" });
+    } catch (error) {
+      console.error("Error processing expired bookings:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to process expired bookings" });
+    }
+  });
 
   // Shop Profile Management
   app.patch("/api/users/:id", requireAuth, async (req, res) => {
@@ -463,9 +646,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Can only delete own services" });
       }
       
-      await storage.deleteService(serviceId);
-      console.log("[API] /api/services/:id DELETE - Service deleted successfully");
-      res.status(200).json({ message: "Service deleted successfully" });
+      try {
+        await storage.deleteService(serviceId);
+        console.log("[API] /api/services/:id DELETE - Service marked as deleted successfully");
+        res.status(200).json({ message: "Service deleted successfully" });
+      } catch (error) {
+        console.error("[API] Error deleting service:", error);
+        res.status(400).json({ message: "Failed to delete service due to existing bookings. Please mark the service as unavailable instead." });
+      }
     } catch (error) {
       console.error("[API] Error deleting service:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete service" });
@@ -483,33 +671,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Service not found" });
       }
 
-      // Create Razorpay order
-      const amount = parseInt(service.price);
-      const order = await razorpay.orders.create({
-        amount: amount * 100, // Convert to paisa
-        currency: "INR",
-        receipt: `booking_${Date.now()}`,
-      });
+      // Parse date if it's in ISO format
+      let dateStr = date;
+      if (date && date.includes('T')) {
+        // Extract YYYY-MM-DD from ISO date string
+        dateStr = date.split('T')[0];
+        console.log("Parsed date from ISO string:", dateStr);
+      }
 
-      // Create booking record
-      const booking = await storage.createBooking({
-        customerId: req.user!.id,
-        serviceId,
-        bookingDate: new Date(`${date}T${time}`),
-        status: "pending",
-        paymentStatus: "pending",
-        razorpayOrderId: order.id,
-      });
+      // Check if Razorpay is properly configured
+      if (!isRazorpayConfigured) {
+        console.log("Razorpay is not properly configured. Creating booking without payment integration.");
+        
+        // Validate date and time format
+        const bookingDateTime = validateAndParseDateTime(dateStr, time);
+        if (!bookingDateTime) {
+          return res.status(400).json({ message: "Invalid date or time format" });
+        }
+        
+        // Create booking record without Razorpay integration
+        const booking = await storage.createBooking({
+          customerId: req.user!.id,
+          serviceId,
+          bookingDate: bookingDateTime,
+          status: "pending",
+          paymentStatus: "pending",
+        });
 
-      // Create notification for provider
-      await storage.createNotification({
-        userId: service.providerId,
-        type: "booking_request",
-        title: "New Booking Request",
-        message: `You have a new booking request for ${service.name}`,
-      });
+        // Create notification for provider
+        await storage.createNotification({
+          userId: service.providerId,
+          type: "booking_request",
+          title: "New Booking Request",
+          message: `You have a new booking request for ${service.name}`,
+        });
 
-      res.status(201).json({ booking, order });
+        return res.status(201).json({ booking, paymentRequired: false });
+      }
+      
+      try {
+        // Create Razorpay order
+        const amount = parseInt(service.price);
+        const order = await razorpay.orders.create({
+          amount: amount * 100, // Convert to paisa
+          currency: "INR",
+          receipt: `booking_${Date.now()}`,
+        });
+
+        // Validate date and time format
+        const bookingDateTime = validateAndParseDateTime(dateStr, time);
+        if (!bookingDateTime) {
+          return res.status(400).json({ message: "Invalid date or time format" });
+        }
+        
+        // Create booking record with Razorpay order ID
+        const booking = await storage.createBooking({
+          customerId: req.user!.id,
+          serviceId,
+          bookingDate: bookingDateTime,
+          status: "pending",
+          paymentStatus: "pending",
+          razorpayOrderId: order.id,
+        });
+
+        // Create notification for provider
+        await storage.createNotification({
+          userId: service.providerId,
+          type: "booking_request",
+          title: "New Booking Request",
+          message: `You have a new booking request for ${service.name}`,
+        });
+
+        res.status(201).json({ booking, order, paymentRequired: true });
+      } catch (razorpayError) {
+        console.error("Razorpay error:", razorpayError);
+        
+        // Validate date and time format
+        const bookingDateTime = validateAndParseDateTime(dateStr, time);
+        if (!bookingDateTime) {
+          return res.status(400).json({ message: "Invalid date or time format" });
+        }
+        
+        // Create booking record without Razorpay integration as fallback
+        const booking = await storage.createBooking({
+          customerId: req.user!.id,
+          serviceId,
+          bookingDate: bookingDateTime,
+          status: "pending",
+          paymentStatus: "pending",
+        });
+
+        // Create notification for provider
+        await storage.createNotification({
+          userId: service.providerId,
+          type: "booking_request",
+          title: "New Booking Request",
+          message: `You have a new booking request for ${service.name}`,
+        });
+
+        res.status(201).json({ booking, paymentRequired: false, message: "Payment integration unavailable, booking created without payment" });
+      }
     } catch (error) {
       console.error("Error creating booking:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create booking" });
@@ -521,14 +782,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status, rejectionReason } = req.body;
       const bookingId = parseInt(req.params.id);
 
+      console.log(`[API] Updating booking status: ID=${bookingId}, Status=${status}, Reason=${rejectionReason || 'N/A'}`);
+
       const booking = await storage.getBooking(bookingId);
       if (!booking) {
+        console.log(`[API] Booking not found: ID=${bookingId}`);
         return res.status(404).json({ message: "Booking not found" });
       }
 
       const service = await storage.getService(booking.serviceId);
       if (!service || service.providerId !== req.user!.id) {
+        console.log(`[API] Not authorized to update booking: ID=${bookingId}`);
         return res.status(403).json({ message: "Not authorized to update this booking" });
+      }
+
+      // Validate status
+      if (!['accepted', 'rejected'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status. Must be 'accepted' or 'rejected'" });
+      }
+
+      // Require rejection reason if status is rejected
+      if (status === 'rejected' && !rejectionReason) {
+        return res.status(400).json({ message: "Rejection reason is required when rejecting a booking" });
       }
 
       // Update booking status
@@ -540,19 +815,286 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create notification for customer
       const notificationMessage = status === "rejected"
         ? `Your booking for ${service.name} was rejected. Reason: ${rejectionReason}`
-        : `Your booking for ${service.name} was ${status}`;
+        : `Your booking for ${service.name} has been accepted. The service provider will meet you at the scheduled time.`;
+
+      const notificationTitle = status === "rejected" ? "Booking Rejected" : "Booking Accepted";
 
       await storage.createNotification({
         userId: booking.customerId,
         type: "booking_update",
-        title: `Booking ${status}`,
+        title: notificationTitle,
         message: notificationMessage,
       });
-
-      res.json(updatedBooking);
+      
+      console.log(`[API] Booking status updated successfully: ID=${bookingId}, Status=${status}`);
+      console.log(`[API] Notification sent to customer: ID=${booking.customerId}`);
+  
+      res.json({
+        booking: updatedBooking,
+        message: status === "accepted" 
+          ? "Booking accepted successfully. Customer has been notified." 
+          : "Booking rejected. Customer has been notified with the reason."
+      });
     } catch (error) {
       console.error("Error updating booking status:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update booking status" });
+    }
+  });
+
+  // New endpoint for customers to mark service as completed and confirm satisfaction
+  app.patch("/api/bookings/:id/complete", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const { isSatisfactory, comments } = req.body;
+      const bookingId = parseInt(req.params.id);
+      
+      console.log(`[API] Customer marking booking as completed: ID=${bookingId}, Satisfactory=${isSatisfactory}, Comments=${comments || 'N/A'}`);
+
+      if (isSatisfactory === undefined) {
+        return res.status(400).json({ message: "Satisfaction status (isSatisfactory) is required" });
+      }
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        console.log(`[API] Booking not found: ID=${bookingId}`);
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      // Verify this booking belongs to the customer
+      if (booking.customerId !== req.user!.id) {
+        console.log(`[API] Not authorized to update booking: ID=${bookingId}, User=${req.user!.id}, Owner=${booking.customerId}`);
+        return res.status(403).json({ message: "Not authorized to update this booking" });
+      }
+
+      // Verify the booking is in 'accepted' status
+      if (booking.status !== "accepted") {
+        console.log(`[API] Invalid booking status for completion: ID=${bookingId}, Status=${booking.status}`);
+        return res.status(400).json({ 
+          message: "Only accepted bookings can be marked as completed",
+          currentStatus: booking.status
+        });
+      }
+
+      const service = await storage.getService(booking.serviceId);
+      if (!service) {
+        console.log(`[API] Service not found: ID=${booking.serviceId}`);
+        return res.status(404).json({ message: "Service not found" });
+      }
+
+      // Update booking status to completed
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        status: "completed",
+        comments: comments || null,
+      });
+      
+      console.log(`[API] Booking marked as completed: ID=${bookingId}`);
+
+      // Create notification for service provider
+      const notificationMessage = isSatisfactory
+        ? `Customer has marked the booking for ${service.name} as completed and was satisfied with the service.`
+        : `Customer has marked the booking for ${service.name} as completed but had some concerns with the service.`;
+
+      await storage.createNotification({
+        userId: service.providerId,
+        type: "booking_update",
+        title: "Service Completed",
+        message: notificationMessage
+      });
+      
+      console.log(`[API] Notification sent to provider: ID=${service.providerId}`);
+
+      // If the service was satisfactory and payment is pending, process payment
+      if (isSatisfactory && booking.paymentStatus === "pending") {
+        console.log(`[API] Processing payment for completed service: ID=${bookingId}`);
+        
+        // If there's a Razorpay order ID, we need to handle payment through the frontend
+        if (booking.razorpayOrderId) {
+          console.log(`[API] Razorpay payment required: OrderID=${booking.razorpayOrderId}`);
+          return res.json({
+            booking: updatedBooking,
+            paymentRequired: true,
+            razorpayOrderId: booking.razorpayOrderId,
+            message: "Please complete the payment for this service"
+          });
+        } else {
+          // For services without Razorpay integration, mark as paid directly
+          const paidBooking = await storage.updateBooking(bookingId, {
+            paymentStatus: "paid"
+          });
+          
+          console.log(`[API] Booking marked as paid: ID=${bookingId}`);
+          
+          // Notify provider about payment
+          await storage.createNotification({
+            userId: service.providerId,
+            type: "payment",
+            title: "Payment Received",
+            message: `Payment for booking #${bookingId} has been marked as received.`
+          });
+          
+          console.log(`[API] Payment notification sent to provider: ID=${service.providerId}`);
+          
+          return res.json({
+            booking: paidBooking,
+            paymentRequired: false,
+            message: "Service completed and payment recorded"
+          });
+        }
+      }
+
+      res.json({
+        booking: updatedBooking,
+        message: isSatisfactory 
+          ? "Thank you for your positive feedback! Please proceed to payment." 
+          : "Thank you for your feedback. We're sorry to hear you had concerns with the service."
+      });
+    } catch (error) {
+      console.error("Error completing booking:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to complete booking" });
+    }
+  });
+
+  // Process payment for completed service
+  app.post("/api/bookings/:id/payment", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+      const bookingId = parseInt(req.params.id);
+      
+      console.log(`[API] Processing payment for booking: ID=${bookingId}, PaymentID=${razorpayPaymentId || 'N/A'}`);
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        console.log(`[API] Booking not found: ID=${bookingId}`);
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      // Verify this booking belongs to the customer
+      if (booking.customerId !== req.user!.id) {
+        console.log(`[API] Not authorized to process payment: User=${req.user!.id}, Owner=${booking.customerId}`);
+        return res.status(403).json({ message: "Not authorized to process payment for this booking" });
+      }
+
+      // Verify the booking is in 'completed' status
+      if (booking.status !== "completed") {
+        console.log(`[API] Invalid booking status for payment: ID=${bookingId}, Status=${booking.status}`);
+        return res.status(400).json({ 
+          message: "Only completed bookings can be paid",
+          currentStatus: booking.status
+        });
+      }
+
+      // Get service details
+      const service = await storage.getService(booking.serviceId);
+      if (!service) {
+        console.log(`[API] Service not found: ID=${booking.serviceId}`);
+        return res.status(404).json({ message: "Service not found" });
+      }
+
+      // Verify payment if Razorpay is configured
+      if (isRazorpayConfigured && razorpayPaymentId && razorpayOrderId && razorpaySignature) {
+        console.log(`[API] Verifying Razorpay payment signature: OrderID=${razorpayOrderId}`);
+        // Verify the payment signature
+        const generatedSignature = crypto
+          .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
+          .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+          .digest("hex");
+
+        if (generatedSignature !== razorpaySignature) {
+          console.log(`[API] Invalid payment signature: Expected=${generatedSignature}, Received=${razorpaySignature}`);
+          return res.status(400).json({ message: "Invalid payment signature" });
+        }
+        console.log(`[API] Payment signature verified successfully`);
+      }
+
+      // Update booking payment status
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        paymentStatus: "paid",
+        razorpayPaymentId: razorpayPaymentId || booking.razorpayPaymentId
+      });
+      
+      console.log(`[API] Booking payment status updated to paid: ID=${bookingId}`);
+      
+      // Create notification for service provider
+      await storage.createNotification({
+        userId: service.providerId,
+        type: "payment",
+        title: "Payment Received",
+        message: `Payment for booking #${bookingId} (${service.name}) has been received.`
+      });
+      
+      console.log(`[API] Payment notification sent to provider: ID=${service.providerId}`);
+      
+      // Create notification for customer
+      await storage.createNotification({
+        userId: booking.customerId,
+        type: "payment",
+        title: "Payment Successful",
+        message: `Your payment for ${service.name} has been processed successfully. Thank you for using our service!`
+      });
+      
+      console.log(`[API] Payment confirmation notification sent to customer: ID=${booking.customerId}`);
+
+      res.json({
+        success: true,
+        booking: updatedBooking,
+        message: "Payment processed successfully"
+      });
+    } catch (error) {
+      console.error("Error processing payment:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to process payment" });
+    }
+  });
+
+  // Get bookings for customer
+  app.get("/api/bookings", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const bookings = await storage.getBookingsByCustomer(req.user!.id);
+      
+      // Enrich bookings with service details
+      const enrichedBookings = await Promise.all(
+        bookings.map(async (booking) => {
+          const service = await storage.getService(booking.serviceId);
+          return {
+            ...booking,
+            service: service || { name: "Unknown Service" }
+          };
+        })
+      );
+      
+      res.json(enrichedBookings);
+    } catch (error) {
+      console.error("Error fetching customer bookings:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch bookings" });
+    }
+  });
+
+  // Get bookings for provider
+  app.get("/api/bookings/provider", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const bookings = await storage.getBookingsByProvider(req.user!.id);
+      
+      // Enrich bookings with service details
+      const enrichedBookings = await Promise.all(
+        bookings.map(async (booking) => {
+          const service = await storage.getService(booking.serviceId);
+          const customer = await storage.getUser(booking.customerId);
+          
+          return {
+            ...booking,
+            service: service || { name: "Unknown Service" },
+            customer: customer ? {
+              id: customer.id,
+              name: customer.name,
+              phone: customer.phone,
+              email: customer.email
+            } : { name: "Unknown Customer" }
+          };
+        })
+      );
+      
+      res.json(enrichedBookings);
+    } catch (error) {
+      console.error("Error fetching provider bookings:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch bookings" });
     }
   });
 

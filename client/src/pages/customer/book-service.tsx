@@ -166,6 +166,7 @@ export default function BookService() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [order, setOrder] = useState<any>(null);
 
   // Fetch service with provider info
@@ -212,8 +213,13 @@ export default function BookService() {
       return res.json();
     },
     onSuccess: (data) => {
-      setOrder(data.order);
-      setPaymentDialogOpen(true);
+      // Show booking pending notification - provider needs to accept first
+      toast({
+        title: t("booking_request_sent"),
+        description: t("booking_pending_provider_approval"),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
     onError: (error: Error) => {
       toast({
@@ -223,6 +229,67 @@ export default function BookService() {
       });
     },
   });
+  
+  // Mutation for handling payment after booking is accepted and service is completed
+  const paymentMutation = useMutation({
+    mutationFn: async (bookingId: number) => {
+      const res = await apiRequest("POST", `/api/bookings/${bookingId}/initiate-payment`, {});
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || t("payment_initiation_failed"));
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setOrder(data.order);
+      setPaymentDialogOpen(true);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: t("payment_initiation_failed"),
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Mutation for marking a service as completed
+  const completeServiceMutation = useMutation({
+    mutationFn: async ({ bookingId, isSatisfactory, comments }: { bookingId: number; isSatisfactory: boolean; comments?: string }) => {
+      const res = await apiRequest("PATCH", `/api/bookings/${bookingId}/complete`, { isSatisfactory, comments });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || t("service_completion_failed"));
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: t("service_marked_complete"),
+        description: data.message || t("thank_you_for_feedback"),
+      });
+      
+      // If payment is required, initiate it
+      if (data.paymentRequired && data.booking) {
+        paymentMutation.mutate(data.booking.id);
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: t("service_completion_failed"),
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Show information dialog when component mounts
+  useEffect(() => {
+    setDialogOpen(true);
+  }, []);
 
   const handleBooking = () => {
     if (!selectedTime || !service) return;
@@ -241,7 +308,7 @@ export default function BookService() {
       script.async = true;
       script.onload = () => {
         const options = {
-          key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+          key: "rzp_test_WIK4gEdE7PPhgw", // Using the provided test key directly
           amount: order.amount,
           currency: order.currency,
           name: service?.name,
@@ -414,8 +481,11 @@ export default function BookService() {
                   {bookingMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   ) : null}
-                  {t('book_service')}
+                  {t('request_booking')}
                 </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  {t('booking_requires_provider_approval')}
+                </p>
               </div>
             </div>
 
@@ -474,12 +544,31 @@ export default function BookService() {
         </Card>
       </motion.div>
 
+      {/* Payment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Complete your booking</DialogTitle>
+            <DialogTitle>{t("payment_processing")}</DialogTitle>
           </DialogHeader>
-          <p>Please wait while we initialize the payment...</p>
+          <p>{t("payment_initialization_message")}</p>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Information Dialog about booking process */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("booking_process_info")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>{t("booking_process_step1") || "When you request a booking, the service provider will receive a notification."}</p>
+            <p>{t("booking_process_step2") || "The provider will review your request and either accept or reject it. You'll receive a notification with their decision."}</p>
+            <p>{t("booking_process_step3") || "If accepted, you'll meet the provider at the scheduled time. After the service is completed, you can mark it as satisfactory and proceed with payment."}</p>
+            <p>{t("booking_process_step4") || "If rejected, you'll receive a notification with the reason and can book with another provider."}</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setDialogOpen(false)}>{t("understand")}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </DashboardLayout>

@@ -203,7 +203,7 @@ export default function Cart() {
       }
 
       const options = {
-        key: "rzp_test_1234567890", // Test mode key
+        key: "rzp_test_WIK4gEdE7PPhgw", // Using the provided test key directly
         amount: parseInt(data.razorpayOrder.amount),
         currency: data.razorpayOrder.currency,
         name: "Your Shop Name",

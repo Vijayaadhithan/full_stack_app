@@ -42,14 +42,6 @@ export function setupAuth(app: Express) {
   app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());
-  app.use(
-    session({
-      secret: process.env.SESSION_SECRET || 'fallback-secret',
-      resave: false,
-      saveUninitialized: false,
-      // Optionally set 'cookie', 'store', etc.
-    })
-  );
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
