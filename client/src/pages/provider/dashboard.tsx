@@ -308,7 +308,7 @@ const serviceFormSchema = z.object({
   description: z.string().min(1, "Description is required"),
   category: z.string().min(1, "Category is required"),
   price: z.string().min(1, "Price is required"),
-  duration: z.number().min(15, "Duration must be at least 15 minutes"),
+  duration: z.coerce.number().min(15, "Duration must be at least 15 minutes"),
   isAvailable: z.boolean().default(true),
   workingHours: z.object({
     monday: z.object({
@@ -351,11 +351,11 @@ const serviceFormSchema = z.object({
     start: z.string().min(1, "Start time is required"),
     end: z.string().min(1, "End time is required"),
   })).optional().default([]),
-  maxDailyBookings: z.number().min(1, "Must accept at least 1 booking per day"),
-  bufferTime: z.number().min(0, "Buffer time must be non-negative"),
+  maxDailyBookings: z.coerce.number().min(1, "Must accept at least 1 booking per day"),
+  bufferTime: z.coerce.number().min(0, "Buffer time must be non-negative"),
   location: z.object({
-    lat: z.number(),
-    lng: z.number(),
+    lat: z.coerce.number(),
+    lng: z.coerce.number(),
   }),
 });
 
@@ -821,7 +821,14 @@ export default function ProviderDashboard() {
                             <FormItem>
                               <FormLabel>Duration (minutes)</FormLabel>
                               <FormControl>
-                                <Input {...field} type="number" min="15" step="15" />
+                                <Input 
+                                  {...field} 
+                                  type="number" 
+                                  min="15" 
+                                  step="15" 
+                                  onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 15)}
+                                  value={field.value}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>

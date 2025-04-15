@@ -72,8 +72,23 @@ export default function ProviderBookings() {
     resolver: zodResolver(bookingActionSchema),
     defaultValues: {
       comments: "",
+      status: "accepted", // Set a default status
     },
   });
+
+  // Reset form when action type changes
+  useEffect(() => {
+    if (actionType) {
+      form.reset({
+        comments: "",
+        status: actionType === "accept" ? "accepted"
+          : actionType === "reject" ? "rejected"
+          : actionType === "reschedule" ? "rescheduled"
+          : "completed",
+        rescheduleDate: actionType === "reschedule" ? new Date().toISOString().slice(0, 16) : undefined
+      });
+    }
+  }, [actionType, form]);
 
   const updateBookingMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: BookingActionData }) => {
@@ -87,6 +102,7 @@ export default function ProviderBookings() {
     onSuccess: () => {
       // Invalidate both bookings and notifications queries
       queryClient.invalidateQueries({ queryKey: ["/api/bookings/provider"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] }); // Also invalidate customer bookings
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
         title: "Success",
@@ -144,20 +160,6 @@ export default function ProviderBookings() {
     // Execute the mutation
     updateBookingMutation.mutate(payload);
   };
-
-  // Reset form when action type changes
-  useEffect(() => {
-    if (actionType) {
-      form.reset({
-        comments: "",
-        status: actionType === "accept" ? "accepted"
-          : actionType === "reject" ? "rejected"
-          : actionType === "reschedule" ? "rescheduled"
-          : "completed",
-        rescheduleDate: actionType === "reschedule" ? new Date().toISOString().slice(0, 16) : undefined
-      });
-    }
-  }, [actionType, form]);
 
   return (
     <DashboardLayout>

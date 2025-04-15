@@ -457,62 +457,62 @@ export default function Bookings() {
           <p>Please wait while we initialize the payment...</p>
         </DialogContent>
       </Dialog>
-      
-      {/* Initialize Razorpay when order is available */}
-      {useEffect(() => {
-        if (order) {
-          const script = document.createElement('script');
-          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-          script.async = true;
-          script.onload = () => {
-            const options = {
-              key: "rzp_test_WIK4gEdE7PPhgw", // Using the provided test key directly
-              amount: order.amount,
-              currency: order.currency,
-              name: order.booking?.service?.name || "Service Booking",
-              description: `Payment for booking #${order.booking?.id}`,
-              order_id: order.id,
-              handler: async (response: any) => {
-                try {
-                  const res = await apiRequest("POST", `/api/bookings/${order.booking.id}/payment`, {
-                    razorpayPaymentId: response.razorpay_payment_id,
-                    razorpaySignature: response.razorpay_signature,
-                  });
-
-                  if (res.ok) {
-                    queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-                    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-                    toast({
-                      title: "Payment successful",
-                      description: "Your booking has been confirmed and payment processed.",
-                    });
-                    setPaymentDialogOpen(false);
-                  } else {
-                    throw new Error("Payment verification failed");
-                  }
-                } catch (error) {
-                  toast({
-                    title: "Payment failed",
-                    description: error instanceof Error ? error.message : "Payment verification failed",
-                    variant: "destructive",
-                  });
-                }
-              },
-              theme: {
-                color: "#10B981",
-              },
-            };
-
-            const rzp = new window.Razorpay(options);
-            rzp.open();
-          };
-          document.body.appendChild(script);
-
-          return () => {
-            document.body.removeChild(script);
-          };
-        }
-      }, [order])}
     </DashboardLayout>
   );
+
+  // Initialize Razorpay when order is available - moved outside JSX
+  useEffect(() => {
+    if (order) {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => {
+        const options = {
+          key: "rzp_test_WIK4gEdE7PPhgw", // Using the provided test key directly
+          amount: order.amount,
+          currency: order.currency,
+          name: order.booking?.service?.name || "Service Booking",
+          description: `Payment for booking #${order.booking?.id}`,
+          order_id: order.id,
+          handler: async (response: any) => {
+            try {
+              const res = await apiRequest("POST", `/api/bookings/${order.booking.id}/payment`, {
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              });
+
+              if (res.ok) {
+                queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+                toast({
+                  title: "Payment successful",
+                  description: "Your booking has been confirmed and payment processed.",
+                });
+                setPaymentDialogOpen(false);
+              } else {
+                throw new Error("Payment verification failed");
+              }
+            } catch (error) {
+              toast({
+                title: "Payment failed",
+                description: error instanceof Error ? error.message : "Payment verification failed",
+                variant: "destructive",
+              });
+            }
+          },
+          theme: {
+            color: "#10B981",
+          },
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+      };
+      document.body.appendChild(script);
+
+      return () => {
+        document.body.removeChild(script);
+      };
+    }
+  }, [order]);
 }

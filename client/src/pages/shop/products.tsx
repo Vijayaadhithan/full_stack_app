@@ -82,14 +82,14 @@ export default function ShopProducts() {
 
     try {
       const formData = new FormData();
-      formData.append("image", files[0]);
+      formData.append("file", files[0]);
 
       const res = await apiRequest("POST", "/api/upload", formData);
       if (!res.ok) throw new Error("Failed to upload image");
 
-      const { url } = await res.json();
+      const { path } = await res.json();
       const currentImages = form.getValues("images") || [];
-      form.setValue("images", [...currentImages, url]);
+      form.setValue("images", [...currentImages, path]);
       setImageUploadError(null);
     } catch (error) {
       setImageUploadError("Failed to upload image. Please try again.");

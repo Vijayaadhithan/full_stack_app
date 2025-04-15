@@ -69,7 +69,7 @@ export default function CustomerProfile() {
       reader.readAsDataURL(file);
       
       const formData = new FormData();
-      formData.append("profilePicture", file);
+      formData.append("file", file);
       
       const res = await apiRequest("POST", `/api/users/${user?.id}/profile-picture`, formData);
       const updatedUser = await res.json();
