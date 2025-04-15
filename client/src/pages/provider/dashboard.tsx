@@ -204,7 +204,7 @@ function PendingBookingRequestsList() {
       </Dialog>
 
       <Button variant="outline" size="sm" asChild className="w-full">
-        <Link href="/provider/bookings">View All Bookings</Link>
+        <Link href="/provider/bookings?status=accepted">View All Upcoming Bookings</Link>
       </Button>
     </div>
   );
@@ -1018,7 +1018,7 @@ export default function ProviderDashboard() {
               <CardHeader>
                 <CardTitle className="flex justify-between items-center">
                   <span>Upcoming Bookings</span>
-                  <Link href="/provider/bookings">
+                  <Link href="/provider/bookings?status=accepted">
                     <Button variant="ghost" size="sm">View All</Button>
                   </Link>
                 </CardTitle>

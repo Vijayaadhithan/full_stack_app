@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
 import { MainNav } from "@/components/navigation/main-nav";
-import { NotificationsCenter } from "@/components/notifications-center";
 import { LanguageSelector } from "@/components/language-selector";
 import { useLanguage } from "@/contexts/language-context";
 import { motion } from "framer-motion";
@@ -18,7 +17,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <MainNav />
         <div className="flex items-center gap-4">
           <LanguageSelector />
-          <NotificationsCenter />
         </div>
       </div>
       <motion.main 

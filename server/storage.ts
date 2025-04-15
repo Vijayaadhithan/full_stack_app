@@ -517,6 +517,29 @@ export class MemStorage implements IStorage {
     }
   }
 
+  async markAllNotificationsAsRead(userId: number, role?: string): Promise<void> {
+    // Get all notifications for this user
+    let userNotifications = await this.getNotificationsByUser(userId);
+    
+    // Apply role-based filtering if role is provided
+    if (role) {
+      if (role === 'shop_owner') {
+        // Shop owners should not see service notifications
+        userNotifications = userNotifications.filter(n => n.type !== 'service');
+      } else if (role === 'provider') {
+        // Service providers should not see order notifications
+        userNotifications = userNotifications.filter(n => n.type !== 'order');
+      }
+      // For customers, we don't need additional filtering
+    }
+    
+    // Mark filtered notifications as read
+    for (const notification of userNotifications) {
+      notification.isRead = true;
+      this.notifications.set(notification.id, notification);
+    }
+  }
+
   async deleteNotification(id: number): Promise<void> {
     this.notifications.delete(id);
   }

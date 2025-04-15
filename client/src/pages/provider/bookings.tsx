@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Check, X, Calendar, Clock } from "lucide-react";
 import { Booking, Service } from "@shared/schema";
 import { z } from "zod";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const bookingActionSchema = z.object({
   status: z.enum(["accepted", "rejected", "rescheduled", "completed"]),
@@ -29,15 +29,44 @@ export default function ProviderBookings() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const { toast } = useToast();
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  // Get status from URL query parameter
+  const [searchParams] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search);
+    }
+    return new URLSearchParams();
+  });
+  const statusFromUrl = searchParams.get('status');
+  
+  const [selectedStatus, setSelectedStatus] = useState<string>(statusFromUrl || "all");
   const [dateFilter, setDateFilter] = useState<string>("");
   const [actionType, setActionType] = useState<"accept" | "reject" | "reschedule" | "complete" | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
+  // Fetch all bookings including accepted ones
   const { data: bookings, isLoading } = useQuery<(Booking & { service: Service })[]>({
     queryKey: ["/api/bookings/provider"],
     enabled: !!user?.id,
   });
+
+  // Update the selected status when the URL changes
+  useEffect(() => {
+    // Check if we're in a browser environment
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get('status');
+      if (status) {
+        setSelectedStatus(status);
+      }
+    }
+  }, []);
+  
+  // Set the initial status filter based on URL parameter when component mounts
+  useEffect(() => {
+    if (statusFromUrl) {
+      setSelectedStatus(statusFromUrl);
+    }
+  }, [statusFromUrl]);
 
   const form = useForm<BookingActionData>({
     resolver: zodResolver(bookingActionSchema),
@@ -56,7 +85,9 @@ export default function ProviderBookings() {
       return res.json();
     },
     onSuccess: () => {
+      // Invalidate both bookings and notifications queries
       queryClient.invalidateQueries({ queryKey: ["/api/bookings/provider"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
         title: "Success",
         description: "Booking updated successfully",
@@ -86,18 +117,47 @@ export default function ProviderBookings() {
 
   const handleAction = (data: BookingActionData) => {
     if (!selectedBooking) return;
-
-    updateBookingMutation.mutate({
+    
+    // Set the correct status based on action type
+    const status = actionType === "accept" ? "accepted"
+      : actionType === "reject" ? "rejected"
+      : actionType === "reschedule" ? "rescheduled"
+      : "completed";
+      
+    // Ensure we have all required data
+    const payload = {
       id: selectedBooking.id,
       data: {
         ...data,
+        status,
+        // For reschedule, ensure we have a date
+        ...(status === "rescheduled" && !data.rescheduleDate && {
+          rescheduleDate: new Date().toISOString()
+        }),
+        // For rejection, ensure we have a reason
+        ...(status === "rejected" && {
+          rejectionReason: data.comments
+        })
+      },
+    };
+    
+    // Execute the mutation
+    updateBookingMutation.mutate(payload);
+  };
+
+  // Reset form when action type changes
+  useEffect(() => {
+    if (actionType) {
+      form.reset({
+        comments: "",
         status: actionType === "accept" ? "accepted"
           : actionType === "reject" ? "rejected"
           : actionType === "reschedule" ? "rescheduled"
-          : "completed"
-      },
-    });
-  };
+          : "completed",
+        rescheduleDate: actionType === "reschedule" ? new Date().toISOString().slice(0, 16) : undefined
+      });
+    }
+  }, [actionType, form]);
 
   return (
     <DashboardLayout>
@@ -174,7 +234,7 @@ export default function ProviderBookings() {
 
                     {booking.status === 'pending' && (
                       <div className="flex gap-2">
-                        <Dialog open={actionType === 'accept'} onOpenChange={() => setActionType(null)}>
+                        <Dialog>
                           <DialogTrigger asChild>
                             <Button
                               variant="outline"
@@ -213,7 +273,7 @@ export default function ProviderBookings() {
                           </DialogContent>
                         </Dialog>
 
-                        <Dialog open={actionType === 'reject'} onOpenChange={() => setActionType(null)}>
+                        <Dialog>
                           <DialogTrigger asChild>
                             <Button
                               variant="outline"
@@ -254,7 +314,7 @@ export default function ProviderBookings() {
                           </DialogContent>
                         </Dialog>
 
-                        <Dialog open={actionType === 'reschedule'} onOpenChange={() => setActionType(null)}>
+                        <Dialog>
                           <DialogTrigger asChild>
                             <Button
                               variant="outline"
@@ -310,7 +370,7 @@ export default function ProviderBookings() {
                     )}
 
                     {booking.status === 'accepted' && (
-                      <Dialog open={actionType === 'complete'} onOpenChange={() => setActionType(null)}>
+                      <Dialog>
                         <DialogTrigger asChild>
                           <Button
                             variant="outline"

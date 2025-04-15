@@ -8,6 +8,7 @@ type NotificationContextType = {
   notifications: Notification[];
   unreadCount: number;
   markAsRead: (id: number) => void;
+  markAllAsRead: () => void;
   deleteNotification: (id: number) => void;
   refreshNotifications: () => void;
   pendingBookingsCount: number;
@@ -20,11 +21,64 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
 
   // Fetch all notifications
-  const { data: notifications = [], refetch: refreshNotifications } = useQuery<Notification[]>({
+  const { data: allNotifications = [], refetch: refreshNotifications } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
     refetchInterval: 30000, // Refetch every 30 seconds
     enabled: !!user,
   });
+  
+  // Filter notifications based on user role
+  const notifications = React.useMemo(() => {
+    if (!user) return [];
+    
+    // For customer, only show relevant notifications
+    if (user.role === 'customer') {
+      return allNotifications.filter(notification => {
+        // For service type notifications, only show accepted, rejected, or rescheduled
+        if (notification.type === 'service') {
+          return notification.title.includes('Booking Accepted') || 
+                 notification.title.includes('Booking Rejected') || 
+                 notification.title.includes('Booking Rescheduled');
+        }
+        // Show all other notification types
+        return true;
+      });
+    }
+    
+    // For service providers, only show service-related notifications
+    if (user.role === 'provider') {
+      return allNotifications.filter(notification => {
+        // For completed services, don't show notifications to avoid button issues
+        if (notification.title.includes('Service Completed')) {
+          return false;
+        }
+        
+        // Only show service notifications that are relevant to this provider
+        if (notification.type === 'service') {
+          return notification.userId === user.id;
+        }
+        
+        // Show general notifications
+        return notification.type !== 'shop';
+      });
+    }
+    
+    // For shop owners, only show shop-related notifications
+    if (user.role === 'shop') {
+      return allNotifications.filter(notification => {
+        // Don't show service provider notifications to shop owners
+        if (notification.type === 'service') {
+          return false;
+        }
+        
+        // Show shop-related and general notifications
+        return true;
+      });
+    }
+    
+    return allNotifications;
+  }, [allNotifications, user]);
+
 
   // Fetch pending bookings count for providers
   useEffect(() => {
@@ -63,6 +117,30 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Mark all notifications as read
+  const markAllAsReadMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", "/api/notifications/mark-all-read");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to mark all notifications as read");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      // Force refresh the notifications data
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      // Immediately update the local state to show zero unread count
+      queryClient.setQueryData(["/api/notifications"], (oldData: Notification[] | undefined) => {
+        if (!oldData) return [];
+        return oldData.map(notification => ({
+          ...notification,
+          isRead: true
+        }));
+      });
+    },
+  });
+
   // Delete notification
   const deleteNotificationMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -84,6 +162,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     notifications,
     unreadCount,
     markAsRead: (id: number) => markAsReadMutation.mutate(id),
+    markAllAsRead: () => markAllAsReadMutation.mutate(),
     deleteNotification: (id: number) => deleteNotificationMutation.mutate(id),
     refreshNotifications,
     pendingBookingsCount,

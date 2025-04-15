@@ -1241,6 +1241,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendStatus(200);
   });
 
+  app.patch("/api/notifications/mark-all-read", requireAuth, async (req, res) => {
+    const { role } = req.body;
+    // Pass both user ID and role to properly filter notifications
+    await storage.markAllNotificationsAsRead(req.user!.id, role);
+    res.sendStatus(200);
+  });
+
   app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
     await storage.deleteNotification(parseInt(req.params.id));
     res.sendStatus(200);

@@ -17,7 +17,7 @@ import {
   cart, wishlist, returnRequests, promotions
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
-import { eq, and, lt, ne } from "drizzle-orm";
+import { eq, and, lt, ne, sql } from "drizzle-orm";
 
 interface BlockedTimeSlot {
   id: number;
@@ -489,6 +489,27 @@ export class PostgresStorage implements IStorage {
 
   async markNotificationAsRead(id: number): Promise<void> {
     await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+  }
+
+  async markAllNotificationsAsRead(userId: number, role?: string): Promise<void> {
+    // Base query condition: notifications for this user
+    let query = db.update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.userId, userId));
+    
+    // Add role-based filtering if role is provided
+    if (role) {
+      if (role === 'shop_owner') {
+        // Shop owners should not see service notifications
+        query = query.where(sql`type != 'service'`);
+      } else if (role === 'provider') {
+        // Service providers should not see order notifications
+        query = query.where(sql`type != 'order'`);
+      }
+      // For customers, we don't need additional filtering
+    }
+    
+    await query;
   }
 
   async deleteNotification(id: number): Promise<void> {
