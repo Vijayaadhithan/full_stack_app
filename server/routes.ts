@@ -1210,14 +1210,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Review routes
   app.post("/api/reviews", requireAuth, requireRole(["customer"]), async (req, res) => {
-    const result = insertReviewSchema.safeParse(req.body);
-    if (!result.success) return res.status(400).json(result.error);
+    try {
+      const result = insertReviewSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json(result.error);
+      
+      // Check if user has already reviewed this service for this booking
+      const existingReviews = await storage.getReviewsByService(result.data.serviceId);
+      const userReview = existingReviews.find(r => 
+        r.customerId === req.user!.id && 
+        r.bookingId === result.data.bookingId
+      );
+      
+      if (userReview) {
+        return res.status(400).json({ 
+          message: "You have already reviewed this service. Please edit your existing review instead."
+        });
+      }
+      
+      const review = await storage.createReview({
+        ...result.data,
+        customerId: req.user!.id,
+      });
+      res.status(201).json(review);
+    } catch (error) {
+      console.error("Error creating review:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to create review" });
+    }
+  });
 
-    const review = await storage.createReview({
-      ...result.data,
-      customerId: req.user!.id,
-    });
-    res.status(201).json(review);
+  // Add endpoint to update an existing review
+  app.patch("/api/reviews/:id", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const reviewId = parseInt(req.params.id);
+      const { rating, review } = req.body;
+      
+      // Verify the review belongs to this user
+      const existingReview = await storage.getReviewById(reviewId);
+      if (!existingReview) {
+        return res.status(404).json({ message: "Review not found" });
+      }
+      
+      if (existingReview.customerId !== req.user!.id) {
+        return res.status(403).json({ message: "You can only edit your own reviews" });
+      }
+      
+      // Update the review
+      const updatedReview = await storage.updateReview(reviewId, { rating, review });
+      res.json(updatedReview);
+    } catch (error) {
+      console.error("Error updating review:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to update review" });
+    }
   });
 
   app.get("/api/reviews/service/:id", requireAuth, async (req, res) => {

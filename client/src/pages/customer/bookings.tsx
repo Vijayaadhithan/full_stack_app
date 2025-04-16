@@ -91,19 +91,52 @@ export default function Bookings() {
     },
   });
 
+  // Check if user has already reviewed this service
+  const { data: existingReviews } = useQuery<Review[]>({
+    queryKey: ["/api/reviews/service/", selectedBooking?.serviceId],
+    enabled: !!selectedBooking?.serviceId,
+  });
+
+  // Determine if the user has already reviewed this service
+  const userReview = existingReviews?.find(review => 
+    review.serviceId === selectedBooking?.serviceId && 
+    review.bookingId === selectedBooking?.id
+  );
+
+  // Set initial review state if editing
+  useEffect(() => {
+    if (userReview) {
+      setRating(userReview.rating);
+      setReview(userReview.review || "");
+    }
+  }, [userReview]);
+
   const reviewMutation = useMutation({
     mutationFn: async (data: {
       serviceId: number;
       rating: number;
       review: string;
+      bookingId?: number;
+      id?: number;
     }) => {
-      const res = await apiRequest("POST", "/api/reviews", data);
-      return res.json();
+      // If we have an existing review ID, update it instead of creating a new one
+      if (data.id) {
+        const res = await apiRequest("PATCH", `/api/reviews/${data.id}`, {
+          rating: data.rating,
+          review: data.review
+        });
+        return res.json();
+      } else {
+        // Create new review
+        const res = await apiRequest("POST", "/api/reviews", data);
+        return res.json();
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reviews/service/", selectedBooking?.serviceId] });
       toast({
-        title: "Review submitted",
+        title: userReview ? "Review updated" : "Review submitted",
         description: "Thank you for your feedback!",
       });
     },
@@ -189,6 +222,9 @@ export default function Bookings() {
       serviceId: selectedBooking.serviceId,
       rating,
       review,
+      bookingId: selectedBooking.id,
+      // If we're editing an existing review, include its ID
+      ...(userReview && { id: userReview.id })
     });
   };
 
@@ -391,12 +427,16 @@ export default function Bookings() {
                                 variant="outline"
                                 onClick={() => setSelectedBooking(booking)}
                               >
-                                Leave Review
+                                {existingReviews?.find(r => r.bookingId === booking.id) 
+                                  ? "Edit Review" 
+                                  : "Leave Review"}
                               </Button>
                             </DialogTrigger>
                             <DialogContent>
                               <DialogHeader>
-                                <DialogTitle>Review Service</DialogTitle>
+                                <DialogTitle>
+                                {userReview ? "Edit Review" : "Review Service"}
+                              </DialogTitle>
                               </DialogHeader>
                               <div className="space-y-4 pt-4">
                                 <div>
@@ -432,7 +472,7 @@ export default function Bookings() {
                                   onClick={handleReview}
                                   disabled={!review}
                                 >
-                                  Submit Review
+                                  {userReview ? "Update Review" : "Submit Review"}
                                 </Button>
                               </div>
                             </DialogContent>

@@ -117,7 +117,7 @@ export function NotificationsCenter() {
            notification.message.includes('new service request'))) {
         return true;
       }
-      return ['service', 'booking'].includes(notification.type);
+      return ['service', 'booking', 'booking_request'].includes(notification.type);
     }
     // Customers should see all relevant notifications
     return true;
@@ -209,21 +209,23 @@ export function NotificationsCenter() {
         <SheetHeader>
           <div className="flex justify-between items-center">
             <SheetTitle>{t('notifications')}</SheetTitle>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => markAllAsReadMutation.mutate()}
-              disabled={markAllAsReadMutation.isPending || filteredNotifications.length === 0}
-            >
-              {markAllAsReadMutation.isPending ? (
-                <span className="animate-pulse">{t('marking')}...</span>
-              ) : (
-                <>
-                  <Check className="h-4 w-4 mr-1" />
-                  {t('mark_all_read')}
-                </>
-              )}
-            </Button>
+            {unreadCount > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => markAllAsReadMutation.mutate()}
+                disabled={markAllAsReadMutation.isPending}
+              >
+                {markAllAsReadMutation.isPending ? (
+                  <span className="animate-pulse">{t('marking')}...</span>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4 mr-1" />
+                    {t('mark_all_read')}
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </SheetHeader>
         <ScrollArea className="h-[calc(100vh-5rem)] mt-4">

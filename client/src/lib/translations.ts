@@ -102,7 +102,19 @@ export const translations = {
     // Notifications
     'notifications': 'Notifications',
     'no_notifications': 'No notifications',
-    'mark_as_read': 'Mark as read',
+    'mark_all_read': 'Mark all as read',
+    'marking': 'Marking',
+    'notifications_cleared': 'Notifications Cleared',
+    'all_notifications_marked_as_read': 'All notifications marked as read',
+    
+    // Booking Process
+    'booking_process_info': 'Booking Process Information',
+    'booking_process_step1': 'Step 1: Request Booking',
+    'booking_process_step2': 'Step 2: Provider Review',
+    'booking_process_step3': 'Step 3: Service Completion',
+    'booking_process_step4': 'Step 4: If Rejected',
+    'understand': 'Understand',
+    'I understand': 'I understand',
 
     // Navigation
     'dashboard': 'Dashboard',
@@ -181,6 +193,15 @@ export const translations = {
     'error': 'त्रुटि', 
     'loading': 'लोड हो रहा है...', 
     // Add Hindi translations for all the above keys
+    
+    // Booking Process
+    'booking_process_info': 'बुकिंग प्रक्रिया जानकारी',
+    'booking_process_step1': 'चरण 1: बुकिंग अनुरोध',
+    'booking_process_step2': 'चरण 2: प्रदाता समीक्षा',
+    'booking_process_step3': 'चरण 3: सेवा पूर्णता',
+    'booking_process_step4': 'चरण 4: यदि अस्वीकृत',
+    'understand': 'समझें',
+    'I understand': 'मैं समझता हूँ',
 
     // Shop Management
     'my_products': 'मेरे उत्पाद', 
@@ -349,6 +370,15 @@ export const translations = {
     'loading': 'ஏற்றுகொள்ளுதல்...', 
     // Add Tamil translations for all the above keys
 
+    // Booking Process
+    'booking_process_info': 'முன்பதிவு செயல்முறை தகவல்',
+    'booking_process_step1': 'படி 1: முன்பதிவு கோரிக்கை',
+    'booking_process_step2': 'படி 2: வழங்குநர் மதிப்பாய்வு',
+    'booking_process_step3': 'படி 3: சேவை நிறைவு',
+    'booking_process_step4': 'படி 4: நிராகரிக்கப்பட்டால்',
+    'understand': 'புரிந்துகொள்',
+    'I understand': 'நான் புரிந்துகொள்கிறேன்',
+
     // Shop Management
     'my_products': 'எனது பொருட்கள்', 
     'add_product': 'பொருள் சேர்',
@@ -436,7 +466,10 @@ export const translations = {
     // Notifications
     'notifications': 'அறிவிப்புகள்', 
     'no_notifications': 'எந்த அறிவிப்புகளும் இல்லை', 
-    'mark_as_read': 'படித்ததாகக் குறிக்கவும்', 
+    'mark_all_read': 'அனைத்தையும் படித்ததாக குறி',
+    'marking': 'குறிக்கிறது',
+    'notifications_cleared': 'அறிவிப்புகள் அழிக்கப்பட்டன',
+    'all_notifications_marked_as_read': 'அனைத்து அறிவிப்புகளும் படித்ததாக குறிக்கப்பட்டன',
 
     // Navigation
     'dashboard': 'டாஷ்போர்டு',

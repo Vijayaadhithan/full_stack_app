@@ -96,6 +96,8 @@ export interface IStorage {
   createReview(review: InsertReview): Promise<Review>;
   getReviewsByService(serviceId: number): Promise<Review[]>;
   getReviewsByProvider(providerId: number): Promise<Review[]>;
+  getReviewById(id: number): Promise<Review | undefined>;
+  updateReview(id: number, data: { rating?: number; review?: string }): Promise<Review>;
   updateReview(id: number, review: Partial<Review>): Promise<Review>;
 
   // Notification operations

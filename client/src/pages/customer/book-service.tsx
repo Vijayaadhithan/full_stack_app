@@ -561,13 +561,25 @@ export default function BookService() {
             <DialogTitle>{t("booking_process_info")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p>{t("booking_process_step1") || "When you request a booking, the service provider will receive a notification."}</p>
-            <p>{t("booking_process_step2") || "The provider will review your request and either accept or reject it. You'll receive a notification with their decision."}</p>
-            <p>{t("booking_process_step3") || "If accepted, you'll meet the provider at the scheduled time. After the service is completed, you can mark it as satisfactory and proceed with payment."}</p>
-            <p>{t("booking_process_step4") || "If rejected, you'll receive a notification with the reason and can book with another provider."}</p>
+            <div className="mb-4">
+              <h3 className="font-medium text-lg mb-1">{t("booking_process_step1")}</h3>
+              <p className="text-muted-foreground">{t("When you request a booking, the service provider will receive a notification.")}</p>
+            </div>
+            <div className="mb-4">
+              <h3 className="font-medium text-lg mb-1">{t("booking_process_step2")}</h3>
+              <p className="text-muted-foreground">{t("The provider will review your request and either accept or reject it. You'll receive a notification with their decision.")}</p>
+            </div>
+            <div className="mb-4">
+              <h3 className="font-medium text-lg mb-1">{t("booking_process_step3")}</h3>
+              <p className="text-muted-foreground">{t("If accepted, you'll meet the provider at the scheduled time. After the service is completed, you can mark it as satisfactory and proceed with payment.")}</p>
+            </div>
+            <div className="mb-4">
+              <h3 className="font-medium text-lg mb-1">{t("booking_process_step4")}</h3>
+              <p className="text-muted-foreground">{t("If rejected, you'll receive a notification with the reason and can book with another provider.")}</p>
+            </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => setDialogOpen(false)}>{t("understand")}</Button>
+            <Button onClick={() => setDialogOpen(false)}>{t("I understand")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

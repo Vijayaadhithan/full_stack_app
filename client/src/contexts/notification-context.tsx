@@ -53,9 +53,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           return false;
         }
         
-        // Only show service notifications that are relevant to this provider
-        if (notification.type === 'service') {
-          return notification.userId === user.id;
+        // Show booking requests and service notifications
+        if (notification.type === 'service' || notification.type === 'booking_request') {
+          return true;
         }
         
         // Show general notifications
