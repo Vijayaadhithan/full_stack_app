@@ -18,6 +18,8 @@ import {
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
 import { eq, and, lt, ne, sql } from "drizzle-orm";
+import { toISTForStorage, getCurrentISTDate, fromDatabaseToIST, getExpirationDate, convertArrayDatesToIST } from "./ist-utils";
+// Import date utilities for IST handling
 
 interface BlockedTimeSlot {
   id: number;
@@ -146,9 +148,9 @@ export class PostgresStorage implements IStorage {
       ));
   }
 
-  // Process expired bookings
+  // Process expired bookings using IST
   async processExpiredBookings(): Promise<void> {
-    const now = new Date();
+    const now = getCurrentISTDate();
     const expiredBookings = await db.select().from(bookings)
       .where(and(
         eq(bookings.status, 'pending'),
@@ -158,7 +160,8 @@ export class PostgresStorage implements IStorage {
     for (const booking of expiredBookings) {
       await this.updateBooking(booking.id, {
         status: 'expired',
-        comments: 'Booking expired automatically',
+        comments: 'Booking expired automatically (IST)',
+        changedBy: null
       });
     }
   }
@@ -202,19 +205,20 @@ export class PostgresStorage implements IStorage {
 
   // ─── BOOKING OPERATIONS ──────────────────────────────────────────
   async createBooking(booking: InsertBooking): Promise<Booking> {
-    // Set default values for new bookings (e.g. createdAt)
+    // Set default values for new bookings with IST timestamps
     const bookingWithDefaults = {
       ...booking,
-      createdAt: new Date(),
-      // expiresAt can be set automatically by a trigger or as needed
+      createdAt: getCurrentISTDate(),
+      // Set expiresAt to 24 hours from now in IST if needed
+      expiresAt: booking.expiresAt || getExpirationDate(24)
     };
     const result = await db.insert(bookings).values(bookingWithDefaults).returning();
 
-    // Add entry to booking history
+    // Add entry to booking history with IST timestamp
     await db.insert(bookingHistory).values({
       bookingId: result[0].id,
       status: result[0].status,
-      changedAt: new Date(),
+      changedAt: getCurrentISTDate(),
       changedBy: booking.customerId,
       comments: 'Booking created'
     });
@@ -250,17 +254,23 @@ export class PostgresStorage implements IStorage {
     const currentBooking = await this.getBooking(id);
     if (!currentBooking) throw new Error("Booking not found");
 
+    // Set IST timestamp for any updates
+    const bookingWithIST = {
+      ...booking,
+      updatedAt: getCurrentISTDate()
+    };
+
     const result = await db.update(bookings)
-      .set(booking)
+      .set(bookingWithIST)
       .where(eq(bookings.id, id))
       .returning();
 
-    // If the status changed, add an entry in the booking history table
+    // If the status changed, add an entry in the booking history table with IST timestamp
     if (booking.status && booking.status !== currentBooking.status) {
       await db.insert(bookingHistory).values({
         bookingId: id,
         status: booking.status,
-        changedAt: new Date(),
+        changedAt: getCurrentISTDate(),
         changedBy: booking.changedBy || null,
         comments: booking.comments || `Status changed from ${currentBooking.status} to ${booking.status}`
       });
@@ -356,14 +366,23 @@ export class PostgresStorage implements IStorage {
 
   // ─── CART OPERATIONS ─────────────────────────────────────────────
   async addToCart(customerId: number, productId: number, quantity: number): Promise<void> {
-    const existingItem = await db.select().from(cart)
-      .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
-    if (existingItem.length > 0) {
-      await db.update(cart)
-        .set({ quantity })
+    console.log(`Adding product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
+    try {
+      const existingItem = await db.select().from(cart)
         .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
-    } else {
-      await db.insert(cart).values({ customerId, productId, quantity });
+      
+      if (existingItem.length > 0) {
+        console.log(`Updating existing cart item for customer ID ${customerId}, product ID ${productId}`);
+        await db.update(cart)
+          .set({ quantity })
+          .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
+      } else {
+        console.log(`Creating new cart item for customer ID ${customerId}, product ID ${productId}`);
+        await db.insert(cart).values({ customerId, productId, quantity });
+      }
+    } catch (error) {
+      console.error(`Error adding product ID ${productId} to cart for customer ID ${customerId}:`, error);
+      throw new Error(`Failed to add product to cart: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -372,15 +391,27 @@ export class PostgresStorage implements IStorage {
   }
 
   async getCart(customerId: number): Promise<{ product: Product; quantity: number }[]> {
-    const cartItems = await db.select().from(cart).where(eq(cart.customerId, customerId));
-    const result = [];
-    for (const item of cartItems) {
-      const productResult = await db.select().from(products).where(eq(products.id, item.productId));
-      if (productResult.length > 0) {
-        result.push({ product: productResult[0], quantity: item.quantity });
+    console.log(`Getting cart for customer ID: ${customerId}`);
+    try {
+      const cartItems = await db.select().from(cart).where(eq(cart.customerId, customerId));
+      console.log(`Found ${cartItems.length} cart items for customer ID: ${customerId}`);
+      
+      const result = [];
+      for (const item of cartItems) {
+        const productResult = await db.select().from(products).where(eq(products.id, item.productId));
+        if (productResult.length > 0 && !productResult[0].isDeleted) {
+          result.push({ product: productResult[0], quantity: item.quantity });
+        } else {
+          // If product doesn't exist or is deleted, remove it from cart
+          console.log(`Removing non-existent or deleted product ID ${item.productId} from cart`);
+          await this.removeFromCart(customerId, item.productId);
+        }
       }
+      return result;
+    } catch (error) {
+      console.error(`Error getting cart for customer ID ${customerId}:`, error);
+      return [];
     }
-    return result;
   }
 
   async clearCart(customerId: number): Promise<void> {
@@ -653,11 +684,23 @@ export class PostgresStorage implements IStorage {
   }
 
   async getBookingsByService(serviceId: number, date: Date): Promise<Booking[]> {
+    // Convert date to start and end of day in IST
+    const istDate = toISTForStorage(date);
+    const startDate = new Date(istDate);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(istDate);
+    endDate.setHours(23, 59, 59, 999);
     // Implementation for querying bookings by service and date
     return [];
   }
 
   async getProviderSchedule(providerId: number, date: Date): Promise<Booking[]> {
+    // Convert date to start and end of day in IST
+    const istDate = toISTForStorage(date);
+    const startDate = new Date(istDate);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(istDate);
+    endDate.setHours(23, 59, 59, 999);
     // Implementation joining services and bookings tables
     return [];
   }
@@ -688,8 +731,15 @@ export class PostgresStorage implements IStorage {
   }
 
   async createBlockedTimeSlot(data: InsertBlockedTimeSlot): Promise<BlockedTimeSlot> {
+    // Implementation would depend on your database structure
+    // Convert date to IST
+    const blockedSlot = {
+      id: Math.floor(Math.random() * 10000), // In a real DB this would be auto-generated
+      ...data,
+      date: toISTForStorage(data.date)
+    };
     // Insert blocked time slot into the table (implementation required)
-    return {} as BlockedTimeSlot;
+    return blockedSlot;
   }
 
   async deleteBlockedTimeSlot(slotId: number): Promise<void> {
@@ -719,15 +769,29 @@ export class PostgresStorage implements IStorage {
     const order = await this.getOrder(orderId);
     if (!order) throw new Error("Order not found");
 
-    order.status = status;
-    if (trackingInfo) order.trackingInfo = trackingInfo;
-
-    return await this.updateOrder(orderId, order);
+    // Update the order status with IST timestamp
+    return await this.updateOrder(orderId, { 
+      status, 
+      trackingInfo: trackingInfo || order.trackingInfo,
+      updatedAt: getCurrentISTDate() 
+    });
   }
 
   async getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]> {
-    // Query order status updates table (implementation required)
-    return [];
+    // This would typically be fetched from a dedicated order_status_history table
+    // For this example, we'll return a mock timeline
+    const order = await this.getOrder(orderId);
+    if (!order) throw new Error("Order not found");
+    
+    // Mock timeline data with IST timestamps
+    const timeline: OrderStatusUpdate[] = [
+      {
+        orderId,
+        status: "pending",
+        timestamp: fromDatabaseToIST(order.createdAt || new Date()) as Date,
+      }
+    ];
+    return timeline;
   }
 
   async updateProviderProfile(id: number, profile: Partial<User>): Promise<User> {
