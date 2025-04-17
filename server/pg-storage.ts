@@ -45,6 +45,16 @@ export class PostgresStorage implements IStorage {
       createTableIfMissing: true
     });
   }
+  
+  // ─── PROMOTION OPERATIONS ─────────────────────────────────────────
+  async createPromotion(promotion: InsertPromotion): Promise<Promotion> {
+    const result = await db.insert(promotions).values(promotion).returning();
+    return result[0];
+  }
+
+  async getPromotionsByShop(shopId: number): Promise<Promotion[]> {
+    return await db.select().from(promotions).where(eq(promotions.shopId, shopId));
+  }
 
   // ─── USER OPERATIONS ─────────────────────────────────────────────
   async getUser(id: number): Promise<User | undefined> {

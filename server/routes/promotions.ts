@@ -113,6 +113,23 @@ export function registerPromotionRoutes(app: Express) {
         excludedProducts: z.array(z.number()).optional(),
         minPurchase: z.coerce.number().min(0).optional(),
         maxDiscount: z.coerce.number().min(0).optional(),
+      })
+      // Only validate name if it's being updated and not just toggling isActive
+      .superRefine((data, ctx) => {
+        // If we're updating name, validate it
+        if (data.name !== undefined && data.name.trim() === "") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Promotion name is required",
+            path: ["name"]
+          });
+        }
+      })
+      .refine(data => {
+        // Ensure at least one field is provided for the update
+        return Object.keys(data).length > 0;
+      }, {
+        message: "At least one field must be provided for update"
       });
 
       const result = promotionUpdateSchema.safeParse(req.body);
