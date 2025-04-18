@@ -95,11 +95,11 @@ export default function ShopReviews() {
                           ))}
                         </div>
                         <span className="text-sm text-muted-foreground">
-                          {new Date(review.createdAt).toLocaleDateString()}
+                          {review.createdAt ? new Date(review.createdAt).toLocaleDateString() : 'N/A'}
                         </span>
                       </div>
                       <p>{review.review}</p>
-                      {review.images?.length > 0 && (
+                      {review.images && review.images.length > 0 && (
                         <div className="flex gap-2 mt-2">
                           {review.images.map((image, i) => (
                             <img

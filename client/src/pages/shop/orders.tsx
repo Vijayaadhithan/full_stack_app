@@ -182,7 +182,7 @@ export default function ShopOrders() {
                             {t("order")} #{order.id}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(order.orderDate).toLocaleDateString()}
+                            {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'N/A'}
                           </p>
                         </div>
                         <div className="text-right">
@@ -360,7 +360,7 @@ export default function ShopOrders() {
                             {t("return_request")} #{returnRequest.id}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(returnRequest.createdAt).toLocaleDateString()}
+                            {returnRequest.createdAt ? new Date(returnRequest.createdAt).toLocaleDateString() : 'N/A'}
                           </p>
                         </div>
                         <div className="flex gap-2">

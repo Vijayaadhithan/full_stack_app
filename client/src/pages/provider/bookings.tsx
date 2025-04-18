@@ -158,7 +158,14 @@ export default function ProviderBookings() {
     };
     
     // Execute the mutation
-    updateBookingMutation.mutate(payload);
+    updateBookingMutation.mutate({
+      id: payload.id,
+      data: {
+        status: payload.data.status as "accepted" | "rejected" | "rescheduled" | "completed",
+        comments: payload.data.comments,
+        rescheduleDate: payload.data.rescheduleDate
+      }
+    });
   };
 
   return (

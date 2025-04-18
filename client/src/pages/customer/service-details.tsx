@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,7 +6,7 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Service } from "@shared/schema";
 import { motion } from "framer-motion";
-import { Loader2, MapPin, Star, Clock } from "lucide-react";
+import { Loader2, MapPin, Star, Clock } from 'lucide-react';
 
 type ServiceDetails = Service & {
   provider: {
@@ -27,18 +28,24 @@ export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
   console.log("Service ID from params:", id);
 
-  const { data: service, isLoading, error } = useQuery<ServiceDetails>({
+  const { data: service, isLoading, isError, error, isSuccess } = useQuery<ServiceDetails, Error>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
     retry: false,
-    onError: (error) => {
+  });
+
+  useEffect(() => {
+    if (isError && error) {
       console.error("Error fetching service:", error);
       console.error("Query key:", [`/api/services/${id}`]);
-    },
-    onSuccess: (data) => {
-      console.log("Successfully fetched service:", data);
     }
-  });
+  }, [isError, error, id]);
+
+  useEffect(() => {
+    if (isSuccess && service) {
+      console.log("Successfully fetched service:", service);
+    }
+  }, [isSuccess, service]);
 
   if (isLoading) {
     return (

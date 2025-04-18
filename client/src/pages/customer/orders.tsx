@@ -74,7 +74,7 @@ export default function Orders() {
                           <h3 className="font-semibold">Order #{order.id}</h3>
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Placed {order.createdAt ? formatDistanceToNow(new Date(order.createdAt), { addSuffix: true }) : 'recently'}
+                          Placed {order.orderDate ? formatDistanceToNow(new Date(order.orderDate), { addSuffix: true }) : 'recently'}
                         </p>
                         <div className="mt-2">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">

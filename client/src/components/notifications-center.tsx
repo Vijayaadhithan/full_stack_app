@@ -111,7 +111,7 @@ export function NotificationsCenter() {
     // and specifically service request notifications
     if (user.role === 'provider') {
       // Include notifications about new service requests
-      if (notification.type === 'service' && 
+      if (notification.type === 'service_request' &&
           (notification.title.includes('New Service Request') || 
            notification.title.includes('Service Request') || 
            notification.message.includes('new service request'))) {
@@ -182,7 +182,7 @@ export function NotificationsCenter() {
           navigate(`/shop/returns${id ? `/${id}` : ''}`);
         }
         break;
-      case "service":
+      case "service_request":
         if (user?.role === 'provider') {
           navigate(`/provider/services${id ? `/${id}` : ''}`);
         }

@@ -2,7 +2,7 @@ import { ShopLayout } from "@/components/layout/shop-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
-import { Order, Product, ProductReview } from "@shared/schema";
+import { Order as BaseOrder, Product, ProductReview } from "@shared/schema";
 import { Loader2, TrendingUp, TrendingDown } from "lucide-react";
 import {
   LineChart,
@@ -18,6 +18,20 @@ import {
 
 export default function ShopAnalytics() {
   const { user } = useAuth();
+
+  // Define a type for Order with items included
+  type OrderItem = {
+    id: number;
+    productId: number;
+    name: string;
+    quantity: number;
+    price: string; // Assuming price is string based on schema, adjust if needed
+    total: string; // Assuming total is string based on schema, adjust if needed
+  };
+
+  type Order = BaseOrder & {
+    items?: OrderItem[]; // Make items optional as it might not always be present
+  };
 
   const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: [`/api/orders/shop/${user?.id}`],
@@ -39,7 +53,7 @@ export default function ShopAnalytics() {
 
   // Calculate daily revenue data for the chart
   const dailyRevenue = orders?.reduce((acc, order) => {
-    const date = new Date(order.orderDate).toLocaleDateString();
+    const date = order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'Unknown Date';
     acc[date] = (acc[date] || 0) + parseFloat(order.total);
     return acc;
   }, {} as Record<string, number>);
@@ -51,17 +65,18 @@ export default function ShopAnalytics() {
 
   // Calculate product performance
   const productPerformance = products?.map(product => {
-    const productOrders = orders?.filter(order => 
-      order.items?.some(item => item.productId === product.id)
+    const productOrders = orders?.filter(order =>
+      order.items?.some((item: OrderItem) => item.productId === product.id)
     ) || [];
-    const totalSold = productOrders.reduce((sum, order) => 
-      sum + (order.items?.find(item => item.productId === product.id)?.quantity || 0), 
+    const totalSold = productOrders.reduce((sum, order) =>
+      sum + (order.items?.find((item: OrderItem) => item.productId === product.id)?.quantity || 0),
     0);
     const revenue = productOrders.reduce((sum, order) => {
-      const item = order.items?.find(item => item.productId === product.id);
-      return sum + (item ? parseFloat(item.price) * item.quantity : 0);
+      const item = order.items?.find((item: OrderItem) => item.productId === product.id);
+      // Ensure item.price is treated as a number for calculation
+      return sum + (item ? parseFloat(item.price || '0') * item.quantity : 0);
     }, 0);
-    
+
     return {
       name: product.name,
       sold: totalSold,

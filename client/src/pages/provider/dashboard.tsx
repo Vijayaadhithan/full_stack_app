@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,12 +52,12 @@ import { useLanguage } from "@/contexts/language-context";
 // ─── PENDING BOOKING REQUESTS COMPONENT ───────────────────────────────
 function PendingBookingRequestsList() {
   const { toast } = useToast();
-  const [selectedBooking, setSelectedBooking] = useState<(Booking & { service: any }) | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<(Booking & { service?: Service }) | null>(null); // Use optional Service type
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<'accept' | 'reject' | null>(null);
   const [actionComment, setActionComment] = useState('');
-  
-  const { data: pendingBookings, isLoading } = useQuery<(Booking & { service: any })[]>({
+
+  const { data: pendingBookings, isLoading } = useQuery<(Booking & { service?: Service })[]>({
     queryKey: ["/api/bookings/provider/pending"],
   });
 
@@ -119,12 +119,12 @@ function PendingBookingRequestsList() {
             <div>
               <p className="font-medium">{booking.service?.name}</p>
               <p className="text-sm text-muted-foreground">
-                {format(new Date(booking.bookingDate), 'PPP')} at {format(new Date(booking.bookingDate), 'p')}
+                {booking.bookingDate ? `${format(new Date(booking.bookingDate), 'PPP')} at ${format(new Date(booking.bookingDate), 'p')}` : 'Date not set'}
               </p>
               <div className="flex items-center mt-1">
                 <Clock className="h-3 w-3 mr-1 text-yellow-500" />
                 <span className="text-xs">
-                  Expires in {Math.ceil((new Date(booking.expiresAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days
+                  {booking.expiresAt ? `Expires in ${Math.ceil((new Date(booking.expiresAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days` : 'Expiration not set'}
                 </span>
               </div>
             </div>
@@ -175,7 +175,7 @@ function PendingBookingRequestsList() {
             <div className="space-y-2">
               <p className="text-sm font-medium">Date & Time</p>
               <p className="text-sm">
-                {selectedBooking && format(new Date(selectedBooking.bookingDate), 'PPP')} at {selectedBooking && format(new Date(selectedBooking.bookingDate), 'p')}
+                {selectedBooking?.bookingDate ? `${format(new Date(selectedBooking.bookingDate), 'PPP')} at ${format(new Date(selectedBooking.bookingDate), 'p')}` : 'Date not set'}
               </p>
             </div>
             <div className="space-y-2">
@@ -212,7 +212,7 @@ function PendingBookingRequestsList() {
 
 // ─── BOOKING HISTORY COMPONENT ─────────────────────────────────────────
 function BookingHistoryList() {
-  const { data: bookingHistory, isLoading } = useQuery<(Booking & { service: any })[]>({
+  const { data: bookingHistory, isLoading } = useQuery<(Booking & { service?: Service })[]>({ // Add optional service
     queryKey: ["/api/bookings/provider/history"],
   });
 
@@ -237,8 +237,10 @@ function BookingHistoryList() {
         {recentHistory.map((booking) => (
           <div key={booking.id} className="flex items-center justify-between border rounded-md p-3">
             <div>
-              <p className="font-medium">{booking.service?.name}</p>
-              <p className="text-sm text-muted-foreground">{format(new Date(booking.bookingDate), 'PPP')}</p>
+              <p className="font-medium">{booking.service?.name}</p> {/* Use optional chaining */}
+              <p className="text-sm text-muted-foreground">
+                {booking.bookingDate ? format(new Date(booking.bookingDate), 'PPP') : 'Date not set'} {/* Add null check */}
+              </p>
               <div className="flex items-center mt-1">
                 {booking.status === 'accepted' && (
                   <>
@@ -398,17 +400,17 @@ export default function ProviderDashboard() {
   });
 
   // Fetch services, bookings and reviews (only after user is available)
-  const { data: services, isLoading: servicesLoading } = useQuery<Service[]>({
+  const { data: services, isLoading: servicesLoading } = useQuery<Service[]>({ // Service type from @shared/schema
     queryKey: [`/api/services/provider/${user?.id}`],
     enabled: !!user?.id,
   });
 
-  const { data: bookings, isLoading: bookingsLoading } = useQuery<Booking[]>({
+  const { data: bookings, isLoading: bookingsLoading } = useQuery<(Booking & { service?: Service })[]>({ // Adjust Booking type
     queryKey: [`/api/bookings/provider/${user?.id}`],
     enabled: !!user?.id,
   });
 
-  const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
+  const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({ // Review type from @shared/schema
     queryKey: [`/api/reviews/provider/${user?.id}`],
     enabled: !!user?.id,
   });
@@ -424,7 +426,7 @@ export default function ProviderDashboard() {
     ? bookings
         .filter(
           (booking) =>
-            booking.status === "confirmed" && isAfter(new Date(booking.bookingDate), new Date())
+            booking.status === "accepted" && booking.bookingDate && isAfter(new Date(booking.bookingDate), new Date())
         )
         .sort(
           (a, b) =>
@@ -661,9 +663,28 @@ export default function ProviderDashboard() {
                               size="icon"
                               onClick={() => {
                                 setEditingService(service);
+                                // Explicitly map fields and provide defaults for nullish values
+                                const defaultWorkingHours = {
+                                  monday: { isAvailable: true, start: "09:00", end: "17:00" },
+                                  tuesday: { isAvailable: true, start: "09:00", end: "17:00" },
+                                  wednesday: { isAvailable: true, start: "09:00", end: "17:00" },
+                                  thursday: { isAvailable: true, start: "09:00", end: "17:00" },
+                                  friday: { isAvailable: true, start: "09:00", end: "17:00" },
+                                  saturday: { isAvailable: true, start: "10:00", end: "16:00" },
+                                  sunday: { isAvailable: false, start: "00:00", end: "00:00" },
+                                };
                                 form.reset({
-                                  ...service,
-                                  price: service.price.toString(),
+                                  name: service.name,
+                                  description: service.description ?? "",
+                                  category: service.category,
+                                  price: service.price?.toString() ?? "", // Ensure price is string and handle null
+                                  duration: service.duration,
+                                  isAvailable: service.isAvailable ?? true,
+                                  workingHours: service.workingHours ?? defaultWorkingHours,
+                                  breakTime: service.breakTime ?? [],
+                                  maxDailyBookings: service.maxDailyBookings ?? 1,
+                                  bufferTime: service.bufferTime ?? 0,
+                                  location: service.location ?? { lat: 0, lng: 0 },
                                 });
                                 setDialogOpen(true);
                               }}
@@ -848,7 +869,7 @@ export default function ProviderDashboard() {
                               control={form.control}
                               name={`workingHours.${key}.isAvailable`}
                               render={({ field }) => (
-                                <Switch checked={field.value} onCheckedChange={field.onChange} size="sm" />
+                                <Switch checked={field.value} onCheckedChange={field.onChange} />
                               )}
                             />
                           </div>

@@ -217,9 +217,9 @@ export default function Bookings() {
   };
 
   const handleReview = () => {
-    if (!selectedBooking) return;
+    if (!selectedBooking || !selectedBooking.serviceId) return; // Add check for serviceId
     reviewMutation.mutate({
-      serviceId: selectedBooking.serviceId,
+      serviceId: selectedBooking.serviceId, // Now safe to access
       rating,
       review,
       bookingId: selectedBooking.id,
@@ -286,11 +286,13 @@ export default function Bookings() {
                             Status: {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                             {booking.rejectionReason && ` - Reason: ${booking.rejectionReason}`}
                           </p>
-                          {booking.isRecurring && (
+                          {/* Remove the block trying to access non-existent properties 
+                          {booking.isRecurring && ( 
                             <p className="text-sm text-muted-foreground">
-                              Recurring: {booking.recurringPattern}
+                              Recurring: {booking.recurringPattern} 
                             </p>
-                          )}
+                          )} 
+                          */}
                         </div>
                         <div className="space-x-2">
                           {booking.status === "accepted" && (

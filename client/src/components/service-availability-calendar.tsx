@@ -190,9 +190,9 @@ export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime
               ))}
               <div className="space-y-2 mt-4">
                 <h5 className="font-medium">{t("blocked_slots")}</h5>
-                {blockedSlots?.filter(slot => 
+                {blockedSlots?.filter((slot: { date: string }) =>
                   format(new Date(slot.date), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
-                ).map((slot) => (
+                ).map((slot: { id: number; startTime: string; endTime: string; reason?: string }) => (
                   <div key={slot.id} className="flex items-center justify-between p-2 border rounded">
                     <div>
                       <p className="font-medium">

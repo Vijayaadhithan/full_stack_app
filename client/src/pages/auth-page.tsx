@@ -26,6 +26,7 @@ const translations = {
     customer: "Customer",
     provider: "Service Provider",
     shop: "Shop Owner",
+    admin: "Admin",
     language: "Language",
   },
   hi: {
@@ -41,6 +42,7 @@ const translations = {
     customer: "ग्राहक",
     provider: "सेवा प्रदाता",
     shop: "दुकान मालिक",
+    admin: "प्रशासक",
     language: "भाषा",
   },
   ta: {
@@ -54,33 +56,44 @@ const translations = {
     phone: "தொலைபேசி",
     email: "மின்னஞ்சல்",
     customer: "வாடிக்கையாளர்",
-    provider: "சேவை வழங்குநர்",
+    provider: "சேवை வழங்குநர்",
     shop: "கடை உரிமையாளர்",
+    admin: "நிர்வாகி",
     language: "மொழி",
   }
 };
 
-const authSchema = z.object({
+// Schemas
+const loginSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   role: z.enum(["customer", "provider", "shop", "admin"]),
-  name: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().email().optional(),
+  name: z.string().min(1, "Name is required"),
+  phone: z.string().min(10, "Valid phone number is required"),
+  email: z.string().email("Valid email is required"),
 });
+
+// Types
+type LoginData = z.infer<typeof loginSchema>;
+type RegisterData = z.infer<typeof registerSchema>;
 
 export default function AuthPage() {
   const { loginMutation, registerMutation, user } = useAuth();
   const [, setLocation] = useLocation();
-  const [language, setLanguage] = useState("en");
-  const t = translations[language as keyof typeof translations];
+  const [language, setLanguage] = useState<keyof typeof translations>("en");
+  const t = translations[language];
 
-  const loginForm = useForm({
-    resolver: zodResolver(authSchema.pick({ username: true, password: true })),
+  const loginForm = useForm<LoginData>({
+    resolver: zodResolver(loginSchema),
   });
 
-  const registerForm = useForm({
-    resolver: zodResolver(authSchema),
+  const registerForm = useForm<RegisterData>({
+    resolver: zodResolver(registerSchema),
   });
 
   useEffect(() => {
@@ -94,7 +107,7 @@ export default function AuthPage() {
       <Card className="w-full max-w-lg">
         <CardHeader className="space-y-4">
           <div className="flex justify-end">
-            <Select value={language} onValueChange={setLanguage}>
+            <Select value={language} onValueChange={(val) => setLanguage(val as keyof typeof translations)}>
               <SelectTrigger className="w-32">
                 <SelectValue placeholder={t.language} />
               </SelectTrigger>
@@ -105,10 +118,9 @@ export default function AuthPage() {
               </SelectContent>
             </Select>
           </div>
-          <CardTitle className="text-2xl text-center">
-            {t.welcome}
-          </CardTitle>
+          <CardTitle className="text-2xl text-center">{t.welcome}</CardTitle>
         </CardHeader>
+
         <CardContent>
           <Tabs defaultValue="login">
             <TabsList className="grid w-full grid-cols-2">
@@ -116,6 +128,7 @@ export default function AuthPage() {
               <TabsTrigger value="register">{t.register}</TabsTrigger>
             </TabsList>
 
+            {/* Login Tab */}
             <TabsContent value="login">
               <form
                 onSubmit={loginForm.handleSubmit((data) =>
@@ -123,17 +136,30 @@ export default function AuthPage() {
                 )}
                 className="space-y-4"
               >
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="username">{t.username}</Label>
-                  <Input {...loginForm.register("username")} />
+                  <Input id="username" {...loginForm.register("username")} />
+                  {loginForm.formState.errors.username && (
+                    <p className="text-red-500 text-sm">
+                      {loginForm.formState.errors.username.message}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
+
+                <div className="space-y-1">
                   <Label htmlFor="password">{t.password}</Label>
                   <Input
+                    id="password"
                     type="password"
                     {...loginForm.register("password")}
                   />
+                  {loginForm.formState.errors.password && (
+                    <p className="text-red-500 text-sm">
+                      {loginForm.formState.errors.password.message}
+                    </p>
+                  )}
                 </div>
+
                 <Button
                   type="submit"
                   className="w-full"
@@ -148,6 +174,7 @@ export default function AuthPage() {
               </form>
             </TabsContent>
 
+            {/* Register Tab */}
             <TabsContent value="register">
               <form
                 onSubmit={registerForm.handleSubmit((data) =>
@@ -155,40 +182,79 @@ export default function AuthPage() {
                 )}
                 className="space-y-4"
               >
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="role">{t.role}</Label>
                   <select
+                    id="role"
                     {...registerForm.register("role")}
                     className="w-full p-2 border rounded"
                   >
                     <option value="customer">{t.customer}</option>
                     <option value="provider">{t.provider}</option>
                     <option value="shop">{t.shop}</option>
+                    <option value="admin">{t.admin}</option>
                   </select>
+                  {registerForm.formState.errors.role && (
+                    <p className="text-red-500 text-sm">
+                      {registerForm.formState.errors.role.message}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
+
+                <div className="space-y-1">
                   <Label htmlFor="username">{t.username}</Label>
-                  <Input {...registerForm.register("username")} />
+                  <Input id="username" {...registerForm.register("username")} />
+                  {registerForm.formState.errors.username && (
+                    <p className="text-red-500 text-sm">
+                      {registerForm.formState.errors.username.message}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
+
+                <div className="space-y-1">
                   <Label htmlFor="password">{t.password}</Label>
                   <Input
+                    id="password"
                     type="password"
                     {...registerForm.register("password")}
                   />
+                  {registerForm.formState.errors.password && (
+                    <p className="text-red-500 text-sm">
+                      {registerForm.formState.errors.password.message}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
+
+                <div className="space-y-1">
                   <Label htmlFor="name">{t.name}</Label>
-                  <Input {...registerForm.register("name")} />
+                  <Input id="name" {...registerForm.register("name")} />
+                  {registerForm.formState.errors.name && (
+                    <p className="text-red-500 text-sm">
+                      {registerForm.formState.errors.name.message}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
+
+                <div className="space-y-1">
                   <Label htmlFor="phone">{t.phone}</Label>
-                  <Input {...registerForm.register("phone")} />
+                  <Input id="phone" {...registerForm.register("phone")} />
+                  {registerForm.formState.errors.phone && (
+                    <p className="text-red-500 text-sm">
+                      {registerForm.formState.errors.phone.message}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
+
+                <div className="space-y-1">
                   <Label htmlFor="email">{t.email}</Label>
-                  <Input type="email" {...registerForm.register("email")} />
+                  <Input id="email" type="email" {...registerForm.register("email")} />
+                  {registerForm.formState.errors.email && (
+                    <p className="text-red-500 text-sm">
+                      {registerForm.formState.errors.email.message}
+                    </p>
+                  )}
                 </div>
+
                 <Button
                   type="submit"
                   className="w-full"

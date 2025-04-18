@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,29 +14,45 @@ export default function ServiceProvider() {
   console.log("ServiceProvider component - Service ID from params:", id);
 
   // Fetch service details with provider info
-  const { data: service, isLoading, error } = useQuery<Service & { provider: User }>({  
+  const { data: service, isLoading, isError: serviceIsError, error: serviceError, isSuccess: serviceIsSuccess } = useQuery<Service & { provider: User }, Error>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
-    onError: (error) => {
-      console.error("Error fetching service:", error);
-      console.error("Query key:", [`/api/services/${id}`]);
-    },
-    onSuccess: (data) => {
-      console.log("Successfully fetched service data:", data);
-    }
+    retry: false, // Optional: prevent retries on error if desired
   });
 
   // Fetch reviews separately
-  const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
+  const { data: reviews, isLoading: reviewsLoading, isError: reviewsIsError, error: reviewsError, isSuccess: reviewsIsSuccess } = useQuery<Review[], Error>({
     queryKey: [`/api/reviews/service/${id}`],
     enabled: !!id,
-    onError: (error) => {
-      console.error("Error fetching reviews:", error);
-    },
-    onSuccess: (data) => {
-      console.log("Successfully fetched reviews data:", data);
-    }
+    retry: false, // Optional: prevent retries on error if desired
   });
+
+  // Handle service query side effects
+  useEffect(() => {
+    if (serviceIsError && serviceError) {
+      console.error("Error fetching service:", serviceError);
+      console.error("Query key:", [`/api/services/${id}`]);
+    }
+  }, [serviceIsError, serviceError, id]);
+
+  useEffect(() => {
+    if (serviceIsSuccess && service) {
+      console.log("Successfully fetched service data:", service);
+    }
+  }, [serviceIsSuccess, service]);
+
+  // Handle reviews query side effects
+  useEffect(() => {
+    if (reviewsIsError && reviewsError) {
+      console.error("Error fetching reviews:", reviewsError);
+    }
+  }, [reviewsIsError, reviewsError]);
+
+  useEffect(() => {
+    if (reviewsIsSuccess && reviews) {
+      console.log("Successfully fetched reviews data:", reviews);
+    }
+  }, [reviewsIsSuccess, reviews]);
 
   const isPageLoading = isLoading || reviewsLoading;
 
@@ -62,8 +79,10 @@ export default function ServiceProvider() {
     );
   }
 
-  const averageRating = reviews?.length
-    ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length
+  // Ensure reviews is an array before calculating average rating
+  const validReviews = Array.isArray(reviews) ? reviews : [];
+  const averageRating = validReviews.length
+    ? validReviews.reduce((acc, review) => acc + review.rating, 0) / validReviews.length
     : 0;
 
   return (
@@ -87,7 +106,7 @@ export default function ServiceProvider() {
                   <h2 className="text-2xl font-bold">{service.provider?.name}</h2>
                   <div className="flex items-center gap-1 text-yellow-500">
                     <Star className="h-4 w-4 fill-current" />
-                    <span>{averageRating.toFixed(1)} ({reviews?.length || 0} reviews)</span>
+                    <span>{averageRating.toFixed(1)} ({validReviews.length || 0} reviews)</span>
                   </div>
                   <p className="text-muted-foreground mt-2 flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
@@ -134,10 +153,10 @@ export default function ServiceProvider() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {!reviews?.length ? (
+                  {!validReviews.length ? (
                     <p className="text-center text-muted-foreground">No reviews yet</p>
                   ) : (
-                    reviews.map((review) => (
+                    validReviews.map((review) => (
                       <div key={review.id} className="border-b pb-4 last:border-0">
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">

@@ -105,14 +105,15 @@ export default function ProviderReviews() {
                       {new Date(review.createdAt || '').toLocaleDateString()}
                     </p>
 
-                    {review.providerResponse ? (
+                    {review.providerReply ? (
                       <div className="mt-4 pl-4 border-l-2">
                         <p className="text-sm">
-                          <span className="font-semibold">Your reply:</span> {review.providerResponse}
+                          <span className="font-semibold">Your reply:</span> {review.providerReply}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">
+                        {/* Assuming no respondedAt field based on schema, removing the date display */}
+                        {/* <p className="text-xs text-muted-foreground mt-1">
                           {new Date(review.respondedAt || '').toLocaleDateString()}
-                        </p>
+                        </p> */}
                       </div>
                     ) : (
                       <div className="mt-4 space-y-2">

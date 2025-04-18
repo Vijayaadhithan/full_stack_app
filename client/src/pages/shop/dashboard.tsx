@@ -126,7 +126,7 @@ export default function ShopDashboard() {
                       <div>
                         <p className="font-medium">Order #{order.id}</p>
                         <p className="text-sm text-muted-foreground">
-                          {new Date(order.orderDate).toLocaleDateString()}
+                          {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'N/A'}
                         </p>
                       </div>
                       <div className="text-right">

@@ -28,6 +28,13 @@ import {
 } from "lucide-react";
 import { z } from "zod";
 
+// Define the type for timeline updates
+interface TimelineUpdate {
+  status: 'pending' | 'confirmed' | 'shipped' | 'delivered'; // Use specific statuses if known
+  trackingInfo?: string;
+  timestamp: string | Date;
+}
+
 const returnRequestSchema = z.object({
   reason: z.string().min(10, "Please provide a detailed reason"),
   items: z.array(z.object({
@@ -46,7 +53,7 @@ export default function OrderDetails() {
     queryKey: [`/api/orders/${id}`],
   });
 
-  const { data: timeline } = useQuery({
+  const { data: timeline } = useQuery<TimelineUpdate[]>({
     queryKey: [`/api/orders/${id}/timeline`],
     enabled: !!order,
   });
@@ -83,7 +90,7 @@ export default function OrderDetails() {
     );
   }
 
-  const statusIcon = {
+  const statusIcon: Record<TimelineUpdate['status'], React.ReactElement> = {
     pending: <AlertCircle className="h-5 w-5 text-yellow-500" />,
     confirmed: <CheckCircle className="h-5 w-5 text-green-500" />,
     shipped: <Truck className="h-5 w-5 text-blue-500" />,
@@ -111,7 +118,7 @@ export default function OrderDetails() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {timeline?.map((update, index) => (
+              {timeline?.map((update: TimelineUpdate, index: number) => (
                 <div
                   key={index}
                   className="flex items-start gap-4 border-l-2 border-border pl-4 pb-4 last:pb-0"

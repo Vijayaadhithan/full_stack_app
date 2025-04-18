@@ -42,7 +42,10 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   const t = React.useCallback((key: string): string => {
     try {
-      return translations[language]?.[key] || translations['en'][key] || key;
+      // Cast the specific language object to allow string indexing
+      const currentLangTranslations = translations[language] as unknown as Record<string, string> | undefined;
+      const englishTranslations = translations['en'] as unknown as Record<string, string>;
+      return currentLangTranslations?.[key] || englishTranslations[key] || key;
     } catch (error) {
       console.error('Error in translation lookup:', error);
       return key;

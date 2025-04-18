@@ -71,7 +71,7 @@ export default function ShopProducts() {
       stock: product.stock,
       category: product.category,
       images: product.images || [],
-      isAvailable: product.isAvailable,
+      isAvailable: product.isAvailable ?? true, // Default to true if null
       shopId: user?.id || 0,
     });
   };
@@ -538,7 +538,7 @@ export default function ShopProducts() {
                       <span className="text-sm font-medium">{t("availability")}</span>
                     </div>
                     <Switch
-                      checked={product.isAvailable}
+                      checked={product.isAvailable ?? false} // Handle null case
                       onCheckedChange={(checked) =>
                         updateProductMutation.mutate({
                           id: product.id,

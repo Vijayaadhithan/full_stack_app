@@ -137,8 +137,8 @@ export const bookingHistory = pgTable("booking_history", {
 
 // Sessions table for express-session storage
 export const sessions = pgTable("sessions", {
-  sid: text("sid").$type<string>("varchar").primaryKey(),
-  sess: jsonb("sess").$type<any>("json").notNull(),
+  sid: text("sid").primaryKey(),
+  sess: jsonb("sess").$type<any>().notNull(),
   expire: timestamp("expire", { precision: 6 }).notNull(),
 });
 
@@ -207,31 +207,21 @@ export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => users.id),
   shopId: integer("shop_id").references(() => users.id),
-  status: text("status").$type<"pending" | "confirmed" | "processing" | "packed" | "shipped" | "delivered" | "cancelled" | "returned">().notNull(),
+  status: text("status").$type<"pending" | "cancelled" | "confirmed" | "processing" | "packed" | "shipped" | "delivered" | "returned">().notNull(),
   paymentStatus: text("payment_status").$type<"pending" | "paid" | "refunded">().notNull(),
   total: decimal("total").notNull(),
-  subTotal: decimal("sub_total").notNull(),
-  tax: decimal("tax"),
-  shipping: decimal("shipping"),
-  discount: decimal("discount"),
-  promotionCode: text("promotion_code"),
-  shippingAddress: jsonb("shipping_address").notNull(),
-  billingAddress: jsonb("billing_address").notNull(),
-  trackingNumber: text("tracking_number"),
-  trackingUrl: text("tracking_url"),
+  shippingAddress: text("shipping_address").notNull(),
+  billingAddress: text("billing_address"),
+  paymentMethod: text("payment_method"),
+  trackingInfo: text("tracking_info"),
   notes: text("notes"),
-  orderDate: timestamp("order_date").notNull(),
+  eReceiptId: text("e_receipt_id"),
+  eReceiptUrl: text("e_receipt_url"),
+  eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
   razorpayOrderId: text("razorpay_order_id"),
   razorpayPaymentId: text("razorpay_payment_id"),
-});
-
-export const orderHistory = pgTable("order_history", {
-  id: serial("id").primaryKey(),
-  orderId: integer("order_id").references(() => orders.id),
-  status: text("status").notNull(),
-  comment: text("comment"),
-  createdAt: timestamp("created_at").defaultNow(),
-  createdBy: integer("created_by").references(() => users.id),
+  orderDate: timestamp("order_date").defaultNow(),
+  returnRequested: boolean("return_requested").default(false), // Add this line
 });
 
 export const orderItems = pgTable("order_items", {
@@ -298,7 +288,7 @@ export const promotions = pgTable("promotions", {
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
-  type: text("type").$type<"booking" | "order" | "promotion" | "system">().notNull(),
+  type: text("type").$type<"booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request" | "shop">().notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),
   isRead: boolean("is_read").default(false),
@@ -409,4 +399,4 @@ export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
 
 export const insertBlockedTimeSlotSchema = createInsertSchema(blockedTimeSlots);
 export type InsertBlockedTimeSlot = z.infer<typeof insertBlockedTimeSlotSchema>;
-export type BlockedTimeSlot = typeof blockedTimeSlots.$inferSelect;
+export type BlockedTimeSlotSelect = typeof blockedTimeSlots.$inferSelect;

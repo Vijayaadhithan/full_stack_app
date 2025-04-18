@@ -40,15 +40,19 @@ export default function Cart() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [shopId, setShopId] = useState<number | null>(null);
 
-  const { data: cartItems, isLoading } = useQuery<CartItem[]>({
+  const { data: cartItems, isLoading } = useQuery<CartItem[]>({ // Ensure correct type
     queryKey: ["/api/cart"],
-    onSuccess: (data) => {
-      // If we have cart items, get the shop ID from the first item
-      if (data && data.length > 0) {
-        setShopId(data[0].product.shopId);
-      }
-    },
+    // onSuccess removed
   });
+
+  // Use useEffect to handle side effects after data fetching
+  useEffect(() => {
+    if (cartItems && cartItems.length > 0) {
+      setShopId(cartItems[0].product.shopId);
+    } else {
+      setShopId(null); // Reset shopId if cart is empty or undefined
+    }
+  }, [cartItems]);
 
   console.log("Cart items:", cartItems); // Debug log
 
@@ -110,9 +114,9 @@ export default function Cart() {
   // Calculate the subtotal from cart items
   const subtotal =
     cartItems?.reduce(
-      (total, item) => total + parseFloat(item.product.price) * item.quantity,
+      (total: number, item: CartItem) => total + parseFloat(item.product.price) * item.quantity,
       0
-    ) || 0;
+    ) ?? 0; // Use nullish coalescing for default value
 
   // Calculate the final total after applying promotion
   const totalAmount = subtotal - discountAmount;
@@ -163,12 +167,12 @@ export default function Cart() {
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
-      if (!cartItems?.length) {
+      if (!cartItems || cartItems.length === 0) { // Explicit check
         throw new Error("Cart is empty");
       }
 
       const orderData = {
-        items: cartItems.map((item) => ({
+        items: cartItems.map((item: CartItem) => ({ // Explicit type
           productId: item.product.id,
           quantity: item.quantity,
           price: item.product.price,
@@ -289,7 +293,7 @@ export default function Cart() {
           <div className="grid gap-6">
             <Card>
               <CardContent className="divide-y">
-                {cartItems?.map((item) => (
+                {cartItems?.map((item: CartItem) => ( // Explicit type
                   <motion.div
                     key={item.product.id}
                     className="py-4 first:pt-6 last:pb-6"
@@ -476,7 +480,7 @@ export default function Cart() {
                   disabled={
                     isCheckingOut ||
                     createOrderMutation.isPending ||
-                    !cartItems?.length
+                    !cartItems || cartItems.length === 0 // Explicit check
                   }
                 >
                   <CreditCard className="h-4 w-4 mr-2" />
