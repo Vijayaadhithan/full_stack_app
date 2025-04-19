@@ -1,6 +1,6 @@
 import { Express } from "express";
 import { z } from "zod";
-import { eq, and, gte, lte, isNull } from "drizzle-orm";
+import { eq, and, gte, lte, isNull, or } from "drizzle-orm"; // Added 'or'
 import { db } from "../db";
 import { promotions, products } from "@shared/schema";
 
@@ -61,11 +61,17 @@ export function registerPromotionRoutes(app: Express) {
         expiryDays
       });
 
-      const promotion = await db.insert(promotions).values({
+      // Convert numeric fields expected as strings by the schema
+      const dbValues: any = {
         ...promotionData,
         startDate,
         endDate,
-      }).returning();
+        value: promotionData.value.toString(), // Convert to string
+        ...(promotionData.minPurchase !== undefined && { minPurchase: promotionData.minPurchase.toString() }), // Convert to string if exists
+        ...(promotionData.maxDiscount !== undefined && { maxDiscount: promotionData.maxDiscount.toString() }), // Convert to string if exists
+      };
+
+      const promotion = await db.insert(promotions).values(dbValues).returning();
 
       res.status(201).json(promotion[0]);
     } catch (error) {
@@ -151,6 +157,17 @@ export function registerPromotionRoutes(app: Express) {
         updateData.endDate = endDate;
       }
 
+      // Convert numeric fields expected as strings by the schema before updating
+      if (updateData.value !== undefined) {
+        updateData.value = updateData.value.toString();
+      }
+      if (updateData.minPurchase !== undefined) {
+        updateData.minPurchase = updateData.minPurchase.toString();
+      }
+      if (updateData.maxDiscount !== undefined) {
+        updateData.maxDiscount = updateData.maxDiscount.toString();
+      }
+
       // Update the promotion using the same storage method as other entities
       const updatedResult = await db.update(promotions)
         .set(updateData)
@@ -165,6 +182,60 @@ export function registerPromotionRoutes(app: Express) {
     } catch (error) {
       console.error("Error updating promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update promotion" });
+    }
+  });
+
+ // Update promotion status only
+  app.patch("/api/promotions/:id/status", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      const promotionId = parseInt(req.params.id);
+      const { isActive } = z.object({ isActive: z.boolean() }).parse(req.body);
+ 
+      // Get the existing promotion to check ownership
+      const existingPromotions = await db.select().from(promotions).where(eq(promotions.shopId, req.user!.id));
+      const promotion = existingPromotions.find(p => p.id === promotionId);
+ 
+      if (!promotion) {
+        return res.status(404).json({ message: "Promotion not found or you don't have permission to update it" });
+      }
+ 
+      // Update only the isActive status
+      const updatedResult = await db.update(promotions)
+        .set({ isActive })
+        .where(eq(promotions.id, promotionId))
+        .returning();
+ 
+      if (!updatedResult.length) {
+        return res.status(404).json({ message: "Failed to update promotion status" });
+      }
+ 
+      res.json(updatedResult[0]);
+    } catch (error) {
+      console.error("Error updating promotion status:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update promotion status" });
+    }
+  });
+
+  // Delete a promotion
+  app.delete("/api/promotions/:id", requireAuth, requireRole(["shop"]), async (req, res) => {
+    try {
+      const promotionId = parseInt(req.params.id);
+ 
+      // Get the existing promotion to check ownership
+      const existingPromotions = await db.select().from(promotions).where(eq(promotions.shopId, req.user!.id));
+      const promotion = existingPromotions.find(p => p.id === promotionId);
+ 
+      if (!promotion) {
+        return res.status(404).json({ message: "Promotion not found or you don't have permission to delete it" });
+      }
+ 
+      // Delete the promotion
+      await db.delete(promotions).where(eq(promotions.id, promotionId));
+ 
+      res.status(200).json({ message: "Promotion deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting promotion:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete promotion" });
     }
   });
 
@@ -191,7 +262,8 @@ export function registerPromotionRoutes(app: Express) {
 
       // Filter out promotions that have reached their usage limit
       const validPromotions = activePromotions.filter(promo => {
-        return !promo.usageLimit || promo.usedCount < promo.usageLimit;
+        // Add null check for usedCount
+        return !promo.usageLimit || (promo.usedCount || 0) < promo.usageLimit;
       });
 
       res.json(validPromotions);
@@ -244,16 +316,17 @@ export function registerPromotionRoutes(app: Express) {
 
       const promoDetails = promotion[0];
 
-      // Check usage limit
-      if (promoDetails.usageLimit && promoDetails.usedCount >= promoDetails.usageLimit) {
+      // Check usage limit (add null check)
+      if (promoDetails.usageLimit && (promoDetails.usedCount || 0) >= promoDetails.usageLimit) {
         return res.status(400).json({ message: "This promotion has reached its usage limit" });
       }
 
-      // Check minimum purchase requirement
-      if (promoDetails.minPurchase && subtotal < promoDetails.minPurchase) {
+      // Check minimum purchase requirement (convert promoDetails.minPurchase to number)
+      const minPurchaseValue = promoDetails.minPurchase ? parseFloat(promoDetails.minPurchase) : 0;
+      if (minPurchaseValue > 0 && subtotal < minPurchaseValue) {
         return res.status(400).json({
-          message: `Minimum purchase of ₹${promoDetails.minPurchase} required for this promotion`,
-          minPurchase: promoDetails.minPurchase
+          message: `Minimum purchase of ₹${minPurchaseValue} required for this promotion`,
+          minPurchase: minPurchaseValue
         });
       }
 
@@ -282,17 +355,19 @@ export function registerPromotionRoutes(app: Express) {
         0
       );
 
-      // Calculate discount
+      // Calculate discount (convert promoDetails.value to number)
       let discountAmount = 0;
+      const promoValue = parseFloat(promoDetails.value);
       if (promoDetails.type === "percentage") {
-        discountAmount = (applicableSubtotal * parseFloat(promoDetails.value)) / 100;
+        discountAmount = (applicableSubtotal * promoValue) / 100;
       } else { // fixed_amount
-        discountAmount = parseFloat(promoDetails.value);
+        discountAmount = promoValue;
       }
 
-      // Apply max discount cap if specified
-      if (promoDetails.maxDiscount && discountAmount > promoDetails.maxDiscount) {
-        discountAmount = parseFloat(promoDetails.maxDiscount);
+      // Apply max discount cap if specified (convert promoDetails.maxDiscount to number)
+      const maxDiscountValue = promoDetails.maxDiscount ? parseFloat(promoDetails.maxDiscount) : null;
+      if (maxDiscountValue !== null && discountAmount > maxDiscountValue) {
+        discountAmount = maxDiscountValue;
       }
 
       // Round to 2 decimal places
@@ -338,12 +413,12 @@ export function registerPromotionRoutes(app: Express) {
         return res.status(400).json({ message: "Promotion is not active or has expired" });
       }
 
-      // Check usage limit
-      if (promotion.usageLimit && promotion.usedCount >= promotion.usageLimit) {
+      // Check usage limit (add null check)
+      if (promotion.usageLimit && (promotion.usedCount || 0) >= promotion.usageLimit) {
         return res.status(400).json({ message: "This promotion has reached its usage limit" });
       }
 
-      // Increment the used count
+      // Increment the used count (add null check)
       await db.update(promotions)
         .set({ usedCount: (promotion.usedCount || 0) + 1 })
         .where(eq(promotions.id, promotionId));

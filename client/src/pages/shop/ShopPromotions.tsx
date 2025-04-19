@@ -9,6 +9,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"; // Added this import
+import {
   Form,
   FormField,
   FormItem,
@@ -32,7 +43,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2 } from "lucide-react";
+import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { useState } from "react";
 
@@ -75,6 +86,8 @@ export default function ShopPromotions() {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(null);
 
   // Fetch promotions for the current shop
   const { data: promotions, isLoading } = useQuery<Promotion[]>({
@@ -175,6 +188,62 @@ export default function ShopPromotions() {
         description: error.message,
         variant: "destructive",
       });
+    },
+  });
+
+  // Update Status mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/promotions/${id}/status`, { isActive });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to update promotion status");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/promotions/shop/${user?.id}`] });
+      toast({
+        title: "Success",
+        description: "Promotion status updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete mutation
+  const deletePromotionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/promotions/${id}`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to delete promotion");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/promotions/shop/${user?.id}`] });
+      toast({
+        title: "Success",
+        description: "Promotion deleted successfully",
+      });
+      setDeleteConfirmationOpen(false);
+      setPromotionToDelete(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      setDeleteConfirmationOpen(false);
+      setPromotionToDelete(null);
     },
   });
 
@@ -411,17 +480,65 @@ export default function ShopPromotions() {
                         {promotion.description}
                       </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setEditingPromotion(promotion);
-                        resetFormWithPromotion(promotion);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center space-x-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingPromotion(promotion);
+                          resetFormWithPromotion(promotion);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog open={deleteConfirmationOpen && promotionToDelete?.id === promotion.id} onOpenChange={(open) => {
+                        if (!open) {
+                          setDeleteConfirmationOpen(false);
+                          setPromotionToDelete(null);
+                        }
+                      }}>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setPromotionToDelete(promotion);
+                              setDeleteConfirmationOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This action cannot be undone. This will permanently delete the promotion "{promotionToDelete?.name}".
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => {
+                              setDeleteConfirmationOpen(false);
+                              setPromotionToDelete(null);
+                            }}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              onClick={() => {
+                                if (promotionToDelete) {
+                                  deletePromotionMutation.mutate(promotionToDelete.id);
+                                }
+                              }}
+                              disabled={deletePromotionMutation.isPending}
+                            >
+                              {deletePromotionMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
 
                   <div className="mt-4 space-y-2">
@@ -455,15 +572,12 @@ export default function ShopPromotions() {
                     <Switch
                       checked={promotion.isActive}
                       onCheckedChange={(checked) =>
-                        updatePromotionMutation.mutate({
+                        updateStatusMutation.mutate({
                           id: promotion.id,
-                          data: {
-                            ...form.getValues(),
-                            isActive: checked,
-                            expiryDays: 0, // Keep existing expiry
-                          },
+                          isActive: checked,
                         })
                       }
+                      disabled={updateStatusMutation.isPending}
                     />
                   </div>
                 </CardContent>

@@ -23,6 +23,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import Razorpay from "razorpay";
 import crypto from 'crypto';
+import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null {
@@ -1829,6 +1830,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update promotion" });
     }
   });
+
+  // Register promotion routes
+  registerPromotionRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;
