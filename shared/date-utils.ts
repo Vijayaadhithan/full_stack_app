@@ -1,59 +1,55 @@
 /**
  * Utility functions for handling dates with Indian Standard Time (IST)
  */
+import { formatInTimeZone, toZonedTime, fromZonedTime } from 'date-fns-tz';
+import { format as formatBase, parseISO } from 'date-fns';
 
-// IST offset is UTC+5:30
-const IST_OFFSET = 330; // 5 hours and 30 minutes in minutes
+const timeZone = 'Asia/Kolkata';
 
 /**
- * Converts a Date object or date string to Indian Standard Time (IST)
+ * Converts a Date object or date string (assumed UTC if no timezone specified) to a Date object representing the equivalent time in IST.
+ * Note: This primarily changes the internal representation for potential use with non-timezone-aware functions.
+ * For formatting, prefer formatInTimeZone.
  * @param date Date object or date string to convert
- * @returns Date object in IST
+ * @returns Date object representing the time in IST
  */
 export function toIndianTime(date: Date | string): Date {
-  const inputDate = typeof date === 'string' ? new Date(date) : date;
-  
-  // Create a new date object with the IST offset
-  const istDate = new Date(inputDate.getTime());
-  
-  // Adjust for IST (UTC+5:30)
-  istDate.setMinutes(istDate.getMinutes() + IST_OFFSET - inputDate.getTimezoneOffset());
-  
-  return istDate;
+  const inputDate = typeof date === 'string' ? parseISO(date) : date;
+  return toZonedTime(inputDate, timeZone);
 }
 
 /**
- * Formats a date to a string in IST
- * @param date Date to format
- * @param options Intl.DateTimeFormatOptions for formatting
+ * Formats a date (Date object or string) directly into an IST string according to specified options.
+ * This is the preferred method for displaying dates/times in IST.
+ * @param date Date object or date string to format
+ * @param formatString The date-fns format string (e.g., 'yyyy-MM-dd HH:mm:ss')
  * @returns Formatted date string in IST
  */
-export function formatIndianTime(date: Date | string, options?: Intl.DateTimeFormatOptions): string {
-  const istDate = toIndianTime(date);
-  
-  const defaultOptions: Intl.DateTimeFormatOptions = {
-    timeZone: 'Asia/Kolkata',
-    ...options
-  };
-  
-  return new Intl.DateTimeFormat('en-IN', defaultOptions).format(istDate);
+export function formatInIndianTime(date: Date | string, formatString: string): string {
+  const inputDate = typeof date === 'string' ? parseISO(date) : date;
+  // Ensure the input date is treated as UTC before converting to IST for formatting
+  // If the date string already has timezone info, parseISO handles it.
+  // If it's a Date object, it's inherently UTC-based in JS.
+  return formatInTimeZone(inputDate, timeZone, formatString);
 }
 
 /**
- * Creates a new Date object in IST timezone
- * @returns Date object in IST
+ * Creates a new Date object representing the current time in IST.
+ * @returns Date object representing the current time in IST
  */
 export function newIndianDate(): Date {
-  return toIndianTime(new Date());
+  return toZonedTime(new Date(), timeZone);
 }
 
 /**
- * Converts a date string to an ISO string in IST
- * @param dateStr Date string to convert
- * @returns ISO string in IST
+ * Converts a date string or Date object to an ISO string representing the equivalent time in IST.
+ * @param dateStr Date string or Date object to convert
+ * @returns ISO string representing the time in IST (with IST offset)
  */
 export function toIndianISOString(dateStr: string | Date): string {
-  return toIndianTime(dateStr).toISOString();
+  const inputDate = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr;
+  // Format in IST timezone with the ISO format including offset
+  return formatInTimeZone(inputDate, timeZone, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 }
 
 /**
@@ -63,21 +59,20 @@ export function toIndianISOString(dateStr: string | Date): string {
  * @returns Formatted date string
  */
 export function formatIndianDisplay(date: Date | string, formatType: 'date' | 'time' | 'datetime' = 'datetime'): string {
-  const options: Intl.DateTimeFormatOptions = {
-    timeZone: 'Asia/Kolkata',
-  };
-  
-  if (formatType === 'date' || formatType === 'datetime') {
-    options.year = 'numeric';
-    options.month = 'long';
-    options.day = 'numeric';
+  let formatString = '';
+
+  switch (formatType) {
+    case 'date':
+      formatString = 'dd MMMM yyyy'; // e.g., 26 April 2025
+      break;
+    case 'time':
+      formatString = 'hh:mm a'; // e.g., 10:30 PM
+      break;
+    case 'datetime':
+    default:
+      formatString = 'dd MMMM yyyy, hh:mm a'; // e.g., 26 April 2025, 10:30 PM
+      break;
   }
-  
-  if (formatType === 'time' || formatType === 'datetime') {
-    options.hour = '2-digit';
-    options.minute = '2-digit';
-    options.hour12 = true;
-  }
-  
-  return formatIndianTime(date, options);
+
+  return formatInIndianTime(date, formatString);
 }
