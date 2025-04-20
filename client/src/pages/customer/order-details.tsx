@@ -27,7 +27,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { z } from "zod";
-
+import { formatIndianDisplay } from '@shared/date-utils'; 
 // Define the type for timeline updates
 interface TimelineUpdate {
   status: 'pending' | 'confirmed' | 'shipped' | 'delivered'; // Use specific statuses if known
@@ -132,7 +132,7 @@ export default function OrderDetails() {
                       </p>
                     )}
                     <p className="text-sm text-muted-foreground">
-                      {new Date(update.timestamp).toLocaleString()}
+                      {formatIndianDisplay(update.timestamp, 'datetime')}
                     </p>
                   </div>
                 </div>

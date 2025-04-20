@@ -1,37 +1,37 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Order } from "@shared/schema";
 import { motion } from "framer-motion";
 import { Package, ArrowLeft, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
-import { formatDistanceToNow } from "date-fns";
+import { formatIndianDisplay } from "@shared/date-utils";
 
-const container = {
+const containerVariants = {
   hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
+  show: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
-const item = {
+const itemVariants = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
+  show: { opacity: 1, y: 0 },
 };
 
 export default function Orders() {
   const { data: orders, isLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
+    queryFn: async () => {
+      const res = await fetch("/api/orders");
+      if (!res.ok) throw new Error("Network response was not ok");
+      return res.json();
+    },
   });
 
   return (
     <DashboardLayout>
       <motion.div
-        variants={container}
+        variants={containerVariants}
         initial="hidden"
         animate="show"
         className="max-w-4xl mx-auto space-y-6 p-6"
@@ -50,21 +50,19 @@ export default function Orders() {
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
           </div>
-        ) : !orders?.length ? (
+        ) : !orders || orders.length === 0 ? (
           <Card>
             <CardContent className="p-6 text-center">
               <p className="text-muted-foreground">You have no orders yet</p>
               <Link href="/customer/browse-shops">
-                <Button className="mt-4">
-                  Browse Shops
-                </Button>
+                <Button className="mt-4">Browse Shops</Button>
               </Link>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-4">
             {orders.map((order) => (
-              <motion.div key={order.id} variants={item}>
+              <motion.div key={order.id} variants={itemVariants}>
                 <Card>
                   <CardContent className="p-6">
                     <div className="flex flex-col md:flex-row justify-between gap-4">
@@ -74,19 +72,18 @@ export default function Orders() {
                           <h3 className="font-semibold">Order #{order.id}</h3>
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Placed {order.orderDate ? formatDistanceToNow(new Date(order.orderDate), { addSuffix: true }) : 'recently'}
+                          Order ID: {order.id}{" "}
+                          <span className="mx-1">•</span> Placed{" "}
+                          {order.orderDate
+                            ? formatIndianDisplay(order.orderDate, "datetime")
+                            : "recently"}
                         </p>
-                        <div className="mt-2">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                            {order.status}
-                          </span>
-                        </div>
                       </div>
                       <div className="flex flex-col items-end justify-between">
                         <p className="font-semibold">₹{order.total}</p>
                         <Link href={`/customer/order/${order.id}`}>
                           <Button size="sm" variant="outline" className="mt-2">
-                            View Details
+                            View Details{" "}
                             <ExternalLink className="h-3 w-3 ml-1" />
                           </Button>
                         </Link>

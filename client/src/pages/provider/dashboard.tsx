@@ -38,10 +38,12 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  CalendarIcon,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Booking, Review, Service } from "@shared/schema";
 import { format, isAfter } from "date-fns";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -119,7 +121,7 @@ function PendingBookingRequestsList() {
             <div>
               <p className="font-medium">{booking.service?.name}</p>
               <p className="text-sm text-muted-foreground">
-                {booking.bookingDate ? `${format(new Date(booking.bookingDate), 'PPP')} at ${format(new Date(booking.bookingDate), 'p')}` : 'Date not set'}
+                {booking.bookingDate ? formatIndianDisplay(booking.bookingDate, 'date') : 'Date not set'} {/* Use formatIndianDisplay */}
               </p>
               <div className="flex items-center mt-1">
                 <Clock className="h-3 w-3 mr-1 text-yellow-500" />
@@ -175,7 +177,7 @@ function PendingBookingRequestsList() {
             <div className="space-y-2">
               <p className="text-sm font-medium">Date & Time</p>
               <p className="text-sm">
-                {selectedBooking?.bookingDate ? `${format(new Date(selectedBooking.bookingDate), 'PPP')} at ${format(new Date(selectedBooking.bookingDate), 'p')}` : 'Date not set'}
+                {selectedBooking?.bookingDate ? formatIndianDisplay(selectedBooking.bookingDate, 'datetime') : 'Date not set'} {/* Use formatIndianDisplay */}
               </p>
             </div>
             <div className="space-y-2">
@@ -239,7 +241,7 @@ function BookingHistoryList() {
             <div>
               <p className="font-medium">{booking.service?.name}</p> {/* Use optional chaining */}
               <p className="text-sm text-muted-foreground">
-                {booking.bookingDate ? format(new Date(booking.bookingDate), 'PPP') : 'Date not set'} {/* Add null check */}
+                {booking.bookingDate ? formatIndianDisplay(booking.bookingDate, 'date') : 'Date not set'} {/* Use formatIndianDisplay */}
               </p>
               <div className="flex items-center mt-1">
                 {booking.status === 'accepted' && (
@@ -1067,13 +1069,21 @@ export default function ProviderDashboard() {
                           <div>
                             <p className="font-medium">{booking.service?.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {format(new Date(booking.bookingDate), "MMMM d, yyyy")}
+                              <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
+                              {/* {format(new Date(booking.bookingDate), "MMMM d, yyyy")} */}
+                              {formatIndianDisplay(booking.bookingDate, 'date')} {/* Use formatIndianDisplay */}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
+                              {/* <span className="text-sm">{format(new Date(booking.bookingDate), "h:mm a")}</span> */}
+                              {formatIndianDisplay(booking.bookingDate, 'time')} {/* Use formatIndianDisplay */}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{format(new Date(booking.bookingDate), "h:mm a")}</span>
+                          {/* <span className="text-sm">{format(new Date(booking.bookingDate), "h:mm a")}</span> */}
+                          <span className="text-sm">{formatIndianDisplay(booking.bookingDate, 'time')}</span> {/* Use formatIndianDisplay */}
                         </div>
                       </div>
                     ))}
@@ -1110,7 +1120,9 @@ export default function ProviderDashboard() {
                         </div>
                         <p className="text-sm">{review.review}</p>
                         <p className="text-xs text-muted-foreground mt-2">
-                          {format(new Date(review.createdAt || ''), "MMMM d, yyyy")}
+                          Reviewed on:
+                          {/* {format(new Date(review.createdAt || ''), "MMMM d, yyyy")} */}
+                          {formatIndianDisplay(review.createdAt || '', 'date')} {/* Use formatIndianDisplay */}
                         </p>
                       </div>
                     ))}

@@ -15,6 +15,7 @@ import {
   BarChart,
   Bar,
 } from "recharts";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 export default function ShopAnalytics() {
   const { user } = useAuth();
@@ -53,7 +54,7 @@ export default function ShopAnalytics() {
 
   // Calculate daily revenue data for the chart
   const dailyRevenue = orders?.reduce((acc, order) => {
-    const date = order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'Unknown Date';
+    const date = order.orderDate ? formatIndianDisplay(order.orderDate, 'date') : 'Unknown Date'; // Use formatIndianDisplay
     acc[date] = (acc[date] || 0) + parseFloat(order.total);
     return acc;
   }, {} as Record<string, number>);

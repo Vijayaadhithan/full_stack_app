@@ -23,6 +23,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import Razorpay from "razorpay";
 import crypto from 'crypto';
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 
 // Helper function to validate and parse date and time
@@ -1482,20 +1483,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: customer.id,
         type: "booking",
         title: "Booking Confirmed",
-        message: `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`,
+        message: `Your booking for ${formatIndianDisplay(booking.bookingDate, 'date')} has been confirmed.`, // Use formatIndianDisplay
       });
 
       // Send SMS notification
       await storage.sendSMSNotification(
         customer.phone,
-        `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`
+        `Your booking for ${formatIndianDisplay(booking.bookingDate, 'date')} has been confirmed.` // Use formatIndianDisplay
       );
 
       // Send email notification
       await storage.sendEmailNotification(
         customer.email,
         "Booking Confirmation",
-        `Your booking for ${new Date(booking.bookingDate).toLocaleDateString()} has been confirmed.`
+        `Your booking for ${formatIndianDisplay(booking.bookingDate, 'date')} has been confirmed.` // Use formatIndianDisplay
       );
     }
 

@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Star, MessageSquare } from "lucide-react";
 import { ProductReview } from "@shared/schema";
 import { useState } from "react";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 type ReplyFormData = {
   reply: string;
@@ -95,7 +96,7 @@ export default function ShopReviews() {
                           ))}
                         </div>
                         <span className="text-sm text-muted-foreground">
-                          {review.createdAt ? new Date(review.createdAt).toLocaleDateString() : 'N/A'}
+                          {review.createdAt ? formatIndianDisplay(review.createdAt, 'date') : 'N/A'} {/* Use formatIndianDisplay */}
                         </span>
                       </div>
                       <p>{review.review}</p>

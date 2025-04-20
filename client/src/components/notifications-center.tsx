@@ -17,6 +17,7 @@ import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 export function NotificationsCenter() {
   const [open, setOpen] = useState(false);
@@ -260,7 +261,7 @@ export function NotificationsCenter() {
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {notification.createdAt
-                          ? new Date(notification.createdAt).toLocaleString()
+                          ? formatIndianDisplay(notification.createdAt, 'datetime') // Use formatIndianDisplay
                           : ''}
                       </p>
                     </div>

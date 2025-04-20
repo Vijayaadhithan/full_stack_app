@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 const container = {
   hidden: { opacity: 0 },
@@ -102,7 +103,9 @@ export default function ProviderReviews() {
                     </div>
                     <p>{review.review}</p>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(review.createdAt || '').toLocaleDateString()}
+                      Review Date: {
+                      formatIndianDisplay(review.createdAt || '', 'date') // Use formatIndianDisplay
+                      }
                     </p>
 
                     {review.providerReply ? (

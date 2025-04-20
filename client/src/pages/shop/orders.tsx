@@ -14,11 +14,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Package, Truck, CheckCircle2 } from "lucide-react";
 import { Order, ReturnRequest } from "@shared/schema";
 import { z } from "zod";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type OrderWithDetails = Order & {
   customer: {
@@ -182,7 +183,7 @@ export default function ShopOrders() {
                             {t("order")} #{order.id}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'N/A'}
+                            {order.orderDate ? formatIndianDisplay(order.orderDate, 'date') : 'N/A'} {/* Use formatIndianDisplay */}
                           </p>
                         </div>
                         <div className="text-right">
@@ -360,7 +361,7 @@ export default function ShopOrders() {
                             {t("return_request")} #{returnRequest.id}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {returnRequest.createdAt ? new Date(returnRequest.createdAt).toLocaleDateString() : 'N/A'}
+                            {returnRequest.createdAt ? formatIndianDisplay(returnRequest.createdAt, 'date') : 'N/A'} {/* Use formatIndianDisplay */}
                           </p>
                         </div>
                         <div className="flex gap-2">

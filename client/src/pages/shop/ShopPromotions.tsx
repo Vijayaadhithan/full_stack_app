@@ -46,6 +46,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { useState } from "react";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 // Define the Promotion type based on the server schema
 type Promotion = {
@@ -557,9 +558,9 @@ export default function ShopPromotions() {
                     <div className="flex justify-between items-center text-sm">
                       <span>Period</span>
                       <span className="font-semibold">
-                        {new Date(promotion.startDate).toLocaleDateString()} 
+                        {formatIndianDisplay(promotion.startDate, 'date')} {/* Use formatIndianDisplay */}
                         {promotion.endDate
-                          ? ` - ${new Date(promotion.endDate).toLocaleDateString()}`
+                          ? ` - ${formatIndianDisplay(promotion.endDate, 'date')}` /* Use formatIndianDisplay */
                           : " (No expiry)"}
                       </span>
                     </div>

@@ -16,6 +16,7 @@ import { motion } from "framer-motion";
 import { Star, Calendar as CalendarIcon, Clock, X, CheckCircle, AlertCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { format, isAfter, isBefore, addDays } from "date-fns";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 const container = {
   hidden: { opacity: 0 },
@@ -277,10 +278,12 @@ export default function Bookings() {
                         <div>
                           <h3 className="font-semibold">{booking.service.name}</h3>
                           <p className="text-sm text-muted-foreground">
-                            {format(
-                              new Date(booking.bookingDate),
-                              "MMMM d, yyyy 'at' h:mm a"
-                            )}
+                            <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
+                            {formatIndianDisplay(booking.bookingDate, "date")}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
+                            {formatIndianDisplay(booking.bookingDate, "time")}
                           </p>
                           <p className={`text-sm font-medium ${booking.status === "accepted" ? "text-green-600" : booking.status === "rejected" ? "text-red-600" : "text-yellow-600"}`}>
                             Status: {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
@@ -406,10 +409,12 @@ export default function Bookings() {
                         <div>
                           <h3 className="font-semibold">{booking.service.name}</h3>
                           <p className="text-sm text-muted-foreground">
-                            {format(
-                              new Date(booking.bookingDate),
-                              "MMMM d, yyyy 'at' h:mm a"
-                            )}
+                            <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
+                            {formatIndianDisplay(booking.bookingDate, "date")}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
+                            {formatIndianDisplay(booking.bookingDate, "time")}
                           </p>
                           <p
                             className={`text-sm ${

@@ -12,7 +12,10 @@ import { useLanguage } from "@/contexts/language-context";
 import { motion } from "framer-motion";
 import { Loader2, MapPin, Clock, Star, AlertCircle } from "lucide-react";
 import { useState, useEffect } from "react";
-import { format, addDays, isBefore, isAfter, addMinutes, isWithinInterval, parse } from "date-fns";
+import { format as formatBase, addDays, isBefore, isAfter, addMinutes, isWithinInterval, parse } from "date-fns";
+import { formatInTimeZone, fromZonedTime, toZonedTime } from 'date-fns-tz'; // Import date-fns-tz functions
+
+const timeZone = 'Asia/Kolkata'; // Define IST timezone
 
 declare global {
   interface Window {
@@ -26,24 +29,36 @@ type TimeSlot = {
   available: boolean;
 };
 
-function isBreakTime(time: Date, breakTimes: Array<{ start: string; end: string }>) {
+function isBreakTime(slotStart: Date, slotEnd: Date, breakTimes: Array<{ start: string; end: string }>, date: Date) {
+  const zonedDate = toZonedTime(date, timeZone);
   return breakTimes.some(breakTime => {
-    // Ensure break times are in HH:mm format
-    const formattedStart = breakTime.start.includes(':') ? breakTime.start : `${breakTime.start}:00`;
-    const formattedEnd = breakTime.end.includes(':') ? breakTime.end : `${breakTime.end}:00`;
-    
-    console.log(`Checking break time: ${formattedStart} - ${formattedEnd} against slot time: ${format(time, 'HH:mm')}`);
-    
-    const breakStart = parse(formattedStart, "HH:mm", time);
-    const breakEnd = parse(formattedEnd, "HH:mm", time);
-    
-    // Log if we have invalid dates
-    if (isNaN(breakStart.getTime()) || isNaN(breakEnd.getTime())) {
-      console.error(`Invalid break time format: ${formattedStart} - ${formattedEnd}`);
+    try {
+      const breakStartStr = breakTime.start.padStart(5, '0'); // Ensure HH:mm
+      const breakEndStr = breakTime.end.padStart(5, '0'); // Ensure HH:mm
+
+      const breakStartHour = parseInt(breakStartStr.split(':')[0], 10);
+      const breakStartMinute = parseInt(breakStartStr.split(':')[1], 10);
+      const breakEndHour = parseInt(breakEndStr.split(':')[0], 10);
+      const breakEndMinute = parseInt(breakEndStr.split(':')[1], 10);
+
+      const breakStartDateTime = new Date(zonedDate);
+      breakStartDateTime.setHours(breakStartHour, breakStartMinute, 0, 0);
+      const breakEndDateTime = new Date(zonedDate);
+      breakEndDateTime.setHours(breakEndHour, breakEndMinute, 0, 0);
+
+      const breakStartUTC = fromZonedTime(breakStartDateTime, timeZone);
+      const breakEndUTC = fromZonedTime(breakEndDateTime, timeZone);
+
+      // Check if the slot *overlaps* with the break time
+      const overlaps = slotStart < breakEndUTC && slotEnd > breakStartUTC;
+      if (overlaps) {
+        console.log(`Slot ${formatInTimeZone(slotStart, timeZone, 'HH:mm')} - ${formatInTimeZone(slotEnd, timeZone, 'HH:mm')} overlaps with break ${formatInTimeZone(breakStartUTC, timeZone, 'HH:mm')} - ${formatInTimeZone(breakEndUTC, timeZone, 'HH:mm')}`);
+      }
+      return overlaps;
+    } catch (e) {
+      console.error(`Error parsing break time: ${breakTime.start}-${breakTime.end}`, e);
       return false;
     }
-    
-    return isWithinInterval(time, { start: breakStart, end: breakEnd });
   });
 }
 
@@ -55,12 +70,13 @@ function generateTimeSlots(
   breakTimes: Array<{ start: string; end: string }>,
   existingBookings: { start: Date; end: Date }[]
 ): TimeSlot[] {
+  const zonedDate = toZonedTime(date, timeZone); // Use the selected date in IST
   // Get day of week in lowercase (monday, tuesday, etc.) to match workingHours keys exactly
-  const dayOfWeek = format(date, 'EEEE').toLowerCase();
+  const dayOfWeek = formatBase(zonedDate, 'EEEE').toLowerCase(); // Get day of week in IST
   const daySchedule = workingHours[dayOfWeek];
 
   console.log('Generating time slots for:', {
-    date: format(date, 'yyyy-MM-dd'),
+    date: formatBase(zonedDate, 'yyyy-MM-dd'), // Log date in IST
     dayOfWeek,
     daySchedule,
     workingHoursKeys: workingHours ? Object.keys(workingHours) : 'undefined'
@@ -78,84 +94,88 @@ function generateTimeSlots(
   }
 
   // Ensure time format is HH:mm
-  const formatTimeString = (timeStr: string): string => {
-    if (!timeStr) return "00:00";
-    // If already in HH:mm format, return as is
-    if (timeStr.includes(':')) return timeStr;
-    // If it's in 12-hour format with AM/PM, convert to 24-hour
-    if (timeStr.toLowerCase().includes('am') || timeStr.toLowerCase().includes('pm')) {
-      // This is a simplification - a real implementation would properly convert 12h to 24h
-      console.warn(`Time format appears to be 12-hour: ${timeStr}. Should be in 24-hour format (HH:mm).`);
-      return timeStr; // Return as is for now, but log a warning
-    }
-    // If it's just a number, assume it's hours and add :00
-    return `${timeStr}:00`;
-  };
+  const startStr = daySchedule.start.padStart(5, '0'); // Ensure HH:mm
+  const endStr = daySchedule.end.padStart(5, '0'); // Ensure HH:mm
 
-  const formattedStart = formatTimeString(daySchedule.start);
-  const formattedEnd = formatTimeString(daySchedule.end);
-
-  console.log(`Using formatted time range: ${formattedStart} - ${formattedEnd}`);
+  console.log(`Using time range (IST): ${startStr} - ${endStr}`);
 
   const slots: TimeSlot[] = [];
-  const startTime = parse(formattedStart, "HH:mm", date);
-  const endTime = parse(formattedEnd, "HH:mm", date);
+  let startTimeUTC: Date;
+  let endTimeUTC: Date;
 
-  console.log('Parsed time range:', {
-    startTime: startTime.toString(),
-    endTime: endTime.toString(),
-    isStartValid: !isNaN(startTime.getTime()),
-    isEndValid: !isNaN(endTime.getTime()),
-    rawStart: daySchedule.start,
-    rawEnd: daySchedule.end
+  try {
+    const startHour = parseInt(startStr.split(':')[0], 10);
+    const startMinute = parseInt(startStr.split(':')[1], 10);
+    const endHour = parseInt(endStr.split(':')[0], 10);
+    const endMinute = parseInt(endStr.split(':')[1], 10);
+
+    const startDateTime = new Date(zonedDate);
+    startDateTime.setHours(startHour, startMinute, 0, 0);
+    const endDateTime = new Date(zonedDate);
+    endDateTime.setHours(endHour, endMinute, 0, 0);
+
+    // Convert IST start/end times to UTC for internal calculations
+    startTimeUTC = fromZonedTime(startDateTime, timeZone);
+    endTimeUTC = fromZonedTime(endDateTime, timeZone);
+
+  } catch (e) {
+    console.error(`Error parsing working hours: ${startStr}-${endStr}`, e);
+    return []; // Return empty if parsing fails
+  }
+
+  console.log('Parsed UTC time range:', {
+    startTimeUTC: startTimeUTC.toISOString(),
+    endTimeUTC: endTimeUTC.toISOString(),
+    isStartValid: !isNaN(startTimeUTC.getTime()),
+    isEndValid: !isNaN(endTimeUTC.getTime()),
   });
 
   // If either time is invalid, return empty slots
-  if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
-    console.error('Invalid time format. Cannot generate time slots.');
+  if (isNaN(startTimeUTC.getTime()) || isNaN(endTimeUTC.getTime())) {
+    console.error('Invalid start/end time. Cannot generate time slots.');
     return [];
   }
 
-  // Log existing bookings for debugging
-  console.log(`Existing bookings for ${format(date, 'yyyy-MM-dd')}:`, 
-    existingBookings.map(b => `${format(b.start, 'HH:mm')} - ${format(b.end, 'HH:mm')}`));
+  // Log existing bookings (in UTC) for debugging
+  console.log(`Existing bookings (UTC) for ${formatBase(zonedDate, 'yyyy-MM-dd')}:`, 
+    existingBookings.map(b => `${b.start.toISOString()} - ${b.end.toISOString()}`));
   
   // Log break times for debugging
-  console.log('Break times:', breakTimes);
+  console.log('Break times (raw):', breakTimes);
 
-  let currentSlot = startTime;
-  while (currentSlot < endTime) {
-    const slotEnd = addMinutes(currentSlot, duration);
+  let currentSlotStartUTC = startTimeUTC;
+  while (currentSlotStartUTC < endTimeUTC) {
+    const slotEndUTC = addMinutes(currentSlotStartUTC, duration);
 
-    const isInBreakTime = isBreakTime(currentSlot, breakTimes) || 
-                         isBreakTime(slotEnd, breakTimes);
+    // Check if the slot falls within break time (using IST date for context)
+    const isInBreakTime = isBreakTime(currentSlotStartUTC, slotEndUTC, breakTimes, date);
 
+    // Check if the slot overlaps with existing bookings (all in UTC)
     const isOverlapping = existingBookings.some(booking => {
-      const overlaps = (
-        (currentSlot >= booking.start && currentSlot < booking.end) ||
-        (slotEnd > booking.start && slotEnd <= booking.end) ||
-        (currentSlot <= booking.start && slotEnd >= booking.end)
-      );
+      // Simple overlap check: (StartA < EndB) and (EndA > StartB)
+      const overlaps = currentSlotStartUTC < booking.end && slotEndUTC > booking.start;
       if (overlaps) {
-        console.log(`Slot ${format(currentSlot, 'HH:mm')} - ${format(slotEnd, 'HH:mm')} overlaps with booking ${format(booking.start, 'HH:mm')} - ${format(booking.end, 'HH:mm')}`);
+        console.log(`Slot ${formatInTimeZone(currentSlotStartUTC, timeZone, 'HH:mm')} - ${formatInTimeZone(slotEndUTC, timeZone, 'HH:mm')} overlaps with booking ${formatInTimeZone(booking.start, timeZone, 'HH:mm')} - ${formatInTimeZone(booking.end, timeZone, 'HH:mm')}`);
       }
       return overlaps;
     });
 
-    if (!isOverlapping && !isInBreakTime) {
+    // Slot is available if it doesn't overlap and isn't during a break, and ends before or at the working end time
+    if (!isOverlapping && !isInBreakTime && slotEndUTC <= endTimeUTC) {
       slots.push({
-        start: currentSlot,
-        end: slotEnd,
+        start: currentSlotStartUTC, // Store UTC time
+        end: slotEndUTC,         // Store UTC time
         available: true,
       });
     } else {
-      console.log(`Slot ${format(currentSlot, 'HH:mm')} - ${format(slotEnd, 'HH:mm')} is not available. Break time: ${isInBreakTime}, Overlapping: ${isOverlapping}`);
+      console.log(`Slot ${formatInTimeZone(currentSlotStartUTC, timeZone, 'HH:mm')} - ${formatInTimeZone(slotEndUTC, timeZone, 'HH:mm')} is not available. Break: ${isInBreakTime}, Overlap: ${isOverlapping}, Exceeds End: ${slotEndUTC > endTimeUTC}`);
     }
 
-    currentSlot = addMinutes(slotEnd, bufferTime);
+    // Move to the next potential slot start time (add buffer)
+    currentSlotStartUTC = addMinutes(currentSlotStartUTC, duration + bufferTime);
   }
 
-  console.log(`Generated ${slots.length} available time slots for ${format(date, 'yyyy-MM-dd')}`);
+  console.log(`Generated ${slots.length} available time slots for ${formatBase(zonedDate, 'yyyy-MM-dd')}`);
   return slots;
 }
 
@@ -163,7 +183,7 @@ export default function BookService() {
   const { id } = useParams<{ id: string }>();
   const { t } = useLanguage();
   const { toast } = useToast();
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date()); // Represents the *day* selected, time part is ignored
   const [selectedTime, setSelectedTime] = useState<string>();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -181,10 +201,10 @@ export default function BookService() {
     enabled: !!service && !!selectedDate,
   });
   
-  // Parse the dates from strings to Date objects
+  // Parse the UTC date strings from API to Date objects
   const existingBookings = existingBookingsRaw?.map(booking => ({
-    start: new Date(booking.start),
-    end: new Date(booking.end)
+    start: new Date(booking.start), // Already UTC
+    end: new Date(booking.end)     // Already UTC
   })) || [];
 
   // Generate available time slots
@@ -296,8 +316,10 @@ export default function BookService() {
 
     bookingMutation.mutate({
       serviceId: service.id,
-      date: selectedDate.toISOString(),
-      time: selectedTime,
+      // Send the selected slot's start time in UTC ISO format
+      date: selectedTime ? new Date(selectedTime).toISOString() : new Date().toISOString(), // selectedTime holds the UTC start time string
+      // 'time' field might be redundant now, date contains the full timestamp
+      time: selectedTime ? formatInTimeZone(new Date(selectedTime), timeZone, 'HH:mm') : '', // Keep sending HH:mm for compatibility if needed
     });
   };
 
@@ -432,9 +454,12 @@ export default function BookService() {
                   selected={selectedDate}
                   onSelect={(date) => {
                     if (date) {
+                      // Set only the date part, reset time
+                      const today = new Date();
+                      date.setHours(today.getHours(), today.getMinutes(), today.getSeconds(), today.getMilliseconds());
                       setSelectedDate(date);
                       setSelectedTime(undefined);
-                      console.log(`Selected date: ${format(date, 'yyyy-MM-dd')}`);
+                      console.log(`Selected date (day): ${formatBase(date, 'yyyy-MM-dd')}`);
                     }
                   }}
                   disabled={(date) =>
@@ -450,18 +475,18 @@ export default function BookService() {
                 <div className="grid grid-cols-2 gap-2">
                   {timeSlots.map((slot) => (
                     <Button
-                      key={slot.start.toISOString()}
+                      key={slot.start.toISOString()} // Use UTC ISO string as key
                       variant={
-                        selectedTime === format(slot.start, "HH:mm")
+                        selectedTime === slot.start.toISOString() // Compare with UTC ISO string
                           ? "default"
                           : "outline"
                       }
-                      onClick={() =>
-                        setSelectedTime(format(slot.start, "HH:mm"))
-                      }
+                      // Store the selected slot's UTC start time as ISO string
+                      onClick={() => setSelectedTime(slot.start.toISOString())}
                       className="w-full"
                     >
-                      {format(slot.start, "HH:mm")}
+                      {/* Display the time in IST format */} 
+                      {formatInTimeZone(slot.start, timeZone, 'hh:mm a')}
                     </Button>
                   ))}
                 </div>
@@ -524,7 +549,7 @@ export default function BookService() {
                           ))}
                         </div>
                         <span className="text-sm text-muted-foreground">
-                          {format(new Date(review.createdAt), "MMM d, yyyy")}
+                          {formatInTimeZone(new Date(review.createdAt), timeZone, "MMM d, yyyy")}
                         </span>
                       </div>
                       <p className="text-sm">{review.review}</p>

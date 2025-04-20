@@ -16,6 +16,7 @@ import { Loader2, Check, X, Calendar, Clock } from "lucide-react";
 import { Booking, Service } from "@shared/schema";
 import { z } from "zod";
 import { useState, useEffect } from "react";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 const bookingActionSchema = z.object({
   status: z.enum(["accepted", "rejected", "rescheduled", "completed"]),
@@ -225,13 +226,14 @@ export default function ProviderBookings() {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Calendar className="h-4 w-4" />
-                        {new Date(booking.bookingDate).toLocaleString()}
+                        {formatIndianDisplay(booking.bookingDate, 'date')}
                         <Clock className="h-4 w-4 ml-2" />
-                        {booking.service.duration} mins
+                        {formatIndianDisplay(booking.bookingDate, 'time')}
+                        <span className="ml-2">({booking.service.duration} mins)</span>
                       </div>
                       {booking.status === 'rescheduled' && booking.rescheduleDate && (
                         <div className="text-sm text-yellow-600">
-                          Rescheduled to: {new Date(booking.rescheduleDate).toLocaleString()}
+                          Rescheduled to: {formatIndianDisplay(booking.rescheduleDate, 'datetime')}
                         </div>
                       )}
                       {booking.status === 'rejected' && booking.rejectionReason && (

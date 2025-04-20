@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Plus
 } from "lucide-react";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 export default function ShopDashboard() {
   const { user } = useAuth();
@@ -126,7 +127,7 @@ export default function ShopDashboard() {
                       <div>
                         <p className="font-medium">Order #{order.id}</p>
                         <p className="text-sm text-muted-foreground">
-                          {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'N/A'}
+                          {order.orderDate ? formatIndianDisplay(order.orderDate, 'date') : 'N/A'} {/* Use formatIndianDisplay */}
                         </p>
                       </div>
                       <div className="text-right">

@@ -7,7 +7,7 @@ import { Service, User, Review } from "@shared/schema";
 import { Loader2, MapPin, Clock, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useParams, Link } from "wouter";
-import { format } from "date-fns";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 export default function ServiceProvider() {
   const { id } = useParams<{ id: string }>();
@@ -166,7 +166,7 @@ export default function ServiceProvider() {
                               ))}
                             </div>
                             <span className="text-sm text-muted-foreground">
-                              {format(new Date(review.createdAt || ''), "MMM d, yyyy")}
+                              {formatIndianDisplay(review.createdAt || '', 'date')} {/* Use formatIndianDisplay */}
                             </span>
                           </div>
                         </div>

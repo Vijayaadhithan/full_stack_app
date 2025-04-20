@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { Booking } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
 // Component to display booking requests with status tracking
 function BookingRequestsList() {
@@ -48,7 +49,7 @@ function BookingRequestsList() {
               <div>
                 <p className="font-medium">{booking.service?.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {format(new Date(booking.bookingDate), 'PPP')} at {format(new Date(booking.bookingDate), 'p')}
+                  {formatIndianDisplay(booking.bookingDate, 'datetime')} {/* Use formatIndianDisplay */}
                 </p>
                 <div className="flex items-center mt-1">
                   <Clock className="h-3 w-3 mr-1 text-yellow-500" />
@@ -97,7 +98,7 @@ function BookingHistoryList() {
             <div>
               <p className="font-medium">{booking.service?.name}</p>
               <p className="text-sm text-muted-foreground">
-                {format(new Date(booking.bookingDate), 'PPP')}
+                {formatIndianDisplay(booking.bookingDate, 'date')} {/* Use formatIndianDisplay */}
               </p>
               <div className="flex items-center mt-1">
                 {booking.status === 'accepted' && (
