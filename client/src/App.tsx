@@ -20,6 +20,7 @@ import Cart from "@/pages/customer/cart";
 import Wishlist from "@/pages/customer/wishlist";
 import Bookings from "@/pages/customer/bookings";
 import OrderDetails from "@/pages/customer/order-details";
+import CustomerProfile from "@/pages/customer/profile"; // Add this import
 import ProviderDashboard from "@/pages/provider/dashboard";
 import ProviderProfile from "@/pages/provider/profile";
 import ProviderServices from "@/pages/provider/services";
@@ -55,6 +56,7 @@ function Router() {
       <ProtectedRoute path="/customer/bookings" component={Bookings} />
       <ProtectedRoute path="/customer/order/:id" component={OrderDetails} />
       <ProtectedRoute path="/customer/orders" component={OrderDetails} />
+      <ProtectedRoute path="/customer/profile" component={CustomerProfile} /> {/* Add this route */}
 
       {/* Provider Routes */}
       <ProtectedRoute path="/provider" component={ProviderDashboard} />

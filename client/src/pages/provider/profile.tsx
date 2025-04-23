@@ -18,7 +18,11 @@ const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   phone: z.string().min(10, "Valid phone number is required"),
   email: z.string().email("Valid email is required"),
-  address: z.string().min(1, "Address is required"),
+  addressStreet: z.string().optional(),
+  addressCity: z.string().optional(),
+  addressState: z.string().optional(),
+  addressPostalCode: z.string().optional(),
+  addressCountry: z.string().optional(),
   bio: z.string().min(10, "Bio should be at least 10 characters"),
   qualifications: z.string().optional(),
   experience: z.string().optional(),
@@ -40,7 +44,11 @@ export default function ProviderProfile() {
       name: user?.name || "",
       phone: user?.phone || "",
       email: user?.email || "",
-      address: user?.address || "",
+      addressStreet: user?.addressStreet || "",
+      addressCity: user?.addressCity || "",
+      addressState: user?.addressState || "",
+      addressPostalCode: user?.addressPostalCode || "",
+      addressCountry: user?.addressCountry || "",
       bio: user?.bio || "",
       qualifications: user?.qualifications || "",
       experience: user?.experience || "",
@@ -56,7 +64,11 @@ export default function ProviderProfile() {
         name: user.name || "",
         phone: user.phone || "",
         email: user.email || "",
-        address: user.address || "",
+        addressStreet: user.addressStreet || "",
+        addressCity: user.addressCity || "",
+        addressState: user.addressState || "",
+        addressPostalCode: user.addressPostalCode || "",
+        addressCountry: user.addressCountry || "",
         bio: user.bio || "",
         qualifications: user.qualifications || "",
         experience: user.experience || "",
@@ -67,7 +79,11 @@ export default function ProviderProfile() {
         name: user.name || "",
         phone: user.phone || "",
         email: user.email || "",
-        address: user.address || "",
+        addressStreet: user.addressStreet || "",
+        addressCity: user.addressCity || "",
+        addressState: user.addressState || "",
+        addressPostalCode: user.addressPostalCode || "",
+        addressCountry: user.addressCountry || "",
         bio: user.bio || "",
         qualifications: user.qualifications || "",
         experience: user.experience || "",
@@ -122,7 +138,11 @@ export default function ProviderProfile() {
       name: data.name,
       phone: data.phone,
       email: data.email,
-      address: data.address,
+      addressStreet: data.addressStreet,
+      addressCity: data.addressCity,
+      addressState: data.addressState,
+      addressPostalCode: data.addressPostalCode,
+      addressCountry: data.addressCountry,
       bio: data.bio,
       qualifications: data.qualifications,
       experience: data.experience,
@@ -219,19 +239,75 @@ export default function ProviderProfile() {
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="address"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Address</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} disabled={!editMode} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Address Fields */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="addressStreet"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Address Street</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="addressCity"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>City</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="addressState"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>State</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="addressPostalCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Postal Code</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="addressCountry"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Country</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                {/* End Address Fields */}
 
                 <FormField
                   control={form.control}

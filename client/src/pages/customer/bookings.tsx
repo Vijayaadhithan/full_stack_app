@@ -33,7 +33,20 @@ const item = {
   show: { opacity: 1, y: 0 }
 };
 
-type BookingWithService = Booking & { service: Service };
+// Update BookingWithService type to include provider details
+type BookingWithService = Booking & { 
+  service: Service;
+  provider?: { // Make provider optional initially
+    id: number;
+    name: string;
+    phone: string;
+    addressStreet?: string;
+    addressCity?: string;
+    addressState?: string;
+    addressPostalCode?: string;
+    addressCountry?: string;
+  } | null; // Allow null if provider not found
+};
 
 declare global {
   interface Window {
@@ -289,13 +302,18 @@ export default function Bookings() {
                             Status: {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                             {booking.rejectionReason && ` - Reason: ${booking.rejectionReason}`}
                           </p>
-                          {/* Remove the block trying to access non-existent properties 
-                          {booking.isRecurring && ( 
-                            <p className="text-sm text-muted-foreground">
-                              Recurring: {booking.recurringPattern} 
-                            </p>
-                          )} 
-                          */}
+                          {/* Display provider details if booking is accepted */}
+                          {booking.status === 'accepted' && booking.provider && (
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              <p><strong>Provider:</strong> {booking.provider.name}</p>
+                              <p><strong>Phone:</strong> {booking.provider.phone}</p>
+                              {booking.provider.addressStreet && (
+                                <p>
+                                  <strong>Address:</strong> {booking.provider.addressStreet}, {booking.provider.addressCity}, {booking.provider.addressState} {booking.provider.addressPostalCode}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="space-x-2">
                           {booking.status === "accepted" && (

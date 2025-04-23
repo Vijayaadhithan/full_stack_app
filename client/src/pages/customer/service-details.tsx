@@ -121,7 +121,7 @@ export default function ServiceDetails() {
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  <span>Location: {service.location ? `${service.location.lat}, ${service.location.lng}` : 'Not specified'}</span>
+                  <span>Location: {service.addressStreet ? `${service.addressStreet}, ${service.addressCity}, ${service.addressState} ${service.addressPostalCode}, ${service.addressCountry}` : 'Not specified'}</span>
                 </div>
               </div>
               <div>

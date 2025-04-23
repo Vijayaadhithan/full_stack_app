@@ -63,7 +63,11 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   email: text("email").notNull(),
-  address: text("address"),
+  addressStreet: text("address_street"),
+  addressCity: text("address_city"),
+  addressState: text("address_state"),
+  addressPostalCode: text("address_postal_code"),
+  addressCountry: text("address_country"),
   language: text("language").default("en"),
   profilePicture: text("profile_picture"),
   paymentMethods: jsonb("payment_methods").$type<PaymentMethod[]>(),
@@ -88,7 +92,12 @@ export const services = pgTable("services", {
   isDeleted: boolean("is_deleted").default(false), // Add soft deletion flag
   category: text("category").notNull(),
   images: text("images").array(),
-  location: jsonb("location").$type<{ lat: number; lng: number }>(),
+  addressStreet: text("address_street"),
+  addressCity: text("address_city"),
+  addressState: text("address_state"),
+  addressPostalCode: text("address_postal_code"),
+  addressCountry: text("address_country"),
+  // Removed latitude and longitude
   bufferTime: integer("buffer_time").default(15), // in minutes
   workingHours: jsonb("working_hours").$type<WorkingHours>(),
   breakTime: jsonb("break_time").$type<BreakTime[]>(),

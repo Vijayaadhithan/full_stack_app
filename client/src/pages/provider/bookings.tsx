@@ -12,8 +12,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Check, X, Calendar, Clock } from "lucide-react";
-import { Booking, Service } from "@shared/schema";
+import { Loader2, Check, X, Calendar, Clock, User as UserIcon } from "lucide-react"; // Import UserIcon
+import { Booking, Service, User } from "@shared/schema"; // Import User type
 import { z } from "zod";
 import { useState, useEffect } from "react";
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
@@ -45,7 +45,7 @@ export default function ProviderBookings() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   // Fetch all bookings including accepted ones
-  const { data: bookings, isLoading } = useQuery<(Booking & { service: Service })[]>({
+  const { data: bookings, isLoading } = useQuery<BookingWithDetails[]>({ // Use BookingWithDetails
     queryKey: ["/api/bookings/provider"],
     enabled: !!user?.id,
   });
@@ -231,6 +231,18 @@ export default function ProviderBookings() {
                         {formatIndianDisplay(booking.bookingDate, 'time')}
                         <span className="ml-2">({booking.service.duration} mins)</span>
                       </div>
+                      {/* Display Customer Information */}
+                      {booking.customer && (
+                        <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
+                          <p className="flex items-center"><UserIcon className="h-4 w-4 mr-1" /> <strong>Customer:</strong> {booking.customer.name}</p>
+                          <p><strong>Phone:</strong> {booking.customer.phone}</p>
+                          {booking.customer.addressStreet && (
+                            <p>
+                              <strong>Address:</strong> {booking.customer.addressStreet}, {booking.customer.addressCity}, {booking.customer.addressState} {booking.customer.addressPostalCode}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {booking.status === 'rescheduled' && booking.rescheduleDate && (
                         <div className="text-sm text-yellow-600">
                           Rescheduled to: {formatIndianDisplay(booking.rescheduleDate, 'datetime')}
@@ -430,3 +442,9 @@ export default function ProviderBookings() {
     </DashboardLayout>
   );
 }
+
+// Update Booking type to include customer details
+type BookingWithDetails = Booking & { 
+  service: Service; 
+  customer?: User | null; // Add customer details
+};

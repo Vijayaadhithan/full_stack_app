@@ -74,9 +74,9 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async updateUser(id: number, updateData: Partial<User>): Promise<User> {
+  async updateUser(id: number, updateData: Partial<Omit<User, 'address'>> & { addressStreet?: string; addressCity?: string; addressState?: string; addressPostalCode?: string; addressCountry?: string }): Promise<User> {
     const result = await db.update(users)
-      .set(updateData)
+      .set({ ...updateData }) // Spread operator handles the partial update correctly
       .where(eq(users.id, id))
       .returning();
     if (!result[0]) throw new Error("User not found");
@@ -85,7 +85,8 @@ export class PostgresStorage implements IStorage {
 
   // ─── SERVICE OPERATIONS ──────────────────────────────────────────
   async createService(service: InsertService): Promise<Service> {
-    const result = await db.insert(services).values(service).returning();
+    // Type assertion might be needed depending on InsertService definition
+    const result = await db.insert(services).values(service as any).returning();
     return result[0];
   }
 
@@ -180,9 +181,9 @@ export class PostgresStorage implements IStorage {
     ));
   }
 
-  async updateService(id: number, service: Partial<Service>): Promise<Service> {
+  async updateService(id: number, serviceUpdate: Partial<Service>): Promise<Service> {
     const result = await db.update(services)
-      .set(service)
+      .set(serviceUpdate as any) // Pass the update data directly
       .where(eq(services.id, id))
       .returning();
     if (!result[0]) throw new Error("Service not found");

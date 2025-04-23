@@ -43,7 +43,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUser(id: number, user: Partial<User>): Promise<User>;
+  updateUser(id: number, user: Partial<Omit<User, 'address'>> & { addressStreet?: string; addressCity?: string; addressState?: string; addressPostalCode?: string; addressCountry?: string }): Promise<User>;
 
   // Service operations
   createService(service: InsertService): Promise<Service>;
@@ -239,10 +239,10 @@ export class MemStorage implements IStorage {
     return user;
   }
 
-  async updateUser(id: number, updateData: Partial<User>): Promise<User> {
+  async updateUser(id: number, updateData: Partial<Omit<User, 'address'>> & { addressStreet?: string; addressCity?: string; addressState?: string; addressPostalCode?: string; addressCountry?: string }): Promise<User> {
     const existing = this.users.get(id);
     if (!existing) throw new Error("User not found");
-    const updated = { ...existing, ...updateData };
+    const updated = { ...existing, ...updateData }; // Spread handles partial updates
     this.users.set(id, updated);
     return updated;
   }

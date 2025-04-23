@@ -11,6 +11,7 @@ import { Booking } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+import { User } from 'lucide-react'; // Import User icon
 
 // Component to display booking requests with status tracking
 function BookingRequestsList() {
@@ -197,6 +198,18 @@ export default function CustomerDashboard() {
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground">View and manage your service bookings</p>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/customer/profile"> {/* Add link to profile page */}
+            <Card className="cursor-pointer hover:shadow-md transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">My Profile</CardTitle>
+                <User className="h-4 w-4 text-muted-foreground" /> {/* Use User icon */}
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">View and edit your profile information</p>
               </CardContent>
             </Card>
           </Link>

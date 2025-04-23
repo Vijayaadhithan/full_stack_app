@@ -105,14 +105,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pendingBookings = await storage.getPendingBookingRequestsForProvider(providerId);
       
       // Fetch service details for each booking
-      const bookingsWithService = await Promise.all(
+      const bookingsWithDetails = await Promise.all(
         pendingBookings.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
-          return { ...booking, service };
+          const customer = await storage.getUser(booking.customerId); // Fetch customer details
+          return { 
+            ...booking, 
+            service, 
+            customer: customer ? { // Include customer details
+              id: customer.id,
+              name: customer.name,
+              phone: customer.phone,
+              addressStreet: customer.addressStreet,
+              addressCity: customer.addressCity,
+              addressState: customer.addressState,
+              addressPostalCode: customer.addressPostalCode,
+              addressCountry: customer.addressCountry,
+            } : null
+          };
         })
       );
+      res.json(bookingsWithDetails); // Send details back
       
-      res.json(bookingsWithService);
+
     } catch (error) {
       console.error("Error fetching pending bookings:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch pending bookings" });
@@ -181,11 +196,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bookingsWithService = await Promise.all(
         bookingRequests.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
-          return { ...booking, service };
+          let provider = null;
+          if (service) {
+            provider = await storage.getUser(service.providerId);
+          }
+          return { 
+            ...booking, 
+            service, 
+            provider: provider ? { // Include provider details
+              id: provider.id,
+              name: provider.name,
+              phone: provider.phone,
+              addressStreet: provider.addressStreet,
+              addressCity: provider.addressCity,
+              addressState: provider.addressState,
+              addressPostalCode: provider.addressPostalCode,
+              addressCountry: provider.addressCountry,
+            } : null
+          };
         })
       );
       
-      res.json(bookingsWithService);
+      res.json(bookingsWithService); // Send the response back
     } catch (error) {
       console.error("Error fetching booking requests:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking requests" });
@@ -199,14 +231,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bookingHistory = await storage.getBookingHistoryForCustomer(customerId);
       
       // Fetch service details for each booking
-      const bookingsWithService = await Promise.all(
+      const bookingsWithDetails = await Promise.all(
         bookingHistory.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
-          return { ...booking, service };
+          const customer = await storage.getUser(booking.customerId); // Fetch customer details
+          return { 
+            ...booking, 
+            service, 
+            customer: customer ? { // Include customer details
+              id: customer.id,
+              name: customer.name,
+              phone: customer.phone,
+              addressStreet: customer.addressStreet,
+              addressCity: customer.addressCity,
+              addressState: customer.addressState,
+              addressPostalCode: customer.addressPostalCode,
+              addressCountry: customer.addressCountry,
+            } : null
+          };
         })
       );
+      res.json(bookingsWithDetails); // Send details back
       
-      res.json(bookingsWithService);
+
     } catch (error) {
       console.error("Error fetching booking history:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking history" });
@@ -220,14 +267,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bookingHistory = await storage.getBookingHistoryForProvider(providerId);
       
       // Fetch service details for each booking
-      const bookingsWithService = await Promise.all(
+      const bookingsWithDetails = await Promise.all(
         bookingHistory.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
-          return { ...booking, service };
+          const customer = await storage.getUser(booking.customerId); // Fetch customer details
+          return { 
+            ...booking, 
+            service, 
+            customer: customer ? { // Include customer details
+              id: customer.id,
+              name: customer.name,
+              phone: customer.phone,
+              addressStreet: customer.addressStreet,
+              addressCity: customer.addressCity,
+              addressState: customer.addressState,
+              addressPostalCode: customer.addressPostalCode,
+              addressCountry: customer.addressCountry,
+            } : null
+          };
         })
       );
+      res.json(bookingsWithDetails); // Send details back
       
-      res.json(bookingsWithService);
+
     } catch (error) {
       console.error("Error fetching booking history:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking history" });
@@ -366,38 +428,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Can only update own products" });
       }
 
-      // Import and use the updateProductSchema for validation
-      const { updateProductSchema } = await import("../shared/updateProductSchema");
-      
-      // Validate the request body against the schema
-      const result = updateProductSchema.safeParse(req.body);
-      
-      if (!result.success) {
-        return res.status(400).json({ 
-          message: "Invalid product data", 
-          errors: result.error.errors 
-        });
-      }
+      // Use a Zod schema for partial updates if desired, or rely on storage layer validation
+      // For now, directly pass the body. The storage layer handles partial updates.
+      const updateData = req.body;
 
-      // Only pass the validated data to the storage layer
-      const updatedProduct = await storage.updateProduct(productId, result.data);
-      res.json(updatedProduct);
+      // The storage.updateService method expects Partial<Service>
+      const updatedService = await storage.updateService(serviceId, updateData);
+      console.log("[API] /api/services/:id PATCH - Updated service:", updatedService);
+      res.json(updatedService);
     } catch (error) {
-      console.error("Error updating product:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update product" });
+      console.error("[API] Error in /api/services/:id PATCH:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update service" });
     }
   });
 
   // Service routes
   app.post("/api/services", requireAuth, requireRole(["provider"]), async (req, res) => {
     try {
+      // The schema already reflects the address fields, no need to handle 'location'
       const result = insertServiceSchema.safeParse(req.body);
-      if (!result.success) return res.status(400).json(result.error);
+      if (!result.success) {
+        console.error("[API] /api/services POST - Validation error:", result.error.flatten());
+        return res.status(400).json(result.error.flatten());
+      }
 
       const service = await storage.createService({
         ...result.data,
         providerId: req.user!.id,
         isAvailable: true, // Default to available
+        // Ensure address fields are included if they are part of result.data
       });
 
       console.log("Created service:", service);
@@ -1080,9 +1139,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const service = await storage.getService(booking.serviceId);
           const customer = await storage.getUser(booking.customerId);
           
+          // Include customer contact details for the provider
+          const customerContact = customer ? {
+            phone: customer.phone,
+            addressStreet: customer.addressStreet,
+            addressCity: customer.addressCity,
+            addressState: customer.addressState,
+            addressPostalCode: customer.addressPostalCode,
+            addressCountry: customer.addressCountry,
+          } : {};
+
           return {
             ...booking,
             service: service || { name: "Unknown Service" },
+            customerContact: customerContact, // Add customer contact info
             customer: customer ? {
               id: customer.id,
               name: customer.name,

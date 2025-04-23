@@ -20,7 +20,11 @@ const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   phone: z.string().min(10, "Invalid phone number"),
   email: z.string().email("Invalid email"),
-  address: z.string().min(1, "Address is required"),
+  addressStreet: z.string().optional(),
+  addressCity: z.string().optional(),
+  addressState: z.string().optional(),
+  addressPostalCode: z.string().optional(),
+  addressCountry: z.string().optional(),
 });
 
 export default function CustomerProfile() {
@@ -34,7 +38,11 @@ export default function CustomerProfile() {
       name: user?.name || "",
       phone: user?.phone || "",
       email: user?.email || "",
-      address: user?.address || "",
+      addressStreet: user?.addressStreet || "",
+      addressCity: user?.addressCity || "",
+      addressState: user?.addressState || "",
+      addressPostalCode: user?.addressPostalCode || "",
+      addressCountry: user?.addressCountry || "",
     },
   });
 
@@ -86,54 +94,8 @@ export default function CustomerProfile() {
       >
         <h1 className="text-2xl font-bold">Profile Settings</h1>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile Picture</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col items-center gap-4">
-                <div className="relative h-32 w-32">
-                  <img
-                    src={imagePreview || "https://via.placeholder.com/128"}
-                    alt="Profile"
-                    className="h-full w-full rounded-full object-cover"
-                  />
-                  <label
-                    htmlFor="profile-picture"
-                    className="absolute bottom-0 right-0 p-2 bg-primary text-primary-foreground rounded-full cursor-pointer hover:bg-primary/90"
-                  >
-                    <Upload className="h-4 w-4" />
-                  </label>
-                  <input
-                    type="file"
-                    id="profile-picture"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageChange}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Methods</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {user?.paymentMethods?.map((method, index) => (
-                <div key={index} className="flex items-center gap-2 p-2 border rounded">
-                  <CreditCard className="h-4 w-4" />
-                  <span>{method.type === "card" ? "●●●● " + method.details.last4 : method.details.vpa}</span>
-                </div>
-              ))}
-              <Button variant="outline" className="w-full">
-                Add Payment Method
-              </Button>
-            </CardContent>
-          </Card>
-
+        <div className="grid gap-6">
+          {/* Profile Picture and Payment Methods Cards Removed */}
           <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle>Personal Information</CardTitle>
@@ -168,15 +130,33 @@ export default function CustomerProfile() {
                       <Input {...form.register("email")} type="email" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="address">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="addressStreet">
                         <span className="flex items-center gap-2">
                           <MapPin className="h-4 w-4" />
-                          Address
+                          Street Address
                         </span>
                       </Label>
-                      <Input {...form.register("address")} />
+                      <Input {...form.register("addressStreet")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="addressCity">City</Label>
+                      <Input {...form.register("addressCity")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="addressState">State</Label>
+                      <Input {...form.register("addressState")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="addressPostalCode">Postal Code</Label>
+                      <Input {...form.register("addressPostalCode")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="addressCountry">Country</Label>
+                      <Input {...form.register("addressCountry")} />
                     </div>
                   </div>
+                 </div>
                   <Button
                     type="submit"
                     className="w-full"
