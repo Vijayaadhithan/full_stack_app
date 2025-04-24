@@ -18,6 +18,7 @@ import {
   insertPromotionSchema,
   insertBlockedTimeSlotSchema, // Added import
   promotions, // Import promotions table for direct updates
+  users // Import the users table schema
 } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
@@ -388,19 +389,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all shops
   app.get("/api/shops", requireAuth, async (req, res) => {
     try {
-      // Get all users with role "shop"
-      const allUsers = await Promise.all(
-        Array.from({ length: 100 }, (_, i) => i + 1).map(async (id) => {
-          try {
-            return await storage.getUser(id);
-          } catch {
-            return null;
-          }
-        })
-      );
-      
-      const shops = allUsers
-        .filter((user): user is NonNullable<typeof user> => !!user && user.role === "shop");
+      // Fetch users with the 'shop' role directly from the database
+      const shops = await db.select().from(users).where(eq(users.role, 'shop'));
       
       res.json(shops);
     } catch (error) {
@@ -483,13 +473,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For now, directly pass the body. The storage layer handles partial updates.
       const updateData = req.body;
 
-      // The storage.updateService method expects Partial<Service>
-      const updatedService = await storage.updateService(serviceId, updateData);
-      console.log("[API] /api/services/:id PATCH - Updated service:", updatedService);
-      res.json(updatedService);
+      // The storage.updateProduct method expects Partial<Product>
+      const updatedProduct = await storage.updateProduct(productId, updateData);
+      console.log("[API] /api/products/:id PATCH - Updated product:", updatedProduct);
+      res.json(updatedProduct);
     } catch (error) {
-      console.error("[API] Error in /api/services/:id PATCH:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update service" });
+      console.error("[API] Error in /api/products/:id PATCH:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update product" });
     }
   });
 

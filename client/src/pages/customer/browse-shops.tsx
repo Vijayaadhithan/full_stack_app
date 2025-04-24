@@ -80,7 +80,7 @@ export default function BrowseShops() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredShops.map((shop) => (
               <motion.div key={shop.id} variants={item}>
-                <Link href={`/customer/shop/${shop.id}`}>
+                <Link href={`/customer/shops/${shop.id}`}>
                   <Card className="cursor-pointer hover:shadow-lg transition-shadow h-full">
                     <CardContent className="p-6">
                       <div className="flex flex-col gap-4">
