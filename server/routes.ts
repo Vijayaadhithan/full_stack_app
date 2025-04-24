@@ -25,6 +25,7 @@ import Razorpay from "razorpay";
 import crypto from 'crypto';
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
+import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null {
@@ -1801,9 +1802,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   app.get("/api/products", requireAuth, async (req, res) => {
-    // Get all products from storage
-    const products = Array.from(storage.products.values());
-    res.json(products);
+    try {
+      // Get all products from storage
+      const products = await storage.getProducts();
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
+
+  // Get a specific product by shop ID and product ID
+  app.get("/api/shops/:shopId/products/:productId", requireAuth, async (req, res) => {
+    try {
+      const shopId = parseInt(req.params.shopId);
+      const productId = parseInt(req.params.productId);
+      const product = await storage.getProduct(productId);
+
+      if (!product || product.shopId !== shopId) {
+        return res.status(404).json({ message: "Product not found in this shop" });
+      }
+      res.json(product);
+    } catch (error) {
+      console.error("Error fetching product:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch product" });
+    }
+  });
+
+  // Get shop details by ID
+  app.get("/api/shops/:shopId", requireAuth, async (req, res) => {
+    try {
+      const shopId = parseInt(req.params.shopId);
+      const shop = await storage.getUser(shopId);
+
+      if (!shop || shop.role !== 'shop') {
+        return res.status(404).json({ message: "Shop not found" });
+      }
+      // Return only necessary public shop info
+      res.json({
+        id: shop.id,
+        name: shop.name,
+        shopProfile: shop.shopProfile,
+        // Add other relevant public fields if needed
+      });
+    } catch (error) {
+      console.error("Error fetching shop details:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch shop details" });
+    }
   });
 
   app.delete("/api/products/:id", requireAuth, requireRole(["shop"]), async (req, res) => {

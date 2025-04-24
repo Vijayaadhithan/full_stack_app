@@ -16,6 +16,7 @@ import BookService from "@/pages/customer/book-service";
 import BrowseProducts from "@/pages/customer/browse-products";
 import BrowseShops from "@/pages/customer/browse-shops";
 import ShopDetails from "@/pages/customer/shop-details";
+import ProductDetails from "./pages/customer/product-details"; // Import the new component
 import Cart from "@/pages/customer/cart";
 import Wishlist from "@/pages/customer/wishlist";
 import Bookings from "@/pages/customer/bookings";
@@ -50,7 +51,8 @@ function Router() {
       <ProtectedRoute path="/customer/book-service/:id" component={BookService} />
       <ProtectedRoute path="/customer/browse-products" component={BrowseProducts} />
       <ProtectedRoute path="/customer/browse-shops" component={BrowseShops} />
-      <ProtectedRoute path="/customer/shop/:id" component={ShopDetails} />
+      <ProtectedRoute path="/customer/shops/:id" component={ShopDetails} />
+      <ProtectedRoute path="/customer/shops/:shopId/products/:productId" component={ProductDetails} /> {/* Add route for product details */}
       <ProtectedRoute path="/customer/cart" component={Cart} />
       <ProtectedRoute path="/customer/wishlist" component={Wishlist} />
       <ProtectedRoute path="/customer/bookings" component={Bookings} />

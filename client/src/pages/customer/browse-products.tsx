@@ -2,13 +2,19 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Product } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { Search, ShoppingCart, Heart, Store } from "lucide-react";
+import { Search, ShoppingCart, Heart } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 
@@ -17,40 +23,22 @@ const container = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.1
-    }
-  }
+      staggerChildren: 0.1,
+    },
+  },
 };
 
 const item = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
+  show: { opacity: 1, y: 0 },
 };
 
 export default function BrowseProducts() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>();
-  
-  // Redirect to browse shops page
-  return (
-    <DashboardLayout>
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
-        <h2 className="text-2xl font-bold">Browse Shops First</h2>
-        <p className="text-muted-foreground text-center max-w-md">
-          To provide a better shopping experience, please browse our shops first and then view their products.
-        </p>
-        <Link href="/customer/browse-shops">
-          <Button size="lg">
-            <Store className="mr-2 h-5 w-5" />
-            Browse Shops
-          </Button>
-        </Link>
-      </div>
-    </DashboardLayout>
-  );
-  
-  /* Original implementation commented out
+
+  // Original implementation restored
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ["/api/products", selectedCategory],
   });
@@ -108,10 +96,13 @@ export default function BrowseProducts() {
     },
   });
 
-  const filteredProducts = products?.filter(product =>
-    (!selectedCategory || product.category === selectedCategory) &&
-    (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredProducts = products?.filter(
+    (product) =>
+      (!selectedCategory || product.category === selectedCategory) &&
+      (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.description
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -134,7 +125,10 @@ export default function BrowseProducts() {
                 className="pl-10"
               />
             </div>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <Select
+              value={selectedCategory}
+              onValueChange={setSelectedCategory}
+            >
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
@@ -142,7 +136,7 @@ export default function BrowseProducts() {
                 <SelectItem value="electronics">Electronics</SelectItem>
                 <SelectItem value="clothing">Clothing</SelectItem>
                 <SelectItem value="books">Books</SelectItem>
-                <SelectItem value="home">Home & Living</SelectItem>
+                <SelectItem value="home">Home &amp; Living</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -156,46 +150,44 @@ export default function BrowseProducts() {
           <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredProducts?.map((product) => (
               <motion.div key={product.id} variants={item}>
-                <Card className="h-full flex flex-col">
-                  <div className="aspect-square relative overflow-hidden">
-                    <img
-                      src={product.images?.[0] || "https://via.placeholder.com/400"}
-                      alt={product.name}
-                      className="object-cover w-full h-full"
-                    />
-                    {product.discount && (
-                      <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded">
-                        {product.discount}% OFF
-                      </div>
-                    )}
-                  </div>
-                  <CardContent className="flex-1 p-4">
-                    <h3 className="font-semibold truncate">{product.name}</h3>
-                    <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                      {product.description}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold">₹{product.price}</p>
-                      <div className="flex gap-2">
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          onClick={() => addToWishlistMutation.mutate(product.id)}
-                          disabled={addToWishlistMutation.isPending}
-                        >
-                          <Heart className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          onClick={() => addToCartMutation.mutate(product.id)}
-                          disabled={!product.isAvailable || addToCartMutation.isPending}
-                        >
-                          <ShoppingCart className="h-4 w-4" />
-                        </Button>
-                      </div>
+                <Link href={`/customer/shops/${product.shopId}/products/${product.id}`}>
+                  <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
+                    <div className="aspect-square relative overflow-hidden">
+                      <img
+                        src={product.images?.[0] || "https://via.placeholder.com/400"}
+                        alt={product.name}
+                        className="object-cover w-full h-full"
+                      />
+                      {/* Discount display removed as 'discount' property doesn't exist on Product type */}
                     </div>
-                  </CardContent>
-                </Card>
+                    <CardContent className="flex-1 p-4">
+                      <h3 className="font-semibold truncate">{product.name}</h3>
+                      <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                        {product.description}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold">₹{product.price}</p>
+                        <div className="flex gap-2">
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); addToWishlistMutation.mutate(product.id); }}
+                            disabled={addToWishlistMutation.isPending}
+                          >
+                            <Heart className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); addToCartMutation.mutate(product.id); }}
+                            disabled={!product.isAvailable || product.stock <= 0 || addToCartMutation.isPending}
+                          >
+                            <ShoppingCart className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               </motion.div>
             ))}
           </div>
@@ -203,5 +195,4 @@ export default function BrowseProducts() {
       </motion.div>
     </DashboardLayout>
   );
-  */
 }

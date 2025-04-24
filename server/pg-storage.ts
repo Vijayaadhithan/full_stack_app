@@ -54,6 +54,11 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   async getPromotionsByShop(shopId: number): Promise<Promotion[]> {
     return await db.select().from(promotions).where(eq(promotions.shopId, shopId));
   }
@@ -64,14 +69,29 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   async getUserByUsername(username: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.username, username));
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   async createUser(user: InsertUser): Promise<User> {
     const result = await db.insert(users).values(user).returning();
     return result[0];
+  }
+
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async updateUser(id: number, updateData: Partial<Omit<User, 'address'>> & { addressStreet?: string; addressCity?: string; addressState?: string; addressPostalCode?: string; addressCountry?: string }): Promise<User> {
@@ -83,6 +103,11 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   // ─── SERVICE OPERATIONS ──────────────────────────────────────────
   async createService(service: InsertService): Promise<Service> {
     // Type assertion might be needed depending on InsertService definition
@@ -90,11 +115,21 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   async getService(id: number): Promise<Service | undefined> {
     console.log("Getting service with ID:", id);
     const result = await db.select().from(services).where(eq(services.id, id));
     console.log("Found service:", result[0]);
     return result[0];
+  }
+
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   // Get pending booking requests for a provider
@@ -190,6 +225,11 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   async deleteService(id: number): Promise<void> {
     // Instead of deleting, mark as deleted (soft delete)
     const result = await db.update(services)
@@ -227,9 +267,19 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   async getBooking(id: number): Promise<Booking | undefined> {
     const result = await db.select().from(bookings).where(eq(bookings.id, id));
     return result[0];
+  }
+
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getBookingsByCustomer(customerId: number): Promise<Booking[]> {
@@ -287,15 +337,30 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   // ─── PRODUCT OPERATIONS ──────────────────────────────────────────
   async createProduct(product: InsertProduct): Promise<Product> {
     const result = await db.insert(products).values(product).returning();
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   async getProduct(id: number): Promise<Product | undefined> {
     const result = await db.select().from(products).where(eq(products.id, id));
     return result[0];
+  }
+
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getProductsByShop(shopId: number): Promise<Product[]> {
@@ -319,6 +384,11 @@ export class PostgresStorage implements IStorage {
       .returning();
     if (!result[0]) throw new Error("Product not found");
     return result[0];
+  }
+
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async removeProductFromAllCarts(productId: number): Promise<void> {
@@ -448,9 +518,19 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   async getOrder(id: number): Promise<Order | undefined> {
     const result = await db.select().from(orders).where(eq(orders.id, id));
     return result[0];
+  }
+
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getOrdersByCustomer(customerId: number): Promise<Order[]> {
@@ -470,9 +550,19 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   async createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
     const result = await db.insert(orderItems).values(orderItem).returning();
     return result[0];
+  }
+
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async updateProductStock(productId: number, quantity: number): Promise<void> {
@@ -492,6 +582,11 @@ export class PostgresStorage implements IStorage {
   async createReview(review: InsertReview): Promise<Review> {
     const result = await db.insert(reviews).values(review).returning();
     return result[0];
+  }
+
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getReviewsByService(serviceId: number): Promise<Review[]> {
@@ -519,10 +614,20 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
+  }
+
   // ─── NOTIFICATION OPERATIONS ──────────────────────────────────────
   async createNotification(notification: InsertNotification): Promise<Notification> {
     const result = await db.insert(notifications).values(notification).returning();
     return result[0];
+  }
+
+  async getProducts(): Promise<Product[]> {
+    // Only return non-deleted products
+    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getNotificationsByUser(userId: number): Promise<Notification[]> {

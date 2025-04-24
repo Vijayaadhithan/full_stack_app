@@ -68,6 +68,7 @@ export interface IStorage {
   getProductsByCategory(category: string): Promise<Product[]>;
   updateProduct(id: number, product: Partial<Product>): Promise<Product>;
   deleteProduct(id: number): Promise<void>;
+  getProducts(): Promise<Product[]>; // Add method to get all products
   removeProductFromAllCarts(productId: number): Promise<void>;
 
   // Cart operations
@@ -216,6 +217,12 @@ export class MemStorage implements IStorage {
     });
     this.providerAvailability = new Map();
     this.blockedTimeSlots = new Map(); // Initialize the new map
+  }
+
+  // Add implementation for getProducts
+  async getProducts(): Promise<Product[]> {
+    // Filter out deleted products as well
+    return Array.from(this.products.values()).filter(p => !p.isDeleted);
   }
 
   // User operations
