@@ -9,6 +9,19 @@ import { motion } from "framer-motion";
 import { useParams, Link } from "wouter";
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
+// Helper function to format address
+const formatAddress = (user: User | undefined): string => {
+  if (!user) return "Address not available";
+  const parts = [
+    user.addressStreet,
+    user.addressCity,
+    user.addressState,
+    user.addressPostalCode,
+    user.addressCountry,
+  ].filter(Boolean); // Filter out null/undefined/empty strings
+  return parts.length > 0 ? parts.join(', ') : "Address not available";
+};
+
 export default function ServiceProvider() {
   const { id } = useParams<{ id: string }>();
   console.log("ServiceProvider component - Service ID from params:", id);
@@ -110,7 +123,7 @@ export default function ServiceProvider() {
                   </div>
                   <p className="text-muted-foreground mt-2 flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
-                    {service.provider?.address || "Address not available"}
+                    {formatAddress(service.provider)}
                   </p>
                 </div>
               </CardContent>

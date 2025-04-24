@@ -1,42 +1,47 @@
+import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { DialogFooter } from "@/components/ui/dialog";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Booking, Service, Review } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { Star, Calendar as CalendarIcon, Clock, X, CheckCircle, AlertCircle } from "lucide-react";
-import { useState, useEffect } from "react";
+import {
+  Star,
+  Calendar as CalendarIcon,
+  Clock,
+  MapPin as LocationIcon,
+} from "lucide-react";
 import { format, isAfter, isBefore, addDays } from "date-fns";
-import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+import { formatIndianDisplay } from "@shared/date-utils";
+import { DialogTrigger } from "@radix-ui/react-dialog";
 
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-};
-
-const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
-};
-
-// Update BookingWithService type to include provider details
-type BookingWithService = Booking & { 
+type BookingWithService = Booking & {
   service: Service;
-  provider?: { // Make provider optional initially
+  provider?: {
     id: number;
     name: string;
     phone: string;
@@ -45,7 +50,7 @@ type BookingWithService = Booking & {
     addressState?: string;
     addressPostalCode?: string;
     addressCountry?: string;
-  } | null; // Allow null if provider not found
+  } | null;
 };
 
 declare global {
@@ -63,17 +68,90 @@ export default function Bookings() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [order, setOrder] = useState<any>(null);
 
+  // Fetch bookings
   const { data: bookings, isLoading } = useQuery<BookingWithService[]>({
     queryKey: ["/api/bookings"],
   });
 
+  // Fetch existing reviews for selected service
+  const { data: existingReviews } = useQuery<Review[]>({
+    queryKey: ["/api/reviews/service/", selectedBooking?.serviceId],
+    enabled: !!selectedBooking?.serviceId,
+  });
+
+  // Derive the user's review for the selected booking
+  const userReview = existingReviews?.find(
+    (r) =>
+      r.serviceId === selectedBooking?.serviceId &&
+      r.bookingId === selectedBooking?.id
+  );
+
+  // When editing, populate rating & text
+  useEffect(() => {
+    if (userReview) {
+      setRating(userReview.rating);
+      setReview(userReview.review || "");
+    }
+  }, [userReview]);
+
+  // Razorpay script loader (must be above the return)
+  useEffect(() => {
+    if (!order) return;
+
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => {
+      const options = {
+        key: "rzp_test_WIK4gEdE7PPhgw",
+        amount: order.amount,
+        currency: order.currency,
+        name: order.booking?.service?.name || "Service Booking",
+        description: `Payment for booking #${order.booking?.id}`,
+        order_id: order.id,
+        handler: async (response: any) => {
+          try {
+            const res = await apiRequest(
+              "POST",
+              `/api/bookings/${order.booking.id}/payment`,
+              {
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              }
+            );
+            if (!res.ok) throw new Error("Payment verification failed");
+            queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+            queryClient.invalidateQueries({
+              queryKey: ["/api/notifications"],
+            });
+            toast({
+              title: "Payment successful",
+              description:
+                "Your booking has been confirmed and payment processed.",
+            });
+            setPaymentDialogOpen(false);
+          } catch (err: any) {
+            toast({
+              title: "Payment failed",
+              description: err.message,
+              variant: "destructive",
+            });
+          }
+        },
+        theme: { color: "#10B981" },
+      };
+      new window.Razorpay(options).open();
+    };
+    document.body.appendChild(script);
+    return () => void document.body.removeChild(script);
+  }, [order, toast]);
+
+  // Cancel mutation
   const cancelMutation = useMutation({
-    mutationFn: async (bookingId: number) => {
-      const res = await apiRequest("PATCH", `/api/bookings/${bookingId}`, {
+    mutationFn: (bookingId: number) =>
+      apiRequest("PATCH", `/api/bookings/${bookingId}`, {
         status: "cancelled",
-      });
-      return res.json();
-    },
+      }).then((r) => r.json()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       toast({
@@ -83,19 +161,18 @@ export default function Bookings() {
     },
   });
 
+  // Reschedule mutation
   const rescheduleMutation = useMutation({
-    mutationFn: async ({
+    mutationFn: ({
       bookingId,
       date,
     }: {
       bookingId: number;
       date: string;
-    }) => {
-      const res = await apiRequest("PATCH", `/api/bookings/${bookingId}`, {
+    }) =>
+      apiRequest("PATCH", `/api/bookings/${bookingId}`, {
         bookingDate: date,
-      });
-      return res.json();
-    },
+      }).then((r) => r.json()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       toast({
@@ -105,64 +182,54 @@ export default function Bookings() {
     },
   });
 
-  // Check if user has already reviewed this service
-  const { data: existingReviews } = useQuery<Review[]>({
-    queryKey: ["/api/reviews/service/", selectedBooking?.serviceId],
-    enabled: !!selectedBooking?.serviceId,
-  });
-
-  // Determine if the user has already reviewed this service
-  const userReview = existingReviews?.find(review => 
-    review.serviceId === selectedBooking?.serviceId && 
-    review.bookingId === selectedBooking?.id
-  );
-
-  // Set initial review state if editing
-  useEffect(() => {
-    if (userReview) {
-      setRating(userReview.rating);
-      setReview(userReview.review || "");
-    }
-  }, [userReview]);
-
+  // Review create/update mutation
   const reviewMutation = useMutation({
-    mutationFn: async (data: {
+    mutationFn: (data: {
       serviceId: number;
       rating: number;
       review: string;
       bookingId?: number;
       id?: number;
     }) => {
-      // If we have an existing review ID, update it instead of creating a new one
       if (data.id) {
-        const res = await apiRequest("PATCH", `/api/reviews/${data.id}`, {
+        return apiRequest("PATCH", `/api/reviews/${data.id}`, {
           rating: data.rating,
-          review: data.review
-        });
-        return res.json();
-      } else {
-        // Create new review
-        const res = await apiRequest("POST", "/api/reviews", data);
-        return res.json();
+          review: data.review,
+        }).then((r) => r.json());
       }
+      return apiRequest("POST", "/api/reviews", data).then((r) => r.json());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/reviews"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/reviews/service/", selectedBooking?.serviceId] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/reviews/service/", selectedBooking?.serviceId],
+      });
       toast({
         title: userReview ? "Review updated" : "Review submitted",
         description: "Thank you for your feedback!",
       });
     },
   });
-  
-  // Mutation for marking a service as completed
+
+  // Complete service mutation
   const completeServiceMutation = useMutation({
-    mutationFn: async ({ bookingId, isSatisfactory, comments }: { bookingId: number; isSatisfactory: boolean; comments?: string }) => {
-      const res = await apiRequest("PATCH", `/api/bookings/${bookingId}/complete`, { isSatisfactory, comments });
+    mutationFn: async ({
+      bookingId,
+      isSatisfactory,
+      comments,
+    }: {
+      bookingId: number;
+      isSatisfactory: boolean;
+      comments?: string;
+    }) => {
+      const res = await apiRequest(
+        "PATCH",
+        `/api/bookings/${bookingId}/complete`,
+        { isSatisfactory, comments }
+      );
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to complete service");
+        const body = await res.json();
+        throw new Error(body.message || "Failed to complete service");
       }
       return res.json();
     },
@@ -171,12 +238,11 @@ export default function Bookings() {
         title: "Service marked as completed",
         description: data.message || "Thank you for your feedback",
       });
-      
-      // If payment is required, initiate it
       if (data.paymentRequired && data.booking) {
-        initiatePaymentMutation.mutate(data.booking.id);
+        setOrder(null);
+        setOrder(data.booking); // triggers Razorpay effect
+        setPaymentDialogOpen(true);
       }
-      
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
@@ -188,28 +254,26 @@ export default function Bookings() {
       });
     },
   });
-  
-  // Mutation for initiating payment
+
+  // Initiate payment (if needed)
   const initiatePaymentMutation = useMutation({
-    mutationFn: async (bookingId: number) => {
-      const res = await apiRequest("POST", `/api/bookings/${bookingId}/initiate-payment`, {});
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Payment initiation failed");
-      }
-      return res.json();
-    },
+    mutationFn: (bookingId: number) =>
+      apiRequest("POST", `/api/bookings/${bookingId}/initiate-payment`, {}).then(
+        (r) => {
+          if (!r.ok) throw new Error("Payment initiation failed");
+          return r.json();
+        }
+      ),
     onSuccess: (data) => {
       setOrder(data.order);
       setPaymentDialogOpen(true);
     },
-    onError: (error: Error) => {
+    onError: (error: Error) =>
       toast({
         title: "Payment initiation failed",
         description: error.message,
         variant: "destructive",
-      });
-    },
+      }),
   });
 
   const handleCancel = (booking: BookingWithService) => {
@@ -231,14 +295,13 @@ export default function Bookings() {
   };
 
   const handleReview = () => {
-    if (!selectedBooking || !selectedBooking.serviceId) return; // Add check for serviceId
+    if (!selectedBooking?.serviceId) return;
     reviewMutation.mutate({
-      serviceId: selectedBooking.serviceId, // Now safe to access
+      serviceId: selectedBooking.serviceId,
       rating,
       review,
       bookingId: selectedBooking.id,
-      // If we're editing an existing review, include its ID
-      ...(userReview && { id: userReview.id })
+      ...(userReview && { id: userReview.id }),
     });
   };
 
@@ -253,38 +316,40 @@ export default function Bookings() {
   }
 
   const upcomingBookings = bookings?.filter(
-    (booking) =>
-      booking.status !== "cancelled" &&
-      booking.status !== "completed" &&
-      isAfter(new Date(booking.bookingDate), new Date())
+    (b) =>
+      b.status !== "cancelled" &&
+      b.status !== "completed" &&
+      isAfter(new Date(b.bookingDate), new Date())
   );
-
   const pastBookings = bookings?.filter(
-    (booking) =>
-      booking.status === "completed" ||
-      isBefore(new Date(booking.bookingDate), new Date())
+    (b) =>
+      b.status === "completed" ||
+      isBefore(new Date(b.bookingDate), new Date())
   );
 
   return (
     <DashboardLayout>
       <motion.div
-        variants={container}
+        variants={{
+          hidden: { opacity: 0 },
+          show: { opacity: 1, transition: { staggerChildren: 0.1 } },
+        }}
         initial="hidden"
         animate="show"
         className="max-w-4xl mx-auto space-y-6"
       >
         <h1 className="text-2xl font-bold">My Bookings</h1>
-
         <Tabs defaultValue="upcoming">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
             <TabsTrigger value="past">Past</TabsTrigger>
           </TabsList>
 
+          {/* Upcoming */}
           <TabsContent value="upcoming">
             <div className="grid gap-4">
               {upcomingBookings?.map((booking) => (
-                <motion.div key={booking.id} variants={item}>
+                <motion.div key={booking.id} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}>
                   <Card>
                     <CardContent className="pt-6">
                       <div className="flex justify-between items-start">
@@ -298,20 +363,24 @@ export default function Bookings() {
                             <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
                             {formatIndianDisplay(booking.bookingDate, "time")}
                           </p>
-                          <p className={`text-sm font-medium ${booking.status === "accepted" ? "text-green-600" : booking.status === "rejected" ? "text-red-600" : "text-yellow-600"}`}>
-                            Status: {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                            {booking.rejectionReason && ` - Reason: ${booking.rejectionReason}`}
-                          </p>
-                          {/* Display provider details if booking is accepted */}
-                          {booking.status === 'accepted' && booking.provider && (
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              <p><strong>Provider:</strong> {booking.provider.name}</p>
-                              <p><strong>Phone:</strong> {booking.provider.phone}</p>
-                              {booking.provider.addressStreet && (
-                                <p>
-                                  <strong>Address:</strong> {booking.provider.addressStreet}, {booking.provider.addressCity}, {booking.provider.addressState} {booking.provider.addressPostalCode}
-                                </p>
-                              )}
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <LocationIcon className="h-4 w-4" />
+                            <span>
+                              {booking.serviceLocation === "customer"
+                                ? "Service at Your Location"
+                                : booking.provider?.addressStreet
+                                ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
+                                : "Service at Provider's Location"}
+                            </span>
+                          </div>
+                          {booking.provider && (
+                            <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
+                              <p>
+                                <strong>Provider:</strong> {booking.provider.name}
+                              </p>
+                              <p>
+                                <strong>Phone:</strong> {booking.provider.phone}
+                              </p>
                             </div>
                           )}
                         </div>
@@ -319,10 +388,7 @@ export default function Bookings() {
                           {booking.status === "accepted" && (
                             <Dialog>
                               <DialogTrigger asChild>
-                                <Button
-                                  variant="default"
-                                  onClick={() => setSelectedBooking(booking)}
-                                >
+                                <Button onClick={() => setSelectedBooking(booking)}>
                                   Mark Complete
                                 </Button>
                               </DialogTrigger>
@@ -333,30 +399,28 @@ export default function Bookings() {
                                 <div className="space-y-4 pt-4">
                                   <p>Was the service completed satisfactorily?</p>
                                   <div className="flex gap-4">
-                                    <Button 
-                                      className="flex-1" 
-                                      onClick={() => {
-                                        if (!selectedBooking) return;
+                                    <Button
+                                      className="flex-1"
+                                      onClick={() =>
                                         completeServiceMutation.mutate({
-                                          bookingId: selectedBooking.id,
+                                          bookingId: booking.id,
                                           isSatisfactory: true,
-                                          comments: "Service was satisfactory"
-                                        });
-                                      }}
+                                          comments: "Service was satisfactory",
+                                        })
+                                      }
                                     >
                                       Yes, Proceed to Payment
                                     </Button>
-                                    <Button 
-                                      variant="outline" 
+                                    <Button
+                                      variant="outline"
                                       className="flex-1"
-                                      onClick={() => {
-                                        if (!selectedBooking) return;
+                                      onClick={() =>
                                         completeServiceMutation.mutate({
-                                          bookingId: selectedBooking.id,
+                                          bookingId: booking.id,
                                           isSatisfactory: false,
-                                          comments: "Service had issues"
-                                        });
-                                      }}
+                                          comments: "Service had issues",
+                                        })
+                                      }
                                     >
                                       No, Report Issues
                                     </Button>
@@ -369,10 +433,7 @@ export default function Bookings() {
                             <>
                               <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => setSelectedBooking(booking)}
-                                  >
+                                  <Button onClick={() => setSelectedBooking(booking)}>
                                     Reschedule
                                   </Button>
                                 </DialogTrigger>
@@ -417,10 +478,11 @@ export default function Bookings() {
             </div>
           </TabsContent>
 
+          {/* Past */}
           <TabsContent value="past">
             <div className="grid gap-4">
               {pastBookings?.map((booking) => (
-                <motion.div key={booking.id} variants={item}>
+                <motion.div key={booking.id} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}>
                   <Card>
                     <CardContent className="pt-6">
                       <div className="flex justify-between items-start">
@@ -434,76 +496,85 @@ export default function Bookings() {
                             <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
                             {formatIndianDisplay(booking.bookingDate, "time")}
                           </p>
-                          <p
-                            className={`text-sm ${
-                              booking.status === "completed"
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {booking.status.charAt(0).toUpperCase() +
-                              booking.status.slice(1)}
-                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <LocationIcon className="h-4 w-4" />
+                            <span>
+                              {booking.serviceLocation === "customer"
+                                ? "Service at Your Location"
+                                : booking.provider?.addressStreet
+                                ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
+                                : "Service at Provider's Location"}
+                            </span>
+                          </div>
+                          {booking.provider && (
+                            <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
+                              <p>
+                                <strong>Provider:</strong> {booking.provider.name}
+                              </p>
+                              <p>
+                                <strong>Phone:</strong> {booking.provider.phone}
+                              </p>
+                            </div>
+                          )}
                         </div>
-                        {booking.status === "completed" && (
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                onClick={() => setSelectedBooking(booking)}
-                              >
-                                {existingReviews?.find(r => r.bookingId === booking.id) 
-                                  ? "Edit Review" 
-                                  : "Leave Review"}
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>
-                                {userReview ? "Edit Review" : "Review Service"}
-                              </DialogTitle>
-                              </DialogHeader>
-                              <div className="space-y-4 pt-4">
-                                <div>
-                                  <Label>Rating</Label>
-                                  <div className="flex items-center gap-1">
-                                    {[1, 2, 3, 4, 5].map((value) => (
-                                      <Button
-                                        key={value}
-                                        variant="ghost"
-                                        size="sm"
-                                        className={`p-0 ${
-                                          value <= rating
-                                            ? "text-yellow-500"
-                                            : "text-gray-300"
-                                        }`}
-                                        onClick={() => setRating(value)}
-                                      >
-                                        <Star className="h-6 w-6 fill-current" />
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label>Review</Label>
-                                  <Textarea
-                                    value={review}
-                                    onChange={(e) => setReview(e.target.value)}
-                                    placeholder="Share your experience..."
-                                  />
-                                </div>
-                                <Button
-                                  className="w-full"
-                                  onClick={handleReview}
-                                  disabled={!review}
-                                >
-                                  {userReview ? "Update Review" : "Submit Review"}
+                        <div className="space-x-2">
+                          {booking.status === "accepted" && (
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button onClick={() => setSelectedBooking(booking)}>
+                                  {existingReviews?.some((r) => r.bookingId === booking.id)
+                                    ? "Edit Review"
+                                    : "Leave Review"}
                                 </Button>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        )}
-                      </div>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>
+                                    {userReview ? "Edit Review" : "Review Service"}
+                                  </DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 pt-4">
+                                  <div>
+                                    <Label>Rating</Label>
+                                    <div className="flex items-center gap-1">
+                                      {[1, 2, 3, 4, 5].map((value) => (
+                                        <Button
+                                          key={value}
+                                          variant="ghost"
+                                          size="sm"
+                                          className={`p-0 ${
+                                            value <= rating
+                                              ? "text-yellow-500"
+                                              : "text-gray-300"
+                                          }`}
+                                          onClick={() => setRating(value)}
+                                        >
+                                          <Star className="h-6 w-6 fill-current" />
+                                        </Button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label>Review</Label>
+                                    <Textarea
+                                      value={review}
+                                      onChange={(e) => setReview(e.target.value)}
+                                      placeholder="Share your experience..."
+                                    />
+                                  </div>
+                                  <Button
+                                    className="w-full"
+                                    onClick={handleReview}
+                                    disabled={!review}
+                                  >
+                                    {userReview ? "Update Review" : "Submit Review"}
+                                  </Button>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          )}
+                        </div>
+                      </div> {/* ← added this closing tag */}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -512,7 +583,7 @@ export default function Bookings() {
           </TabsContent>
         </Tabs>
       </motion.div>
-      
+
       {/* Payment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent>
@@ -524,60 +595,4 @@ export default function Bookings() {
       </Dialog>
     </DashboardLayout>
   );
-
-  // Initialize Razorpay when order is available - moved outside JSX
-  useEffect(() => {
-    if (order) {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.async = true;
-      script.onload = () => {
-        const options = {
-          key: "rzp_test_WIK4gEdE7PPhgw", // Using the provided test key directly
-          amount: order.amount,
-          currency: order.currency,
-          name: order.booking?.service?.name || "Service Booking",
-          description: `Payment for booking #${order.booking?.id}`,
-          order_id: order.id,
-          handler: async (response: any) => {
-            try {
-              const res = await apiRequest("POST", `/api/bookings/${order.booking.id}/payment`, {
-                razorpayPaymentId: response.razorpay_payment_id,
-                razorpaySignature: response.razorpay_signature,
-              });
-
-              if (res.ok) {
-                queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-                queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-                toast({
-                  title: "Payment successful",
-                  description: "Your booking has been confirmed and payment processed.",
-                });
-                setPaymentDialogOpen(false);
-              } else {
-                throw new Error("Payment verification failed");
-              }
-            } catch (error) {
-              toast({
-                title: "Payment failed",
-                description: error instanceof Error ? error.message : "Payment verification failed",
-                variant: "destructive",
-              });
-            }
-          },
-          theme: {
-            color: "#10B981",
-          },
-        };
-
-        const rzp = new window.Razorpay(options);
-        rzp.open();
-      };
-      document.body.appendChild(script);
-
-      return () => {
-        document.body.removeChild(script);
-      };
-    }
-  }, [order]);
 }

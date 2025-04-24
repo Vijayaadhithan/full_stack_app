@@ -102,6 +102,7 @@ export const services = pgTable("services", {
   workingHours: jsonb("working_hours").$type<WorkingHours>(),
   breakTime: jsonb("break_time").$type<BreakTime[]>(),
   maxDailyBookings: integer("max_daily_bookings").default(10),
+  serviceLocationType: text("service_location_type").$type<"customer_location" | "provider_location">().notNull().default("provider_location"), // New field: where the service takes place
 });
 
 export const serviceAvailability = pgTable("service_availability", {
@@ -132,6 +133,8 @@ export const bookings = pgTable("bookings", {
   razorpayPaymentId: text("razorpay_payment_id"),
   createdAt: timestamp("created_at").defaultNow(),
   expiresAt: timestamp("expires_at"),
+  serviceLocation: text("service_location").$type<'customer' | 'provider'>(), // Added service location type
+  providerAddress: text("provider_address"), // Added provider address (nullable)
 });
 
 // Booking history table to track status changes
@@ -322,7 +325,12 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
 // Update service schema validation
-export const insertServiceSchema = createInsertSchema(services).extend({
+export const insertServiceSchema = createInsertSchema(services, {
+  // Add specific validation if needed, e.g., for price
+  price: z.string().refine(val => !isNaN(parseFloat(val)), { message: "Price must be a valid number" }),
+  // Ensure serviceLocationType is included and validated
+  serviceLocationType: z.enum(["customer_location", "provider_location"]).optional().default("provider_location"),
+}).extend({
   workingHours: z.object({
     monday: z.object({
       isAvailable: z.boolean(),
@@ -370,7 +378,11 @@ export const insertServiceSchema = createInsertSchema(services).extend({
 export type Service = typeof services.$inferSelect;
 export type InsertService = z.infer<typeof insertServiceSchema>;
 
-export const insertBookingSchema = createInsertSchema(bookings);
+export const insertBookingSchema = createInsertSchema(bookings, {
+  // Add specific validation if needed
+  serviceLocation: z.enum(['customer', 'provider']).optional(),
+  providerAddress: z.string().optional().nullable(), // Allow null
+});
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
@@ -409,3 +421,19 @@ export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
 export const insertBlockedTimeSlotSchema = createInsertSchema(blockedTimeSlots);
 export type InsertBlockedTimeSlot = z.infer<typeof insertBlockedTimeSlotSchema>;
 export type BlockedTimeSlotSelect = typeof blockedTimeSlots.$inferSelect;
+
+export const Booking = z.object({
+  id: z.number(),
+  customerId: z.number(),
+  providerId: z.number(),
+  serviceId: z.number(),
+  bookingDate: z.string(), // ISO string format
+  status: z.enum(["pending", "accepted", "rejected", "rescheduled", "completed", "cancelled"]), // Removed 'expired' as it's handled internally
+  comments: z.string().optional(),
+  rejectionReason: z.string().optional(),
+  rescheduleDate: z.string().optional(), // ISO string format
+  createdAt: z.string(), // ISO string format
+  updatedAt: z.string(), // ISO string format
+  serviceLocation: z.enum(["customer", "provider"]).optional(), // Updated service location
+  providerAddress: z.string().optional().nullable(), // Updated provider address (nullable)
+});

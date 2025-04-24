@@ -344,7 +344,7 @@ export default function ProviderDashboard() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
-  const [activeTab, setActiveTab] = useState<"basic" | "availability" | "scheduling" | "location">("basic");
+  const [activeTab, setActiveTab] = useState<"basic" | "availability" | "scheduling" | "location">("basic"); // Added scheduling tab type
 
   const form = useForm<ServiceFormData>({
     resolver: zodResolver(serviceFormSchema),
@@ -601,6 +601,11 @@ export default function ProviderDashboard() {
                               size="icon"
                               onClick={() => {
                                 setEditingService(service);
+                                // Ensure breakTime is mapped correctly, handling potential null/undefined inside the array
+                                const formattedBreakTime = service.breakTime?.map(bt => ({ 
+                                  start: bt?.start || '', 
+                                  end: bt?.end || '' 
+                                })) || [];
                                 form.reset({
                                   name: service.name,
                                   description: service.description ?? "",
@@ -609,7 +614,7 @@ export default function ProviderDashboard() {
                                   duration: service.duration,
                                   isAvailable: service.isAvailable ?? true,
                                   workingHours: service.workingHours ?? {},
-                                  breakTime: service.breakTime ?? [],
+                                  breakTime: formattedBreakTime, // Use the formatted array
                                   maxDailyBookings: service.maxDailyBookings ?? 1,
                                   bufferTime: service.bufferTime ?? 0,
                                   addressStreet: service.addressStreet ?? "",
@@ -618,6 +623,7 @@ export default function ProviderDashboard() {
                                   addressPostalCode: service.addressPostalCode ?? "",
                                   addressCountry: service.addressCountry ?? "",
                                 });
+                                setActiveTab("basic"); // Reset to basic tab when opening for edit
                                 setDialogOpen(true);
                               }}
                             >
@@ -704,13 +710,14 @@ export default function ProviderDashboard() {
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <Tabs
                   value={activeTab}
-                  onValueChange={(value) => setActiveTab(value as "basic" | "availability" | "scheduling" | "location")}
+                  onValueChange={(value) => setActiveTab(value as "basic" | "availability" | "location")}
                 >
-                  <TabsList className="grid w-full grid-cols-4">
+                  <TabsList className="grid w-full grid-cols-4"> {/* Adjusted grid-cols if needed, currently 4 */}
                     <TabsTrigger value="basic">Basic Info</TabsTrigger>
                     <TabsTrigger value="availability">Availability</TabsTrigger>
-                    <TabsTrigger value="scheduling">Scheduling</TabsTrigger>
+
                     <TabsTrigger value="location">Location</TabsTrigger>
+                    <TabsTrigger value="scheduling">Scheduling</TabsTrigger> {/* Added Scheduling Tab */}
                   </TabsList>
 
                   <TabsContent value="basic">
@@ -834,7 +841,8 @@ export default function ProviderDashboard() {
                           />
                         </div>
                       ))}
-                      <FormField
+                      {/* Buffer time moved to Scheduling tab */}
+                      {/* <FormField
                         control={form.control}
                         name="bufferTime"
                         render={({ field }) => (
@@ -846,7 +854,7 @@ export default function ProviderDashboard() {
                             <FormMessage />
                           </FormItem>
                         )}
-                      />
+                      /> */}
                       <FormField
                         control={form.control}
                         name="maxDailyBookings"
@@ -863,15 +871,93 @@ export default function ProviderDashboard() {
                     </div>
                   </TabsContent>
 
+                  {/* Scheduling Tab Content */}
                   <TabsContent value="scheduling">
                     <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Scheduling & Breaks</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Configure break times and advanced scheduling options.
-                      </p>
+                      <h3 className="text-lg font-medium">Break Times</h3>
+                      {form.watch('breakTime')?.map((breakItem, index) => (
+                        <div key={index} className="flex items-center gap-2 p-2 border rounded">
+                          <FormField
+                            control={form.control}
+                            name={`breakTime.${index}.start`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel>Start Time</FormLabel>
+                                <FormControl>
+                                  <Input type="time" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`breakTime.${index}.end`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel>End Time</FormLabel>
+                                <FormControl>
+                                  <Input type="time" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => {
+                              const currentBreaks = form.getValues('breakTime') || [];
+                              form.setValue('breakTime', currentBreaks.filter((_, i) => i !== index));
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          const currentBreaks = form.getValues('breakTime') || [];
+                          form.setValue('breakTime', [...currentBreaks, { start: '', end: '' }]);
+                        }}
+                      >
+                        <Plus className="mr-2 h-4 w-4" /> Add Break Time
+                      </Button>
+
+                      <FormField
+                        control={form.control}
+                        name="maxDailyBookings"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Max Daily Bookings</FormLabel>
+                            <FormControl>
+                              <Input type="number" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {/* Buffer time moved from Availability tab */}
+                      <FormField
+                        control={form.control}
+                        name="bufferTime"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Buffer Time (minutes between bookings)</FormLabel>
+                            <FormControl>
+                              <Input type="number" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
                   </TabsContent>
 
+                  {/* Location Tab Content */}
                   <TabsContent value="location">
                     <div className="space-y-4">
                       <h3 className="text-lg font-medium">Service Location</h3>

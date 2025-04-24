@@ -11,9 +11,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/language-context";
 import { motion } from "framer-motion";
 import { Loader2, MapPin, Clock, Star, AlertCircle } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react"; // Add useMemo
 import { format as formatBase, addDays, isBefore, isAfter, addMinutes, isWithinInterval, parse } from "date-fns";
 import { formatInTimeZone, fromZonedTime, toZonedTime } from 'date-fns-tz'; // Import date-fns-tz functions
+
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+// Remove Input import if no longer needed elsewhere
+// import { Input } from "@/components/ui/input";
 
 const timeZone = 'Asia/Kolkata'; // Define IST timezone
 
@@ -33,30 +38,59 @@ function isBreakTime(slotStart: Date, slotEnd: Date, breakTimes: Array<{ start: 
   const zonedDate = toZonedTime(date, timeZone);
   return breakTimes.some(breakTime => {
     try {
-      const breakStartStr = breakTime.start.padStart(5, '0'); // Ensure HH:mm
-      const breakEndStr = breakTime.end.padStart(5, '0'); // Ensure HH:mm
+      const breakStartStr = breakTime.start?.padStart(5, '0'); // Ensure HH:mm, add optional chaining
+      const breakEndStr = breakTime.end?.padStart(5, '0'); // Ensure HH:mm, add optional chaining
 
-      const breakStartHour = parseInt(breakStartStr.split(':')[0], 10);
-      const breakStartMinute = parseInt(breakStartStr.split(':')[1], 10);
-      const breakEndHour = parseInt(breakEndStr.split(':')[0], 10);
-      const breakEndMinute = parseInt(breakEndStr.split(':')[1], 10);
+      // Skip if start or end time is missing or invalid
+      if (!breakStartStr || !breakEndStr) {
+        console.warn(`Skipping invalid break time entry:`, breakTime);
+        return false;
+      }
+
+      // Handle potential zero-duration breaks gracefully
+      if (breakStartStr === breakEndStr) {
+        // console.log(`Skipping zero-duration break: ${breakStartStr}`);
+        return false; // A zero-duration break cannot overlap
+      }
+
+      const breakStartParts = breakStartStr.split(':');
+      const breakEndParts = breakEndStr.split(':');
+
+      if (breakStartParts.length !== 2 || breakEndParts.length !== 2) {
+        console.error(`Invalid time format in break time: ${breakTime.start}-${breakTime.end}`);
+        return false;
+      }
+
+      const breakStartHour = parseInt(breakStartParts[0], 10);
+      const breakStartMinute = parseInt(breakStartParts[1], 10);
+      const breakEndHour = parseInt(breakEndParts[0], 10);
+      const breakEndMinute = parseInt(breakEndParts[1], 10);
+
+      if (isNaN(breakStartHour) || isNaN(breakStartMinute) || isNaN(breakEndHour) || isNaN(breakEndMinute)) {
+        console.error(`Invalid time values in break time: ${breakTime.start}-${breakTime.end}`);
+        return false; // Skip invalid break times
+      }
 
       const breakStartDateTime = new Date(zonedDate);
       breakStartDateTime.setHours(breakStartHour, breakStartMinute, 0, 0);
       const breakEndDateTime = new Date(zonedDate);
       breakEndDateTime.setHours(breakEndHour, breakEndMinute, 0, 0);
 
+      // Handle breaks spanning midnight if necessary (assuming breaks are within the same day for now)
+      // if (breakEndDateTime <= breakStartDateTime) { ... }
+
       const breakStartUTC = fromZonedTime(breakStartDateTime, timeZone);
       const breakEndUTC = fromZonedTime(breakEndDateTime, timeZone);
 
       // Check if the slot *overlaps* with the break time
+      // Overlap occurs if: slot starts before break ends AND slot ends after break starts
       const overlaps = slotStart < breakEndUTC && slotEnd > breakStartUTC;
-      if (overlaps) {
-        console.log(`Slot ${formatInTimeZone(slotStart, timeZone, 'HH:mm')} - ${formatInTimeZone(slotEnd, timeZone, 'HH:mm')} overlaps with break ${formatInTimeZone(breakStartUTC, timeZone, 'HH:mm')} - ${formatInTimeZone(breakEndUTC, timeZone, 'HH:mm')}`);
-      }
+      // if (overlaps) {
+      //   console.log(`Slot ${formatInTimeZone(slotStart, timeZone, 'HH:mm')} - ${formatInTimeZone(slotEnd, timeZone, 'HH:mm')} overlaps with break ${formatInTimeZone(breakStartUTC, timeZone, 'HH:mm')} - ${formatInTimeZone(breakEndUTC, timeZone, 'HH:mm')}`);
+      // }
       return overlaps;
     } catch (e) {
-      console.error(`Error parsing break time: ${breakTime.start}-${breakTime.end}`, e);
+      console.error(`Error processing break time: ${breakTime.start}-${breakTime.end}`, e);
       return false;
     }
   });
@@ -68,36 +102,43 @@ function generateTimeSlots(
   bufferTime: number,
   workingHours: any,
   breakTimes: Array<{ start: string; end: string }>,
-  existingBookings: { start: Date; end: Date }[]
+  existingBookings: { start: Date | string; end: Date | string }[],
+  maxDailyBookings: number | null // Add maxDailyBookings parameter
 ): TimeSlot[] {
+  console.log('[generateTimeSlots] --- Start ---');
+  console.log('[generateTimeSlots] Input Date (UTC):', date.toISOString());
+  console.log('[generateTimeSlots] Input Date (IST):', formatInTimeZone(date, timeZone, 'yyyy-MM-dd HH:mm:ss zzzz'));
+  console.log('[generateTimeSlots] Duration:', duration, 'Buffer:', bufferTime, 'Max Bookings:', maxDailyBookings);
+  console.log('[generateTimeSlots] Working Hours:', JSON.stringify(workingHours));
+  console.log('[generateTimeSlots] Break Times:', JSON.stringify(breakTimes));
+  console.log('[generateTimeSlots] Existing Bookings:', JSON.stringify(existingBookings.map(b => ({ start: b.start.toString(), end: b.end.toString() }))));
+
   const zonedDate = toZonedTime(date, timeZone); // Use the selected date in IST
-  // Get day of week in lowercase (monday, tuesday, etc.) to match workingHours keys exactly
   const dayOfWeek = formatBase(zonedDate, 'EEEE').toLowerCase(); // Get day of week in IST
   const daySchedule = workingHours[dayOfWeek];
 
-  console.log('Generating time slots for:', {
-    date: formatBase(zonedDate, 'yyyy-MM-dd'), // Log date in IST
-    dayOfWeek,
-    daySchedule,
-    workingHoursKeys: workingHours ? Object.keys(workingHours) : 'undefined'
-  });
+  console.log(`[generateTimeSlots] Day: ${dayOfWeek}, Schedule:`, daySchedule ? JSON.stringify(daySchedule) : 'Not Found');
 
-  // Check if day schedule exists and is available
   if (!daySchedule) {
-    console.error(`Day schedule not found for ${dayOfWeek}. Available keys:`, workingHours ? Object.keys(workingHours) : 'undefined');
+    console.log('[generateTimeSlots] No schedule found for this day. Returning empty array.');
+    console.log('[generateTimeSlots] --- End ---');
     return [];
   }
 
   if (!daySchedule.isAvailable) {
-    console.log(`Day ${dayOfWeek} is marked as not available`);
+    console.log('[generateTimeSlots] Day marked as unavailable. Returning empty array.');
+    console.log('[generateTimeSlots] --- End ---');
     return [];
   }
 
-  // Ensure time format is HH:mm
-  const startStr = daySchedule.start.padStart(5, '0'); // Ensure HH:mm
-  const endStr = daySchedule.end.padStart(5, '0'); // Ensure HH:mm
+  const startStr = daySchedule.start?.padStart(5, '0'); // Add optional chaining
+  const endStr = daySchedule.end?.padStart(5, '0'); // Add optional chaining
 
-  console.log(`Using time range (IST): ${startStr} - ${endStr}`);
+  if (!startStr || !endStr) {
+      console.error('[generateTimeSlots] Invalid or missing start/end time in schedule. Returning empty array.');
+      console.log('[generateTimeSlots] --- End ---');
+      return [];
+  }
 
   const slots: TimeSlot[] = [];
   let startTimeUTC: Date;
@@ -109,73 +150,171 @@ function generateTimeSlots(
     const endHour = parseInt(endStr.split(':')[0], 10);
     const endMinute = parseInt(endStr.split(':')[1], 10);
 
+    if (isNaN(startHour) || isNaN(startMinute) || isNaN(endHour) || isNaN(endMinute)) {
+        throw new Error('Invalid time format in working hours');
+    }
+
     const startDateTime = new Date(zonedDate);
     startDateTime.setHours(startHour, startMinute, 0, 0);
     const endDateTime = new Date(zonedDate);
     endDateTime.setHours(endHour, endMinute, 0, 0);
 
-    // Convert IST start/end times to UTC for internal calculations
+    // Handle overnight shifts if end time is earlier than start time
+    if (endDateTime <= startDateTime) {
+        console.log('[generateTimeSlots] Detected overnight shift. Adjusting end time.');
+        endDateTime.setDate(endDateTime.getDate() + 1);
+    }
+
     startTimeUTC = fromZonedTime(startDateTime, timeZone);
     endTimeUTC = fromZonedTime(endDateTime, timeZone);
+    console.log(`[generateTimeSlots] Calculated Work Start (UTC): ${startTimeUTC.toISOString()}, End (UTC): ${endTimeUTC.toISOString()}`);
+    console.log(`[generateTimeSlots] Calculated Work Start (IST): ${formatInTimeZone(startTimeUTC, timeZone, 'HH:mm')}, End (IST): ${formatInTimeZone(endTimeUTC, timeZone, 'HH:mm')}`);
 
-  } catch (e) {
-    console.error(`Error parsing working hours: ${startStr}-${endStr}`, e);
-    return []; // Return empty if parsing fails
-  }
-
-  console.log('Parsed UTC time range:', {
-    startTimeUTC: startTimeUTC.toISOString(),
-    endTimeUTC: endTimeUTC.toISOString(),
-    isStartValid: !isNaN(startTimeUTC.getTime()),
-    isEndValid: !isNaN(endTimeUTC.getTime()),
-  });
-
-  // If either time is invalid, return empty slots
-  if (isNaN(startTimeUTC.getTime()) || isNaN(endTimeUTC.getTime())) {
-    console.error('Invalid start/end time. Cannot generate time slots.');
+  } catch (e: any) {
+    console.error('[generateTimeSlots] Error parsing working hours:', e.message);
+    console.log('[generateTimeSlots] --- End ---');
     return [];
   }
 
-  // Log existing bookings (in UTC) for debugging
-  console.log(`Existing bookings (UTC) for ${formatBase(zonedDate, 'yyyy-MM-dd')}:`, 
-    existingBookings.map(b => `${b.start.toISOString()} - ${b.end.toISOString()}`));
-  
-  // Log break times for debugging
-  console.log('Break times (raw):', breakTimes);
-
-  let currentSlotStartUTC = startTimeUTC;
-  while (currentSlotStartUTC < endTimeUTC) {
-    const slotEndUTC = addMinutes(currentSlotStartUTC, duration);
-
-    // Check if the slot falls within break time (using IST date for context)
-    const isInBreakTime = isBreakTime(currentSlotStartUTC, slotEndUTC, breakTimes, date);
-
-    // Check if the slot overlaps with existing bookings (all in UTC)
-    const isOverlapping = existingBookings.some(booking => {
-      // Simple overlap check: (StartA < EndB) and (EndA > StartB)
-      const overlaps = currentSlotStartUTC < booking.end && slotEndUTC > booking.start;
-      if (overlaps) {
-        console.log(`Slot ${formatInTimeZone(currentSlotStartUTC, timeZone, 'HH:mm')} - ${formatInTimeZone(slotEndUTC, timeZone, 'HH:mm')} overlaps with booking ${formatInTimeZone(booking.start, timeZone, 'HH:mm')} - ${formatInTimeZone(booking.end, timeZone, 'HH:mm')}`);
-      }
-      return overlaps;
-    });
-
-    // Slot is available if it doesn't overlap and isn't during a break, and ends before or at the working end time
-    if (!isOverlapping && !isInBreakTime && slotEndUTC <= endTimeUTC) {
-      slots.push({
-        start: currentSlotStartUTC, // Store UTC time
-        end: slotEndUTC,         // Store UTC time
-        available: true,
-      });
-    } else {
-      console.log(`Slot ${formatInTimeZone(currentSlotStartUTC, timeZone, 'HH:mm')} - ${formatInTimeZone(slotEndUTC, timeZone, 'HH:mm')} is not available. Break: ${isInBreakTime}, Overlap: ${isOverlapping}, Exceeds End: ${slotEndUTC > endTimeUTC}`);
-    }
-
-    // Move to the next potential slot start time (add buffer)
-    currentSlotStartUTC = addMinutes(currentSlotStartUTC, duration + bufferTime);
+  if (isNaN(startTimeUTC.getTime()) || isNaN(endTimeUTC.getTime())) {
+    console.error('[generateTimeSlots] Invalid start or end time calculated. Returning empty array.');
+    console.log('[generateTimeSlots] --- End ---');
+    return [];
   }
 
-  console.log(`Generated ${slots.length} available time slots for ${formatBase(zonedDate, 'yyyy-MM-dd')}`);
+  let currentSlotStartUTC = startTimeUTC;
+  let slotCounter = 0; // Add counter for limiting logs
+  let generatedSlotsCount = 0; // Counter for generated slots
+  const nowUTC = new Date(); // Define nowUTC once outside the loop
+  const isSelectedDateToday = formatBase(toZonedTime(date, timeZone), 'yyyy-MM-dd') === formatBase(toZonedTime(nowUTC, timeZone), 'yyyy-MM-dd'); // Check if selected date is today
+  console.log(`[generateTimeSlots] Is selected date today? ${isSelectedDateToday}, Now (UTC): ${nowUTC.toISOString()}, Now (IST): ${formatInTimeZone(nowUTC, timeZone, 'yyyy-MM-dd HH:mm:ss')}`);
+
+  while (currentSlotStartUTC < endTimeUTC) {
+    // Check if maxDailyBookings limit is reached
+    if (maxDailyBookings !== null && generatedSlotsCount >= maxDailyBookings) {
+      console.log(`  Slot generation stopped: Max daily bookings limit (${maxDailyBookings}) reached.`);
+      break;
+    }
+
+    const slotEndUTC = addMinutes(currentSlotStartUTC, duration);
+    slotCounter++;
+    console.log(`\n[generateTimeSlots] Iteration ${slotCounter}:`);
+    console.log(`  Trying Slot (UTC): ${currentSlotStartUTC.toISOString()} - ${slotEndUTC.toISOString()}`);
+    console.log(`  Trying Slot (IST): ${formatInTimeZone(currentSlotStartUTC, timeZone, 'HH:mm')} - ${formatInTimeZone(slotEndUTC, timeZone, 'HH:mm')}`);
+
+    // Check 1: Does the slot end after the working day ends?
+    if (slotEndUTC > endTimeUTC) {
+      console.log(`  Slot rejected: Ends after working hours (End UTC: ${endTimeUTC.toISOString()}).`);
+      break; // No further slots possible today
+    }
+
+    // Check 2: Is the slot in a break time?
+    const isInBreakTime = isBreakTime(currentSlotStartUTC, slotEndUTC, breakTimes, date);
+    console.log(`  Check 2: Is in break time? ${isInBreakTime}`);
+    if (isInBreakTime) {
+      console.log('  Slot rejected: Overlaps with break time.');
+      // Advance past the break - find the end of the overlapping break
+      const overlappingBreak = breakTimes.find(breakTime => {
+          try {
+              const breakStartStr = breakTime.start?.padStart(5, '0');
+              const breakEndStr = breakTime.end?.padStart(5, '0');
+              if (!breakStartStr || !breakEndStr) return false;
+              const breakStartDateTime = parse(breakStartStr, 'HH:mm', zonedDate);
+              const breakEndDateTime = parse(breakEndStr, 'HH:mm', zonedDate);
+              const breakStartUTC = fromZonedTime(breakStartDateTime, timeZone);
+              const breakEndUTC = fromZonedTime(breakEndDateTime, timeZone);
+              return currentSlotStartUTC < breakEndUTC && slotEndUTC > breakStartUTC;
+          } catch { return false; }
+      });
+      if (overlappingBreak?.end) {
+          try {
+              const breakEndDateTime = parse(overlappingBreak.end.padStart(5, '0'), 'HH:mm', zonedDate);
+              const breakEndUTC = fromZonedTime(breakEndDateTime, timeZone);
+              console.log(`  Advancing currentSlotStartUTC past break end: ${breakEndUTC.toISOString()}`);
+              currentSlotStartUTC = breakEndUTC; // Move to the end of the break
+          } catch (e) {
+              console.error('  Error parsing break end time for advancement, using smaller advance:', e);
+              currentSlotStartUTC = addMinutes(currentSlotStartUTC, bufferTime || 15); // Fallback advance by buffer or 15 mins
+          }
+      } else {
+          console.warn('  Could not determine break end time, using smaller advance.');
+          currentSlotStartUTC = addMinutes(currentSlotStartUTC, bufferTime || 15); // Fallback advance by buffer or 15 mins
+      }
+      continue;
+    }
+
+    // Check 3: Does the slot overlap with existing bookings?
+    const overlappingBooking = existingBookings.find(booking => {
+      try {
+        // Ensure booking dates are properly converted to Date objects
+        const bookingStart = booking.start instanceof Date ? booking.start : new Date(booking.start);
+        const bookingEnd = booking.end instanceof Date ? booking.end : new Date(booking.end);
+        
+        if (isNaN(bookingStart.getTime()) || isNaN(bookingEnd.getTime())) {
+          console.warn("  Invalid date in existing booking during check:", booking);
+          return false; // Skip invalid booking data
+        }
+        
+        // Check for overlap: (SlotStart < BookingEnd) and (SlotEnd > BookingStart)
+        const overlaps = currentSlotStartUTC < bookingEnd && slotEndUTC > bookingStart;
+        
+        if (overlaps) {
+          console.log(`  Overlap check: Slot ${formatInTimeZone(currentSlotStartUTC, timeZone, 'HH:mm')}-${formatInTimeZone(slotEndUTC, timeZone, 'HH:mm')} vs Booking ${formatInTimeZone(bookingStart, timeZone, 'HH:mm')}-${formatInTimeZone(bookingEnd, timeZone, 'HH:mm')}`);
+        }
+        
+        return overlaps;
+      } catch (error) {
+        console.error("  Error checking booking overlap:", error);
+        return false; // Skip on error
+      }
+    });
+    console.log(`  Check 3: Overlaps with existing booking? ${!!overlappingBooking}`);
+    if (overlappingBooking) {
+      console.log('  Slot rejected: Overlaps with an existing booking.');
+      // Advance past the existing booking
+      try {
+        const bookingEnd = overlappingBooking.end instanceof Date ? overlappingBooking.end : new Date(overlappingBooking.end);
+      if (!isNaN(bookingEnd.getTime())) {
+          console.log(`  Advancing currentSlotStartUTC past booking end: ${bookingEnd.toISOString()}`);
+          currentSlotStartUTC = addMinutes(bookingEnd, bufferTime); // Move start time past the booking + buffer
+      } else {
+          console.warn('  Invalid booking end date, using smaller advance.');
+          currentSlotStartUTC = addMinutes(currentSlotStartUTC, bufferTime || 15); // Fallback advance by buffer or 15 mins
+      }
+      } catch (error) {
+        console.error('  Error processing booking end time:', error);
+        currentSlotStartUTC = addMinutes(currentSlotStartUTC, bufferTime || 15); // Fallback advance by buffer or 15 mins
+      }
+      continue;
+    }
+
+    // Check 4: Is the slot start time in the past (only if selected date is today)?
+    const isPast = isSelectedDateToday && isBefore(currentSlotStartUTC, nowUTC);
+    console.log(`  Check 4: Is slot start in the past? ${isPast} (Only checked if today)`);
+    if (isPast) {
+      console.log('  Slot rejected: Start time is in the past.');
+      // Advance by a smaller increment to check the next possible moment
+      currentSlotStartUTC = addMinutes(currentSlotStartUTC, bufferTime || 15); 
+      continue;
+    }
+
+    // If all checks pass, add the slot
+    console.log('  Slot accepted!');
+    slots.push({
+      start: currentSlotStartUTC,
+      end: slotEndUTC,
+      available: true,
+    });
+    generatedSlotsCount++; // Increment generated slots count
+
+    // Move to the next potential slot start time (End of current slot + buffer)
+    currentSlotStartUTC = addMinutes(slotEndUTC, bufferTime);
+    console.log(`  Advanced next potential slot start (UTC) to: ${currentSlotStartUTC.toISOString()}`);
+  }
+
+  console.log(`[generateTimeSlots] Generated ${slots.length} slots.`);
+  console.log('[generateTimeSlots] Final Slots (UTC):', JSON.stringify(slots.map(s => ({ start: s.start.toISOString(), end: s.end.toISOString() }))));
+  console.log('[generateTimeSlots] --- End ---');
   return slots;
 }
 
@@ -184,79 +323,190 @@ export default function BookService() {
   const { t } = useLanguage();
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date()); // Represents the *day* selected, time part is ignored
-  const [selectedTime, setSelectedTime] = useState<string>();
+  const [selectedTime, setSelectedTime] = useState<string>(); // Store the selected UTC start time string
+  const [serviceLocation, setServiceLocation] = useState<'customer' | 'provider'>('provider'); // Default to provider location
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [order, setOrder] = useState<any>(null);
 
   // Fetch service with provider info
-  const { data: service, isLoading: serviceLoading } = useQuery<Service & { provider: User, reviews: any[] }>({    
+  const { data: service, isLoading: serviceLoading } = useQuery<Service & { provider: User, reviews: any[], workingHours: any, breakTime: any[], breakTimes: any[], bookings: any[] }>({    
     queryKey: [`/api/services/${id}`],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/services/${id}`);
+      if (!res.ok) throw new Error("Failed to fetch service details");
+      const data = await res.json();
+      console.log('Raw service data from API:', data);
+      // Handle potential naming inconsistency between breakTime and breakTimes
+      if (data.breakTime && !data.breakTimes) {
+        data.breakTimes = data.breakTime;
+      } else if (data.breakTimes && !data.breakTime) {
+        data.breakTime = data.breakTimes;
+      }
+      return data;
+    },
     enabled: !!id,
   });
-
-  // Get existing bookings for availability check
-  const { data: existingBookingsRaw } = useQuery<{ start: string; end: string }[]>({
-    queryKey: [`/api/services/${id}/bookings`, selectedDate.toISOString()],
-    enabled: !!service && !!selectedDate,
-  });
   
-  // Parse the UTC date strings from API to Date objects
-  const existingBookings = existingBookingsRaw?.map(booking => ({
-    start: new Date(booking.start), // Already UTC
-    end: new Date(booking.end)     // Already UTC
-  })) || [];
+  // Log service data when it changes
+  useEffect(() => {
+    if (service) {
+      console.log('Service data loaded:', {
+        id: service.id,
+        name: service.name,
+        hasWorkingHours: !!service.workingHours,
+        breakTimeLength: service.breakTime?.length || 0,
+        breakTimesLength: service.breakTimes?.length || 0
+      });
+    }
+  }, [service]);
 
-  // Generate available time slots
-  const timeSlots = service && existingBookings
-    ? generateTimeSlots(
+  // Fetch existing bookings for the selected date and service
+  const { data: existingBookings, isLoading: bookingsLoading } = useQuery<any[]>({ 
+    queryKey: ['/api/bookings/service', id, selectedDate.toISOString().split('T')[0]], // Use ISO date string for consistent cache key
+    queryFn: async () => {
+      const dateStr = formatBase(selectedDate, 'yyyy-MM-dd');
+      console.log(`Fetching bookings for service ${id} on date ${dateStr}`);
+      const res = await apiRequest("GET", `/api/bookings/service/${id}?date=${dateStr}`);
+      if (!res.ok) throw new Error("Failed to fetch existing bookings");
+      const bookingsData = await res.json();
+      
+      console.log('Raw booking data from API:', bookingsData);
+      
+      // Convert booking dates from ISO strings to Date objects (assuming they are UTC)
+      const processedBookings = bookingsData.map((booking: any) => {
+        try {
+          const startDate = new Date(booking.bookingDate); // Assuming bookingDate is the start time in UTC
+          // Calculate end time based on duration
+          const endDate = service?.duration 
+            ? addMinutes(new Date(booking.bookingDate), service.duration) 
+            : addMinutes(new Date(booking.bookingDate), 60); // Default to 60 minutes if duration not set
+            
+          // Validate dates
+          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            console.warn('Invalid booking date detected:', booking);
+            return null; // Will be filtered out
+          }
+          
+          return {
+            ...booking,
+            start: startDate,
+            end: endDate
+          };
+        } catch (error) {
+          console.error('Error processing booking:', error, booking);
+          return null; // Will be filtered out
+        }
+      }).filter(Boolean); // Remove any null entries
+      
+      console.log('Processed bookings:', processedBookings);
+      return processedBookings;
+    },
+    enabled: !!id && !!service, // Enable when service is loaded
+  });
+
+  // Memoize the break time array to ensure consistency
+  const breakTimeArray = useMemo(() => {
+    if (!service) return [];
+    // Prefer breakTimes if it exists and is an array, otherwise use breakTime if it's an array, fallback to empty
+    const breaks = Array.isArray(service.breakTimes) && service.breakTimes.length > 0
+      ? service.breakTimes
+      : Array.isArray(service.breakTime)
+      ? service.breakTime
+      : [];
+    console.log('Memoized breakTimeArray:', breaks);
+    return breaks;
+  }, [service]);
+
+  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
+
+  useEffect(() => {
+    // Only proceed if we have all required data
+    if (service && service.workingHours && service.duration) { // Ensure duration is also loaded
+      console.log('Generating time slots with:', {
+        selectedDate,
+        duration: service.duration,
+        bufferTime: service.bufferTime || 0,
+        workingHours: service.workingHours,
+        breakTimes: breakTimeArray,
+        existingBookings: existingBookings || [],
+        maxDailyBookings: service.maxDailyBookings ?? null // Added nullish coalescing for safety
+      });
+      const slots = generateTimeSlots(
         selectedDate,
         service.duration,
-        service.bufferTime || 0,
+        service.bufferTime || 0, // Use bufferTime from service or default to 0
         service.workingHours,
-        service.breakTime || [],
-        existingBookings
-      )
-    : [];
+        breakTimeArray, // Use the memoized array
+        existingBookings || [], // Pass existing bookings or empty array
+        service.maxDailyBookings ?? null // Pass maxDailyBookings or null
+      );
+      setAvailableSlots(slots);
+      setSelectedTime(undefined); // Reset selected time when date changes or slots regenerate
+    } else {
+      console.log('Skipping slot generation: Missing service, workingHours, or duration.');
+      setAvailableSlots([]); // Clear slots if required data is missing
+    }
+  }, [service, selectedDate, existingBookings, breakTimeArray]); // Add breakTimeArray to dependency array
+  
+  // Debug log when availableSlots changes
+  useEffect(() => {
+    console.log('Available slots updated:', {
+      count: availableSlots.length,
+      hasWorkingHours: !!service?.workingHours,
+      breakTimeArrayLength: breakTimeArray.length,
+      existingBookingsCount: existingBookings?.length || 0
+    });
+  }, [availableSlots, service, existingBookings, breakTimeArray]);
+  
+  // Remove getNoSlotsReason function as logic is moved to JSX
+  /*
+  const getNoSlotsReason = () => {
+    // ... (removed function) ...
+  };
+  */
 
-  const bookingMutation = useMutation({
-    mutationFn: async (data: {
-      serviceId: number;
-      date: string;
-      time: string;
+  const createBookingMutation = useMutation({
+    mutationFn: async (data: { 
+      serviceId: number; 
+      bookingDate: string; // ISO string in UTC
+      serviceLocation: 'customer' | 'provider';
+      // No need to send providerAddress explicitly if 'provider' is chosen
+      // The backend can derive it from the service/provider ID
     }) => {
       const res = await apiRequest("POST", "/api/bookings", data);
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || t("booking_failed"));
+        throw new Error(error.message || "Booking failed");
       }
       return res.json();
     },
     onSuccess: (data) => {
-      // Show booking pending notification - provider needs to accept first
-      toast({
-        title: t("booking_request_sent"),
-        description: t("booking_pending_provider_approval"),
-      });
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({
+        title: "Booking Request Sent",
+        description: data.message || "Your booking request has been sent to the provider.",
+      });
+      // Optionally redirect or close modal
+      // setLocation('/customer/bookings');
+      setDialogOpen(false); // Close the confirmation dialog
     },
     onError: (error: Error) => {
       toast({
-        title: t("booking_failed"),
+        title: "Booking Failed",
         description: error.message,
         variant: "destructive",
       });
     },
   });
-  
-  // Mutation for handling payment after booking is accepted and service is completed
-  const paymentMutation = useMutation({
+
+  const initiatePaymentMutation = useMutation({
     mutationFn: async (bookingId: number) => {
       const res = await apiRequest("POST", `/api/bookings/${bookingId}/initiate-payment`, {});
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || t("payment_initiation_failed"));
+        throw new Error(error.message || "Payment initiation failed");
       }
       return res.json();
     },
@@ -266,126 +516,142 @@ export default function BookService() {
     },
     onError: (error: Error) => {
       toast({
-        title: t("payment_initiation_failed"),
+        title: "Payment Error",
         description: error.message,
         variant: "destructive",
       });
     },
   });
-  
-  // Mutation for marking a service as completed
-  const completeServiceMutation = useMutation({
-    mutationFn: async ({ bookingId, isSatisfactory, comments }: { bookingId: number; isSatisfactory: boolean; comments?: string }) => {
-      const res = await apiRequest("PATCH", `/api/bookings/${bookingId}/complete`, { isSatisfactory, comments });
+
+  const handlePaymentSuccess = useMutation({
+    mutationFn: async (paymentData: any) => {
+      const res = await apiRequest("POST", "/api/payments/verify", paymentData);
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || t("service_completion_failed"));
+        throw new Error(error.message || "Payment verification failed");
       }
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast({
-        title: t("service_marked_complete"),
-        description: data.message || t("thank_you_for_feedback"),
+        title: "Payment Successful",
+        description: "Your payment has been processed.",
       });
-      
-      // If payment is required, initiate it
-      if (data.paymentRequired && data.booking) {
-        paymentMutation.mutate(data.booking.id);
-      }
-      
+      setPaymentDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
     onError: (error: Error) => {
       toast({
-        title: t("service_completion_failed"),
+        title: "Payment Verification Failed",
         description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  // Show information dialog when component mounts
-  useEffect(() => {
-    setDialogOpen(true);
-  }, []);
-
-  const handleBooking = () => {
-    if (!selectedTime || !service) return;
-
-    bookingMutation.mutate({
-      serviceId: service.id,
-      // Send the selected slot's start time in UTC ISO format
-      date: selectedTime ? new Date(selectedTime).toISOString() : new Date().toISOString(), // selectedTime holds the UTC start time string
-      // 'time' field might be redundant now, date contains the full timestamp
-      time: selectedTime ? formatInTimeZone(new Date(selectedTime), timeZone, 'HH:mm') : '', // Keep sending HH:mm for compatibility if needed
+  const loadRazorpay = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
     });
   };
 
-  useEffect(() => {
-    if (order) {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.async = true;
-      script.onload = () => {
-        const options = {
-          key: "rzp_test_WIK4gEdE7PPhgw", // Using the provided test key directly
-          amount: order.amount,
-          currency: order.currency,
-          name: service?.name,
-          description: `Booking for ${service?.name}`,
-          order_id: order.id,
-          handler: async (response: any) => {
-            try {
-              const res = await apiRequest("POST", `/api/bookings/${order.booking.id}/payment`, {
-                razorpayPaymentId: response.razorpay_payment_id,
-                razorpaySignature: response.razorpay_signature,
-              });
-
-              if (res.ok) {
-                queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-                queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-                toast({
-                  title: t("booking_successful"),
-                  description: t("booking_confirmation_sent"),
-                });
-                setPaymentDialogOpen(false);
-              } else {
-                throw new Error("Payment verification failed");
-              }
-            } catch (error) {
-              toast({
-                title: t("payment_failed"),
-                description: error instanceof Error ? error.message : "Payment verification failed",
-                variant: "destructive",
-              });
-            }
-          },
-          prefill: {
-            name: service?.provider?.name,
-            email: service?.provider?.email,
-          },
-          theme: {
-            color: "#10B981",
-          },
-        };
-
-        const rzp = new window.Razorpay(options);
-        rzp.open();
-      };
-      document.body.appendChild(script);
-
-      return () => {
-        document.body.removeChild(script);
-      };
+  const displayRazorpay = async () => {
+    const res = await loadRazorpay();
+    if (!res) {
+      toast({ title: "Razorpay SDK failed to load. Are you online?" });
+      return;
     }
-  }, [order]);
+
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: order.amount.toString(),
+      currency: order.currency,
+      name: "Your Service Booking",
+      description: `Payment for ${service?.name}`,
+      order_id: order.id,
+      handler: function (response: any) {
+        handlePaymentSuccess.mutate({
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+          bookingId: order.notes.bookingId, // Assuming bookingId is passed in notes
+        });
+      },
+      prefill: {
+        // You can prefill customer details here if available
+        // name: "Customer Name",
+        // email: "customer@example.com",
+        // contact: "9999999999",
+      },
+      notes: {
+        address: "Your Company Address",
+      },
+      theme: {
+        color: "#3399cc",
+      },
+    };
+
+    const paymentObject = new window.Razorpay(options);
+    paymentObject.open();
+  };
+
+  useEffect(() => {
+    if (paymentDialogOpen && order) {
+      displayRazorpay();
+    }
+  }, [paymentDialogOpen, order]);
+
+  const handleBookingRequest = () => {
+    if (!selectedTime) {
+      toast({ title: "Please select a time slot", variant: "destructive" });
+      return;
+    }
+    setDialogOpen(true); // Open confirmation dialog
+  };
+
+  const confirmBooking = () => {
+    if (!selectedTime || !service) return;
+
+    // selectedTime is the UTC start time string
+    const bookingDateUTC = new Date(selectedTime);
+
+    createBookingMutation.mutate({
+      serviceId: service.id,
+      bookingDate: bookingDateUTC.toISOString(), // Send UTC ISO string
+      serviceLocation: serviceLocation,
+      // No providerAddress needed here
+    });
+  };
+
+  // Calculate average rating
+  const averageRating = service?.reviews && service.reviews.length > 0
+    ? service.reviews.reduce((acc, review) => acc + review.rating, 0) / service.reviews.length
+    : 0;
+
+  // --- Calendar disabling logic ---
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Set to start of today
+
+  const disabledDays = [
+    { before: addDays(today, 1) }, // Disable past dates and today
+    (date: Date) => { // Disable days where the provider is unavailable
+      if (!service?.workingHours) return true; // Disable if working hours not loaded
+      const zonedDate = toZonedTime(date, timeZone);
+      const dayOfWeek = formatBase(zonedDate, 'EEEE').toLowerCase();
+      const schedule = service.workingHours[dayOfWeek];
+      return !schedule || !schedule.isAvailable;
+    }
+  ];
+  // --- End Calendar disabling logic ---
 
   if (serviceLoading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       </DashboardLayout>
@@ -395,219 +661,263 @@ export default function BookService() {
   if (!service) {
     return (
       <DashboardLayout>
-        <div className="flex flex-col items-center justify-center min-h-[60vh]">
-          <h2 className="text-2xl font-bold mb-4">Service not found</h2>
-          <Link href="/customer/browse-services">
-            <Button>Back to Services</Button>
-          </Link>
+        <div className="p-6 text-center">
+          <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
+          <h2 className="mt-4 text-xl font-semibold">Service Not Found</h2>
+          <p className="mt-2 text-muted-foreground">The requested service could not be found.</p>
+          <Button asChild className="mt-4">
+            <Link href="/customer/browse-services">Browse Other Services</Link>
+          </Button>
         </div>
       </DashboardLayout>
     );
   }
 
-  const averageRating = service.reviews?.length
-    ? service.reviews.reduce((acc, review) => acc + review.rating, 0) / service.reviews.length
-    : 0;
+  // Format provider address
+  const providerFullAddress = [
+    service.provider.addressStreet,
+    service.provider.addressCity,
+    service.provider.addressState,
+    service.provider.addressPostalCode,
+    service.provider.addressCountry
+  ].filter(Boolean).join(', ');
 
   return (
     <DashboardLayout>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="max-w-4xl mx-auto space-y-6 p-6"
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="p-4 md:p-6 space-y-6"
       >
         <Card>
           <CardHeader>
-            <CardTitle>{service.name}</CardTitle>
+            <CardTitle className="text-2xl font-bold">{service.name}</CardTitle>
+            <div className="flex items-center text-sm text-muted-foreground">
+              <Star className="h-4 w-4 mr-1 fill-yellow-400 text-yellow-500" />
+              <span>{averageRating.toFixed(1)} ({service.reviews?.length || 0} reviews)</span>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Provider Info */}
-            <div className="bg-muted/50 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">Service Provider</h3>
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-                  {service.provider?.profilePicture ? (
-                    <img
-                      src={service.provider.profilePicture}
-                      alt={service.provider.name}
-                      className="h-full w-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-2xl">{service.provider?.name[0]}</span>
-                  )}
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">{service.description}</p>
+            <div className="flex items-center text-sm">
+              <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
+              <span>Duration: {service.duration} minutes</span>
+            </div>
+            <div className="flex items-start text-sm">
+              <MapPin className="h-4 w-4 mr-2 mt-0.5 text-muted-foreground" />
+              <span>Location: {providerFullAddress || 'Not specified'}</span>
+            </div>
+            <div className="text-lg font-semibold">
+              Price: ₹{service.price}
+            </div>
+            <div>
+              <h3 className="font-medium mb-2">Service Provider</h3>
+              <div className="flex items-center space-x-3">
+                {/* Add provider avatar/icon if available */}
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-lg font-semibold">
+                  {service.provider.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-medium">{service.provider?.name}</p>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
-                    <span>{averageRating.toFixed(1)} ({service.reviews?.length || 0} reviews)</span>
-                  </div>
+                  <p className="font-medium">{service.provider.name}</p>
+                  {/* Add link to provider profile if needed */}
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            {/* Removed grid layout from CardContent to prevent heading wrapping */}
+            <CardTitle>Book Your Slot</CardTitle>
+          </CardHeader>
+          {/* Reverted CardContent and added Grid for layout */}
+          <CardContent className="grid md:grid-cols-2 gap-6">
+            {/* Calendar Section (Left Column) */}
+            <div>
+              <h3 className="font-medium mb-2">Select Date</h3>
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => date && setSelectedDate(date)}
+                disabled={disabledDays}
+                className="rounded-md border p-0"
+                fromDate={addDays(today, 1)} // Start from tomorrow
+              />
+            </div>
+            {/* Time Slots, Location, and Button Section (Right Column) */}
+            <div className="space-y-4"> {/* Use space-y for vertical spacing within the right column */}
               <div>
-                <h3 className="font-semibold mb-2">{t('select_date')}</h3>
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={(date) => {
-                    if (date) {
-                      // Set only the date part, reset time
-                      const today = new Date();
-                      date.setHours(today.getHours(), today.getMinutes(), today.getSeconds(), today.getMilliseconds());
-                      setSelectedDate(date);
-                      setSelectedTime(undefined);
-                      console.log(`Selected date (day): ${formatBase(date, 'yyyy-MM-dd')}`);
-                    }
-                  }}
-                  disabled={(date) =>
-                    // Only disable dates in the past
-                    isBefore(date, new Date())
-                    // No upper limit on future dates - can book any date in the future
-                  }
-                />
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="font-semibold">{t('available_time_slots')}</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {timeSlots.map((slot) => (
-                    <Button
-                      key={slot.start.toISOString()} // Use UTC ISO string as key
-                      variant={
-                        selectedTime === slot.start.toISOString() // Compare with UTC ISO string
-                          ? "default"
-                          : "outline"
-                      }
-                      // Store the selected slot's UTC start time as ISO string
-                      onClick={() => setSelectedTime(slot.start.toISOString())}
-                      className="w-full"
-                    >
-                      {/* Display the time in IST format */} 
-                      {formatInTimeZone(slot.start, timeZone, 'hh:mm a')}
-                    </Button>
-                  ))}
-                </div>
-
-                {!timeSlots.length && (
-                  <div className="flex items-center gap-2 text-yellow-600">
-                    <AlertCircle className="h-4 w-4" />
-                    <span>{t('no_slots_available')}</span>
+                <h3 className="font-medium mb-2">Available Time Slots ({formatBase(selectedDate, 'PPP')})</h3>
+                {bookingsLoading || serviceLoading ? ( // Show loader if service or bookings are loading
+                  <div className="flex items-center justify-center h-20">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : availableSlots.length > 0 ? (
+                  // Render available slots
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {availableSlots.map((slot, index) => {
+                      const startTime = slot.start instanceof Date ? slot.start : new Date(slot.start);
+                      const slotKey = startTime.toISOString();
+                      const formattedTime = formatInTimeZone(startTime, timeZone, 'hh:mm a');
+                      
+                      return (
+                        <Button
+                          key={`${slotKey}-${index}`} // Use index in key to ensure uniqueness
+                          variant={selectedTime === slotKey ? "default" : "outline"}
+                          onClick={() => setSelectedTime(slotKey)}
+                          disabled={!slot.available} // Should always be true here, but keep for safety
+                          className="w-full justify-center"
+                        >
+                          {formattedTime}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  // Render specific 'no slots' messages
+                  <div>
+                    {breakTimeArray.length > 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No slots available due to provider's break times or existing bookings.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No slots available. The provider may be fully booked or unavailable on this day.
+                      </p>
+                    )}
+                    {/* Optional: Add more detailed reason based on working hours check */}
+                    {!service?.workingHours || !service.workingHours[formatBase(toZonedTime(selectedDate, timeZone), 'EEEE').toLowerCase()]?.isAvailable ? (
+                      <p className="text-xs text-muted-foreground mt-1">Provider is marked as unavailable on this day.</p>
+                    ) : null}
                   </div>
                 )}
+              </div>
 
-                <Button
-                  className="w-full"
-                  onClick={handleBooking}
-                  disabled={!selectedTime || bookingMutation.isPending}
+              <div>
+                <h3 className="font-medium mb-2">Service Location</h3>
+                <RadioGroup 
+                  value={serviceLocation} 
+                  onValueChange={(value) => setServiceLocation(value as 'customer' | 'provider')}
+                  className="flex space-x-4"
                 >
-                  {bookingMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : null}
-                  {t('request_booking')}
-                </Button>
-                <p className="text-xs text-muted-foreground text-center">
-                  {t('booking_requires_provider_approval')}
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="provider" id="provider_location" />
+                    <Label htmlFor="provider_location">Provider's Location</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="customer" id="my_location" />
+                    <Label htmlFor="my_location">My Location</Label>
+                  </div>
+                </RadioGroup>
+                {/* Display provider address when provider location is selected */}
+                {serviceLocation === 'provider' && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Service will be at: {providerFullAddress || 'Provider address not specified'}
+                  </p>
+                )}
+                 {/* Remove the input field for provider address */}
+                 {/* 
+                 {serviceLocation === 'provider' && (
+                   <div className="mt-4 space-y-2">
+                     <Label htmlFor="provider_address">Provider Address</Label>
+                     <Input 
+                       id="provider_address"
+                       placeholder="Enter provider's full address"
+                       value={providerAddress} 
+                       onChange={(e) => setProviderAddress(e.target.value)} 
+                       required={serviceLocation === 'provider'}
+                     />
+                   </div>
+                 )}
+                 */}
+              </div>
+
+              {/* Button remains within the right column */}
+              <Button
+                onClick={handleBookingRequest}
+                className="w-full mt-4" /* Reverted margin */
+                disabled={!selectedTime || createBookingMutation.isPending}
+              >
+                {createBookingMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Request Booking
+              </Button>
+              {/* {service.bookingRequiresProviderApproval && (
+                <p className="text-xs text-center text-muted-foreground mt-2">
+                  Booking requires provider approval.
                 </p>
-              </div>
+              )} */}
             </div>
+          </CardContent>
+        </Card>
 
-            {/* Service Details */}
-            <div className="border-t pt-4">
-              <h3 className="font-semibold mb-2">{t('service_details')}</h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    <span>{t('duration')}: {service.duration} {t('minutes')}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    <span>{t('location')}: {service.location ? `${service.location.lat}, ${service.location.lng}` : 'Not specified'}</span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">{service.description}</p>
-                  <p className="mt-2 font-semibold">₹{service.price}</p>
-                </div>
-              </div>
+        {/* Confirmation Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirm Booking</DialogTitle>
+            </DialogHeader>
+            <div>
+              <p><strong>Service:</strong> {service.name}</p>
+              <p><strong>Date:</strong> {formatBase(selectedDate, 'PPP')}</p>
+              <p><strong>Time:</strong> {selectedTime ? formatInTimeZone(new Date(selectedTime), timeZone, 'hh:mm a') : 'N/A'}</p>
+              <p><strong>Location:</strong> {serviceLocation === 'provider' ? `Provider's Location (${providerFullAddress || 'Not specified'})` : 'Your Location'}</p>
+              <p><strong>Price:</strong> ₹{service.price}</p>
             </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={confirmBooking} disabled={createBookingMutation.isPending}>
+                {createBookingMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Confirm & Request
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-            {/* Reviews Section */}
-            {service.reviews && service.reviews.length > 0 && (
-              <div className="border-t pt-4">
-                <h3 className="font-semibold mb-4">Customer Reviews</h3>
-                <div className="space-y-4">
-                  {service.reviews.map((review) => (
-                    <div key={review.id} className="border rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="flex text-yellow-500">
-                          {Array.from({ length: review.rating }).map((_, i) => (
-                            <Star key={i} className="h-4 w-4 fill-current" />
-                          ))}
-                        </div>
-                        <span className="text-sm text-muted-foreground">
-                          {formatInTimeZone(new Date(review.createdAt), timeZone, "MMM d, yyyy")}
-                        </span>
-                      </div>
-                      <p className="text-sm">{review.review}</p>
-                      {review.providerReply && (
-                        <div className="mt-2 pl-4 border-l-2">
-                          <p className="text-sm text-muted-foreground">
-                            <span className="font-medium">Provider response:</span> {review.providerReply}
-                          </p>
-                        </div>
-                      )}
+        {/* Payment Dialog */}
+        <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Complete Payment</DialogTitle>
+            </DialogHeader>
+            {/* Razorpay checkout will be initiated here */}
+            <p className="text-center text-muted-foreground">Redirecting to payment gateway...</p>
+          </DialogContent>
+        </Dialog>
+
+        {/* Customer Reviews Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer Reviews</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {service.reviews && service.reviews.length > 0 ? (
+              <div className="space-y-4">
+                {service.reviews.map((review) => (
+                  <div key={review.id} className="border-b pb-4 last:border-b-0">
+                    <div className="flex items-center mb-1">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`h-4 w-4 ${i < review.rating ? 'fill-yellow-400 text-yellow-500' : 'text-muted-foreground'}`}
+                        />
+                      ))}
+                      <span className="ml-2 text-sm font-medium">{review.rating}.0</span>
                     </div>
-                  ))}
-                </div>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      {review.createdAt ? formatBase(new Date(review.createdAt), 'PP') : ''} - By {review.customerName || 'Anonymous'}
+                    </p>
+                    <p className="text-sm">{review.review}</p>
+                  </div>
+                ))}
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No reviews yet.</p>
             )}
           </CardContent>
         </Card>
       </motion.div>
-
-      {/* Payment Dialog */}
-      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("payment_processing")}</DialogTitle>
-          </DialogHeader>
-          <p>{t("payment_initialization_message")}</p>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Information Dialog about booking process */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("booking_process_info")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="mb-4">
-              <h3 className="font-medium text-lg mb-1">{t("booking_process_step1")}</h3>
-              <p className="text-muted-foreground">{t("When you request a booking, the service provider will receive a notification.")}</p>
-            </div>
-            <div className="mb-4">
-              <h3 className="font-medium text-lg mb-1">{t("booking_process_step2")}</h3>
-              <p className="text-muted-foreground">{t("The provider will review your request and either accept or reject it. You'll receive a notification with their decision.")}</p>
-            </div>
-            <div className="mb-4">
-              <h3 className="font-medium text-lg mb-1">{t("booking_process_step3")}</h3>
-              <p className="text-muted-foreground">{t("If accepted, you'll meet the provider at the scheduled time. After the service is completed, you can mark it as satisfactory and proceed with payment.")}</p>
-            </div>
-            <div className="mb-4">
-              <h3 className="font-medium text-lg mb-1">{t("booking_process_step4")}</h3>
-              <p className="text-muted-foreground">{t("If rejected, you'll receive a notification with the reason and can book with another provider.")}</p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setDialogOpen(false)}>{t("I understand")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 }

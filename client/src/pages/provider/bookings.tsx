@@ -13,6 +13,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Check, X, Calendar, Clock, User as UserIcon } from "lucide-react"; // Import UserIcon
+import { MapPin as LocationIcon } from 'lucide-react'; // Use a different alias for MapPin
 import { Booking, Service, User } from "@shared/schema"; // Import User type
 import { z } from "zod";
 import { useState, useEffect } from "react";
@@ -231,14 +232,27 @@ export default function ProviderBookings() {
                         {formatIndianDisplay(booking.bookingDate, 'time')}
                         <span className="ml-2">({booking.service.duration} mins)</span>
                       </div>
+                      {/* Display Service Location */}
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <LocationIcon className="h-4 w-4" />
+                        <span>
+                          {booking.serviceLocation === 'customer' 
+                            ? t('service_at_customer_location') 
+                            : booking.providerAddress 
+                              ? `${t('service_at_provider_location')}: ${booking.providerAddress}`
+                              : t('service_at_provider_location') // Fallback if address is missing
+                          }
+                        </span>
+                      </div>
                       {/* Display Customer Information */}
                       {booking.customer && (
                         <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
-                          <p className="flex items-center"><UserIcon className="h-4 w-4 mr-1" /> <strong>Customer:</strong> {booking.customer.name}</p>
-                          <p><strong>Phone:</strong> {booking.customer.phone}</p>
-                          {booking.customer.addressStreet && (
+                          <p className="flex items-center"><UserIcon className="h-4 w-4 mr-1" /> <strong>{t('customer')}:</strong> {booking.customer.name}</p>
+                          <p><strong>{t('phone')}:</strong> {booking.customer.phone}</p>
+                          {/* Only show customer address if service is at customer location */}
+                          {booking.serviceLocation === 'customer' && booking.customer.addressStreet && (
                             <p>
-                              <strong>Address:</strong> {booking.customer.addressStreet}, {booking.customer.addressCity}, {booking.customer.addressState} {booking.customer.addressPostalCode}
+                              <strong>{t('address')}:</strong> {booking.customer.addressStreet}, {booking.customer.addressCity}, {booking.customer.addressState} {booking.customer.addressPostalCode}
                             </p>
                           )}
                         </div>

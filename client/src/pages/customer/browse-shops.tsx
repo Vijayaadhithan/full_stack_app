@@ -6,8 +6,20 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Loader2, Store, MapPin, Star } from "lucide-react";
 import { useState } from "react";
-import { User } from "@shared/schema";
+import { User, ShopProfile } from "@shared/schema";
 import { motion } from "framer-motion";
+
+// Helper function to format address
+const formatAddress = (user: User): string => {
+  const parts = [
+    user.addressStreet,
+    user.addressCity,
+    user.addressState,
+    user.addressPostalCode,
+    user.addressCountry,
+  ].filter(Boolean); // Filter out null/undefined/empty strings
+  return parts.length > 0 ? parts.join(', ') : "Location not specified";
+};
 
 const container = {
   hidden: { opacity: 0 },
@@ -88,7 +100,7 @@ export default function BrowseShops() {
                             <h3 className="font-semibold">{shop.shopProfile?.shopName || shop.name}</h3>
                             <div className="flex items-center text-sm text-muted-foreground">
                               <MapPin className="h-3 w-3 mr-1" />
-                              <span>{shop.address || "Location not specified"}</span>
+                              <span>{formatAddress(shop)}</span>
                             </div>
                           </div>
                         </div>

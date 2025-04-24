@@ -109,19 +109,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pendingBookings.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
           const customer = await storage.getUser(booking.customerId); // Fetch customer details
-          return { 
-            ...booking, 
-            service, 
-            customer: customer ? { // Include customer details
-              id: customer.id,
-              name: customer.name,
-              phone: customer.phone,
+          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider details
+
+          let relevantAddress = {};
+          // If the booking's serviceLocation is 'customer', include the customer's address
+          if (booking.serviceLocation === 'customer' && customer) {
+            relevantAddress = {
               addressStreet: customer.addressStreet,
               addressCity: customer.addressCity,
               addressState: customer.addressState,
               addressPostalCode: customer.addressPostalCode,
               addressCountry: customer.addressCountry,
-            } : null
+            };
+          }
+          // If serviceLocation is 'provider', the provider knows their own address, so no address is needed here.
+
+          return { 
+            ...booking, 
+            service, 
+            customer: customer ? { id: customer.id, name: customer.name, phone: customer.phone } : null, // Basic customer info
+            provider: provider ? { id: provider.id, name: provider.name, phone: provider.phone } : null, // Basic provider info
+            relevantAddress // Add the conditionally determined address
           };
         })
       );
@@ -192,32 +200,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const customerId = req.user!.id;
       const bookingRequests = await storage.getBookingRequestsWithStatusForCustomer(customerId);
       
-      // Fetch service details for each booking
-      const bookingsWithService = await Promise.all(
+      // Fetch details for each booking
+      const bookingsWithDetails = await Promise.all(
         bookingRequests.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
-          let provider = null;
-          if (service) {
-            provider = await storage.getUser(service.providerId);
-          }
-          return { 
-            ...booking, 
-            service, 
-            provider: provider ? { // Include provider details
-              id: provider.id,
-              name: provider.name,
-              phone: provider.phone,
+          const customer = await storage.getUser(booking.customerId); // Fetch customer (self)
+          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider
+
+          let relevantAddress = {};
+          // If service is at provider's location, show provider address
+          if (service?.serviceLocationType === 'provider_location' && provider) {
+            relevantAddress = {
               addressStreet: provider.addressStreet,
               addressCity: provider.addressCity,
               addressState: provider.addressState,
               addressPostalCode: provider.addressPostalCode,
               addressCountry: provider.addressCountry,
-            } : null
+            };
+          } 
+          // If service is at customer's location, show customer address
+          else if (service?.serviceLocationType === 'customer_location' && customer) {
+            relevantAddress = {
+              addressStreet: customer.addressStreet,
+              addressCity: customer.addressCity,
+              addressState: customer.addressState,
+              addressPostalCode: customer.addressPostalCode,
+              addressCountry: customer.addressCountry,
+            };
+          }
+
+          return { 
+            ...booking, 
+            service, 
+            customer: customer ? { id: customer.id, name: customer.name, phone: customer.phone } : null,
+            provider: provider ? { id: provider.id, name: provider.name, phone: provider.phone } : null,
+            relevantAddress // Add the conditionally determined address
           };
         })
       );
       
-      res.json(bookingsWithService); // Send the response back
+      res.json(bookingsWithDetails); // Send the response back
     } catch (error) {
       console.error("Error fetching booking requests:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking requests" });
@@ -230,24 +252,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const customerId = req.user!.id;
       const bookingHistory = await storage.getBookingHistoryForCustomer(customerId);
       
-      // Fetch service details for each booking
+      // Fetch details for each booking
       const bookingsWithDetails = await Promise.all(
         bookingHistory.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
-          const customer = await storage.getUser(booking.customerId); // Fetch customer details
-          return { 
-            ...booking, 
-            service, 
-            customer: customer ? { // Include customer details
-              id: customer.id,
-              name: customer.name,
-              phone: customer.phone,
+          const customer = await storage.getUser(booking.customerId); // Fetch customer (self)
+          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider
+
+          let relevantAddress = {};
+          // If service is at provider's location, show provider address
+          if (service?.serviceLocationType === 'provider_location' && provider) {
+            relevantAddress = {
+              addressStreet: provider.addressStreet,
+              addressCity: provider.addressCity,
+              addressState: provider.addressState,
+              addressPostalCode: provider.addressPostalCode,
+              addressCountry: provider.addressCountry,
+            };
+          } 
+          // If service is at customer's location, show customer address
+          else if (service?.serviceLocationType === 'customer_location' && customer) {
+            relevantAddress = {
               addressStreet: customer.addressStreet,
               addressCity: customer.addressCity,
               addressState: customer.addressState,
               addressPostalCode: customer.addressPostalCode,
               addressCountry: customer.addressCountry,
-            } : null
+            };
+          }
+
+          return { 
+            ...booking, 
+            service, 
+            customer: customer ? { id: customer.id, name: customer.name, phone: customer.phone } : null,
+            provider: provider ? { id: provider.id, name: provider.name, phone: provider.phone } : null,
+            relevantAddress // Add the conditionally determined address
           };
         })
       );
@@ -266,24 +305,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const providerId = req.user!.id;
       const bookingHistory = await storage.getBookingHistoryForProvider(providerId);
       
-      // Fetch service details for each booking
+      // Fetch details for each booking
       const bookingsWithDetails = await Promise.all(
         bookingHistory.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
           const customer = await storage.getUser(booking.customerId); // Fetch customer details
-          return { 
-            ...booking, 
-            service, 
-            customer: customer ? { // Include customer details
-              id: customer.id,
-              name: customer.name,
-              phone: customer.phone,
+          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider (self)
+
+          let relevantAddress = {};
+          // If service is at provider's location, show provider address (implicitly known)
+          // If service is at customer's location, show customer address
+          if (service?.serviceLocationType === 'customer_location' && customer) {
+            relevantAddress = {
               addressStreet: customer.addressStreet,
               addressCity: customer.addressCity,
               addressState: customer.addressState,
               addressPostalCode: customer.addressPostalCode,
               addressCountry: customer.addressCountry,
-            } : null
+            };
+          }
+          // Provider address is implicitly known by the provider, so no need to explicitly add it here
+          // unless the service location is 'provider_location' and you *want* to show it redundantly.
+          // For clarity, we only show the *other* party's address when relevant.
+
+          return { 
+            ...booking, 
+            service, 
+            customer: customer ? { id: customer.id, name: customer.name, phone: customer.phone } : null,
+            provider: provider ? { id: provider.id, name: provider.name, phone: provider.phone } : null,
+            relevantAddress // Add the conditionally determined address
           };
         })
       );
@@ -445,19 +495,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Service routes
   app.post("/api/services", requireAuth, requireRole(["provider"]), async (req, res) => {
     try {
-      // The schema already reflects the address fields, no need to handle 'location'
-      const result = insertServiceSchema.safeParse(req.body);
+      // Add serviceLocationType to the validation
+      const serviceSchemaWithLocation = insertServiceSchema.extend({
+        serviceLocationType: z.enum(["customer_location", "provider_location"]).optional().default("provider_location"),
+      });
+      const result = serviceSchemaWithLocation.safeParse(req.body);
       if (!result.success) {
         console.error("[API] /api/services POST - Validation error:", result.error.flatten());
         return res.status(400).json(result.error.flatten());
       }
 
-      const service = await storage.createService({
-        ...result.data,
+      const serviceData = { 
+        ...result.data, 
         providerId: req.user!.id,
         isAvailable: true, // Default to available
-        // Ensure address fields are included if they are part of result.data
-      });
+      };
+      const service = await storage.createService(serviceData);
 
       console.log("Created service:", service);
       res.status(201).json(service);
@@ -516,7 +569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const services = await storage.getServices();
       console.log("All services:", services); // Debug log
 
-      // Map through services to include provider info
+      // Map through services to include provider info and rating
       const servicesWithDetails = await Promise.all(services.map(async (service) => {
         const provider = await storage.getUser(service.providerId);
         const reviews = await storage.getReviewsByService(service.id);
@@ -527,11 +580,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return {
           ...service,
           rating,
-          provider: provider ? {
-            id: provider.id,
-            name: provider.name,
+          provider: provider ? { // Include full provider details needed for address logic
+            id: provider.id, 
+            name: provider.name, 
+            phone: provider.phone,
             profilePicture: provider.profilePicture,
-          } : null,
+            addressStreet: provider.addressStreet,
+            addressCity: provider.addressCity,
+            addressState: provider.addressState,
+            addressPostalCode: provider.addressPostalCode,
+            addressCountry: provider.addressCountry,
+          } : null, 
         };
       }));
 
@@ -584,7 +643,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: provider.name,
           email: provider.email,
           profilePicture: provider.profilePicture,
+          // Include address fields
+          addressStreet: provider.addressStreet,
+          addressCity: provider.addressCity,
+          addressState: provider.addressState,
+          addressPostalCode: provider.addressPostalCode,
+          addressCountry: provider.addressCountry
         },
+        // Include availability details
+        workingHours: service.workingHours,
+        breakTime: service.breakTime, // Corrected field name
         reviews: reviews || []
       };
 
@@ -724,7 +792,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Booking routes
   app.post("/api/bookings", requireAuth, requireRole(["customer"]), async (req, res) => {
     try {
-      const { serviceId, date, time } = req.body;
+      // Destructure bookingDate and serviceLocation. Remove date, time, providerAddress.
+      const { serviceId, bookingDate, serviceLocation } = req.body;
 
       // Get service details
       const service = await storage.getService(serviceId);
@@ -732,31 +801,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Service not found" });
       }
 
-      // Parse date if it's in ISO format
-      let dateStr = date;
-      if (date && date.includes('T')) {
-        // Extract YYYY-MM-DD from ISO date string
-        dateStr = date.split('T')[0];
-        console.log("Parsed date from ISO string:", dateStr);
+      // Validate bookingDate is a valid ISO string
+      const bookingDateTime = new Date(bookingDate);
+      if (isNaN(bookingDateTime.getTime())) {
+        return res.status(400).json({ message: "Invalid booking date format. Expected ISO string." });
+      }
+
+      // Validate serviceLocation
+      if (serviceLocation !== 'customer' && serviceLocation !== 'provider') {
+        return res.status(400).json({ message: "Invalid service location. Must be 'customer' or 'provider'." });
       }
 
       // Check if Razorpay is properly configured
       if (!isRazorpayConfigured) {
         console.log("Razorpay is not properly configured. Creating booking without payment integration.");
-        
-        // Validate date and time format
-        const bookingDateTime = validateAndParseDateTime(dateStr, time);
-        if (!bookingDateTime) {
-          return res.status(400).json({ message: "Invalid date or time format" });
-        }
-        
+
         // Create booking record without Razorpay integration
         const booking = await storage.createBooking({
           customerId: req.user!.id,
           serviceId,
-          bookingDate: bookingDateTime,
+          bookingDate: bookingDateTime, // Use the validated Date object
           status: "pending",
           paymentStatus: "pending",
+          serviceLocation: serviceLocation, // Store service location
+          // Remove providerAddress field
         });
 
         // Create notification for provider
@@ -767,33 +835,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `You have a new booking request for ${service.name}`,
         });
 
-        return res.status(201).json({ booking, paymentRequired: false });
+        return res.status(201).json({ booking, paymentRequired: false, message: "Booking request sent. Payment integration unavailable." });
       }
-      
+
+      // --- Razorpay Integration Logic (if configured) ---
       try {
         // Create Razorpay order
-        const amount = parseInt(service.price);
-        const order = await razorpay.orders.create({
+        const amount = parseInt(service.price); // Ensure price is stored as string or number
+        if (isNaN(amount) || amount <= 0) {
+          return res.status(400).json({ message: "Invalid service price for payment." });
+        }
+
+        const orderOptions = {
           amount: amount * 100, // Convert to paisa
           currency: "INR",
-          receipt: `booking_${Date.now()}`,
-        });
+          receipt: `booking_${Date.now()}_${serviceId}`,
+          notes: {
+            serviceId: serviceId,
+            customerId: req.user!.id,
+            // Add other relevant notes if needed
+          }
+        };
 
-        // Validate date and time format
-        const bookingDateTime = validateAndParseDateTime(dateStr, time);
-        if (!bookingDateTime) {
-          return res.status(400).json({ message: "Invalid date or time format" });
-        }
-        
+        const order = await razorpay.orders.create(orderOptions);
+
         // Create booking record with Razorpay order ID
         const booking = await storage.createBooking({
           customerId: req.user!.id,
           serviceId,
-          bookingDate: bookingDateTime,
-          status: "pending",
+          bookingDate: bookingDateTime, // Use the validated Date object
+          status: "pending", // Or 'awaiting_payment' if payment is immediate
           paymentStatus: "pending",
           razorpayOrderId: order.id,
+          serviceLocation: serviceLocation, // Store service location
+          // Remove providerAddress field
         });
+
+        // Add bookingId to order notes for verification webhook (important!)
+        // We need to update the order *after* creating the booking to get the booking ID.
+        // This might require a separate Razorpay API call if notes can't be updated easily,
+        // or store the bookingId -> orderId mapping elsewhere for the webhook.
+        // For simplicity here, we assume the webhook can retrieve bookingId from receipt or other means.
+        // If not, the verification logic needs adjustment.
+        // Example: await razorpay.orders.edit(order.id, { notes: { ...order.notes, bookingId: booking.id } });
 
         // Create notification for provider
         await storage.createNotification({
@@ -803,23 +887,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `You have a new booking request for ${service.name}`,
         });
 
+        // Return booking and order details for frontend payment initiation
         res.status(201).json({ booking, order, paymentRequired: true });
+
       } catch (razorpayError) {
-        console.error("Razorpay error:", razorpayError);
-        
-        // Validate date and time format
-        const bookingDateTime = validateAndParseDateTime(dateStr, time);
-        if (!bookingDateTime) {
-          return res.status(400).json({ message: "Invalid date or time format" });
-        }
-        
-        // Create booking record without Razorpay integration as fallback
+        console.error("Razorpay order creation error:", razorpayError);
+        // Fallback: Create booking without payment if Razorpay fails
         const booking = await storage.createBooking({
           customerId: req.user!.id,
           serviceId,
-          bookingDate: bookingDateTime,
+          bookingDate: bookingDateTime, // Use the validated Date object
           status: "pending",
           paymentStatus: "pending",
+          serviceLocation: serviceLocation, // Store service location
+          // Remove providerAddress field
         });
 
         // Create notification for provider
@@ -830,7 +911,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `You have a new booking request for ${service.name}`,
         });
 
-        res.status(201).json({ booking, paymentRequired: false, message: "Payment integration unavailable, booking created without payment" });
+        // Inform frontend about the fallback
+        res.status(201).json({ booking, paymentRequired: false, message: "Booking request sent. Payment integration failed." });
       }
     } catch (error) {
       console.error("Error creating booking:", error);
@@ -1114,9 +1196,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const enrichedBookings = await Promise.all(
         bookings.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
+          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider details
+
+          // Determine which address to show the customer
+          let displayAddress = null;
+          if (booking.serviceLocation === 'provider') {
+            displayAddress = booking.serviceLocationAddress || 
+                             (provider ? `${provider.addressStreet || ''}, ${provider.addressCity || ''}, ${provider.addressState || ''}`.trim().replace(/^, |, $/g, '') : 'Provider address not available');
+          } else if (booking.serviceLocation === 'customer') {
+            // Customer already knows their own address, no need to display it here
+            displayAddress = 'Service at your location';
+          }
           return {
             ...booking,
-            service: service || { name: "Unknown Service" }
+            service: service || { name: "Unknown Service" },
+            providerName: provider?.name || 'Unknown Provider', // Add provider name
+            displayAddress: displayAddress // Add the determined address
           };
         })
       );
@@ -1137,28 +1232,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const enrichedBookings = await Promise.all(
         bookings.map(async (booking) => {
           const service = await storage.getService(booking.serviceId);
+          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider details
+
+          // Determine which address to show the customer
+          let displayAddress = null;
+          if (booking.serviceLocation === 'provider') {
+            displayAddress = booking.serviceLocationAddress || 
+                             (provider ? `${provider.addressStreet || ''}, ${provider.addressCity || ''}, ${provider.addressState || ''}`.trim().replace(/^, |, $/g, '') : 'Provider address not available');
+          } else if (booking.serviceLocation === 'customer') {
+            // Customer already knows their own address, no need to display it here
+            displayAddress = 'Service at your location';
+          }
           const customer = await storage.getUser(booking.customerId);
-          
-          // Include customer contact details for the provider
-          const customerContact = customer ? {
-            phone: customer.phone,
-            addressStreet: customer.addressStreet,
-            addressCity: customer.addressCity,
-            addressState: customer.addressState,
-            addressPostalCode: customer.addressPostalCode,
-            addressCountry: customer.addressCountry,
-          } : {};
+
+          // Conditionally include customer address based on service location
+          let customerContact = {};
+          if (customer) {
+            customerContact = {
+              name: customer.name,
+              phone: customer.phone,
+              email: customer.email,
+            };
+            if (booking.serviceLocation === 'customer') {
+              customerContact = {
+                ...customerContact,
+                addressStreet: customer.addressStreet,
+                addressCity: customer.addressCity,
+                addressState: customer.addressState,
+                addressPostalCode: customer.addressPostalCode,
+                addressCountry: customer.addressCountry,
+              };
+            }
+          } else {
+             customerContact = { name: "Unknown Customer" };
+          }
 
           return {
             ...booking,
             service: service || { name: "Unknown Service" },
-            customerContact: customerContact, // Add customer contact info
-            customer: customer ? {
-              id: customer.id,
-              name: customer.name,
-              phone: customer.phone,
-              email: customer.email
-            } : { name: "Unknown Customer" }
+            customerContact: customerContact // Updated customer contact info
+            // Removed redundant customer object as details are in customerContact
           };
         })
       );

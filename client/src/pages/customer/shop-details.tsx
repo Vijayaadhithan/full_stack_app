@@ -12,6 +12,19 @@ import { Search, ShoppingCart, Heart, Store, MapPin, ArrowLeft, Loader2 } from "
 import { useState } from "react";
 import { useParams, Link } from "wouter";
 
+// Helper function to format address
+const formatAddress = (user: User | undefined): string => {
+  if (!user) return "Location not specified";
+  const parts = [
+    user.addressStreet,
+    user.addressCity,
+    user.addressState,
+    user.addressPostalCode,
+    user.addressCountry,
+  ].filter(Boolean); // Filter out null/undefined/empty strings
+  return parts.length > 0 ? parts.join(', ') : "Location not specified";
+};
+
 const container = {
   hidden: { opacity: 0 },
   show: {
@@ -191,7 +204,7 @@ export default function ShopDetails() {
                 <h1 className="text-2xl font-bold">{shop.shopProfile?.shopName ?? shop.name}</h1>
                 <div className="flex items-center text-muted-foreground mt-1">
                   <MapPin className="h-4 w-4 mr-1" />
-                  <span>{shop.address ?? "Location not specified"}</span>
+                  <span>{formatAddress(shop)}</span>
                 </div>
                 <p className="mt-4">{shop.shopProfile?.description ?? "No description available"}</p>
               </div>
