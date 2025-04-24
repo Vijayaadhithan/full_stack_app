@@ -1245,33 +1245,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           const customer = await storage.getUser(booking.customerId);
 
-          // Conditionally include customer address based on service location
-          let customerContact = {};
-          if (customer) {
-            customerContact = {
-              name: customer.name,
-              phone: customer.phone,
-              email: customer.email,
-            };
-            if (booking.serviceLocation === 'customer') {
-              customerContact = {
-                ...customerContact,
-                addressStreet: customer.addressStreet,
-                addressCity: customer.addressCity,
-                addressState: customer.addressState,
-                addressPostalCode: customer.addressPostalCode,
-                addressCountry: customer.addressCountry,
-              };
-            }
-          } else {
-             customerContact = { name: "Unknown Customer" };
-          }
+          // No need for customerContact object anymore, just return the full customer object
 
           return {
             ...booking,
             service: service || { name: "Unknown Service" },
-            customerContact: customerContact // Updated customer contact info
-            // Removed redundant customer object as details are in customerContact
+            customer: customer // Return the full customer object
           };
         })
       );
