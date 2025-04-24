@@ -233,28 +233,33 @@ export default function ProviderBookings() {
                         <span className="ml-2">({booking.service.duration} mins)</span>
                       </div>
                       {/* Display Service Location */}
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <LocationIcon className="h-4 w-4" />
-                        <span>
-                          {booking.serviceLocation === 'customer' 
-                            ? t('service_at_customer_location') 
-                            : booking.providerAddress 
-                              ? `${t('service_at_provider_location')}: ${booking.providerAddress}`
-                              : t('service_at_provider_location') // Fallback if address is missing
-                          }
-                        </span>
+                      <div className="flex items-start gap-2 text-sm text-muted-foreground"> {/* Use items-start for multi-line */}
+                        <LocationIcon className="h-4 w-4 mt-1 flex-shrink-0" /> {/* Adjust icon alignment */}
+                        <div> {/* Wrap text content */}
+                          {booking.serviceLocation === 'customer' ? (
+                            <>
+                              <span>{t('service_at_customer_location')}</span>
+                              {booking.customer ? (
+                                <p className="font-medium">{`${booking.customer.addressStreet || ''}, ${booking.customer.addressCity || ''}, ${booking.customer.addressState || ''} ${booking.customer.addressPostalCode || ''}`.trim().replace(/, $/, '') || t('customer_address_not_provided')}</p>
+                              ) : (
+                                <p className="font-medium text-muted-foreground">({t('customer_address_not_available')})</p>
+                              )}
+                            </>
+                          ) : (
+                            <span>
+                              {booking.providerAddress
+                                ? `${t('service_at_provider_location')}: ${booking.providerAddress}`
+                                : t('service_at_provider_location')}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {/* Display Customer Information */}
+                      {/* Display Customer Information (Name and Phone) */}
                       {booking.customer && (
                         <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
                           <p className="flex items-center"><UserIcon className="h-4 w-4 mr-1" /> <strong>{t('customer')}:</strong> {booking.customer.name}</p>
-                          <p><strong>{t('phone')}:</strong> {booking.customer.phone}</p>
-                          {/* Only show customer address if service is at customer location */}
-                          {booking.serviceLocation === 'customer' && booking.customer.addressStreet && (
-                            <p>
-                              <strong>{t('address')}:</strong> {booking.customer.addressStreet}, {booking.customer.addressCity}, {booking.customer.addressState} {booking.customer.addressPostalCode}
-                            </p>
-                          )}
+                          <p><strong>{t('phone')}:</strong> {booking.customer.phone}</p> {/* Keep phone here for all cases */}
+                          {/* Address is now shown in the location section if applicable */}
                         </div>
                       )}
                       {booking.status === 'rescheduled' && booking.rescheduleDate && (

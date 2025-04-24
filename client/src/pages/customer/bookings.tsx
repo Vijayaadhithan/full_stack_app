@@ -518,63 +518,30 @@ export default function Bookings() {
                           )}
                         </div>
                         <div className="space-x-2">
-                          {booking.status === "accepted" && (
+                          {/* Review Button for Completed Bookings */}
+                          {booking.status === 'completed' && (
                             <Dialog>
                               <DialogTrigger asChild>
-                                <Button onClick={() => setSelectedBooking(booking)}>
+                                <Button variant="outline" onClick={() => setSelectedBooking(booking)}>
                                   {existingReviews?.some((r) => r.bookingId === booking.id)
                                     ? "Edit Review"
                                     : "Leave Review"}
                                 </Button>
                               </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>
-                                    {userReview ? "Edit Review" : "Review Service"}
-                                  </DialogTitle>
-                                </DialogHeader>
-                                <div className="space-y-4 pt-4">
-                                  <div>
-                                    <Label>Rating</Label>
-                                    <div className="flex items-center gap-1">
-                                      {[1, 2, 3, 4, 5].map((value) => (
-                                        <Button
-                                          key={value}
-                                          variant="ghost"
-                                          size="sm"
-                                          className={`p-0 ${
-                                            value <= rating
-                                              ? "text-yellow-500"
-                                              : "text-gray-300"
-                                          }`}
-                                          onClick={() => setRating(value)}
-                                        >
-                                          <Star className="h-6 w-6 fill-current" />
-                                        </Button>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <Label>Review</Label>
-                                    <Textarea
-                                      value={review}
-                                      onChange={(e) => setReview(e.target.value)}
-                                      placeholder="Share your experience..."
-                                    />
-                                  </div>
-                                  <Button
-                                    className="w-full"
-                                    onClick={handleReview}
-                                    disabled={!review}
-                                  >
-                                    {userReview ? "Update Review" : "Submit Review"}
-                                  </Button>
-                                </div>
-                              </DialogContent>
+                              {/* The DialogContent is handled below, outside the map */}
                             </Dialog>
                           )}
+                          {/* Payment Button if needed (Should ideally be handled before completion, but kept for safety) */}
+                          {booking.status === 'accepted' && booking.paymentStatus !== 'paid' && Number(booking.service.price) > 0 && (
+                            <Button 
+                              onClick={() => initiatePaymentMutation.mutate(booking.id)}
+                              disabled={initiatePaymentMutation.isPending}
+                            >
+                              {initiatePaymentMutation.isPending ? 'Processing...' : 'Pay Now'}
+                            </Button>
+                          )}
                         </div>
-                      </div> {/* ← added this closing tag */}
+                      </div>
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -582,6 +549,52 @@ export default function Bookings() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Review Dialog - Linked to the trigger in Past Bookings */}
+        <Dialog open={!!selectedBooking && selectedBooking.status === 'completed'} onOpenChange={(open) => !open && setSelectedBooking(undefined)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Leave a Review for {selectedBooking?.service.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div>
+                <Label>Rating</Label>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <Button
+                      key={value}
+                      variant="ghost"
+                      size="sm"
+                      className={`p-0 ${value <= rating ? "text-yellow-500" : "text-gray-300"}`}
+                      onClick={() => setRating(value)}
+                    >
+                      <Star className="h-6 w-6 fill-current" />
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label>Review</Label>
+                <Textarea
+                  value={review}
+                  onChange={(e) => setReview(e.target.value)}
+                  placeholder="Share your experience..."
+                />
+              </div>
+              <Button
+                className="w-full"
+                onClick={handleReview}
+                disabled={reviewMutation.isPending || !review} // Disable if submitting or no review text
+              >
+                {reviewMutation.isPending
+                  ? "Submitting..."
+                  : userReview
+                  ? "Update Review"
+                  : "Submit Review"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </motion.div>
 
       {/* Payment Dialog */}
