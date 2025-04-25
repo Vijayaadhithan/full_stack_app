@@ -44,6 +44,11 @@ const shopProfileSchema = z.object({
   }),
   shippingPolicy: z.string().optional(),
   returnPolicy: z.string().optional(),
+  addressStreet: z.string().optional(),
+  addressCity: z.string().optional(),
+  addressState: z.string().optional(),
+  addressPostalCode: z.string().optional(),
+  addressCountry: z.string().optional(),
 });
 
 type ShopProfileFormData = z.infer<typeof shopProfileSchema>;
@@ -73,6 +78,11 @@ export default function ShopProfile() {
       },
       shippingPolicy: user?.shopProfile?.shippingPolicy || "",
       returnPolicy: user?.shopProfile?.returnPolicy || "",
+      addressStreet: user?.addressStreet || "",
+      addressCity: user?.addressCity || "",
+      addressState: user?.addressState || "",
+      addressPostalCode: user?.addressPostalCode || "",
+      addressCountry: user?.addressCountry || "",
     },
   });
   
@@ -96,6 +106,11 @@ export default function ShopProfile() {
         },
         shippingPolicy: user.shopProfile.shippingPolicy || "",
         returnPolicy: user.shopProfile.returnPolicy || "",
+        addressStreet: user.addressStreet || "",
+        addressCity: user.addressCity || "",
+        addressState: user.addressState || "",
+        addressPostalCode: user.addressPostalCode || "",
+        addressCountry: user.addressCountry || "",
       };
       form.reset(shopData);
       setProfileData(shopData);
@@ -106,10 +121,19 @@ export default function ShopProfile() {
     mutationFn: async (data: ShopProfileFormData) => {
       if (!user?.id) throw new Error("User not found");
 
-      console.log("Updating shop profile with data:", data);
-      const res = await apiRequest("PATCH", `/api/users/${user.id}`, {
-        shopProfile: data,
-      });
+      // Separate shopProfile fields from address fields
+      const { addressStreet, addressCity, addressState, addressPostalCode, addressCountry, ...shopProfileData } = data;
+      const updatePayload = {
+        shopProfile: shopProfileData,
+        addressStreet,
+        addressCity,
+        addressState,
+        addressPostalCode,
+        addressCountry,
+      };
+
+      console.log("Updating user profile with data:", updatePayload);
+      const res = await apiRequest("PATCH", `/api/users/${user.id}`, updatePayload);
       console.log("Shop profile update response:", res);
       
       if (!res.ok) {
@@ -243,6 +267,79 @@ export default function ShopProfile() {
                     </FormItem>
                   )}
                 />
+
+                <div className="space-y-4">
+                  <h3 className="font-medium">Address</h3>
+                  <FormField
+                    control={form.control}
+                    name="addressStreet"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Street Address</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="addressCity"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>City</FormLabel>
+                          <FormControl>
+                            <Input {...field} disabled={!editMode} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="addressState"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>State</FormLabel>
+                          <FormControl>
+                            <Input {...field} disabled={!editMode} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="addressPostalCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Postal Code</FormLabel>
+                          <FormControl>
+                            <Input {...field} disabled={!editMode} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="addressCountry"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Country</FormLabel>
+                          <FormControl>
+                            <Input {...field} disabled={!editMode} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
 
                 <div className="space-y-4">
                   <h3 className="font-medium">Bank Details</h3>
