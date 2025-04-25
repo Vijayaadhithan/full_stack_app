@@ -1428,6 +1428,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(reviews);
   });
 
+  // Add endpoint for service providers to reply to reviews
+  app.post("/api/reviews/:id/reply", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const { response } = req.body;
+      const reviewId = parseInt(req.params.id);
+      
+      // Get the review
+      const review = await storage.getReviewById(reviewId);
+      if (!review) {
+        return res.status(404).json({ message: "Review not found" });
+      }
+      
+      // Get the service to verify ownership
+      const service = await storage.getService(review.serviceId);
+      if (!service || service.providerId !== req.user!.id) {
+        return res.status(403).json({ message: "You can only reply to reviews for your own services" });
+      }
+      
+      // Update the review with the provider's reply
+      const updatedReview = await storage.updateReview(reviewId, { providerReply: response });
+      res.json(updatedReview);
+    } catch (error) {
+      console.error("Error replying to review:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to reply to review" });
+    }
+  });
+
   // Notification routes
   app.get("/api/notifications", requireAuth, async (req, res) => {
     const notifications = await storage.getNotificationsByUser(req.user!.id);

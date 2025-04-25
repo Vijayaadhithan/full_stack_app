@@ -578,15 +578,10 @@ export class PostgresStorage implements IStorage {
     return await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
   }
 
-  // ─── REVIEW OPERATIONS ────────────────────────────────────────────
+  // ─── REVIEW OPERATIONS ───────────────────────────────────────────
   async createReview(review: InsertReview): Promise<Review> {
     const result = await db.insert(reviews).values(review).returning();
     return result[0];
-  }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getReviewsByService(serviceId: number): Promise<Review[]> {
@@ -594,32 +589,29 @@ export class PostgresStorage implements IStorage {
   }
 
   async getReviewsByProvider(providerId: number): Promise<Review[]> {
+    // This requires joining services table to filter by providerId
     const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map(service => service.id);
+    const serviceIds = providerServices.map(s => s.id);
     if (serviceIds.length === 0) return [];
-    let allReviews: Review[] = [];
-    for (const serviceId of serviceIds) {
-      const serviceReviews = await db.select().from(reviews).where(eq(reviews.serviceId, serviceId));
-      allReviews = [...allReviews, ...serviceReviews];
-    }
-    return allReviews;
+    // Use sql.in operator for cleaner query
+    return await db.select().from(reviews).where(sql`${reviews.serviceId} IN ${serviceIds}`);
   }
 
-  async updateReview(id: number, review: Partial<Review>): Promise<Review> {
+  async getReviewById(id: number): Promise<Review | undefined> {
+    const result = await db.select().from(reviews).where(eq(reviews.id, id));
+    return result[0];
+  }
+
+  async updateReview(id: number, reviewData: Partial<Review>): Promise<Review> {
     const result = await db.update(reviews)
-      .set(review)
+      .set(reviewData)
       .where(eq(reviews.id, id))
       .returning();
     if (!result[0]) throw new Error("Review not found");
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
-  // ─── NOTIFICATION OPERATIONS ──────────────────────────────────────
+  // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
   async createNotification(notification: InsertNotification): Promise<Notification> {
     const result = await db.insert(notifications).values(notification).returning();
     return result[0];

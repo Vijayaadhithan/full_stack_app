@@ -496,6 +496,10 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getReviewById(id: number): Promise<Review | undefined> {
+    return this.reviews.get(id);
+  }
+
   async updateReview(id: number, review: Partial<Review>): Promise<Review> {
     const existing = this.reviews.get(id);
     if (!existing) throw new Error("Review not found");
@@ -895,7 +899,11 @@ export class MemStorage implements IStorage {
       name: "Fashion Store",
       phone: "+91-9876543211",
       email: "fashion@example.com",
-      address: "456 Market St, Delhi",
+      addressStreet: "456 Market St",
+      addressCity: "Delhi",
+      addressState: "Delhi",
+      addressPostalCode: "110001",
+      addressCountry: "India",
       language: "en",
       profilePicture: null,
       paymentMethods: null
