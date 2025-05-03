@@ -10,11 +10,13 @@ import {
   OrderItem, InsertOrderItem,
   Review, InsertReview,
   Notification, InsertNotification,
-  ReturnRequest, InsertReturnRequest,
+  ReturnRequest, InsertReturnRequest, // Type
   Promotion, InsertPromotion,
+  ShopProfile, // Added ShopProfile import
   // Ensure bookingHistory is exported from your shared schema if available.
   users, services, bookings, bookingHistory, products, orders, orderItems, reviews, notifications,
-  cart, wishlist, returnRequests, promotions
+  cart, wishlist, promotions, returns, // Changed returnRequests to returns
+  UserRole
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
 import { eq, and, lt, ne, sql } from "drizzle-orm";
@@ -47,10 +49,44 @@ export class PostgresStorage implements IStorage {
       createTableIfMissing: true
     });
   }
+  async processRefund(returnRequestId: number): Promise<void> { // Changed parameter name for clarity
+    // Retrieve the return request from the database.
+    const requestResult = await db.select().from(returns).where(eq(returns.id, returnRequestId)); // Use returns table and parameter
+    const request = requestResult[0];
+    if (!request) {
+      throw new Error("Return request not found");
+    }
+    if (request.status === "refunded") {
+      throw new Error("Refund has already been processed for this request");
+    }
+
+    // Process the refund.
+    // In a real implementation, integrate with a payment processor here.
+    // For now, we simulate refund processing by updating the request status and setting a refunded timestamp.
+    const updatedResult = await db.update(returns) // Use returns table
+      .set({ 
+        status: "refunded",
+        resolvedAt: getCurrentISTDate()
+      })
+      .where(eq(returns.id, returnRequestId)) // Use returns table and parameter
+      .returning();
+    if (!updatedResult[0]) {
+      throw new Error("Failed to update return request during refund processing");
+    }
+
+    // Notify the user that the refund has been processed.
+    await this.createNotification({
+      userId: request.customerId,
+      type: "refund_processed",
+      title: "Refund Processed",
+      message: `Your refund for order ${request.orderId} has been processed.`,
+      isRead: false,
+    });
+  }
   
   // ─── PROMOTION OPERATIONS ─────────────────────────────────────────
   async createPromotion(promotion: InsertPromotion): Promise<Promotion> {
-    const result = await db.insert(promotions).values(promotion).returning();
+    const result = await db.insert(promotions).values({ ...promotion, type: promotion.type as "percentage" | "fixed_amount" }).returning();
     return result[0];
   }
 
@@ -69,43 +105,53 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
   async getUserByUsername(username: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.username, username));
     return result[0];
   }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
+  
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(user).returning();
+    // Explicitly construct the object for insertion, excluding paymentMethods
+    const insertData: Omit<InsertUser, 'paymentMethods' | 'id'> & { role: UserRole; shopProfile?: ShopProfile | null } = {
+      username: user.username,
+      password: user.password,
+      role: user.role as UserRole, // Ensure role is correctly typed
+      name: user.name,
+      phone: user.phone,
+      email: user.email,
+      addressStreet: user.addressStreet,
+      addressCity: user.addressCity,
+      addressState: user.addressState,
+      addressPostalCode: user.addressPostalCode,
+      addressCountry: user.addressCountry,
+      language: user.language,
+      profilePicture: user.profilePicture,
+      // Explicitly handle shopProfile, ensuring it matches the ShopProfile type or is null
+      shopProfile: user.shopProfile ? user.shopProfile as ShopProfile : null,
+      bio: user.bio,
+      qualifications: user.qualifications,
+      experience: user.experience,
+      workingHours: user.workingHours,
+      languages: user.languages,
+    };
+
+    // Drizzle handles undefined fields correctly, so no need to manually remove them.
+
+    const result = await db.insert(users).values(insertData).returning();
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
-  async updateUser(id: number, updateData: Partial<Omit<User, 'address'>> & { addressStreet?: string; addressCity?: string; addressState?: string; addressPostalCode?: string; addressCountry?: string }): Promise<User> {
+  async updateUser(id: number, updateData: Partial<Omit<User, 'address'>> & { addressStreet?: string | null; addressCity?: string | null; addressState?: string | null; addressPostalCode?: string | null; addressCountry?: string | null }): Promise<User> {
     const result = await db.update(users)
       .set({ ...updateData }) // Spread operator handles the partial update correctly
       .where(eq(users.id, id))
       .returning();
     if (!result[0]) throw new Error("User not found");
     return result[0];
-  }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   // ─── SERVICE OPERATIONS ──────────────────────────────────────────
@@ -115,11 +161,6 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
   async getService(id: number): Promise<Service | undefined> {
     console.log("Getting service with ID:", id);
     const result = await db.select().from(services).where(eq(services.id, id));
@@ -127,12 +168,7 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
-  // Get pending booking requests for a provider
+  // Implementation of IStorage.getPendingBookingRequestsForProvider
   async getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]> {
     // Get all services offered by this provider first
     const providerServices = await this.getServicesByProvider(providerId);
@@ -151,31 +187,14 @@ export class PostgresStorage implements IStorage {
     return pendingBookings;
   }
 
-  // Get booking history for a provider
-  async getBookingHistoryForProvider(providerId: number): Promise<Booking[]> {
-    // Get all services offered by this provider first
-    const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map(service => service.id);
-    if (serviceIds.length === 0) return [];
-
-    let bookingHistory: Booking[] = [];
-    for (const serviceId of serviceIds) {
-      const serviceBookings = await db.select().from(bookings)
-        .where(and(
-          eq(bookings.serviceId, serviceId),
-          ne(bookings.status, 'pending')
-        ));
-      bookingHistory = [...bookingHistory, ...serviceBookings];
-    }
-    return bookingHistory;
-  }
+  // Implementation of IStorage.getBookingHistoryForProvider
 
   // Get booking requests with status for a customer
   async getBookingRequestsWithStatusForCustomer(customerId: number): Promise<Booking[]> {
     return await db.select().from(bookings).where(eq(bookings.customerId, customerId));
   }
 
-  // Get booking history for a customer
+  // Implementation of IStorage.getBookingHistoryForCustomer
   async getBookingHistoryForCustomer(customerId: number): Promise<Booking[]> {
     return await db.select().from(bookings)
       .where(and(
@@ -184,23 +203,7 @@ export class PostgresStorage implements IStorage {
       ));
   }
 
-  // Process expired bookings using IST
-  async processExpiredBookings(): Promise<void> {
-    const now = getCurrentISTDate();
-    const expiredBookings = await db.select().from(bookings)
-      .where(and(
-        eq(bookings.status, 'pending'),
-        lt(bookings.expiresAt, now)
-      ));
-
-    for (const booking of expiredBookings) {
-      await this.updateBooking(booking.id, {
-        status: 'expired',
-        comments: 'Booking expired automatically (IST)',
-        changedBy: null
-      });
-    }
-  }
+  // Removed duplicate processExpiredBookings implementation to avoid conflicts.
 
   async getServicesByProvider(providerId: number): Promise<Service[]> {
     return await db.select().from(services).where(and(
@@ -225,11 +228,6 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
   async deleteService(id: number): Promise<void> {
     // Instead of deleting, mark as deleted (soft delete)
     const result = await db.update(services)
@@ -251,7 +249,9 @@ export class PostgresStorage implements IStorage {
       ...booking,
       createdAt: getCurrentISTDate(),
       // Set expiresAt to 24 hours from now in IST if needed
-      expiresAt: booking.expiresAt || getExpirationDate(24)
+      expiresAt: booking.expiresAt || getExpirationDate(24),
+      status: booking.status as "pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired",
+      paymentStatus: booking.paymentStatus as "pending" | "paid" | "refunded"
     };
     const result = await db.insert(bookings).values(bookingWithDefaults).returning();
 
@@ -267,19 +267,9 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
   async getBooking(id: number): Promise<Booking | undefined> {
     const result = await db.select().from(bookings).where(eq(bookings.id, id));
     return result[0];
-  }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getBookingsByCustomer(customerId: number): Promise<Booking[]> {
@@ -322,7 +312,6 @@ export class PostgresStorage implements IStorage {
         bookingId: id,
         status: booking.status,
         changedAt: getCurrentISTDate(),
-        changedBy: booking.changedBy || null,
         comments: booking.comments || `Status changed from ${currentBooking.status} to ${booking.status}`
       });
       // If status is no longer pending, clear the expiration date
@@ -337,30 +326,15 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
   // ─── PRODUCT OPERATIONS ──────────────────────────────────────────
   async createProduct(product: InsertProduct): Promise<Product> {
     const result = await db.insert(products).values(product).returning();
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
   async getProduct(id: number): Promise<Product | undefined> {
     const result = await db.select().from(products).where(eq(products.id, id));
     return result[0];
-  }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getProductsByShop(shopId: number): Promise<Product[]> {
@@ -384,11 +358,6 @@ export class PostgresStorage implements IStorage {
       .returning();
     if (!result[0]) throw new Error("Product not found");
     return result[0];
-  }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async removeProductFromAllCarts(productId: number): Promise<void> {
@@ -469,13 +438,15 @@ export class PostgresStorage implements IStorage {
       
       const result = [];
       for (const item of cartItems) {
-        const productResult = await db.select().from(products).where(eq(products.id, item.productId));
+        const productResult = await db.select().from(products).where(eq(products.id, item.productId!));
         if (productResult.length > 0 && !productResult[0].isDeleted) {
           result.push({ product: productResult[0], quantity: item.quantity });
         } else {
-          // If product doesn't exist or is deleted, remove it from cart
+          // If product doesn't exist or is deleted, remove it from cart if productId is not null
           console.log(`Removing non-existent or deleted product ID ${item.productId} from cart`);
-          await this.removeFromCart(customerId, item.productId);
+          if (item.productId !== null) {
+            await this.removeFromCart(customerId, item.productId);
+          }
         }
       }
       return result;
@@ -506,7 +477,7 @@ export class PostgresStorage implements IStorage {
     const wishlistItems = await db.select().from(wishlist).where(eq(wishlist.customerId, customerId));
     const result: Product[] = [];
     for (const item of wishlistItems) {
-      const productResult = await db.select().from(products).where(eq(products.id, item.productId));
+      const productResult = await db.select().from(products).where(eq(products.id, item.productId!));
       if (productResult.length > 0) result.push(productResult[0]);
     }
     return result;
@@ -514,23 +485,18 @@ export class PostgresStorage implements IStorage {
 
   // ─── ORDER OPERATIONS ─────────────────────────────────────────────
   async createOrder(order: InsertOrder): Promise<Order> {
-    const result = await db.insert(orders).values(order).returning();
+    const orderToInsert = {
+      ...order,
+      status: order.status as "pending" | "cancelled" | "confirmed" | "processing" | "packed" | "shipped" | "delivered" | "returned",
+      paymentStatus: order.paymentStatus as "pending" | "paid" | "refunded",
+    };
+    const result = await db.insert(orders).values(orderToInsert).returning();
     return result[0];
-  }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getOrder(id: number): Promise<Order | undefined> {
     const result = await db.select().from(orders).where(eq(orders.id, id));
     return result[0];
-  }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getOrdersByCustomer(customerId: number): Promise<Order[]> {
@@ -550,19 +516,12 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
-  }
-
   async createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
-    const result = await db.insert(orderItems).values(orderItem).returning();
+    const result = await db.insert(orderItems).values({
+      ...orderItem,
+      status: orderItem.status as "cancelled" | "returned" | "ordered" | null | undefined,
+    }).returning();
     return result[0];
-  }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async updateProductStock(productId: number, quantity: number): Promise<void> {
@@ -613,13 +572,8 @@ export class PostgresStorage implements IStorage {
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
   async createNotification(notification: InsertNotification): Promise<Notification> {
-    const result = await db.insert(notifications).values(notification).returning();
+    const result = await db.insert(notifications).values({ ...notification, type: notification.type as "shop" | "booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request" }).returning();
     return result[0];
-  }
-
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
   }
 
   async getNotificationsByUser(userId: number): Promise<Notification[]> {
@@ -631,22 +585,17 @@ export class PostgresStorage implements IStorage {
   }
 
   async markAllNotificationsAsRead(userId: number, role?: string): Promise<void> {
-    // Base query condition: notifications for this user
-    let query = db.update(notifications)
-      .set({ isRead: true })
-      .where(eq(notifications.userId, userId));
-    
-    // Add role-based filtering if role is provided
-    if (role) {
-      if (role === 'shop_owner') {
-        // Shop owners should not see service notifications
-        query = query.where(sql`type != 'service'`);
-      } else if (role === 'provider') {
-        // Service providers should not see order notifications
-        query = query.where(sql`type != 'order'`);
-      }
-      // For customers, we don't need additional filtering
+    const conditions = [eq(notifications.userId, userId)];
+    if (role === 'shop_owner') {
+      // Shop owners should not see service notifications
+      conditions.push(sql`type != 'service'`);
+    } else if (role === 'provider') {
+      // Service providers should not see order notifications
+      conditions.push(sql`type != 'order'`);
     }
+    const query = db.update(notifications)
+      .set({ isRead: true })
+      .where(and(...conditions));
     
     await query;
   }
@@ -682,7 +631,6 @@ export class PostgresStorage implements IStorage {
     for (const booking of expiredBookings) {
       await this.updateBooking(booking.id, {
         status: 'expired',
-        changedBy: null,
         comments: 'Automatically expired after 7 days'
       });
       await this.createNotification({
@@ -692,7 +640,7 @@ export class PostgresStorage implements IStorage {
         message: 'Your booking request has expired as the service provider did not respond within 7 days.',
         isRead: false,
       });
-      const service = await this.getService(booking.serviceId);
+      const service = typeof booking.serviceId === "number" ? await this.getService(booking.serviceId) : undefined;
       if (service) {
         await this.createNotification({
           userId: service.providerId,
@@ -705,42 +653,9 @@ export class PostgresStorage implements IStorage {
     }
   }
 
-  async getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]> {
-    const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map(service => service.id);
-    if (serviceIds.length === 0) return [];
-    let pendingBookings: Booking[] = [];
-    for (const serviceId of serviceIds) {
-      const serviceBookings = await db.select().from(bookings).where(and(
-        eq(bookings.serviceId, serviceId),
-        eq(bookings.status, 'pending')
-      ));
-      pendingBookings = [...pendingBookings, ...serviceBookings];
-    }
-    // Sort by creation date (newest first)
-    return pendingBookings.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }
 
   // Asynchronously compute last-update timestamp for sorting.
-  async getBookingHistoryForCustomer(customerId: number): Promise<Booking[]> {
-    const customerBookings = await db.select().from(bookings).where(and(
-      eq(bookings.customerId, customerId),
-      ne(bookings.status, 'pending')
-    ));
-
-    const bookingsWithLastUpdate = await Promise.all(customerBookings.map(async (booking) => {
-      const history = await this.getBookingHistory(booking.id);
-      const lastUpdate = history.length > 0
-        ? new Date(history[history.length - 1].changedAt).getTime()
-        : new Date(booking.createdAt).getTime();
-      return { ...booking, lastUpdate };
-    }));
-
-    bookingsWithLastUpdate.sort((a, b) => b.lastUpdate - a.lastUpdate);
-    return bookingsWithLastUpdate;
-  }
+  // Removed duplicate implementation of getBookingHistoryForCustomer to resolve the duplicate function error.
 
   async getBookingHistoryForProvider(providerId: number): Promise<Booking[]> {
     const providerServices = await this.getServicesByProvider(providerId);
@@ -760,7 +675,7 @@ export class PostgresStorage implements IStorage {
       const history = await this.getBookingHistory(booking.id);
       const lastUpdate = history.length > 0
         ? new Date(history[history.length - 1].changedAt).getTime()
-        : new Date(booking.createdAt).getTime();
+        : (booking.createdAt ? new Date(booking.createdAt).getTime() : new Date().getTime());
       return { ...booking, lastUpdate };
     }));
 
@@ -770,23 +685,35 @@ export class PostgresStorage implements IStorage {
 
   async updateBookingStatus(
     id: number,
-    status: "pending" | "confirmed" | "completed" | "cancelled" | "expired",
+    status: "pending" | "completed" | "cancelled" | "confirmed",
     comment?: string
   ): Promise<Booking> {
     const booking = await this.getBooking(id);
     if (!booking) throw new Error("Booking not found");
+    // Map 'confirmed' to 'accepted' for internal consistency
+    const internalStatus = status === "confirmed" ? "accepted" : status;
+    // Ensure that createdAt is always a valid Date object before using new Date()
+    let createdAt: Date;
+    if (booking && booking.createdAt) {
+      createdAt = booking.createdAt instanceof Date
+      ? booking.createdAt
+      : new Date(booking.createdAt as string | number);
+    } else {
+      createdAt = new Date();
+    }
+
     return await this.updateBooking(id, { 
-      status, 
-      statusComment: comment || null 
+      status: internalStatus, 
+      comments: comment || null 
     });
   }
 
   async getBookingsByService(serviceId: number, date: Date): Promise<Booking[]> {
     // Convert date to start and end of day in IST
     const istDate = toISTForStorage(date);
-    const startDate = new Date(istDate);
+    const startDate = new Date(istDate ?? new Date());
     startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(istDate);
+    const endDate = new Date(istDate ?? new Date());
     endDate.setHours(23, 59, 59, 999);
     // Implementation for querying bookings by service and date
     return [];
@@ -795,9 +722,9 @@ export class PostgresStorage implements IStorage {
   async getProviderSchedule(providerId: number, date: Date): Promise<Booking[]> {
     // Convert date to start and end of day in IST
     const istDate = toISTForStorage(date);
-    const startDate = new Date(istDate);
+    const startDate =new Date(istDate ?? new Date());
     startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(istDate);
+    const endDate = new Date(istDate ?? new Date());
     endDate.setHours(23, 59, 59, 999);
     // Implementation joining services and bookings tables
     return [];
@@ -837,7 +764,11 @@ export class PostgresStorage implements IStorage {
       date: toISTForStorage(data.date)
     };
     // Insert blocked time slot into the table (implementation required)
-    return blockedSlot;
+    if (!blockedSlot.date) {
+      throw new Error("Invalid date for blocked time slot");
+    }
+    // Type assertion is safe here because we check for null above
+    return blockedSlot as BlockedTimeSlot;
   }
 
   async deleteBlockedTimeSlot(slotId: number): Promise<void> {
@@ -868,11 +799,15 @@ export class PostgresStorage implements IStorage {
     if (!order) throw new Error("Order not found");
 
     // Update the order status with IST timestamp
-    return await this.updateOrder(orderId, { 
+    // Only include updatedAt if it exists in the Order type
+    const updateData: any = { 
       status, 
-      trackingInfo: trackingInfo || order.trackingInfo,
-      updatedAt: getCurrentISTDate() 
-    });
+      trackingInfo: trackingInfo || order.trackingInfo
+    };
+    if ("updatedAt" in order) {
+      updateData.updatedAt = getCurrentISTDate();
+    }
+    return await this.updateOrder(orderId, updateData);
   }
 
   async getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]> {
@@ -882,18 +817,26 @@ export class PostgresStorage implements IStorage {
     if (!order) throw new Error("Order not found");
     
     // Mock timeline data with IST timestamps
+    // Use order.placedAt if available, otherwise fallback to new Date()
     const timeline: OrderStatusUpdate[] = [
       {
-        orderId,
-        status: "pending",
-        timestamp: fromDatabaseToIST(order.createdAt || new Date()) as Date,
+      orderId,
+      status: "pending",
+      timestamp: fromDatabaseToIST((order as any).placedAt || new Date()) as Date,
       }
     ];
     return timeline;
   }
 
   async updateProviderProfile(id: number, profile: Partial<User>): Promise<User> {
-    return await this.updateUser(id, profile);
+    // Remove any null address fields to satisfy the type requirements
+    const cleanedProfile = { ...profile };
+    if ('addressStreet' in cleanedProfile && cleanedProfile.addressStreet === null) delete cleanedProfile.addressStreet;
+    if ('addressCity' in cleanedProfile && cleanedProfile.addressCity === null) delete cleanedProfile.addressCity;
+    if ('addressState' in cleanedProfile && cleanedProfile.addressState === null) delete cleanedProfile.addressState;
+    if ('addressPostalCode' in cleanedProfile && cleanedProfile.addressPostalCode === null) delete cleanedProfile.addressPostalCode;
+    if ('addressCountry' in cleanedProfile && cleanedProfile.addressCountry === null) delete cleanedProfile.addressCountry;
+    return await this.updateUser(id, cleanedProfile);
   }
 
   async updateProviderAvailability(providerId: number, availability: {
@@ -910,5 +853,30 @@ export class PostgresStorage implements IStorage {
     breaks: { start: string; end: string }[];
   } | null> {
     return null;
+  }
+
+  // STUB implementations to satisfy IStorage interface missing methods
+  async getWaitlistPosition(customerId: number, serviceId: number): Promise<number> {
+    throw new Error('Method not implemented.');
+  }
+
+  async createReturnRequest(returnRequest: any): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getReturnRequest(id: number): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getReturnRequestsByOrder(orderId: number): Promise<any[]> {
+    throw new Error('Method not implemented.');
+  }
+
+  async updateReturnRequest(id: number, update: any): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+
+  async deleteReturnRequest(id: number): Promise<void> {
+    throw new Error('Method not implemented.');
   }
 }

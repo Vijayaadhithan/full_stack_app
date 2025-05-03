@@ -209,6 +209,17 @@ export default function Bookings() {
         description: "Thank you for your feedback!",
       });
     },
+    onError: (error: any) => {
+      // Log the full error object for detailed debugging
+      console.error("Review submission error:", error);
+      // Display error message to the user
+      const errorMessage = error.response?.data?.message || "Failed to submit review. Please try again.";
+      toast({
+        title: "Submission Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    },
   });
 
   // Complete service mutation

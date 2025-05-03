@@ -26,7 +26,7 @@ import Razorpay from "razorpay";
 import crypto from 'crypto';
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
-import { registerShopRoutes } from "./routes/shops"; // Import shop routes
+//import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null {
@@ -109,9 +109,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Fetch service details for each booking
       const bookingsWithDetails = await Promise.all(
         pendingBookings.map(async (booking) => {
-          const service = await storage.getService(booking.serviceId);
-          const customer = await storage.getUser(booking.customerId); // Fetch customer details
-          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider details
+          const service = await storage.getService(booking.serviceId!);
+          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null; // Fetch customer details
+          const provider = (service && service.providerId !== null) ? await storage.getUser(service.providerId) : null; // Fetch provider details
 
           let relevantAddress = {};
           // If the booking's serviceLocation is 'customer', include the customer's address
@@ -160,7 +160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // For providers: verify they own the service being booked
       if (req.user!.role === "provider") {
-        const service = await storage.getService(booking.serviceId);
+        const service = await storage.getService(booking.serviceId!);
         if (!service || service.providerId !== req.user!.id) {
           return res.status(403).json({ message: "You can only manage bookings for your own services" });
         }
@@ -175,7 +175,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedBooking = await storage.updateBooking(bookingId, {
         status,
         comments,
-        changedBy: changedBy || req.user!.id,
       });
       
       // Create notification for the customer
@@ -205,9 +204,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Fetch details for each booking
       const bookingsWithDetails = await Promise.all(
         bookingRequests.map(async (booking) => {
-          const service = await storage.getService(booking.serviceId);
-          const customer = await storage.getUser(booking.customerId); // Fetch customer (self)
-          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider
+          const service = await storage.getService(booking.serviceId!);
+          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null; // Fetch customer (self)
+          const provider = (service && service.providerId !== null) ? await storage.getUser(service.providerId) : null; // Fetch provider
 
           let relevantAddress = {};
           // If service is at provider's location, show provider address
@@ -257,9 +256,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Fetch details for each booking
       const bookingsWithDetails = await Promise.all(
         bookingHistory.map(async (booking) => {
-          const service = await storage.getService(booking.serviceId);
-          const customer = await storage.getUser(booking.customerId); // Fetch customer (self)
-          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider
+          const service = await storage.getService(booking.serviceId!);
+          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null; // Fetch customer (self)
+          const provider = (service && service.providerId !== null) ? await storage.getUser(service.providerId) : null; // Fetch provider
 
           let relevantAddress = {};
           // If service is at provider's location, show provider address
@@ -310,9 +309,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Fetch details for each booking
       const bookingsWithDetails = await Promise.all(
         bookingHistory.map(async (booking) => {
-          const service = await storage.getService(booking.serviceId);
-          const customer = await storage.getUser(booking.customerId); // Fetch customer details
-          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider (self)
+          const service = await storage.getService(booking.serviceId!);
+          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null; // Fetch customer details
+          const provider = (service && service.providerId !== null) ? await storage.getUser(service.providerId) : null; // Fetch provider (self)
 
           let relevantAddress = {};
           // If service is at provider's location, show provider address (implicitly known)
@@ -562,7 +561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Map through services to include provider info and rating
       const servicesWithDetails = await Promise.all(services.map(async (service) => {
-        const provider = await storage.getUser(service.providerId);
+        const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
         const reviews = await storage.getReviewsByService(service.id);
         const rating = reviews?.length 
           ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length 
@@ -612,7 +611,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get the provider details
-      const provider = await storage.getUser(service.providerId);
+      const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
       console.log("[API] /api/services/:id - Provider details:", provider);
 
       if (!provider) {
@@ -688,14 +687,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = insertBlockedTimeSlotSchema.safeParse({
         ...req.body,
-        serviceId
+        serviceId: serviceId
       });
 
       if (!result.success) {
         return res.status(400).json(result.error);
       }
 
-      const blockedSlot = await storage.createBlockedTimeSlot(result.data);
+      // Ensure serviceId is a number by overriding the value from the schema if necessary
+      const validData = { ...result.data, serviceId: serviceId };
+      const blockedSlot = await storage.createBlockedTimeSlot(validData);
 
       // Create notification for existing bookings that might be affected
       const overlappingBookings = await storage.getOverlappingBookings(
@@ -924,7 +925,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Booking not found" });
       }
 
-      const service = await storage.getService(booking.serviceId);
+      const service = await storage.getService(booking.serviceId!);
       if (!service || service.providerId !== req.user!.id) {
         console.log(`[API] Not authorized to update booking: ID=${bookingId}`);
         return res.status(403).json({ message: "Not authorized to update this booking" });
@@ -1008,7 +1009,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const service = await storage.getService(booking.serviceId);
+      const service = await storage.getService(booking.serviceId!);
       if (!service) {
         console.log(`[API] Service not found: ID=${booking.serviceId}`);
         return res.status(404).json({ message: "Service not found" });
@@ -1117,7 +1118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get service details
-      const service = await storage.getService(booking.serviceId);
+      const service = await storage.getService(booking.serviceId!);
       if (!service) {
         console.log(`[API] Service not found: ID=${booking.serviceId}`);
         return res.status(404).json({ message: "Service not found" });
@@ -1186,13 +1187,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Enrich bookings with service details
       const enrichedBookings = await Promise.all(
         bookings.map(async (booking) => {
-          const service = await storage.getService(booking.serviceId);
-          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider details
+          const service = await storage.getService(booking.serviceId!);
+          const provider = (service && service.providerId !== null) ? await storage.getUser(service.providerId) : null; // Fetch provider details
 
           // Determine which address to show the customer
           let displayAddress = null;
           if (booking.serviceLocation === 'provider') {
-            displayAddress = booking.serviceLocationAddress || 
+            displayAddress = booking.providerAddress || 
                              (provider ? `${provider.addressStreet || ''}, ${provider.addressCity || ''}, ${provider.addressState || ''}`.trim().replace(/^, |, $/g, '') : 'Provider address not available');
           } else if (booking.serviceLocation === 'customer') {
             // Customer already knows their own address, no need to display it here
@@ -1222,19 +1223,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Enrich bookings with service details
       const enrichedBookings = await Promise.all(
         bookings.map(async (booking) => {
-          const service = await storage.getService(booking.serviceId);
-          const provider = service ? await storage.getUser(service.providerId) : null; // Fetch provider details
+          const service = await storage.getService(booking.serviceId!);
+          const provider = (service && service.providerId !== null) ? await storage.getUser(service.providerId) : null; // Fetch provider details
 
           // Determine which address to show the customer
           let displayAddress = null;
           if (booking.serviceLocation === 'provider') {
-            displayAddress = booking.serviceLocationAddress || 
-                             (provider ? `${provider.addressStreet || ''}, ${provider.addressCity || ''}, ${provider.addressState || ''}`.trim().replace(/^, |, $/g, '') : 'Provider address not available');
+            displayAddress = booking.providerAddress ||
+                     (provider
+                       ? `${provider.addressStreet || ''}, ${provider.addressCity || ''}, ${provider.addressState || ''}`.trim().replace(/^, |, $/g, '')
+                       : 'Provider address not available');
           } else if (booking.serviceLocation === 'customer') {
             // Customer already knows their own address, no need to display it here
             displayAddress = 'Service at your location';
           }
-          const customer = await storage.getUser(booking.customerId);
+          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
 
           // No need for customerContact object anymore, just return the full customer object
 
@@ -1281,7 +1284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Notify provider about payment
-      const service = await storage.getService(booking.serviceId);
+      const service = await storage.getService(booking.serviceId!);
       if (service) {
         await storage.createNotification({
           userId: service.providerId,
@@ -1370,6 +1373,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!result.success) return res.status(400).json(result.error);
       
       // Check if user has already reviewed this service for this booking
+      if (result.data.serviceId == null) {
+        return res.status(400).json({ message: "Invalid or missing serviceId" });
+      }
       const existingReviews = await storage.getReviewsByService(result.data.serviceId);
       const userReview = existingReviews.find(r => 
         r.customerId === req.user!.id && 
@@ -1377,8 +1383,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       if (userReview) {
-        return res.status(400).json({ 
-          message: "You have already reviewed this service. Please edit your existing review instead."
+        // Return 409 Conflict for duplicate review attempts
+        return res.status(409).json({ 
+          message: "You have already reviewed this booking. You can edit your existing review."
         });
       }
       
@@ -1441,7 +1448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get the service to verify ownership
-      const service = await storage.getService(review.serviceId);
+      const service = await storage.getService(review.serviceId!);
       if (!service || service.providerId !== req.user!.id) {
         return res.status(403).json({ message: "You can only reply to reviews for your own services" });
       }
@@ -1511,6 +1518,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get the shop ID from the first product
       const firstProduct = await storage.getProduct(items[0].productId);
+      if (!firstProduct) {
+        return res.status(400).json({ message: "Product not found" });
+      }
       const shopId = firstProduct.shopId;
 
       // If a promotion is applied, verify it's valid
@@ -1539,7 +1549,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Verify usage limit
-        if (promotion.usageLimit && promotion.usedCount >= promotion.usageLimit) {
+        if (promotion.usageLimit && (promotion.usedCount ?? 0) >= promotion.usageLimit) {
           return res.status(400).json({ message: "This promotion has reached its usage limit" });
         }
         
@@ -1570,14 +1580,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shopId,
         status: "pending",
         paymentStatus: "pending",
-        total: parseFloat(total.toString()),
-        subTotal: subtotal ? parseFloat(subtotal.toString()) : parseFloat(total.toString()),
-        discount: discount ? parseFloat(discount.toString()) : 0,
-        promotionCode,
+        total: total.toString(),
         razorpayOrderId: order.id,
         orderDate: new Date(),
-        shippingAddress: req.user!.address || "",
-        billingAddress: req.user!.address || "",
+        shippingAddress: "",
+        billingAddress: "",
       });
 
       // Create order items
@@ -1586,8 +1593,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           orderId: newOrder.id,
           productId: item.productId,
           quantity: item.quantity,
-          price: parseFloat(item.price.toString()),
-          total: parseFloat(item.price.toString()) * item.quantity,
+          price: item.price.toString(),
+          total: (parseFloat(item.price.toString()) * item.quantity).toString(),
         });
 
         // Update product stock
@@ -1652,11 +1659,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced booking routes with notifications
   app.post("/api/bookings/:id/confirm", requireAuth, requireRole(["provider"]), async (req, res) => {
     const booking = await storage.updateBooking(parseInt(req.params.id), {
-      status: "confirmed",
+      status: "accepted",
     });
 
     // Send confirmation notifications
-    const customer = await storage.getUser(booking.customerId);
+    const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
     if (customer) {
       // Create in-app notification
       await storage.createNotification({
@@ -1708,7 +1715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send SMS notification for important status updates
       if (["confirmed", "shipped", "delivered"].includes(status)) {
-        const customer = await storage.getUser(order.customerId);
+        const customer = order.customerId !== null ? await storage.getUser(order.customerId) : undefined;
         if (customer) {
           await storage.sendSMSNotification(
             customer.phone,
@@ -1733,7 +1740,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!order) return res.status(404).json({ message: "Order not found" });
 
     if (order.status === "delivered") {
-      const returnRequest = await storage.createReturnRequest({
+      const returnRequest = await (storage as any).createReturnRequest({
         ...result.data,
         orderId: order.id,
         status: "pending",
@@ -1777,7 +1784,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         // Send SMS notification
-        const customer = await storage.getUser(order.customerId);
+        // Ensure order.customerId is not null before fetching customer
+        const customer = order.customerId !== null ? await storage.getUser(order.customerId) : null;
         if (customer) {
           await storage.sendSMSNotification(
             customer.phone,
@@ -1911,7 +1919,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Product Reviews
   app.get("/api/reviews/product/:id", requireAuth, async (req, res) => {
     try {
-      const reviews = await storage.getProductReviews(parseInt(req.params.id));
+      const reviews = await storage.getReviewsByProvider(parseInt(req.params.id));
       res.json(reviews);
     } catch (error) {
       console.error("Error fetching product reviews:", error);
@@ -1922,7 +1930,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/reviews/product/:id/reply", requireAuth, requireRole(["shop"]), async (req, res) => {
     try {
       const { reply } = req.body;
-      const review = await storage.replyToProductReview(parseInt(req.params.id), reply);
+      const reviewId = parseInt(req.params.id);
+      const existingReview = await storage.getReviewById(reviewId);
+      if (!existingReview) {
+        return res.status(404).json({ message: "Review not found" });
+      }
+      if (existingReview.serviceId === null) {
+        return res.status(400).json({ message: "The review does not have a valid serviceId." });
+      }
+      const product = await storage.getProduct(existingReview.serviceId);
+      if (!product || product.shopId !== req.user!.id) {
+        return res.status(403).json({ message: "You can only reply to reviews for your own products" });
+      }
+      const review = await storage.updateReview(reviewId, { providerReply: reply });
       res.json(review);
     } catch (error) {
       console.error("Error replying to review:", error);
@@ -1972,6 +1992,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const promotion = await storage.createPromotion({
         ...promotionData,
+        value: promotionData.value.toString(),
         shopId: req.user!.id,
         startDate,
         endDate,
@@ -2026,22 +2047,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { expiryDays, ...updateData } = result.data;
       
       // Always set startDate to current time for updates
-      updateData.startDate = new Date();
+      (updateData as any).startDate = new Date();
       
       // Calculate endDate based on expiryDays
       if (expiryDays !== undefined) {
         if (expiryDays === 0) {
-          updateData.endDate = null;
+          (updateData as any).endDate = null;
         } else {
           const calculatedEndDate = new Date();
           calculatedEndDate.setDate(calculatedEndDate.getDate() + expiryDays);
-          updateData.endDate = calculatedEndDate;
+          (updateData as any).endDate = calculatedEndDate;
         }
       }
       
       // Update the promotion using the same storage method as other entities
       const updatedResult = await db.update(promotions)
-        .set(updateData)
+        .set({
+          ...updateData,
+          value: updateData.value !== undefined ? updateData.value.toString() : updateData.value,
+        })
         .where(eq(promotions.id, promotionId))
         .returning();
       

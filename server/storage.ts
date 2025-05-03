@@ -10,7 +10,8 @@ import {
   Review, InsertReview,
   Notification, InsertNotification,
   ReturnRequest, InsertReturnRequest,
-  Promotion, InsertPromotion
+  Promotion, InsertPromotion,
+  UserRole
 } from "@shared/schema";
 
 const MemoryStore = createMemoryStore(session);
@@ -42,6 +43,7 @@ export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<Omit<User, 'address'>> & { addressStreet?: string; addressCity?: string; addressState?: string; addressPostalCode?: string; addressCountry?: string }): Promise<User>;
 
@@ -60,6 +62,10 @@ export interface IStorage {
   getBookingsByCustomer(customerId: number): Promise<Booking[]>;
   getBookingsByProvider(providerId: number): Promise<Booking[]>;
   updateBooking(id: number, booking: Partial<Booking>): Promise<Booking>;
+  getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]>; // Added
+  getBookingHistoryForProvider(providerId: number): Promise<Booking[]>; // Added
+  getBookingHistoryForCustomer(customerId: number): Promise<Booking[]>; // Added
+  processExpiredBookings(): Promise<void>; // Added
 
   // Product operations
   createProduct(product: InsertProduct): Promise<Product>;
@@ -218,6 +224,24 @@ export class MemStorage implements IStorage {
     this.providerAvailability = new Map();
     this.blockedTimeSlots = new Map(); // Initialize the new map
   }
+  getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]> {
+    throw new Error("Method not implemented.");
+  }
+  getBookingHistoryForProvider(providerId: number): Promise<Booking[]> {
+    throw new Error("Method not implemented.");
+  }
+  getBookingHistoryForCustomer(customerId: number): Promise<Booking[]> {
+    throw new Error("Method not implemented.");
+  }
+  processExpiredBookings(): Promise<void> {
+    throw new Error("Method not implemented.");
+  }
+  createPromotion(promotion: InsertPromotion): Promise<Promotion> {
+    throw new Error("Method not implemented.");
+  }
+  getPromotionsByShop(shopId: number): Promise<Promotion[]> {
+    throw new Error("Method not implemented.");
+  }
 
   // Add implementation for getProducts
   async getProducts(): Promise<Product[]> {
@@ -239,9 +263,40 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.currentId++;
-    const user = { ...insertUser, id };
+    const user: User = {
+      id,
+      username: insertUser.username,
+      password: insertUser.password,
+      role: insertUser.role as UserRole,
+      name: insertUser.name,
+      phone: insertUser.phone,
+      email: insertUser.email,
+      addressStreet: insertUser.addressStreet === undefined ? null : insertUser.addressStreet,
+      addressCity: insertUser.addressCity === undefined ? null : insertUser.addressCity,
+      addressState: insertUser.addressState === undefined ? null : insertUser.addressState,
+      addressPostalCode: insertUser.addressPostalCode === undefined ? null : insertUser.addressPostalCode,
+      addressCountry: insertUser.addressCountry === undefined ? null : insertUser.addressCountry,
+      language: insertUser.language === undefined ? null : insertUser.language,
+      profilePicture: insertUser.profilePicture === undefined ? null : insertUser.profilePicture,
+      paymentMethods: Array.isArray(insertUser.paymentMethods)
+        ? insertUser.paymentMethods.map(pm => ({
+          type: (pm as any).type || "default",
+          details: (pm as any).details || {}
+        }))
+        : null,
+      shopProfile: null,
+      bio: null,
+      qualifications: null,
+      experience: null,
+      workingHours: null,
+      languages: null
+    };
     this.users.set(id, user);
     return user;
   }
@@ -257,7 +312,34 @@ export class MemStorage implements IStorage {
   // Service operations
   async createService(service: InsertService): Promise<Service> {
     const id = this.currentId++;
-    const newService = { ...service, id };
+    const newService = {
+      ...service,
+      id,
+      addressStreet: service.addressStreet === undefined ? null : service.addressStreet,
+      addressCity: service.addressCity === undefined ? null : service.addressCity,
+      addressState: service.addressState === undefined ? null : service.addressState,
+      addressPostalCode: service.addressPostalCode === undefined ? null : service.addressPostalCode,
+      addressCountry: service.addressCountry === undefined ? null : service.addressCountry,
+      providerId: service.providerId === undefined ? null : service.providerId,
+      isAvailable: service.isAvailable === undefined ? null : service.isAvailable,
+      serviceLocationType: (service.serviceLocationType === undefined ? "provider_location" : 
+        (service.serviceLocationType === "customer_location" || service.serviceLocationType === "provider_location" ? 
+          service.serviceLocationType : "provider_location")) as "customer_location" | "provider_location",
+      images: service.images === undefined ? null : service.images,
+      bufferTime: service.bufferTime === undefined ? null : service.bufferTime,
+      workingHours: service.workingHours === undefined ? {
+         monday: { isAvailable: false, start: "", end: "" },
+         tuesday: { isAvailable: false, start: "", end: "" },
+         wednesday: { isAvailable: false, start: "", end: "" },
+         thursday: { isAvailable: false, start: "", end: "" },
+         friday: { isAvailable: false, start: "", end: "" },
+         saturday: { isAvailable: false, start: "", end: "" },
+         sunday: { isAvailable: false, start: "", end: "" },
+      } : service.workingHours,
+      breakTime: service.breakTime == null ? [] : service.breakTime,
+      maxDailyBookings: service.maxDailyBookings === undefined ? 5 : service.maxDailyBookings,
+      isDeleted: false
+    };
     this.services.set(id, newService);
     return newService;
   }
@@ -303,7 +385,28 @@ export class MemStorage implements IStorage {
   // Booking operations
   async createBooking(booking: InsertBooking): Promise<Booking> {
     const id = this.currentId++;
-    const newBooking = { ...booking, id };
+    const newBooking: Booking = {
+      id,
+      createdAt: new Date(),
+      ...booking, 
+// Remove duplicate id property since it's already included in the spread operator
+      serviceLocation: booking.serviceLocation ?? null, // Ensure serviceLocation defaults to null
+      status: "pending",
+      customerId: booking.customerId ?? null,
+      serviceId: booking.serviceId ?? null,
+      rejectionReason: booking.rejectionReason ?? null,
+      providerAddress: booking.providerAddress ?? null,
+      bookingDate: booking.bookingDate,
+      rescheduleDate: booking.rescheduleDate === undefined ? null : booking.rescheduleDate,
+      comments: booking.comments === undefined ? null : booking.comments,
+      paymentStatus: "pending",
+      eReceiptId: null,
+      eReceiptUrl: null,
+      eReceiptGeneratedAt: null,
+      razorpayPaymentId: null,
+      razorpayOrderId: null,
+      expiresAt: null
+    };
     this.bookings.set(id, newBooking);
     return newBooking;
   }
@@ -320,6 +423,7 @@ export class MemStorage implements IStorage {
 
   async getBookingsByProvider(providerId: number): Promise<Booking[]> {
     return Array.from(this.bookings.values()).filter((booking) => {
+      if (booking.serviceId === null) return false;
       const service = this.services.get(booking.serviceId);
       return service?.providerId === providerId;
     });
@@ -336,9 +440,73 @@ export class MemStorage implements IStorage {
   // Product operations
   async createProduct(product: InsertProduct): Promise<Product> {
     const id = this.currentId++;
-    const newProduct = { ...product, id };
-    this.products.set(id, newProduct);
-    return newProduct;
+    const newProduct = { 
+      ...product, 
+      id,
+      shopId: product.shopId === undefined ? null : product.shopId,
+      isAvailable: product.isAvailable === undefined ? null : product.isAvailable,
+      isDeleted: product.isDeleted === undefined ? null : product.isDeleted,
+      createdAt: product.createdAt === undefined ? null : product.createdAt,
+      updatedAt: product.updatedAt === undefined ? null : product.updatedAt,
+      images: product.images === undefined ? null : product.images,
+      sku: product.sku === undefined ? null : product.sku,
+      barcode: product.barcode === undefined ? null : product.barcode,
+      weight: product.weight === undefined ? null : product.weight,
+      dimensions: product.dimensions === undefined ? null : product.dimensions,
+      specifications: product.specifications === undefined ? null : product.specifications,
+      tags: product.tags === undefined ? null : product.tags,
+      minOrderQuantity: product.minOrderQuantity === undefined ? null : product.minOrderQuantity,
+      maxOrderQuantity: product.maxOrderQuantity === undefined ? null : product.maxOrderQuantity,
+      mrp: product.mrp === undefined ? product.price : product.mrp
+    };
+    this.products.set(id, {
+      id: newProduct.id,
+      name: newProduct.name,
+      shopId: newProduct.shopId,
+      description: newProduct.description,
+      price: newProduct.price,
+      mrp: newProduct.mrp,
+      stock: newProduct.stock,
+      category: newProduct.category,
+      images: newProduct.images,
+      isAvailable: newProduct.isAvailable,
+      isDeleted: newProduct.isDeleted,
+      createdAt: newProduct.createdAt,
+      updatedAt: newProduct.updatedAt,
+      sku: newProduct.sku,
+      barcode: newProduct.barcode,
+      weight: newProduct.weight,
+      dimensions: newProduct.dimensions,
+      specifications: newProduct.specifications,
+      tags: newProduct.tags,
+      minOrderQuantity: newProduct.minOrderQuantity,
+      maxOrderQuantity: newProduct.maxOrderQuantity,
+      lowStockThreshold: newProduct.lowStockThreshold ?? null
+    });
+return {
+  id: newProduct.id,
+  name: newProduct.name,
+  shopId: newProduct.shopId,
+  description: newProduct.description,
+  price: newProduct.price,
+  mrp: newProduct.mrp,
+  stock: newProduct.stock,
+  category: newProduct.category,
+  images: newProduct.images,
+  isAvailable: newProduct.isAvailable,
+  isDeleted: newProduct.isDeleted,
+  createdAt: newProduct.createdAt,
+  updatedAt: newProduct.updatedAt,
+  sku: newProduct.sku,
+  barcode: newProduct.barcode,
+  weight: newProduct.weight,
+  dimensions: newProduct.dimensions,
+  specifications: newProduct.specifications,
+  tags: newProduct.tags,
+  minOrderQuantity: newProduct.minOrderQuantity,
+  maxOrderQuantity: newProduct.maxOrderQuantity,
+  lowStockThreshold: newProduct.lowStockThreshold ?? null
+};
   }
 
   async getProduct(id: number): Promise<Product | undefined> {
@@ -365,7 +533,7 @@ export class MemStorage implements IStorage {
 
   async removeProductFromAllCarts(productId: number): Promise<void> {
     // Iterate through all customer carts
-    for (const [customerId, customerCart] of this.cart.entries()) {
+    for (const [customerId, customerCart] of Array.from(this.cart.entries())) {
       // Remove the product if it exists in this customer's cart
       if (customerCart.has(productId)) {
         customerCart.delete(productId);
@@ -431,7 +599,30 @@ export class MemStorage implements IStorage {
   // Order operations
   async createOrder(order: InsertOrder): Promise<Order> {
     const id = this.currentId++;
-    const newOrder = { ...order, id };
+    // Exclude properties that can cause type conflicts
+    const { status, paymentStatus, returnRequested, eReceiptId, eReceiptUrl, eReceiptGeneratedAt, razorpayPaymentId, razorpayOrderId, ...rest } = order;
+    const newOrder = { 
+      ...rest,
+      id,
+      customerId: order.customerId === undefined ? null : order.customerId,
+      shopId: order.shopId === undefined ? null : order.shopId,
+      status: "pending" as "pending",
+      paymentStatus: order.paymentStatus === undefined ? "pending" as "pending" | "paid" | "refunded" : order.paymentStatus as "pending" | "paid" | "refunded",
+      returnRequested: order.returnRequested === undefined ? null : order.returnRequested,
+      billingAddress: order.billingAddress === undefined ? null : order.billingAddress,
+      shippingAddress: order.shippingAddress === undefined || order.shippingAddress === null ? "" : order.shippingAddress,
+      total: order.total === undefined ? "0" : order.total,
+      orderDate: order.orderDate === undefined ? new Date() : order.orderDate,
+      notes: order.notes === undefined ? null : order.notes,
+      // Removed shippingMethod property as it does not exist on type InsertOrder.
+      paymentMethod: order.paymentMethod === undefined ? null : order.paymentMethod,
+      trackingInfo: null,
+      eReceiptId: null,
+      eReceiptUrl: null,
+      eReceiptGeneratedAt: null,
+      razorpayPaymentId: null,
+      razorpayOrderId: null
+    };
     this.orders.set(id, newOrder);
     return newOrder;
   }
@@ -464,8 +655,26 @@ export class MemStorage implements IStorage {
   async createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
     const id = this.currentId++;
     const newOrderItem = { ...orderItem, id };
-    this.orderItems.set(id, newOrderItem);
-    return newOrderItem;
+    this.orderItems.set(id, {
+      id: newOrderItem.id,
+      price: newOrderItem.price,
+      total: newOrderItem.total,
+      quantity: newOrderItem.quantity,
+      status: newOrderItem.status as "cancelled" | "returned" | "ordered" | null,
+      orderId: newOrderItem.orderId ?? null,
+      productId: newOrderItem.productId ?? null,
+      discount: newOrderItem.discount ?? null
+    });
+    return {
+      id: newOrderItem.id,
+      status: newOrderItem.status as "cancelled" | "returned" | "ordered" | null,
+      total: newOrderItem.total,
+      orderId: newOrderItem.orderId ?? null,
+      price: newOrderItem.price,
+      productId: newOrderItem.productId ?? null,
+      quantity: newOrderItem.quantity,
+      discount: newOrderItem.discount ?? null
+    };
   }
 
   async getOrderItemsByOrder(orderId: number): Promise<OrderItem[]> {
@@ -478,8 +687,28 @@ export class MemStorage implements IStorage {
   async createReview(review: InsertReview): Promise<Review> {
     const id = this.currentId++;
     const newReview = { ...review, id };
-    this.reviews.set(id, newReview);
-    return newReview;
+    this.reviews.set(id, {
+      id: newReview.id,
+      createdAt: newReview.createdAt || null,
+      customerId: newReview.customerId || null,
+      serviceId: newReview.serviceId || null,
+      bookingId: newReview.bookingId || null,
+      rating: newReview.rating,
+      review: newReview.review || null,
+      providerReply: newReview.providerReply || null,
+      isVerifiedService: newReview.isVerifiedService || null
+    });
+    return {
+      id: newReview.id,
+      customerId: newReview.customerId ?? null,
+      serviceId: newReview.serviceId ?? null,
+      createdAt: newReview.createdAt ?? null,
+      bookingId: newReview.bookingId ?? null,
+      rating: newReview.rating,
+      review: newReview.review ?? null,
+      providerReply: newReview.providerReply ?? null,
+      isVerifiedService: newReview.isVerifiedService ?? null
+    };
   }
 
   async getReviewsByService(serviceId: number): Promise<Review[]> {
@@ -492,7 +721,7 @@ export class MemStorage implements IStorage {
     const providerServices = await this.getServicesByProvider(providerId);
     const serviceIds = providerServices.map(service => service.id);
     return Array.from(this.reviews.values()).filter(
-      (review) => serviceIds.includes(review.serviceId),
+      (review) => review.serviceId !== null && serviceIds.includes(review.serviceId),
     );
   }
 
@@ -512,8 +741,25 @@ export class MemStorage implements IStorage {
   async createNotification(notification: InsertNotification): Promise<Notification> {
     const id = this.currentId++;
     const newNotification = { ...notification, id };
-    this.notifications.set(id, newNotification);
-    return newNotification;
+    this.notifications.set(id, {
+      id,
+      createdAt: newNotification.createdAt || new Date(),
+      message: newNotification.message,
+      type: newNotification.type as "shop" | "booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request",
+      userId: newNotification.userId || null,
+      title: newNotification.title,
+      isRead: newNotification.isRead || false
+    });
+    const finalNotification: Notification = {
+      id: newNotification.id,
+      userId: newNotification.userId ?? null,
+      type: newNotification.type as "shop" | "booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request",
+      title: newNotification.title,
+      message: newNotification.message,
+      isRead: newNotification.isRead ?? false,
+      createdAt: newNotification.createdAt ?? new Date()
+    };
+    return finalNotification;
   }
 
   async getNotificationsByUser(userId: number): Promise<Notification[]> {
@@ -589,7 +835,22 @@ export class MemStorage implements IStorage {
   // Return and refund operations
   async createReturnRequest(returnRequest: InsertReturnRequest): Promise<ReturnRequest> {
     const id = this.currentId++;
-    const newReturnRequest = { ...returnRequest, id };
+    const newReturnRequest: ReturnRequest = {
+      id,
+      customerId: returnRequest.customerId ?? null,
+      createdAt: new Date(), // Use current date
+      status: (returnRequest.status ?? "requested") as "refunded" | "requested" | "approved" | "rejected" | "received" | "completed", // Default status
+      orderId: returnRequest.orderId ?? null,
+      orderItemId: returnRequest.orderItemId ?? null, // Fix: Default to null if undefined
+      description: returnRequest.description ?? null,
+      images: returnRequest.images ?? null,
+      reason: returnRequest.reason ?? null,
+      resolvedAt: null, // Initially null
+      resolvedBy: null, // Initially null
+      refundAmount: null, // Added refundAmount
+      refundStatus: null, // Added refundStatus
+      refundId: null, // Initially null
+    };
     this.returnRequests.set(id, newReturnRequest);
     return newReturnRequest;
   }
@@ -687,40 +948,41 @@ export class MemStorage implements IStorage {
 
   async updateBookingStatus(
     id: number,
-    status: "pending" | "confirmed" | "completed" | "cancelled",
+    status: "pending" | "completed" | "cancelled" | "confirmed",
     comment?: string
   ): Promise<Booking> {
     const booking = await this.getBooking(id);
     if (!booking) throw new Error("Booking not found");
 
-    const updated = {
-      ...booking,
-      status,
-      statusComment: comment || null,
-    };
-
-    this.bookings.set(id, updated);
-
     // Create notification for status update
-    const customer = await this.getUser(booking.customerId);
+    const customer = booking.customerId !== null ? await this.getUser(booking.customerId) : undefined;
     if (customer) {
       await this.createNotification({
         userId: customer.id,
         type: "booking",
-        title: `Booking ${status}`,
-        message: comment || `Your booking has been ${status}.`,
+        title: `Booking ${status === "confirmed" ? "accepted" : status}`,
+        message: comment || `Your booking has been ${status === "confirmed" ? "accepted" : status}.`,
       });
 
       // Send SMS for important status updates
       if (["confirmed", "cancelled"].includes(status)) {
         await this.sendSMSNotification(
           customer.phone,
-          `Your booking has been ${status}. ${comment || ''}`
+          `Your booking has been ${status === "confirmed" ? "accepted" : status}. ${comment || ''}`
         );
       }
     }
 
-    return updated;
+    // Map "confirmed" to "accepted" to match the expected type
+    let mappedStatus: "pending" | "completed" | "cancelled" | "accepted" | "rejected" | "rescheduled" | "expired" =
+      status === "confirmed" ? "accepted" : status as "pending" | "completed" | "cancelled" | "accepted" | "rejected" | "rescheduled" | "expired";
+    const finalUpdated = {
+      ...booking,
+      status: mappedStatus,
+      statusComment: comment || null,
+    };
+    this.bookings.set(id, finalUpdated);
+    return finalUpdated;
   }
 
   async getBookingsByService(serviceId: number, date: Date): Promise<Booking[]> {
@@ -735,7 +997,7 @@ export class MemStorage implements IStorage {
     const serviceIds = services.map(s => s.id);
 
     return Array.from(this.bookings.values()).filter(booking =>
-      serviceIds.includes(booking.serviceId) &&
+      booking.serviceId !== null && serviceIds.includes(booking.serviceId) &&
       booking.bookingDate.toDateString() === date.toDateString()
     );
   }
@@ -755,7 +1017,7 @@ export class MemStorage implements IStorage {
     });
 
     // Notify provider about new review
-    const service = await this.getService(booking.serviceId);
+    const service = await this.getService(booking.serviceId!);
     if (service) {
       await this.createNotification({
         userId: service.providerId,
@@ -800,11 +1062,19 @@ export class MemStorage implements IStorage {
   }
 
   async deleteBlockedTimeSlot(slotId: number): Promise<void> {
-    for (const [serviceId, slots] of this.blockedTimeSlots.entries()) {
+    // Convert entries to an array to allow iteration without --downlevelIteration
+    const entries = Array.from(this.blockedTimeSlots.entries());
+    for (const [serviceId, slots] of entries) {
       const index = slots.findIndex(slot => slot.id === slotId);
       if (index !== -1) {
-        slots.splice(index, 1);
-        return;
+      slots.splice(index, 1);
+      // If no slots left for this service, remove the key
+      if (slots.length === 0) {
+        this.blockedTimeSlots.delete(serviceId);
+      } else {
+        this.blockedTimeSlots.set(serviceId, slots);
+      }
+      return;
       }
     }
   }
@@ -825,6 +1095,7 @@ export class MemStorage implements IStorage {
     const bookingEnd = new Date(`${date.toDateString()} ${endTime}`);
 
     return bookings.filter(booking => {
+      if (booking.serviceId === null) return false;
       const existingStart = new Date(booking.bookingDate);
       const service = this.services.get(booking.serviceId);
       if (!service) return false;
@@ -848,7 +1119,11 @@ export class MemStorage implements IStorage {
       name: "Wellness Spa",
       phone: "+91-9876543210",
       email: "spa@example.com",
-      address: "123 Main St, Mumbai",
+      addressStreet: "123 Main St",
+      addressCity: "Mumbai",
+      addressState: null,
+      addressPostalCode: null,
+      addressCountry: null,
       language: "en",
       profilePicture: null,
       paymentMethods: null
@@ -868,7 +1143,18 @@ export class MemStorage implements IStorage {
         isAvailable: true,
         bufferTime: 15,
         images: ["https://example.com/massage.jpg"],
-        location: { lat: 19.0760, lng: 72.8777 }
+        workingHours: {
+          monday: { isAvailable: false, start: "", end: "" },
+          tuesday: { isAvailable: false, start: "", end: "" },
+          wednesday: { isAvailable: false, start: "", end: "" },
+          thursday: { isAvailable: false, start: "", end: "" },
+          friday: { isAvailable: false, start: "", end: "" },
+          saturday: { isAvailable: false, start: "", end: "" },
+          sunday: { isAvailable: false, start: "", end: "" }
+        },
+        breakTime: [],
+        maxDailyBookings: 5,
+        serviceLocationType: "provider_location" as "provider_location"
       },
       {
         name: "Hair Styling",
@@ -880,9 +1166,21 @@ export class MemStorage implements IStorage {
         isAvailable: true,
         bufferTime: 10,
         images: ["https://example.com/hairstyle.jpg"],
-        location: { lat: 19.0760, lng: 72.8777 }
+        location: { lat: 19.0760, lng: 72.8777 },
+        workingHours: {
+          monday: { isAvailable: false, start: "", end: "" },
+          tuesday: { isAvailable: false, start: "", end: "" },
+          wednesday: { isAvailable: false, start: "", end: "" },
+          thursday: { isAvailable: false, start: "", end: "" },
+          friday: { isAvailable: false, start: "", end: "" },
+          saturday: { isAvailable: false, start: "", end: "" },
+          sunday: { isAvailable: false, start: "", end: "" }
+        },
+        breakTime: [],
+        maxDailyBookings: 5,
+        serviceLocationType: "provider_location"
       }
-    ];
+    ] as InsertService[]; // Explicitly type the array
 
     const createdServices = [];
     for (const service of services) {
@@ -936,7 +1234,7 @@ export class MemStorage implements IStorage {
     ];
 
     for (const product of products) {
-      await this.createProduct(product);
+      await this.createProduct({ ...product, mrp: product.price });
     }
   }
 }

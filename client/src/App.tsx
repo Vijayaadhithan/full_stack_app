@@ -35,7 +35,6 @@ import ShopInventory from "@/pages/shop/inventory";
 import ShopPromotions from "@/pages/shop/ShopPromotions";
 import ShopReviews from "@/pages/shop/reviews";
 import ShopAnalytics from "@/pages/shop/analytics";
-import AdminDashboard from "@/pages/admin/dashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -77,7 +76,6 @@ function Router() {
       <ProtectedRoute path="/shop/reviews" component={ShopReviews} />
       <ProtectedRoute path="/shop/analytics" component={ShopAnalytics} />
 
-      <ProtectedRoute path="/admin" component={AdminDashboard} />
       <Route path="/" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>

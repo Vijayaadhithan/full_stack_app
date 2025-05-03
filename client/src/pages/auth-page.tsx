@@ -192,7 +192,7 @@ export default function AuthPage() {
                     <option value="customer">{t.customer}</option>
                     <option value="provider">{t.provider}</option>
                     <option value="shop">{t.shop}</option>
-                    <option value="admin">{t.admin}</option>
+                    
                   </select>
                   {registerForm.formState.errors.role && (
                     <p className="text-red-500 text-sm">
