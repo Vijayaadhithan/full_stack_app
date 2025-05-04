@@ -488,22 +488,67 @@ export class PostgresStorage implements IStorage {
 
   // ─── CART OPERATIONS ─────────────────────────────────────────────
   async addToCart(customerId: number, productId: number, quantity: number): Promise<void> {
-    console.log(`Adding product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
+    console.log(`Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
+    if (quantity <= 0) {
+      console.error(`Invalid quantity ${quantity} for product ID ${productId}`);
+      throw new Error("Quantity must be positive");
+    }
+
     try {
-      const existingItem = await db.select().from(cart)
-        .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
-      
-      if (existingItem.length > 0) {
-        console.log(`Updating existing cart item for customer ID ${customerId}, product ID ${productId}`);
+      // Get the product being added to find its shopId
+      const productToAddResult = await db.select({ shopId: products.shopId }).from(products).where(eq(products.id, productId));
+      if (productToAddResult.length === 0) {
+        console.error(`Product ID ${productId} not found`);
+        throw new Error("Product not found");
+      }
+      const shopIdToAdd = productToAddResult[0].shopId;
+      console.log(`Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
+
+      // Get current cart items for the customer
+      const currentCartItems = await db.select({ productId: cart.productId }).from(cart).where(eq(cart.customerId, customerId));
+      console.log(`Customer ID ${customerId} has ${currentCartItems.length} item(s) in cart`);
+
+      if (currentCartItems.length > 0) {
+        // If cart is not empty, check if the new item's shop matches the existing items' shop
+        const firstCartProductId = currentCartItems[0].productId;
+        console.log(`First item in cart has product ID ${firstCartProductId}`);
+        const firstProductResult = await db.select({ shopId: products.shopId }).from(products).where(eq(products.id, firstCartProductId!));
+        
+        if (firstProductResult.length > 0) {
+          const existingShopId = firstProductResult[0].shopId;
+          console.log(`Existing items in cart belong to shop ID ${existingShopId}`);
+          if (shopIdToAdd !== existingShopId) {
+            console.error(`Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`);
+            throw new Error("Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.");
+          }
+        } else {
+          // This case should ideally not happen if DB is consistent, but log it.
+          console.warn(`Could not find product details for the first item (ID: ${firstCartProductId}) in the cart for customer ${customerId}. Proceeding with caution.`);
+        }
+      }
+
+      // Proceed with adding or updating the cart item
+      const existingCartItem = await db.select().from(cart)
+        .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)))
+        .limit(1);
+
+      if (existingCartItem.length > 0) {
+        const newQuantity = existingCartItem[0].quantity + quantity;
+        console.log(`Updating existing cart item for customer ID ${customerId}, product ID ${productId}. New quantity: ${newQuantity}`);
         await db.update(cart)
-          .set({ quantity })
+          .set({ quantity: newQuantity })
           .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
       } else {
-        console.log(`Creating new cart item for customer ID ${customerId}, product ID ${productId}`);
+        console.log(`Creating new cart item for customer ID ${customerId}, product ID ${productId} with quantity ${quantity}`);
         await db.insert(cart).values({ customerId, productId, quantity });
       }
+      console.log(`Successfully added/updated product ID ${productId} in cart for customer ID ${customerId}`);
     } catch (error) {
-      console.error(`Error adding product ID ${productId} to cart for customer ID ${customerId}:`, error);
+      console.error(`Error in addToCart for customer ID ${customerId}, product ID ${productId}:`, error);
+      // Re-throw the original error or a new one with context
+      if (error instanceof Error && error.message.startsWith("Cannot add items")) {
+        throw error; // Re-throw the specific shop mismatch error
+      }
       throw new Error(`Failed to add product to cart: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

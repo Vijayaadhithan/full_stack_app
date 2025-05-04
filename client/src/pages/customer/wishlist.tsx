@@ -50,9 +50,13 @@ export default function Wishlist() {
       });
     },
     onError: (error: Error) => {
+      let description = error.message || "Failed to add product to cart";
+      if (error.message.includes("Cannot add items from different shops")) {
+        description = "You can only add items from one shop at a time. Please clear your cart or checkout first.";
+      }
       toast({
-        title: "Error",
-        description: error.message || "Failed to add product to cart",
+        title: "Error Adding to Cart",
+        description: description,
         variant: "destructive",
       });
     },

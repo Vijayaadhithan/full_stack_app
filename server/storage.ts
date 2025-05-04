@@ -554,10 +554,60 @@ return {
 
   // Cart operations
   async addToCart(customerId: number, productId: number, quantity: number): Promise<void> {
+    console.log(`[MemStorage] Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
+    if (quantity <= 0) {
+      console.error(`[MemStorage] Invalid quantity ${quantity} for product ID ${productId}`);
+      throw new Error("Quantity must be positive");
+    }
+
+    // Get the product being added to find its shopId
+    const productToAdd = this.products.get(productId);
+    if (!productToAdd) {
+      console.error(`[MemStorage] Product ID ${productId} not found`);
+      throw new Error("Product not found");
+    }
+    const shopIdToAdd = productToAdd.shopId;
+    console.log(`[MemStorage] Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
+
+    // Get current cart items
+    const customerCart = this.cart.get(customerId);
+
+    if (customerCart && customerCart.size > 0) {
+      console.log(`[MemStorage] Customer ID ${customerId} has ${customerCart.size} item(s) in cart`);
+      // If cart is not empty, check if the new item's shop matches the existing items' shop
+      const firstCartEntry = customerCart.entries().next().value; // Get the first [productId, quantity] pair
+      const firstProductId = firstCartEntry ? firstCartEntry[0] : null;
+      if (firstProductId === null) {
+        throw new Error("Unexpected empty cart encountered.");
+      }
+      console.log(`[MemStorage] First item in cart has product ID ${firstProductId}`);
+      const firstProduct = this.products.get(firstProductId);
+
+      if (firstProduct) {
+        const existingShopId = firstProduct.shopId;
+        console.log(`[MemStorage] Existing items in cart belong to shop ID ${existingShopId}`);
+        if (shopIdToAdd !== existingShopId) {
+          console.error(`[MemStorage] Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`);
+          throw new Error("Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.");
+        }
+      } else {
+        // This case should ideally not happen if data is consistent, but log it.
+        console.warn(`[MemStorage] Could not find product details for the first item (ID: ${firstProductId}) in the cart for customer ${customerId}. Proceeding with caution.`);
+      }
+    }
+
+    // Ensure the cart map exists for the customer
     if (!this.cart.has(customerId)) {
       this.cart.set(customerId, new Map());
     }
-    this.cart.get(customerId)!.set(productId, quantity);
+    const updatedCustomerCart = this.cart.get(customerId)!;
+
+    // Proceed with adding or updating the cart item
+    const existingQuantity = updatedCustomerCart.get(productId) || 0;
+    const newQuantity = existingQuantity + quantity;
+    console.log(`[MemStorage] Setting quantity for product ID ${productId} to ${newQuantity} for customer ID ${customerId}`);
+    updatedCustomerCart.set(productId, newQuantity);
+    console.log(`[MemStorage] Successfully added/updated product ID ${productId} in cart for customer ID ${customerId}`);
   }
 
   async removeFromCart(customerId: number, productId: number): Promise<void> {
