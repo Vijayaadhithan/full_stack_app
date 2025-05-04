@@ -103,9 +103,12 @@ export interface IStorage {
   createReview(review: InsertReview): Promise<Review>;
   getReviewsByService(serviceId: number): Promise<Review[]>;
   getReviewsByProvider(providerId: number): Promise<Review[]>;
+  getReviewsByCustomer(customerId: number): Promise<Review[]>; // Added
+  getReviewsByCustomer(customerId: number): Promise<Review[]>; // Added
   getReviewById(id: number): Promise<Review | undefined>;
   updateReview(id: number, data: { rating?: number; review?: string }): Promise<Review>;
-  updateReview(id: number, review: Partial<Review>): Promise<Review>;
+  updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review>; // Added for customer-specific update
+  updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review>; // Added for customer-specific update
 
   // Notification operations
   createNotification(notification: InsertNotification): Promise<Notification>;
@@ -725,16 +728,24 @@ return {
     );
   }
 
+  async getReviewsByCustomer(customerId: number): Promise<Review[]> { // Added
+    throw new Error("Method not implemented.");
+  }
+
   async getReviewById(id: number): Promise<Review | undefined> {
     return this.reviews.get(id);
   }
 
-  async updateReview(id: number, review: Partial<Review>): Promise<Review> {
-    const existing = this.reviews.get(id);
-    if (!existing) throw new Error("Review not found");
-    const updated = { ...existing, ...review };
-    this.reviews.set(id, updated);
-    return updated;
+  async updateReview(id: number, data: { rating?: number; review?: string }): Promise<Review> {
+    const review = this.reviews.get(id);
+    if (!review) throw new Error("Review not found");
+    if (data.rating !== undefined) review.rating = data.rating;
+    if (data.review !== undefined) review.review = data.review;
+    return review;
+  }
+
+  async updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review> { // Added
+    throw new Error("Method not implemented.");
   }
 
   // Notification operations

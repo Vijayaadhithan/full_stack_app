@@ -195,6 +195,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── REVIEW OPERATIONS ───────────────────────────────────────────
+
+  // Get reviews submitted by the currently logged-in customer
+  app.get("/api/reviews/customer", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const customerId = req.user!.id;
+      const reviews = await storage.getReviewsByCustomer(customerId);
+      // Optionally, enrich reviews with service/product details if needed
+      res.json(reviews);
+    } catch (error) {
+      console.error("Error fetching customer reviews:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch reviews" });
+    }
+  });
+
+  // Update a specific review owned by the customer
+  const updateReviewSchema = z.object({
+    rating: z.number().int().min(1).max(5).optional(),
+    review: z.string().min(1).optional(),
+  }).strip(); // Use strip to remove extra fields
+
+  app.put("/api/reviews/:id", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const reviewId = parseInt(req.params.id);
+      const customerId = req.user!.id;
+
+      // Validate request body
+      const validationResult = updateReviewSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid input", errors: validationResult.error.errors });
+      }
+      const updateData = validationResult.data;
+
+      // Ensure there's something to update
+      if (!updateData.rating && !updateData.review) {
+        return res.status(400).json({ message: "No update data provided (rating or review required)" });
+      }
+
+      // Update the review using the specific customer update method
+      const updatedReview = await storage.updateCustomerReview(reviewId, customerId, updateData);
+
+      res.json(updatedReview);
+    } catch (error) {
+      console.error("Error updating review:", error);
+      // Handle specific errors like 'Review not found' or 'Unauthorized'
+      if (error instanceof Error && (error.message.includes("not found") || error.message.includes("authorized"))) {
+        return res.status(404).json({ message: error.message }); // Use 404 for not found/authorized in this context
+      }
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to update review" });
+    }
+  });
+
   // Get booking requests with status for a customer
   app.get("/api/bookings/customer/requests", requireAuth, requireRole(["customer"]), async (req, res) => {
     try {
@@ -1088,7 +1140,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Process payment for completed service
+  // Initiate payment for a booking
+  app.post("/api/bookings/:id/initiate-payment", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.id);
+      console.log(`[API] Initiating payment for booking: ID=${bookingId}`);
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        console.log(`[API] Booking not found for payment initiation: ID=${bookingId}`);
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      // Verify this booking belongs to the customer
+      if (booking.customerId !== req.user!.id) {
+        console.log(`[API] Not authorized to initiate payment: User=${req.user!.id}, Owner=${booking.customerId}`);
+        return res.status(403).json({ message: "Not authorized to initiate payment for this booking" });
+      }
+
+      // Check if booking is in a state where payment can be initiated (e.g., accepted or completed)
+      // The client-side logic seems to allow payment for 'accepted' bookings before completion.
+      if (!['accepted', 'completed'].includes(booking.status)) {
+        console.log(`[API] Invalid booking status for payment initiation: ID=${bookingId}, Status=${booking.status}`);
+        return res.status(400).json({ 
+          message: "Payment can only be initiated for accepted or completed bookings",
+          currentStatus: booking.status
+        });
+      }
+      
+      // Check if already paid
+      if (booking.paymentStatus === 'paid') {
+        console.log(`[API] Booking already paid: ID=${bookingId}`);
+        return res.status(400).json({ message: "This booking has already been paid" });
+      }
+
+      // Get service details to determine the amount
+      const service = await storage.getService(booking.serviceId!); 
+      if (!service) {
+        console.log(`[API] Service not found for booking: ServiceID=${booking.serviceId}`);
+        return res.status(404).json({ message: "Service associated with booking not found" });
+      }
+
+      const amountInPaise = Math.round(Number(service.price) * 100); // Convert price to paise
+
+      if (!isRazorpayConfigured) {
+        console.error("[API] Razorpay is not configured. Cannot initiate payment.");
+        return res.status(500).json({ message: "Payment gateway is not configured." });
+      }
+
+      // Create Razorpay order
+      const options = {
+        amount: amountInPaise,
+        currency: "INR",
+        receipt: `booking_${bookingId}_${Date.now()}`,
+        notes: {
+          bookingId: bookingId.toString(),
+          customerId: req.user!.id.toString(),
+          serviceId: service.id.toString()
+        }
+      };
+
+      console.log(`[API] Creating Razorpay order for booking ${bookingId} with options:`, options);
+      const order = await razorpay.orders.create(options);
+      console.log(`[API] Razorpay order created: ID=${order.id}`);
+
+      // Store the razorpayOrderId in the booking record
+      await storage.updateBooking(bookingId, { razorpayOrderId: order.id });
+      console.log(`[API] Stored Razorpay Order ID ${order.id} in booking ${bookingId}`);
+
+      // Return order details needed by Razorpay checkout on the client
+      res.json({ 
+        id: order.id, 
+        amount: order.amount, 
+        currency: order.currency, 
+        booking // Include booking details for context on the client
+      });
+
+    } catch (error) {
+      console.error("Error initiating payment:", error);
+      // Check if the error is from Razorpay
+      if (error instanceof Error && 'statusCode' in error) {
+        const razorpayError = error as any; // Type assertion for Razorpay error
+        console.error("Razorpay Error Details:", razorpayError.error);
+        return res.status(razorpayError.statusCode || 500).json({ 
+          message: razorpayError.error?.description || "Failed to initiate payment with payment gateway",
+          code: razorpayError.error?.code
+        });
+      }
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to initiate payment" });
+    }
+  });
+
+  // Process payment verification after Razorpay checkout
   app.post("/api/bookings/:id/payment", requireAuth, requireRole(["customer"]), async (req, res) => {
     try {
       const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
@@ -1454,7 +1597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Update the review with the provider's reply
-      const updatedReview = await storage.updateReview(reviewId, { providerReply: response });
+      const updatedReview = await storage.updateReview(reviewId, { providerReply: response } as any);
       res.json(updatedReview);
     } catch (error) {
       console.error("Error replying to review:", error);
@@ -1942,7 +2085,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!product || product.shopId !== req.user!.id) {
         return res.status(403).json({ message: "You can only reply to reviews for your own products" });
       }
-      const review = await storage.updateReview(reviewId, { providerReply: reply });
+      const review = await storage.updateReview(reviewId, { providerReply: reply } as any);
       res.json(review);
     } catch (error) {
       console.error("Error replying to review:", error);

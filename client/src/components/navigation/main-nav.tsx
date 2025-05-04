@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, LogOut, User, ShoppingCart, Heart } from "lucide-react";
+import { Home, LogOut, User, ShoppingCart, Heart, Star } from "lucide-react"; // Add Star icon
 import { Link } from "wouter";
 import { NotificationsCenter } from "@/components/notifications-center";
 
@@ -29,6 +29,12 @@ export function MainNav() {
               <Button variant="ghost" className="flex items-center gap-2">
                 <Heart className="h-5 w-5" />
                 Wishlist
+              </Button>
+            </Link>
+            <Link href="/customer/my-reviews"> {/* Add link to My Reviews */}
+              <Button variant="ghost" className="flex items-center gap-2">
+                <Star className="h-5 w-5" /> {/* Use Star icon */}
+                My Reviews
               </Button>
             </Link>
           </div>

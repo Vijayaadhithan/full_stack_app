@@ -49,6 +49,9 @@ export class PostgresStorage implements IStorage {
       createTableIfMissing: true
     });
   }
+  updateReview(id: number, data: { rating?: number; review?: string; }): Promise<Review> {
+    throw new Error("Method not implemented.");
+  }
   async processRefund(returnRequestId: number): Promise<void> { // Changed parameter name for clarity
     // Retrieve the return request from the database.
     const requestResult = await db.select().from(returns).where(eq(returns.id, returnRequestId)); // Use returns table and parameter
@@ -195,6 +198,85 @@ export class PostgresStorage implements IStorage {
   }
 
   // Implementation of IStorage.getBookingHistoryForCustomer
+
+  // ─── REVIEW OPERATIONS ───────────────────────────────────────────
+  async createReview(review: InsertReview): Promise<Review> {
+    const result = await db.insert(reviews).values(review).returning();
+    return result[0];
+  }
+
+  async getReviewsByService(serviceId: number): Promise<Review[]> {
+    return await db.select().from(reviews).where(eq(reviews.serviceId, serviceId));
+  }
+
+  async getReviewsByProvider(providerId: number): Promise<Review[]> {
+    // This requires joining reviews with services to get the providerId
+    const providerServices = await db.select({ id: services.id }).from(services).where(eq(services.providerId, providerId));
+    const serviceIds = providerServices.map(s => s.id);
+    if (serviceIds.length === 0) return [];
+    return await db.select().from(reviews).where(sql`${reviews.serviceId} IN ${serviceIds}`);
+  }
+
+  async getReviewsByCustomer(customerId: number): Promise<(Review & { serviceName: string | null })[]> {
+    const results = await db
+      .select({
+        id: reviews.id,
+        customerId: reviews.customerId,
+        serviceId: reviews.serviceId,
+        rating: reviews.rating,
+        review: reviews.review,
+        providerReply: reviews.providerReply,
+        createdAt: reviews.createdAt,
+        // removed updatedAt as it is not defined in the reviews schema
+        serviceName: services.name,
+      })
+      .from(reviews)
+      .leftJoin(services, eq(reviews.serviceId, services.id))
+      .where(eq(reviews.customerId, customerId));
+
+    // Ensure the return type matches the promise signature
+    return results.map(r => ({
+      ...r,
+      // Drizzle might return null for left join, handle it
+      serviceName: r.serviceName ?? 'Service Not Found',
+      bookingId: null,
+      isVerifiedService: null,
+    }));
+  }
+
+  async getReviewById(id: number): Promise<Review | undefined> {
+    const result = await db.select().from(reviews).where(eq(reviews.id, id));
+    return result[0];
+  }
+
+  async updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review> {
+    // First, verify the review belongs to the customer
+    const reviewCheck = await db.select({ id: reviews.id, customerId: reviews.customerId })
+                                .from(reviews)
+                                .where(eq(reviews.id, reviewId));
+
+    if (!reviewCheck[0]) {
+      throw new Error("Review not found");
+    }
+
+    if (reviewCheck[0].customerId !== customerId) {
+      throw new Error("Customer is not authorized to update this review");
+    }
+
+    // Proceed with the update
+    const result = await db.update(reviews)
+      .set(data)
+      .where(eq(reviews.id, reviewId))
+      .returning();
+
+    if (!result[0]) {
+      // This case should ideally not happen if the check above passed, but good practice to handle it
+      throw new Error("Failed to update review");
+    }
+    return result[0];
+  }
+
+  // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
   async getBookingHistoryForCustomer(customerId: number): Promise<Booking[]> {
     return await db.select().from(bookings)
       .where(and(
@@ -537,38 +619,6 @@ export class PostgresStorage implements IStorage {
     return await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
   }
 
-  // ─── REVIEW OPERATIONS ───────────────────────────────────────────
-  async createReview(review: InsertReview): Promise<Review> {
-    const result = await db.insert(reviews).values(review).returning();
-    return result[0];
-  }
-
-  async getReviewsByService(serviceId: number): Promise<Review[]> {
-    return await db.select().from(reviews).where(eq(reviews.serviceId, serviceId));
-  }
-
-  async getReviewsByProvider(providerId: number): Promise<Review[]> {
-    // This requires joining services table to filter by providerId
-    const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map(s => s.id);
-    if (serviceIds.length === 0) return [];
-    // Use sql.in operator for cleaner query
-    return await db.select().from(reviews).where(sql`${reviews.serviceId} IN ${serviceIds}`);
-  }
-
-  async getReviewById(id: number): Promise<Review | undefined> {
-    const result = await db.select().from(reviews).where(eq(reviews.id, id));
-    return result[0];
-  }
-
-  async updateReview(id: number, reviewData: Partial<Review>): Promise<Review> {
-    const result = await db.update(reviews)
-      .set(reviewData)
-      .where(eq(reviews.id, id))
-      .returning();
-    if (!result[0]) throw new Error("Review not found");
-    return result[0];
-  }
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
   async createNotification(notification: InsertNotification): Promise<Notification> {
@@ -745,11 +795,15 @@ export class PostgresStorage implements IStorage {
   }
 
   async respondToReview(reviewId: number, response: string): Promise<Review> {
-    // Update review with provider response (implementation needed)
-    return {} as Review;
+    const result = await db.update(reviews)
+      .set({ providerReply: response })
+      .where(eq(reviews.id, reviewId))
+      .returning();
+    if (!result[0]) throw new Error("Review not found");
+    return result[0];
   }
 
-  // ─── BLOCKED TIME SLOT OPERATIONS ────────────────────────────────
+  // Add new methods for blocked time slots
   async getBlockedTimeSlots(serviceId: number): Promise<BlockedTimeSlot[]> {
     // Query blocked time slots table (implementation required)
     return [];

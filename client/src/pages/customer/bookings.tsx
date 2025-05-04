@@ -103,12 +103,12 @@ export default function Bookings() {
     script.async = true;
     script.onload = () => {
       const options = {
-        key: "rzp_test_WIK4gEdE7PPhgw",
-        amount: order.amount,
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || "", // Use environment variable
+        amount: order.amount, // Amount should be in the smallest currency unit (e.g., paise for INR)
         currency: order.currency,
-        name: order.booking?.service?.name || "Service Booking",
-        description: `Payment for booking #${order.booking?.id}`,
-        order_id: order.id,
+        name: "Service Booking Payment", // Keep it simple or fetch service name if needed
+        description: `Payment for booking #${order.bookingId}`, // Use bookingId from order state
+        order_id: order.id, // This is the Razorpay Order ID from the order state
         handler: async (response: any) => {
           try {
             const res = await apiRequest(
@@ -192,7 +192,8 @@ export default function Bookings() {
       id?: number;
     }) => {
       if (data.id) {
-        return apiRequest("PATCH", `/api/reviews/${data.id}`, {
+        // Use the customer-specific update endpoint
+        return apiRequest("PUT", `/api/reviews/${data.id}/customer`, {
           rating: data.rating,
           review: data.review,
         }).then((r) => r.json());
@@ -244,18 +245,19 @@ export default function Bookings() {
       }
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => { // Added variables to access bookingId
       toast({
         title: "Service marked as completed",
         description: data.message || "Thank you for your feedback",
       });
-      if (data.paymentRequired && data.booking) {
-        setOrder(null);
-        setOrder(data.booking); // triggers Razorpay effect
-        setPaymentDialogOpen(true);
+      // If payment is required, initiate the payment flow
+      if (data.paymentRequired) {
+        initiatePaymentMutation.mutate(variables.bookingId); // Call initiatePaymentMutation
+      } else {
+        // If no payment needed, just invalidate queries
+        queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
     onError: (error: Error) => {
       toast({
@@ -270,14 +272,23 @@ export default function Bookings() {
   const initiatePaymentMutation = useMutation({
     mutationFn: (bookingId: number) =>
       apiRequest("POST", `/api/bookings/${bookingId}/initiate-payment`, {}).then(
-        (r) => {
-          if (!r.ok) throw new Error("Payment initiation failed");
-          return r.json();
+        async (r) => {
+          if (!r.ok) {
+            const errorBody = await r.json().catch(() => ({ message: "Payment initiation failed" }));
+            throw new Error(errorBody.message || "Payment initiation failed");
+          }
+          return r.json(); // Expects { razorpayOrderId: string, amount: number, currency: string, bookingId: number }
         }
       ),
     onSuccess: (data) => {
-      setOrder(data.order);
-      setPaymentDialogOpen(true);
+      // Set the order state with the specific details needed for Razorpay
+      setOrder({
+        id: data.razorpayOrderId, // This is the Razorpay Order ID
+        amount: data.amount,
+        currency: data.currency,
+        bookingId: data.bookingId, // Keep booking ID for reference/description
+      });
+      setPaymentDialogOpen(true); // Open the dialog (which contains the button to trigger useEffect)
     },
     onError: (error: Error) =>
       toast({
