@@ -112,7 +112,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      // Optimistically update the UI immediately
+      queryClient.setQueryData(["/api/notifications"], (oldData: Notification[] | undefined) => {
+        if (!oldData) return [];
+        return oldData.map(notification => {
+          if (notification.id === id) {
+            return { ...notification, isRead: true };
+          }
+          return notification;
+        });
+      });
+      
+      // Also invalidate the query to ensure data consistency with the server
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
   });

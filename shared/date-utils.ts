@@ -26,10 +26,19 @@ export function toIndianTime(date: Date | string): Date {
  * @returns Formatted date string in IST
  */
 export function formatInIndianTime(date: Date | string, formatString: string): string {
-  const inputDate = typeof date === 'string' ? parseISO(date) : date;
-  // Ensure the input date is treated as UTC before converting to IST for formatting
-  // If the date string already has timezone info, parseISO handles it.
-  // If it's a Date object, it's inherently UTC-based in JS.
+  // Handle different date input types
+  let inputDate: Date;
+  if (typeof date === 'string') {
+    // For string dates, use parseISO which preserves timezone info if present
+    inputDate = parseISO(date);
+  } else {
+    // For Date objects, we need to ensure they're treated as UTC
+    // JavaScript Date objects are always in local timezone internally
+    inputDate = date;
+  }
+  
+  // Use formatInTimeZone to properly convert and format in IST
+  // This handles the timezone conversion correctly
   return formatInTimeZone(inputDate, timeZone, formatString);
 }
 

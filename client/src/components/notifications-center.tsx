@@ -40,7 +40,19 @@ export function NotificationsCenter() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      // Optimistically update the UI immediately
+      queryClient.setQueryData(["/api/notifications"], (oldData: Notification[] | undefined) => {
+        if (!oldData) return [];
+        return oldData.map(notification => {
+          if (notification.id === id) {
+            return { ...notification, isRead: true };
+          }
+          return notification;
+        });
+      });
+      
+      // Also invalidate the query to ensure data consistency with the server
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
   });
@@ -128,7 +140,7 @@ export function NotificationsCenter() {
     if (a.isRead !== b.isRead) {
       return a.isRead ? 1 : -1;
     }
-    // Then sort by date (newest first)
+    // Then sort by date (newest first) - ensure we're comparing dates properly
     return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
   });
 
@@ -259,7 +271,7 @@ export function NotificationsCenter() {
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {notification.createdAt
-                          ? formatIndianDisplay(notification.createdAt, 'datetime') // Use formatIndianDisplay
+                          ? formatIndianDisplay(notification.createdAt, 'datetime') // Use formatIndianDisplay with IST timezone
                           : ''}
                       </p>
                     </div>

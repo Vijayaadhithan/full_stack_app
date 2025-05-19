@@ -13,6 +13,7 @@ import {
   Promotion, InsertPromotion,
   UserRole
 } from "@shared/schema";
+import { newIndianDate, formatIndianDisplay } from "../shared/date-utils";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -842,7 +843,7 @@ return {
     const newNotification = { ...notification, id };
     this.notifications.set(id, {
       id,
-      createdAt: newNotification.createdAt || new Date(),
+      createdAt: newNotification.createdAt || newIndianDate(), // Use newIndianDate() to create dates in IST
       message: newNotification.message,
       type: newNotification.type as "shop" | "booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request",
       userId: newNotification.userId || null,
@@ -856,7 +857,7 @@ return {
       title: newNotification.title,
       message: newNotification.message,
       isRead: newNotification.isRead ?? false,
-      createdAt: newNotification.createdAt ?? new Date()
+      createdAt: newNotification.createdAt ?? newIndianDate() // Use newIndianDate() to create dates in IST
     };
     return finalNotification;
   }

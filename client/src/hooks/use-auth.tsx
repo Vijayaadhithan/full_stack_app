@@ -29,10 +29,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   } = useQuery<SelectUser | undefined, Error>({
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
-    // Setting staleTime to 0 and refetchOnWindowFocus to true ensures data is refetched on focus,
-    // which is useful when returning from an external OAuth flow.
-    staleTime: 0,
+    // Increase staleTime to prevent unnecessary refetches that cause login page flash
+    // while still allowing refetch on window focus for OAuth flows
+    staleTime: 10000, // 10 seconds
     refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const loginMutation = useMutation({
