@@ -43,6 +43,8 @@ export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>; // Added for Google OAuth
+  getUserByGoogleId(googleId: string): Promise<User | undefined>; // Added for Google OAuth
   getAllUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<Omit<User, 'address'>> & { addressStreet?: string; addressCity?: string; addressState?: string; addressPostalCode?: string; addressCountry?: string }): Promise<User>;
@@ -260,6 +262,25 @@ export class MemStorage implements IStorage {
     return user;
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    for (const user of Array.from(this.users.values())) {
+      if (user.email === email) {
+        return user;
+      }
+    }
+    return undefined;
+  }
+
+  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
+    for (const user of Array.from(this.users.values())) {
+      // Ensure googleId is checked correctly, even if it's null or undefined on some user objects
+      if (user.googleId && user.googleId === googleId) {
+        return user;
+      }
+    }
+    return undefined;
+  }
+
   async getUserByUsername(username: string): Promise<User | undefined> {
     return Array.from(this.users.values()).find(
       (user) => user.username === username,
@@ -298,18 +319,35 @@ export class MemStorage implements IStorage {
       qualifications: null,
       experience: null,
       workingHours: null,
-      languages: null
+      languages: null,
+      googleId: null,
+      emailVerified: null
     };
     this.users.set(id, user);
     return user;
   }
 
-  async updateUser(id: number, updateData: Partial<Omit<User, 'address'>> & { addressStreet?: string; addressCity?: string; addressState?: string; addressPostalCode?: string; addressCountry?: string }): Promise<User> {
+  async updateUser(id: number, updateData: Partial<User>): Promise<User> { // Modified to accept Partial<User> to include googleId
     const existing = this.users.get(id);
     if (!existing) throw new Error("User not found");
-    const updated = { ...existing, ...updateData }; // Spread handles partial updates
-    this.users.set(id, updated);
-    return updated;
+
+    // Ensure password is not accidentally overwritten with undefined if not provided in data
+    const { password, ...restOfData } = updateData;
+    const updatedUserData = { ...existing, ...restOfData };
+
+    if (password !== undefined) {
+      // If a new password is provided, it should be handled (e.g., re-hashed if necessary)
+      // For MemStorage, we'll just update it directly. In a real DB scenario, hashing would occur before this point.
+      updatedUserData.password = password;
+    }
+    
+    // Explicitly handle googleId if present in updateData
+    if (updateData.googleId !== undefined) {
+      updatedUserData.googleId = updateData.googleId;
+    }
+
+    this.users.set(id, updatedUserData);
+    return updatedUserData;
   }
 
   // Service operations
@@ -554,10 +592,60 @@ return {
 
   // Cart operations
   async addToCart(customerId: number, productId: number, quantity: number): Promise<void> {
+    console.log(`[MemStorage] Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
+    if (quantity <= 0) {
+      console.error(`[MemStorage] Invalid quantity ${quantity} for product ID ${productId}`);
+      throw new Error("Quantity must be positive");
+    }
+
+    // Get the product being added to find its shopId
+    const productToAdd = this.products.get(productId);
+    if (!productToAdd) {
+      console.error(`[MemStorage] Product ID ${productId} not found`);
+      throw new Error("Product not found");
+    }
+    const shopIdToAdd = productToAdd.shopId;
+    console.log(`[MemStorage] Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
+
+    // Get current cart items
+    const customerCart = this.cart.get(customerId);
+
+    if (customerCart && customerCart.size > 0) {
+      console.log(`[MemStorage] Customer ID ${customerId} has ${customerCart.size} item(s) in cart`);
+      // If cart is not empty, check if the new item's shop matches the existing items' shop
+      const firstCartEntry = customerCart.entries().next().value; // Get the first [productId, quantity] pair
+      const firstProductId = firstCartEntry ? firstCartEntry[0] : null;
+      if (firstProductId === null) {
+        throw new Error("Unexpected empty cart encountered.");
+      }
+      console.log(`[MemStorage] First item in cart has product ID ${firstProductId}`);
+      const firstProduct = this.products.get(firstProductId);
+
+      if (firstProduct) {
+        const existingShopId = firstProduct.shopId;
+        console.log(`[MemStorage] Existing items in cart belong to shop ID ${existingShopId}`);
+        if (shopIdToAdd !== existingShopId) {
+          console.error(`[MemStorage] Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`);
+          throw new Error("Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.");
+        }
+      } else {
+        // This case should ideally not happen if data is consistent, but log it.
+        console.warn(`[MemStorage] Could not find product details for the first item (ID: ${firstProductId}) in the cart for customer ${customerId}. Proceeding with caution.`);
+      }
+    }
+
+    // Ensure the cart map exists for the customer
     if (!this.cart.has(customerId)) {
       this.cart.set(customerId, new Map());
     }
-    this.cart.get(customerId)!.set(productId, quantity);
+    const updatedCustomerCart = this.cart.get(customerId)!;
+
+    // Proceed with adding or updating the cart item
+    const existingQuantity = updatedCustomerCart.get(productId) || 0;
+    const newQuantity = existingQuantity + quantity;
+    console.log(`[MemStorage] Setting quantity for product ID ${productId} to ${newQuantity} for customer ID ${customerId}`);
+    updatedCustomerCart.set(productId, newQuantity);
+    console.log(`[MemStorage] Successfully added/updated product ID ${productId} in cart for customer ID ${customerId}`);
   }
 
   async removeFromCart(customerId: number, productId: number): Promise<void> {
@@ -1137,7 +1225,8 @@ return {
       addressCountry: null,
       language: "en",
       profilePicture: null,
-      paymentMethods: null
+      paymentMethods: null,
+      emailVerified: false
     });
 
     console.log("Created provider:", provider);
@@ -1215,7 +1304,8 @@ return {
       addressCountry: "India",
       language: "en",
       profilePicture: null,
-      paymentMethods: null
+      paymentMethods: null,
+      emailVerified: false
     });
 
     // Create sample products

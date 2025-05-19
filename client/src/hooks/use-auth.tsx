@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type AuthContextType = {
   user: SelectUser | null;
-  isLoading: boolean;
+  isFetching: boolean; // Changed from isLoading
   error: Error | null;
   loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
@@ -25,10 +25,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const {
     data: user,
     error,
-    isLoading,
+    isFetching, // Changed from isLoading
   } = useQuery<SelectUser | undefined, Error>({
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
+    // Setting staleTime to 0 and refetchOnWindowFocus to true ensures data is refetched on focus,
+    // which is useful when returning from an external OAuth flow.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const loginMutation = useMutation({
@@ -85,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user: user ?? null,
-        isLoading,
+        isFetching, // Changed from isLoading
         error,
         loginMutation,
         logoutMutation,

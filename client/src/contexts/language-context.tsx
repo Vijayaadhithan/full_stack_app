@@ -1,4 +1,4 @@
-import * as React from 'react';
+import { useState, useEffect, createContext, useContext, useCallback, useMemo, ReactNode } from 'react';
 import { translations } from '@/lib/translations';
 
 type Language = 'en' | 'hi' | 'ta';
@@ -11,16 +11,16 @@ type LanguageContextType = {
 
 const defaultLanguage: Language = 'en';
 
-export const LanguageContext = React.createContext<LanguageContextType>({
+export const LanguageContext = createContext<LanguageContextType>({
   language: defaultLanguage,
   setLanguage: () => {},
   t: (key) => key,
 });
 
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = React.useState<Language>(defaultLanguage);
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const [language, setLanguageState] = useState<Language>(defaultLanguage);
 
-  React.useEffect(() => {
+  useEffect(() => {
     try {
       const savedLang = localStorage.getItem('language') as Language;
       if (savedLang && ['en', 'hi', 'ta'].includes(savedLang)) {
@@ -31,7 +31,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const handleSetLanguage = React.useCallback((lang: Language) => {
+  const handleSetLanguage = useCallback((lang: Language) => {
     try {
       setLanguageState(lang);
       localStorage.setItem('language', lang);
@@ -40,7 +40,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const t = React.useCallback((key: string): string => {
+  const t = useCallback((key: string): string => {
     try {
       // Cast the specific language object to allow string indexing
       const currentLangTranslations = translations[language] as unknown as Record<string, string> | undefined;
@@ -52,7 +52,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   }, [language]);
 
-  const value = React.useMemo(() => ({
+  const value = useMemo(() => ({
     language,
     setLanguage: handleSetLanguage,
     t,
@@ -66,7 +66,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useLanguage() {
-  const context = React.useContext(LanguageContext);
+  const context = useContext(LanguageContext);
   if (!context) {
     console.error('useLanguage must be used within a LanguageProvider');
     throw new Error('useLanguage must be used within a LanguageProvider');

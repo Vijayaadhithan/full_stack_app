@@ -72,6 +72,8 @@ export const users = pgTable("users", {
   profilePicture: text("profile_picture"),
   paymentMethods: jsonb("payment_methods").$type<PaymentMethod[]>(),
   shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
+  googleId: text("google_id").unique(), // Added for Google OAuth
+  emailVerified: boolean("email_verified").default(false), // Added for Google OAuth
   // Provider profile fields
   bio: text("bio"),
   qualifications: text("qualifications"),
@@ -320,7 +322,10 @@ export const blockedTimeSlots = pgTable("blocked_time_slots", {
 
 
 // Generate insert schemas and types
-export const insertUserSchema = createInsertSchema(users);
+export const insertUserSchema = createInsertSchema(users, {
+  // Add emailVerified to Zod schema for validation if needed, or rely on DB default
+  emailVerified: z.boolean().optional().default(false),
+});
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 

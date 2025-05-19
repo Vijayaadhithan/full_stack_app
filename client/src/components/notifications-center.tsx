@@ -56,7 +56,7 @@ export function NotificationsCenter() {
       return res.json();
     },
     onSuccess: () => {
-      // Immediately update the local state to show zero unread count
+      // Optimistically update the local cache to show zero unread count
       queryClient.setQueryData(["/api/notifications"], (oldData: Notification[] | undefined) => {
         if (!oldData) return [];
         // Only mark notifications relevant to the user's role as read
@@ -87,16 +87,14 @@ export function NotificationsCenter() {
         });
       });
       
-      // Then invalidate the query to refresh from server
+      // Invalidate the query to ensure data is refetched from the server in the background
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       
       toast({
         title: t('notifications_cleared'),
         description: t('all_notifications_marked_as_read'),
       });
-      
-      // Force refetch to update the UI immediately
-      refetch();
+      // REMOVED: refetch(); // The optimistic update and invalidation should be sufficient.
     },
   });
 
