@@ -244,4 +244,25 @@ export function setupAuth(app: Express) {
     app.get("/auth/google", (req, res) => res.status(503).send("Google OAuth is not configured."));
     app.get("/auth/google/callback", (req, res) => res.status(503).send("Google OAuth is not configured."));
   }
+
+  app.post("/api/delete-account", async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    try {
+      const userId = req.user.id;
+      await storage.deleteUserAndData(userId);
+      req.logout((err) => {
+        if (err) {
+          return res.status(500).json({ message: "Account deleted, but failed to log out." });
+        }
+        req.session.destroy(() => {
+          res.status(200).json({ message: "Account and all data deleted successfully." });
+        });
+      });
+    } catch (error) {
+      console.error("Error deleting user account:", error);
+      res.status(500).json({ message: "Failed to delete account." });
+    }
+  });
 }

@@ -50,11 +50,6 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
       icon: Star,
     },
     {
-      name: "Analytics",
-      href: "/shop/analytics",
-      icon: TrendingUp,
-    },
-    {
       name: "Settings",
       href: "/shop/profile",
       icon: Settings,

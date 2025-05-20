@@ -62,6 +62,107 @@ export class PostgresStorage implements IStorage {
     const result = await db.select().from(users).where(eq(users.googleId, googleId));
     return result[0];
   }
+
+  async deleteUserAndData(userId: number): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Step 1: Collect all relevant IDs
+
+      // Bookings related to the user (as customer or provider)
+      const customerBookingsQuery = tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.customerId, userId));
+      const userServicesQuery = tx.select({ id: services.id }).from(services).where(eq(services.providerId, userId));
+      
+      const [customerBookingsResult, userServicesResult] = await Promise.all([customerBookingsQuery, userServicesQuery]);
+
+      const customerBookingIds = customerBookingsResult.map(b => b.id);
+      const serviceIds = userServicesResult.map(s => s.id);
+
+      let providerServiceBookingIds: number[] = [];
+      if (serviceIds.length > 0) {
+        const providerServiceBookings = await tx.select({ id: bookings.id }).from(bookings).where(sql`${bookings.serviceId} IN ${serviceIds}`);
+        providerServiceBookingIds = providerServiceBookings.map(b => b.id);
+      }
+
+      const allBookingIds = Array.from(new Set([...customerBookingIds, ...providerServiceBookingIds]));
+
+      // Orders related to the user (as customer)
+      const userOrders = await tx.select({ id: orders.id }).from(orders).where(eq(orders.customerId, userId));
+      const orderIds = userOrders.map(o => o.id);
+
+      // Products related to the user (as shop owner)
+      const userProducts = await tx.select({ id: products.id }).from(products).where(eq(products.shopId, userId));
+      const productIds = userProducts.map(p => p.id);
+
+      // Step 2: Delete dependent data in the correct order
+
+      // Reviews linked to bookings
+      if (allBookingIds.length > 0) {
+        await tx.delete(reviews).where(sql`${reviews.bookingId} IN ${allBookingIds}`);
+      }
+
+      // Reviews linked directly to services (if schema supports reviews.serviceId and they are not captured by bookingId)
+      if (serviceIds.length > 0) {
+          // This handles reviews that might be directly on a service, not through a booking.
+          await tx.delete(reviews).where(sql`${reviews.serviceId} IN ${serviceIds}`);
+      }
+      
+      // Booking history
+      if (allBookingIds.length > 0) {
+        await tx.delete(bookingHistory).where(sql`${bookingHistory.bookingId} IN ${allBookingIds}`);
+      }
+
+      // Now delete bookings
+      if (allBookingIds.length > 0) {
+          await tx.delete(bookings).where(sql`${bookings.id} IN ${allBookingIds}`);
+      }
+
+      // Order items (linked to orders by customer, and products by shop owner)
+      if (orderIds.length > 0) { // OrderItems for customer's orders
+        await tx.delete(orderItems).where(sql`${orderItems.orderId} IN ${orderIds}`);
+      }
+      if (productIds.length > 0) { // OrderItems for shop owner's products
+        await tx.delete(orderItems).where(sql`${orderItems.productId} IN ${productIds}`);
+      }
+
+      // Returns (linked to orders)
+      if (orderIds.length > 0) {
+        await tx.delete(returns).where(sql`${returns.orderId} IN ${orderIds}`);
+      }
+
+      // Now delete orders (customer's orders)
+      if (orderIds.length > 0) {
+        await tx.delete(orders).where(eq(orders.customerId, userId));
+      }
+
+      // Promotions (linked to shop)
+      if (productIds.length > 0 || serviceIds.length > 0) { 
+        await tx.delete(promotions).where(eq(promotions.shopId, userId));
+      }
+      
+      // Now delete products (shop owner's products)
+      if (productIds.length > 0) {
+        // First, remove these products from any wishlist they might be in
+        await tx.delete(wishlist).where(sql`${wishlist.productId} IN ${productIds}`);
+        // Then, delete the products themselves
+        await tx.delete(products).where(eq(products.shopId, userId));
+      }
+
+      // Other direct dependencies on user/customer ID
+      await tx.delete(reviews).where(eq(reviews.customerId, userId)); // Handles reviews directly by customerId if not linked to booking/service
+      
+      await tx.delete(notifications).where(eq(notifications.userId, userId));
+      await tx.delete(cart).where(eq(cart.customerId, userId));
+      await tx.delete(wishlist).where(eq(wishlist.customerId, userId));
+
+      // Delete services (after related bookings/reviews are handled)
+      if (serviceIds.length > 0) {
+        await tx.delete(services).where(eq(services.providerId, userId));
+      }
+
+      // Finally, delete the user
+      await tx.delete(users).where(eq(users.id, userId));
+    });
+  }
+
   updateReview(id: number, data: { rating?: number; review?: string; }): Promise<Review> {
     throw new Error("Method not implemented.");
   }

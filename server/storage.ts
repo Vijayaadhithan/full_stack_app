@@ -184,6 +184,9 @@ export interface IStorage {
     startTime: string,
     endTime: string
   ): Promise<Booking[]>;
+
+  // User deletion and data erasure
+  deleteUserAndData(userId: number): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -229,6 +232,128 @@ export class MemStorage implements IStorage {
     });
     this.providerAvailability = new Map();
     this.blockedTimeSlots = new Map(); // Initialize the new map
+  }
+  async deleteUserAndData(userId: number): Promise<void> {
+    // Check if user exists
+    if (!this.users.has(userId)) {
+      // Optionally, throw an error or return if user not found
+      console.warn(`[MemStorage] User with ID ${userId} not found for deletion.`);
+      return;
+    }
+
+    // --- Delete data related to the user as a customer ---
+
+    // Bookings made by the user
+    this.bookings.forEach((booking, bookingId) => {
+      if (booking.customerId === userId) {
+        this.bookings.delete(bookingId);
+      }
+    });
+
+    // Orders placed by the user
+    const orderIdsToDelete: number[] = [];
+    this.orders.forEach((order, orderId) => {
+      if (order.customerId === userId) {
+        orderIdsToDelete.push(orderId);
+        // Delete associated order items
+        this.orderItems.forEach((item, itemId) => {
+          if (item.orderId === orderId) {
+            this.orderItems.delete(itemId);
+          }
+        });
+        // Delete associated return requests
+        this.returnRequests.forEach((request, requestId) => {
+          if (request.orderId === orderId) {
+            this.returnRequests.delete(requestId);
+          }
+        });
+        // Delete order status updates
+        this.orderStatusUpdates.delete(orderId);
+      }
+    });
+    orderIdsToDelete.forEach(id => this.orders.delete(id));
+
+    // Reviews written by the user
+    this.reviews.forEach((review, reviewId) => {
+      if (review.customerId === userId) {
+        this.reviews.delete(reviewId);
+      }
+    });
+
+    // Notifications for the user
+    this.notifications.forEach((notification, notificationId) => {
+      if (notification.userId === userId) {
+        this.notifications.delete(notificationId);
+      }
+    });
+
+    // Cart items for the user
+    this.cart.delete(userId);
+
+    // Wishlist items for the user
+    this.wishlist.delete(userId);
+
+    // Waitlist entries for the user
+    this.waitlist.forEach((serviceWaitlist, serviceId) => {
+      if (serviceWaitlist.has(userId)) {
+        serviceWaitlist.delete(userId);
+        if (serviceWaitlist.size === 0) {
+          this.waitlist.delete(serviceId);
+        }
+      }
+    });
+
+    // --- Delete data related to the user as a provider/shop owner ---
+
+    // Services offered by the user (as provider)
+    const serviceIdsToDelete: number[] = [];
+    this.services.forEach((service, serviceId) => {
+      if (service.providerId === userId) {
+        serviceIdsToDelete.push(serviceId);
+        // Delete bookings for these services
+        this.bookings.forEach((booking, bookingId) => {
+          if (booking.serviceId === serviceId) {
+            this.bookings.delete(bookingId);
+          }
+        });
+        // Delete reviews for these services
+        this.reviews.forEach((review, reviewId) => {
+          if (review.serviceId === serviceId) {
+            this.reviews.delete(reviewId);
+          }
+        });
+        // Delete blocked time slots for these services
+        const serviceBlockedSlots = this.blockedTimeSlots.get(serviceId);
+        if (serviceBlockedSlots) {
+            this.blockedTimeSlots.delete(serviceId);
+        }
+      }
+    });
+    serviceIdsToDelete.forEach(id => this.services.delete(id));
+    this.providerAvailability.delete(userId);
+
+
+    // Products sold by the user (as shop owner - assuming shopId might be userId)
+    const productIdsToDelete: number[] = [];
+    this.products.forEach((product, productId) => {
+      if (product.shopId === userId) { // Assuming shopId is the userId of the shop owner
+        productIdsToDelete.push(productId);
+        // Remove this product from all carts and wishlists (if not already handled by customer-specific deletion)
+        this.cart.forEach(userCart => userCart.delete(productId));
+        this.wishlist.forEach(userWishlist => userWishlist.delete(productId));
+      }
+    });
+    productIdsToDelete.forEach(id => this.products.delete(id));
+
+    // Promotions by the user's shop
+    // MemStorage doesn't have a promotions map directly, this would be part of a more complex setup
+    // or promotions are linked via shopId which is userId.
+    // For now, we assume if promotions were stored, they'd be keyed by shopId (userId).
+
+    // Finally, delete the user
+    this.users.delete(userId);
+
+    console.log(`[MemStorage] User ${userId} and all associated data deleted.`);
   }
   getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]> {
     throw new Error("Method not implemented.");

@@ -308,7 +308,10 @@ export default function AuthPage() {
                   type="button"
                   variant="outline"
                   className="w-full mt-2"
-                  onClick={() => window.location.href = '/auth/google'}
+                  onClick={() => {
+                    const selectedRole = registerForm.getValues("role") || "customer";
+                    window.location.href = `/auth/google?role=${selectedRole}`;
+                  }}
                 >
                   Sign in with Google
                 </Button>
@@ -316,7 +319,10 @@ export default function AuthPage() {
                   type="button"
                   variant="outline"
                   className="w-full mt-2"
-                  onClick={() => window.location.href = '/auth/google'}
+                  onClick={() => {
+                    const selectedRole = registerForm.getValues("role") || "customer";
+                    window.location.href = `/auth/google?role=${selectedRole}`;
+                  }}
                 >
                   Sign up with Google
                 </Button>

@@ -35,7 +35,7 @@ import ShopOrders from "@/pages/shop/orders";
 import ShopInventory from "@/pages/shop/inventory";
 import ShopPromotions from "@/pages/shop/ShopPromotions";
 import ShopReviews from "@/pages/shop/reviews";
-import ShopAnalytics from "@/pages/shop/analytics";
+
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -76,7 +76,7 @@ function Router() {
       <ProtectedRoute path="/shop/inventory" component={ShopInventory} />
       <ProtectedRoute path="/shop/promotions" component={ShopPromotions} />
       <ProtectedRoute path="/shop/reviews" component={ShopReviews} />
-      <ProtectedRoute path="/shop/analytics" component={ShopAnalytics} />
+      
 
       <Route path="/" component={AuthPage} />
       <Route component={NotFound} />
