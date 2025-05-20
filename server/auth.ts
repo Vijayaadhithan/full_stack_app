@@ -13,6 +13,7 @@ dotenv.config();
 declare module "express-session" {
   interface SessionData {
     returnTo?: string;
+    signupRole?: SelectUser['role']; // Added for Google OAuth role selection
   }
 }
 
@@ -72,13 +73,14 @@ export function setupAuth(app: Express) {
     passport.use(
       new GoogleStrategy(
         {
+          passReqToCallback: true, // Added to access req in callback for role selection
           clientID: GOOGLE_CLIENT_ID,
           clientSecret: GOOGLE_CLIENT_SECRET,
           callbackURL: "http://localhost:5000/auth/google/callback",
           scope: ["profile", "email"],
           proxy: true,
         },
-        async (accessToken, refreshToken, profile, done) => {
+        async (req: any, accessToken: string, refreshToken: string, profile: any, done: any) => { // req added for role selection
           // Check if the profile, profile.id, or profile.emails are undefined or empty
           if (!profile || !profile.id || !profile.emails || profile.emails.length === 0 || !profile.emails[0].value) {
             console.log('[Google OAuth] Profile data is incomplete or user backed out. Failing authentication.');
@@ -112,10 +114,14 @@ export function setupAuth(app: Express) {
             
             // Create new user
             console.log('[Google OAuth] No existing user found by Google ID or email. Proceeding to create a new user.');
+            const signupRoleFromSession = req.session.signupRole;
+            if (req.session.signupRole) {
+              delete req.session.signupRole; // Clean up session
+            }
+
             const newUser = {
               username: profile.displayName || profile.emails?.[0].value || profile.id, // Ensure username is unique or handle collision
-              // password: await hashPassword(randomBytes(16).toString('hex')), // Or prompt user to set password later
-              role: "customer" as SelectUser['role'], // Default role, or determine based on context
+              role: signupRoleFromSession || "customer" as SelectUser['role'], // Use role from session or default
               name: profile.displayName || '',
               email: profile.emails?.[0].value || '',
               emailVerified: profile.emails?.[0].verified || false, // Capture email_verified status
@@ -204,7 +210,19 @@ export function setupAuth(app: Express) {
 
   // Google OAuth Routes
   if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
-    app.get("/auth/google", passport.authenticate("google"));
+    app.get("/auth/google", (req, res, next) => {
+      const role = req.query.role as SelectUser['role'];
+      // Basic validation for role. Consider using a predefined list or enum for roles.
+      const validRoles: SelectUser['role'][] = ["customer", "provider", "shop"];
+      if (role && validRoles.includes(role)) {
+        req.session.signupRole = role;
+      } else {
+        // Default to 'customer' or handle invalid/missing role as an error
+        req.session.signupRole = "customer"; 
+        console.log(`[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: ${req.query.role}`);
+      }
+      passport.authenticate("google", { scope: ["profile", "email"] })(req, res, next);
+    });
 
     app.get(
       "/auth/google/callback",

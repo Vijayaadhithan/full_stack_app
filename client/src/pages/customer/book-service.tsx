@@ -858,13 +858,24 @@ export default function BookService() {
             <DialogHeader>
               <DialogTitle>Confirm Booking</DialogTitle>
             </DialogHeader>
-            <div>
-              <p><strong>Service:</strong> {service.name}</p>
-              <p><strong>Date:</strong> {formatBase(selectedDate, 'PPP')}</p>
-              <p><strong>Time:</strong> {selectedTime ? formatInTimeZone(new Date(selectedTime), timeZone, 'hh:mm a') : 'N/A'}</p>
-              <p><strong>Location:</strong> {serviceLocation === 'provider' ? `Provider's Location (${providerFullAddress || 'Not specified'})` : 'Your Location'}</p>
-              <p><strong>Price:</strong> ₹{service.price}</p>
-            </div>
+            <div className="space-y-2">
+                <p><strong>Service:</strong> {service.name}</p>
+                <p><strong>Date:</strong> {formatBase(selectedDate, 'PPP')}</p>
+                <p><strong>Time:</strong> {selectedTime ? formatInTimeZone(new Date(selectedTime), timeZone, 'hh:mm a') : 'N/A'}</p>
+                <p><strong>Location:</strong> {serviceLocation === 'provider' ? `Provider's Location (${providerFullAddress || 'Not specified'})` : 'Your Location'}</p>
+                <div className="flex justify-between py-2">
+                  <span>Service Price:</span>
+                  <span>₹{service?.price}</span>
+                </div>
+                <div className="flex justify-between py-2 text-gray-600">
+                  <span>Platform Fee:</span>
+                  <span>₹3.00</span>
+                </div>
+                <div className="flex justify-between py-2 font-bold">
+                  <span>Total:</span>
+                  <span>₹{(parseFloat(service?.price || "0") + 3).toFixed(2)}</span>
+                </div>
+              </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button onClick={confirmBooking} disabled={createBookingMutation.isPending}>

@@ -322,7 +322,8 @@ export class MemStorage implements IStorage {
       workingHours: null,
       languages: null,
       googleId: null,
-      emailVerified: null
+      emailVerified: null,
+      razorpayLinkedAccountId: null
     };
     this.users.set(id, user);
     return user;

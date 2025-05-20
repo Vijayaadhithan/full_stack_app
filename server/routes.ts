@@ -27,6 +27,7 @@ import crypto from 'crypto';
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
+import { razorpayRouteService, RazorpayRouteService } from "./services/razorpay-route"; // Import Razorpay Route service
 
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null {
@@ -1181,7 +1182,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Service associated with booking not found" });
       }
 
-      const amountInPaise = Math.round(Number(service.price) * 100); // Convert price to paise
+      // Initialize Razorpay Route service
+      const razorpayRoute = razorpayRouteService(storage);
+      
+      // Calculate the total amount including the platform fee
+      const originalAmount = Number(service.price);
+      const totalAmount = razorpayRoute.calculateTotalWithCustomerFee(originalAmount);
+      const amountInPaise = Math.round(totalAmount * 100); // Convert price to paise
 
       if (!isRazorpayConfigured) {
         console.error("[API] Razorpay is not configured. Cannot initiate payment.");
@@ -1196,7 +1203,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: {
           bookingId: bookingId.toString(),
           customerId: req.user!.id.toString(),
-          serviceId: service.id.toString()
+          serviceId: service.id.toString(),
+          originalAmount: originalAmount.toString(),
+          platformFee: "3", // Fixed 3rs platform fee for customer
+          totalAmount: totalAmount.toString()
         }
       };
 
@@ -1290,6 +1300,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       console.log(`[API] Booking payment status updated to paid: ID=${bookingId}`);
+      
+      // Process payment split using Razorpay Route
+      try {
+        const razorpayRoute = razorpayRouteService(storage);
+        await razorpayRoute.processBookingPaymentSplit(bookingId, razorpayPaymentId || booking.razorpayPaymentId);
+        console.log(`[API] Payment split processed successfully for booking: ID=${bookingId}`);
+      } catch (splitError) {
+        console.error(`[API] Error processing payment split for booking ${bookingId}:`, splitError);
+        // Continue with the payment process even if the split fails
+        // We'll need to handle this case manually or implement a retry mechanism
+      }
       
       // Create notification for service provider
       await storage.createNotification({
@@ -1699,6 +1720,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         promotionCode = promotion.code || null;
       }
 
+      // Initialize Razorpay Route service
+      const razorpayRoute = razorpayRouteService(storage);
+      
+      // Calculate the total amount including the platform fee
+      const originalAmount = parseFloat(total.toString());
+      const totalWithFee = razorpayRoute.calculateTotalWithCustomerFee(originalAmount);
+
       // Create Razorpay order
       let order;
       try {
@@ -1709,9 +1737,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         order = await razorpay.orders.create({
-          amount: parseInt(total.toString()) * 100, // Convert to paisa
+          amount: Math.round(totalWithFee * 100), // Convert to paisa
           currency: "INR",
           receipt: `order_${Date.now()}`,
+          notes: {
+            originalAmount: originalAmount.toString(),
+            platformFee: "3", // Fixed 3rs platform fee for customer
+            totalWithFee: totalWithFee.toString()
+          }
         });
       } catch (error) {
         console.error("Razorpay order creation error:", error);
@@ -1755,22 +1788,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/orders/:id/payment", requireAuth, requireRole(["customer"]), async (req, res) => {
-    const { razorpayPaymentId } = req.body;
-    const order = await storage.updateOrder(parseInt(req.params.id), {
-      razorpayPaymentId,
-      status: "confirmed",
-      paymentStatus: "paid",
-    });
+    try {
+      const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+      const orderId = parseInt(req.params.id);
+      
+      console.log(`[API] Processing payment for order: ID=${orderId}, PaymentID=${razorpayPaymentId || 'N/A'}`);
 
-    // Create notification
-    await storage.createNotification({
-      userId: order.customerId,
-      type: "order",
-      title: "Order Confirmed",
-      message: "Your order has been confirmed and will be processed soon.",
-    });
+      // Verify payment if Razorpay is configured
+      if (isRazorpayConfigured && razorpayPaymentId && razorpayOrderId && razorpaySignature) {
+        console.log(`[API] Verifying Razorpay payment signature: OrderID=${razorpayOrderId}`);
+        // Verify the payment signature
+        const generatedSignature = crypto
+          .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
+          .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+          .digest("hex");
 
-    res.json(order);
+        if (generatedSignature !== razorpaySignature) {
+          console.log(`[API] Invalid payment signature: Expected=${generatedSignature}, Received=${razorpaySignature}`);
+          return res.status(400).json({ message: "Invalid payment signature" });
+        }
+        console.log(`[API] Payment signature verified successfully`);
+      }
+
+      // Update order payment status
+      const order = await storage.updateOrder(orderId, {
+        razorpayPaymentId,
+        status: "confirmed",
+        paymentStatus: "paid",
+      });
+      
+      console.log(`[API] Order payment status updated to paid: ID=${orderId}`);
+      
+      // Process payment split using Razorpay Route
+      try {
+        const razorpayRoute = razorpayRouteService(storage);
+        await razorpayRoute.processOrderPaymentSplit(orderId, razorpayPaymentId);
+        console.log(`[API] Payment split processed successfully for order: ID=${orderId}`);
+      } catch (splitError) {
+        console.error(`[API] Error processing payment split for order ${orderId}:`, splitError);
+        // Continue with the payment process even if the split fails
+        // We'll need to handle this case manually or implement a retry mechanism
+      }
+
+      // Create notification for customer
+      await storage.createNotification({
+        userId: order.customerId,
+        type: "order",
+        title: "Order Confirmed",
+        message: "Your order has been confirmed and will be processed soon.",
+      });
+      
+      // Create notification for shop
+      await storage.createNotification({
+        userId: order.shopId,
+        type: "order",
+        title: "New Order Received",
+        message: `You have received a new order (#${orderId}). Please process it soon.`,
+      });
+
+      res.json({
+        success: true,
+        order,
+        message: "Payment processed successfully"
+      });
+    } catch (error) {
+      console.error("Error processing order payment:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to process payment" });
+    }
   });
 
   app.get("/api/orders/customer", requireAuth, requireRole(["customer"]), async (req, res) => {
@@ -1781,6 +1865,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/orders/shop", requireAuth, requireRole(["shop"]), async (req, res) => {
     const orders = await storage.getOrdersByShop(req.user!.id);
     res.json(orders);
+  });
+
+  // Razorpay Route - Vendor Onboarding
+  app.post("/api/razorpay/onboard", requireAuth, requireRole(["shop", "provider"]), async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { bankDetails } = req.body;
+      
+      // Validate bank details
+      if (!bankDetails || !bankDetails.accountNumber || !bankDetails.ifscCode || !bankDetails.accountHolderName) {
+        return res.status(400).json({ message: "Bank details are required for onboarding" });
+      }
+      
+      // Initialize Razorpay Route service
+      const razorpayRoute = razorpayRouteService(storage);
+      
+      // Create linked account
+      const linkedAccount = await razorpayRoute.createLinkedAccount(userId, bankDetails);
+      
+      res.json({
+        success: true,
+        message: "Successfully onboarded to Razorpay Route",
+        linkedAccountId: linkedAccount.id
+      });
+    } catch (error) {
+      console.error("Error onboarding vendor to Razorpay Route:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to onboard vendor" });
+    }
+  });
+  
+  // Get Razorpay Route onboarding status
+  app.get("/api/razorpay/onboard-status", requireAuth, requireRole(["shop", "provider"]), async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({
+        isOnboarded: !!user.razorpayLinkedAccountId,
+        linkedAccountId: user.razorpayLinkedAccountId || null
+      });
+    } catch (error) {
+      console.error("Error getting onboarding status:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to get onboarding status" });
+    }
   });
 
   // Add an endpoint to get service availability

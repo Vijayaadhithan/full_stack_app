@@ -74,6 +74,7 @@ export const users = pgTable("users", {
   shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
   googleId: text("google_id").unique(), // Added for Google OAuth
   emailVerified: boolean("email_verified").default(false), // Added for Google OAuth
+  razorpayLinkedAccountId: text("razorpay_linked_account_id"), // Added for Razorpay Route integration
   // Provider profile fields
   bio: text("bio"),
   qualifications: text("qualifications"),
@@ -325,6 +326,8 @@ export const blockedTimeSlots = pgTable("blocked_time_slots", {
 export const insertUserSchema = createInsertSchema(users, {
   // Add emailVerified to Zod schema for validation if needed, or rely on DB default
   emailVerified: z.boolean().optional().default(false),
+  // Add razorpayLinkedAccountId to Zod schema
+  razorpayLinkedAccountId: z.string().optional().nullable(),
 });
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;

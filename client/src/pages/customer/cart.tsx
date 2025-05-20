@@ -118,8 +118,11 @@ export default function Cart() {
       0
     ) ?? 0; // Use nullish coalescing for default value
 
-  // Calculate the final total after applying promotion
-  const totalAmount = subtotal - discountAmount;
+  // Platform fee is fixed at 3rs
+  const platformFee = 3;
+
+  // Calculate the final total after applying promotion and adding platform fee
+  const totalAmount = subtotal - discountAmount + platformFee;
 
   // Handle promotion selection
   const handlePromotionSelect = async (promotion: Promotion | null) => {
@@ -463,6 +466,11 @@ export default function Cart() {
                     <span>-₹{discountAmount.toFixed(2)}</span>
                   </div>
                 )}
+
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Platform Fee</span>
+                  <span>₹{platformFee.toFixed(2)}</span>
+                </div>
 
                 <Separator />
 
