@@ -7,6 +7,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
+import { insertUserSchema } from "@shared/schema";
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -175,10 +176,23 @@ export function setupAuth(app: Express) {
     done(null, user);
   });
 
-  app.post("/api/register", async (req, res, next) => {
-    const existingUser = await storage.getUserByUsername(req.body.username);
+  
+
+app.post("/api/register", async (req, res, next) => {
+    const validationResult = insertUserSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ message: "Invalid input", errors: validationResult.error.errors });
+    }
+
+    const validatedData = validationResult.data;
+
+    const existingUser = await storage.getUserByUsername(validatedData.username);
     if (existingUser) {
       return res.status(400).send("Username already exists");
+    }
+
+    if (validatedData.role === 'shop' && !validatedData.shopProfile) {
+      return res.status(400).json({ message: "Shop profile is required for shop role" });
     }
 
     const user = await storage.createUser({

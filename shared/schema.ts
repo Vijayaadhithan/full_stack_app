@@ -322,12 +322,36 @@ export const blockedTimeSlots = pgTable("blocked_time_slots", {
 });
 
 
+// Zod schema for ShopProfile
+export const shopProfileSchema = z.object({
+  shopName: z.string().min(1, "Shop name is required"),
+  description: z.string().min(1, "Shop description is required"),
+  businessType: z.string().min(1, "Business type is required"),
+  gstin: z.string().optional().nullable(),
+  bankDetails: z.object({
+    accountNumber: z.string().min(1, "Account number is required"),
+    ifscCode: z.string().min(1, "IFSC code is required"),
+    accountHolderName: z.string().min(1, "Account holder name is required"),
+  }).optional().nullable(),
+  workingHours: z.object({
+    from: z.string().min(1, "'From' time is required"),
+    to: z.string().min(1, "'To' time is required"),
+    days: z.array(z.string().min(1)).min(1, "At least one working day is required"),
+  }),
+  shippingPolicy: z.string().optional().nullable(),
+  returnPolicy: z.string().optional().nullable(),
+});
+
 // Generate insert schemas and types
 export const insertUserSchema = createInsertSchema(users, {
+  shopProfile: shopProfileSchema.optional().nullable(), // Validate shopProfile if provided
   // Add emailVerified to Zod schema for validation if needed, or rely on DB default
   emailVerified: z.boolean().optional().default(false),
   // Add razorpayLinkedAccountId to Zod schema
   razorpayLinkedAccountId: z.string().optional().nullable(),
+  // Ensure password is a string, but it will be hashed before actual insertion
+  // Role should be validated against UserRole enum
+  role: z.enum(["customer", "provider", "shop", "admin"]),
 });
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
