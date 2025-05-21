@@ -81,6 +81,16 @@ export const users = pgTable("users", {
   experience: text("experience"),
   workingHours: text("working_hours"),
   languages: text("languages"),
+  // Enhanced profile fields for providers and shops
+  verificationStatus: text("verification_status").$type<"unverified" | "pending" | "verified">().default("unverified"),
+  verificationDocuments: jsonb("verification_documents").$type<string[]>(), // Array of document URLs or identifiers
+  profileCompleteness: integer("profile_completeness").default(0), // Percentage
+  specializations: text("specializations").array(), // For providers
+  certifications: text("certifications").array(), // For providers
+  shopBannerImageUrl: text("shop_banner_image_url"), // For shops
+  shopLogoImageUrl: text("shop_logo_image_url"), // For shops
+  yearsInBusiness: integer("years_in_business"),
+  socialMediaLinks: jsonb("social_media_links").$type<Record<string, string>>(), // e.g., { facebook: "url", instagram: "url" }
 });
 
 // Update services table with new availability fields and soft deletion

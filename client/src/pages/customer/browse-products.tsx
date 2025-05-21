@@ -14,9 +14,11 @@ import { Product } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { Search, ShoppingCart, Heart } from "lucide-react";
-import { useState } from "react";
+import { Search, ShoppingCart, Heart, Filter } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const container = {
   hidden: { opacity: 0 },
@@ -35,13 +37,47 @@ const item = {
 
 export default function BrowseProducts() {
   const { toast } = useToast();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>();
-
-  // Original implementation restored
-  const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: ["/api/products", selectedCategory],
+  const [filters, setFilters] = useState({
+    searchTerm: "",
+    category: undefined as string | undefined,
+    minPrice: "",
+    maxPrice: "",
+    // TODO: Add tags, attributes if needed
   });
+
+  const handleFilterChange = (key: keyof typeof filters, value: string | undefined) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const { data: products, isLoading, error } = useQuery<Product[]>({
+    queryKey: ["/api/products", filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.searchTerm) params.append("searchTerm", filters.searchTerm);
+      if (filters.category && filters.category !== "all") params.append("category", filters.category);
+      if (filters.minPrice) params.append("minPrice", filters.minPrice);
+      if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
+      // Add other filters like tags if implemented
+
+      const queryString = params.toString();
+      const response = await apiRequest("GET", `/api/products${queryString ? `?${queryString}` : ""}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Failed to fetch products" }));
+        throw new Error(errorData.message || "Failed to fetch products");
+      }
+      return response.json();
+    },
+  });
+
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error fetching products",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  }, [error, toast]);
 
   const addToCartMutation = useMutation({
     mutationFn: async (productId: number) => {
@@ -96,14 +132,8 @@ export default function BrowseProducts() {
     },
   });
 
-  const filteredProducts = products?.filter(
-    (product) =>
-      (!selectedCategory || product.category === selectedCategory) &&
-      (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase()))
-  );
+  // Client-side filtering is no longer needed as it's done server-side
+  const filteredProducts = products;
 
   return (
     <DashboardLayout>
@@ -115,30 +145,62 @@ export default function BrowseProducts() {
       >
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
           <h1 className="text-2xl font-bold">Browse Products</h1>
-          <div className="flex gap-4 w-full md:w-auto">
-            <div className="relative flex-1 md:w-80">
+          <div className="flex flex-wrap gap-4 w-full md:w-auto items-center">
+            <div className="relative flex-1 min-w-[200px] md:w-auto">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Search products..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={filters.searchTerm}
+                onChange={(e) => handleFilterChange("searchTerm", e.target.value)}
                 className="pl-10"
               />
             </div>
             <Select
-              value={selectedCategory}
-              onValueChange={setSelectedCategory}
+              value={filters.category}
+              onValueChange={(value) => handleFilterChange("category", value === "all" ? undefined : value)}
             >
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
                 <SelectItem value="electronics">Electronics</SelectItem>
                 <SelectItem value="clothing">Clothing</SelectItem>
                 <SelectItem value="books">Books</SelectItem>
                 <SelectItem value="home">Home &amp; Living</SelectItem>
+                {/* TODO: Fetch categories dynamically */}
               </SelectContent>
             </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-auto">
+                  <Filter className="mr-2 h-4 w-4" /> More Filters
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="minPrice">Min Price (₹)</Label>
+                  <Input 
+                    id="minPrice" 
+                    type="number" 
+                    placeholder="e.g., 100"
+                    value={filters.minPrice}
+                    onChange={(e) => handleFilterChange("minPrice", e.target.value)}
+                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maxPrice">Max Price (₹)</Label>
+                  <Input 
+                    id="maxPrice" 
+                    type="number" 
+                    placeholder="e.g., 1000"
+                    value={filters.maxPrice}
+                    onChange={(e) => handleFilterChange("maxPrice", e.target.value)}
+                  />
+                </div>
+                {/* TODO: Add more filters like tags, ratings etc. */}
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 

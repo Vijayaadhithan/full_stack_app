@@ -5,9 +5,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Loader2, MapPin, Star, Clock } from "lucide-react";
-import { useState } from "react";
+import { Loader2, MapPin, Star, Clock, Search, Filter } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Service } from "@shared/schema";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { apiRequest } from "@/lib/queryClient"; 
+import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 
 const categories = [
@@ -33,20 +37,47 @@ const item = {
 };
 
 export default function BrowseServices() {
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const { data: services, isLoading } = useQuery<Service[]>({
-    queryKey: ["/api/services"],
+  const { toast } = useToast();
+  const [filters, setFilters] = useState({
+    searchTerm: "",
+    category: "All",
+    // Future filters can be added here e.g. location, minRating
   });
 
-  console.log("Available services:", services); // Debug log
+  const handleFilterChange = (key: keyof typeof filters, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
 
-  const filteredServices = services?.filter(service => 
-    (selectedCategory === "All" || service.category === selectedCategory) &&
-    (service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     service.description.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const { data: services, isLoading, error } = useQuery<Service[]>({
+    queryKey: ["/api/services", filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.searchTerm) params.append("searchTerm", filters.searchTerm);
+      if (filters.category && filters.category !== "All") params.append("category", filters.category);
+      // Add other filters here if backend supports them
+
+      const queryString = params.toString();
+      const response = await apiRequest("GET", `/api/services${queryString ? `?${queryString}` : ""}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Failed to fetch services" }));
+        throw new Error(errorData.message || "Failed to fetch services");
+      }
+      return response.json();
+    },
+  });
+
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error fetching services",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  }, [error, toast]);
+
+  // Client-side filtering is no longer needed
+  const filteredServices = services;
 
   return (
     <DashboardLayout>
@@ -56,26 +87,59 @@ export default function BrowseServices() {
         animate="show"
         className="space-y-6 p-6"
       >
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
-          <div className="relative flex-1 w-full">
-            <Input
-              placeholder="Search services..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        <div className="flex flex-col md:flex-row gap-4 items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">Browse Services</h1>
+          <div className="flex flex-wrap gap-4 w-full md:w-auto items-center">
+            <div className="relative flex-1 min-w-[200px] md:w-auto">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder="Search services..."
+                value={filters.searchTerm}
+                onChange={(e) => handleFilterChange("searchTerm", e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select 
+              value={filters.category} 
+              onValueChange={(value) => handleFilterChange("category", value)}
+            >
+              <SelectTrigger className="w-full sm:w-[220px]">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map(category => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* Placeholder for more advanced filters if needed in the future */}
+            {/* 
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-auto">
+                  <Filter className="mr-2 h-4 w-4" /> More Filters
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="location">Location</Label>
+                  <Input id="location" placeholder="e.g., City, Pincode" />
+                </div>
+                 <div className="space-y-2">
+                  <Label htmlFor="minRating">Min Rating</Label>
+                  <Select>
+                    <SelectTrigger><SelectValue placeholder="Any Rating" /></SelectTrigger>
+                    <SelectContent>
+                      {[1,2,3,4,5].map(r => <SelectItem key={r} value={String(r)}>{r} Star{r>1 && 's'}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </PopoverContent>
+            </Popover>
+            */}
           </div>
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map(category => (
-                <SelectItem key={category} value={category}>
-                  {category}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {isLoading ? (

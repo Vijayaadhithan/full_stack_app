@@ -207,9 +207,49 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getProducts(): Promise<Product[]> {
-    // Only return non-deleted products
-    return await db.select().from(products).where(eq(products.isDeleted, false));
+  async getProducts(filters?: any): Promise<Product[]> {
+    // Base query: select non-deleted products
+    let conditions = [eq(products.isDeleted, false)];
+    let query = db.select().from(products);
+
+    if (filters) {
+      const conditions = [];
+      if (filters.category) {
+        conditions.push(eq(products.category, filters.category));
+      }
+      if (filters.minPrice) {
+        conditions.push(sql`${products.price} >= ${filters.minPrice}`);
+      }
+      if (filters.maxPrice) {
+        conditions.push(sql`${products.price} <= ${filters.maxPrice}`);
+      }
+      if (filters.searchTerm) {
+        const searchTermLike = `%${filters.searchTerm}%`;
+        conditions.push(sql`(${products.name} ILIKE ${searchTermLike} OR ${products.description} ILIKE ${searchTermLike})`);
+      }
+      if (filters.shopId) {
+        conditions.push(eq(products.shopId, filters.shopId));
+      }
+      if (filters.tags && filters.tags.length > 0) {
+        // Assuming tags is an array field in the DB. If it's text, this needs adjustment.
+        // This example assumes tags are stored as an array of strings.
+        conditions.push(sql`${products.tags} @> ARRAY[${filters.tags.join(',')}]`);
+      }
+      if (filters.attributes) {
+        // Assuming attributes are stored in a JSONB column named 'specifications'
+        // This is a simplified example; complex attribute filtering might require more specific JSONB operators
+        for (const key in filters.attributes) {
+          if (Object.prototype.hasOwnProperty.call(filters.attributes, key)) {
+            conditions.push(sql`${products.specifications}->>${key} = ${filters.attributes[key]}`);
+          }
+        }
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as typeof query;
+      }
+    }
+    return await query;
   }
 
   async getPromotionsByShop(shopId: number): Promise<Promotion[]> {
@@ -262,9 +302,37 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async updateUser(id: number, updateData: Partial<Omit<User, 'address'>> & { addressStreet?: string | null; addressCity?: string | null; addressState?: string | null; addressPostalCode?: string | null; addressCountry?: string | null }): Promise<User> {
+  async updateUser(id: number, updateData: Partial<User>): Promise<User> {
+    // Calculate profile completeness if relevant fields are updated
+    let profileCompleteness = updateData.profileCompleteness;
+    if (profileCompleteness === undefined) {
+      // If not explicitly set, try to fetch current user to calculate based on existing + new data
+      const currentUser = await this.getUser(id);
+      if (currentUser) {
+        const combinedData = { ...currentUser, ...updateData };
+        let completedFields = 0;
+        const totalProfileFields = 10; // Define total number of fields considered for completeness
+        if (combinedData.name) completedFields++;
+        if (combinedData.phone) completedFields++;
+        if (combinedData.email) completedFields++;
+        if (combinedData.addressStreet && combinedData.addressCity && combinedData.addressState && combinedData.addressPostalCode && combinedData.addressCountry) completedFields++;
+        if (combinedData.profilePicture) completedFields++;
+        if (combinedData.bio) completedFields++; // Example field
+        if (combinedData.qualifications) completedFields++; // Example field
+        if (combinedData.shopProfile && combinedData.shopProfile.description) completedFields++; // Example shop fields
+        if (combinedData.verificationStatus === 'verified') completedFields++;
+        // Add more checks for other fields like specializations, certifications, etc.
+        profileCompleteness = Math.round((completedFields / totalProfileFields) * 100);
+      }
+    }
+
+    const dataToSet: Partial<User> = { ...updateData };
+    if (profileCompleteness !== undefined) {
+      dataToSet.profileCompleteness = profileCompleteness;
+    }
+
     const result = await db.update(users)
-      .set({ ...updateData }) // Spread operator handles the partial update correctly
+      .set(dataToSet)
       .where(eq(users.id, id))
       .returning();
     if (!result[0]) throw new Error("User not found");
@@ -433,9 +501,40 @@ export class PostgresStorage implements IStorage {
     if (!result[0]) throw new Error("Service not found");
   }
 
-  async getServices(): Promise<Service[]> {
-    // Only return non-deleted services
-    return await db.select().from(services).where(eq(services.isDeleted, false));
+  async getServices(filters?: any): Promise<Service[]> {
+    // Build an array of conditions starting with the non-deleted check
+    const conditions = [eq(services.isDeleted, false)];
+    if (filters) {
+      if (filters.category) {
+        conditions.push(eq(services.category, filters.category));
+      }
+      if (filters.minPrice) {
+        conditions.push(sql`${services.price} >= ${filters.minPrice}`);
+      }
+      if (filters.maxPrice) {
+        conditions.push(sql`${services.price} <= ${filters.maxPrice}`);
+      }
+      if (filters.searchTerm) {
+        const searchTermLike = `%${filters.searchTerm}%`;
+        conditions.push(sql`(${services.name} ILIKE ${searchTermLike} OR ${services.description} ILIKE ${searchTermLike})`);
+      }
+      if (filters.providerId) {
+        conditions.push(eq(services.providerId, filters.providerId));
+      }
+      if (filters.locationCity) {
+        conditions.push(eq(services.addressCity, filters.locationCity));
+      }
+      if (filters.locationPostalCode) {
+        conditions.push(eq(services.addressPostalCode, filters.locationPostalCode));
+      }
+      // Note: availabilityDate filtering would be more complex and might require checking bookings or a serviceAvailability table.
+      if (filters.availabilityDate) {
+         conditions.push(eq(services.isAvailable, true)); 
+      }
+    }
+    // Apply all conditions at once
+    const query = db.select().from(services).where(and(...conditions));
+    return await query;
   }
 
   // ─── BOOKING OPERATIONS ──────────────────────────────────────────

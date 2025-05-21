@@ -48,7 +48,7 @@ export interface IStorage {
   getUserByGoogleId(googleId: string): Promise<User | undefined>; // Added for Google OAuth
   getAllUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
-  updateUser(id: number, user: Partial<Omit<User, 'address'>> & { addressStreet?: string; addressCity?: string; addressState?: string; addressPostalCode?: string; addressCountry?: string }): Promise<User>;
+  updateUser(id: number, user: Partial<User>): Promise<User>; // Updated to accept all partial User fields
 
   // Service operations
   createService(service: InsertService): Promise<Service>;
@@ -57,7 +57,7 @@ export interface IStorage {
   getServicesByCategory(category: string): Promise<Service[]>;
   updateService(id: number, service: Partial<Service>): Promise<Service>;
   deleteService(id: number): Promise<void>;
-  getServices(): Promise<Service[]>;
+  getServices(filters?: any): Promise<Service[]>; // Added filters parameter
 
   // Booking operations
   createBooking(booking: InsertBooking): Promise<Booking>;
@@ -77,7 +77,7 @@ export interface IStorage {
   getProductsByCategory(category: string): Promise<Product[]>;
   updateProduct(id: number, product: Partial<Product>): Promise<Product>;
   deleteProduct(id: number): Promise<void>;
-  getProducts(): Promise<Product[]>; // Add method to get all products
+  getProducts(filters?: any): Promise<Product[]>; // Added filters parameter
   removeProductFromAllCarts(productId: number): Promise<void>;
 
   // Cart operations
@@ -448,7 +448,16 @@ export class MemStorage implements IStorage {
       languages: null,
       googleId: null,
       emailVerified: null,
-      razorpayLinkedAccountId: null
+      razorpayLinkedAccountId: null,
+      verificationStatus: null,
+      verificationDocuments: null,
+      profileCompleteness: null,
+      specializations: null,
+      certifications: null,
+      shopBannerImageUrl: null,
+      shopLogoImageUrl: null,
+      yearsInBusiness: null,
+      socialMediaLinks: null
     };
     this.users.set(id, user);
     return user;

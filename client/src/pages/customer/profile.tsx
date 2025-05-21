@@ -131,7 +131,7 @@ export default function CustomerProfile() {
           {/* Profile Picture and Payment Methods Cards Removed */}
           <Card className="md:col-span-2">
             <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
+              <CardTitle>Profile Information</CardTitle>
             </CardHeader>
             <CardContent>
               <Form {...form}>
@@ -139,6 +139,28 @@ export default function CustomerProfile() {
                   onSubmit={form.handleSubmit((data) => updateProfileMutation.mutate(data))}
                   className="space-y-4"
                 >
+                  {user && (
+                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 border rounded-lg bg-secondary/30">
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Verification Status</Label>
+                        <p className={`text-lg font-semibold ${user.verificationStatus === 'verified' ? 'text-green-600' : user.verificationStatus === 'pending' ? 'text-yellow-600' : 'text-red-600'}`}>
+                          {user.verificationStatus ? user.verificationStatus.charAt(0).toUpperCase() + user.verificationStatus.slice(1) : 'Not Available'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Profile Completeness</Label>
+                        <div className="flex items-center gap-2">
+                          <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                            <div 
+                              className="bg-primary h-2.5 rounded-full transition-all duration-500 ease-out"
+                              style={{ width: `${user.profileCompleteness || 0}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-sm font-medium">{user.profileCompleteness || 0}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="name">Full Name</Label>

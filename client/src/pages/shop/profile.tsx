@@ -1,6 +1,7 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -207,7 +208,7 @@ export default function ShopProfile() {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Shop Profile</h1>
+          <h1 className="text-2xl font-bold">Manage Shop Profile</h1>
           {!editMode && (
             <Button
               type="button"
@@ -221,7 +222,37 @@ export default function ShopProfile() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Shop Information</CardTitle>
+            <CardTitle>Shop Profile & Verification</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {user && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 border rounded-lg bg-secondary/30">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Verification Status</Label>
+                  <p className={`text-lg font-semibold ${user.verificationStatus === 'verified' ? 'text-green-600' : user.verificationStatus === 'pending' ? 'text-yellow-600' : 'text-red-600'}`}>
+                    {user.verificationStatus ? user.verificationStatus.charAt(0).toUpperCase() + user.verificationStatus.slice(1) : 'Not Available'}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Profile Completeness</Label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                      <div 
+                        className="bg-primary h-2.5 rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${user.profileCompleteness || 0}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-sm font-medium">{user.profileCompleteness || 0}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Shop Information Details</CardTitle>
           </CardHeader>
           <CardContent>
             <Form {...form}>
@@ -483,7 +514,11 @@ export default function ShopProfile() {
                                 }}
                                 disabled={!editMode}
                               />
-                              <span className="text-sm">{day}</span>
+                              <div className="space-y-0.5">
+                                <Label className="text-sm font-normal">
+                                  {day}
+                                </Label>
+                              </div>
                             </div>
                           ))}
                         </div>

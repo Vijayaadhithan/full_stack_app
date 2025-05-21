@@ -609,8 +609,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/services", requireAuth, async (req, res) => {
     try {
-      const services = await storage.getServices();
-      console.log("All services:", services); // Debug log
+      const { 
+        category,
+        minPrice,
+        maxPrice,
+        searchTerm,
+        providerId,
+        locationCity,
+        locationPostalCode,
+        availabilityDate // YYYY-MM-DD
+      } = req.query;
+
+      const filters: any = {};
+      if (category) filters.category = String(category);
+      if (minPrice) filters.minPrice = parseFloat(String(minPrice));
+      if (maxPrice) filters.maxPrice = parseFloat(String(maxPrice));
+      if (searchTerm) filters.searchTerm = String(searchTerm);
+      if (providerId) filters.providerId = parseInt(String(providerId));
+      if (locationCity) filters.locationCity = String(locationCity);
+      if (locationPostalCode) filters.locationPostalCode = String(locationPostalCode);
+      if (availabilityDate) filters.availabilityDate = String(availabilityDate); // Will be parsed in storage layer
+
+      const services = await storage.getServices(filters);
+      console.log("Filtered services:", services); // Debug log
 
       // Map through services to include provider info and rating
       const servicesWithDetails = await Promise.all(services.map(async (service) => {
@@ -2103,12 +2124,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/products", requireAuth, async (req, res) => {
     try {
-      // Get all products from storage
-      const products = await storage.getProducts();
+      const { 
+        category,
+        minPrice,
+        maxPrice,
+        tags, // comma-separated string
+        searchTerm,
+        shopId,
+        attributes // JSON string for specific attributes e.g. {"color":"red", "size":"M"}
+      } = req.query;
+
+      const filters: any = {};
+      if (category) filters.category = String(category);
+      if (minPrice) filters.minPrice = parseFloat(String(minPrice));
+      if (maxPrice) filters.maxPrice = parseFloat(String(maxPrice));
+      if (tags) filters.tags = String(tags).split(',').map(tag => tag.trim()).filter(tag => tag);
+      if (searchTerm) filters.searchTerm = String(searchTerm);
+      if (shopId) filters.shopId = parseInt(String(shopId));
+      if (attributes) {
+        try {
+          filters.attributes = JSON.parse(String(attributes));
+        } catch (e) {
+          console.error("Failed to parse product attributes filter", e);
+          // Optionally return a 400 error or ignore the filter
+        }
+      }
+
+      const products = await storage.getProducts(filters);
       res.json(products);
     } catch (error) {
       console.error("Error fetching products:", error);
-      res.status(500).json({ message: "Failed to fetch products" });
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch products" });
     }
   });
 
