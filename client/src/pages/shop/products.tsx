@@ -23,14 +23,29 @@ import { useState } from "react";
 const productFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
-  price: z.string().min(1, "Price is required"),
-  mrp: z.string().min(1, "MRP is required"),
+  price: z.coerce.number().positive("Price must be a positive number"),
+  mrp: z.coerce.number().positive("MRP must be a positive number"),
   stock: z.coerce.number().min(0, "Stock must be a positive number"),
   category: z.string().min(1, "Category is required"),
   images: z.array(z.string()).default([]),
   shopId: z.number().optional(),
   isAvailable: z.boolean().default(true),
+  // New fields
+  sku: z.string().optional(),
+  barcode: z.string().optional(),
+  weight: z.coerce.number().positive().optional(),
+  dimensions: z.object({
+    length: z.coerce.number().positive(),
+    width: z.coerce.number().positive(),
+    height: z.coerce.number().positive()
+  }).optional(),
+  specifications: z.record(z.string(), z.string()).optional(),
+  tags: z.array(z.string()).default([]),
+  minOrderQuantity: z.coerce.number().positive().default(1),
+  maxOrderQuantity: z.coerce.number().positive().optional(),
+  lowStockThreshold: z.coerce.number().positive().optional()
 });
+
 
 type ProductFormData = z.infer<typeof productFormSchema>;
 
@@ -52,28 +67,62 @@ export default function ShopProducts() {
     defaultValues: {
       name: "",
       description: "",
-      price: "",
-      mrp: "",
+      price: 0,
+      mrp: 0,
       stock: 0,
       category: "",
       isAvailable: true,
       images: [],
       shopId: user?.id || 0,
+      // New fields
+      sku: "",
+      barcode: "",
+      weight: undefined,
+      dimensions: undefined,
+      specifications: {},
+      tags: [],
+      minOrderQuantity: 1,
+      maxOrderQuantity: undefined,
+      lowStockThreshold: undefined,
     },
   });
+
+  // State for advanced options visibility
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  // State for specifications
+  const [specKey, setSpecKey] = useState("");
+  const [specValue, setSpecValue] = useState("");
+  // State for tags input
+  const [tagInput, setTagInput] = useState("");
 
   const resetFormWithProduct = (product: Product) => {
     form.reset({
       name: product.name,
       description: product.description || "",
-      price: String(product.price),
-      mrp: String(product.mrp),
+      price: Number(product.price),
+      mrp: Number(product.mrp),
       stock: product.stock,
       category: product.category,
       images: product.images || [],
       isAvailable: product.isAvailable ?? true, // Default to true if null
       shopId: user?.id || 0,
+      // New fields
+      sku: product.sku || "",
+      barcode: product.barcode || "",
+      weight: product.weight ? Number(product.weight) : undefined,
+      dimensions: product.dimensions || undefined,
+      specifications: product.specifications || {},
+      tags: product.tags || [],
+      minOrderQuantity: product.minOrderQuantity || 1,
+      maxOrderQuantity: product.maxOrderQuantity || undefined,
+      lowStockThreshold: product.lowStockThreshold || undefined,
     });
+    
+    // Show advanced options if any are set
+    if (product.sku || product.barcode || product.weight || product.dimensions || 
+        product.minOrderQuantity !== 1 || product.maxOrderQuantity || product.lowStockThreshold) {
+      setShowAdvancedOptions(true);
+    }
   };
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,10 +152,24 @@ export default function ShopProducts() {
 
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
-      const res = await apiRequest("POST", "/api/products", {
+      // Format the data for API submission
+      const formattedData = {
         ...data,
         shopId: user?.id,
-      });
+        price: String(data.price),
+        mrp: String(data.mrp),
+        // Ensure dimensions are properly formatted
+        dimensions: data.dimensions,
+        // Convert weight to string if present
+        weight: data.weight !== undefined ? String(data.weight) : undefined,
+        specifications: data.specifications || {},
+        tags: data.tags || [],
+        minOrderQuantity: data.minOrderQuantity || 1,
+        maxOrderQuantity: data.maxOrderQuantity,
+        lowStockThreshold: data.lowStockThreshold
+      };
+      
+      const res = await apiRequest("POST", "/api/products", formattedData);
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to create product");
@@ -136,12 +199,24 @@ export default function ShopProducts() {
       const formattedData = {
         name: data.name,
         description: data.description,
-        price: data.price ? parseFloat(data.price) : undefined,
-        mrp: data.mrp ? parseFloat(data.mrp) : undefined,
-        stock: data.stock !== undefined ? Number(data.stock) : undefined,
+        price: String(data.price),
+        mrp: String(data.mrp),
+        stock: data.stock,
         category: data.category,
         images: data.images,
         isAvailable: data.isAvailable,
+        // New fields
+        sku: data.sku,
+        barcode: data.barcode,
+        // Convert weight to string if present
+        weight: data.weight !== undefined ? String(data.weight) : undefined,
+        // Ensure dimensions are properly formatted
+        dimensions: data.dimensions,
+        specifications: data.specifications,
+        tags: data.tags,
+        minOrderQuantity: data.minOrderQuantity,
+        maxOrderQuantity: data.maxOrderQuantity,
+        lowStockThreshold: data.lowStockThreshold
       };
 
       console.log("Sending update request for product ID:", id, "with data:", formattedData);
@@ -226,14 +301,25 @@ export default function ShopProducts() {
     form.reset({
       name: "",
       description: "",
-      price: "",
-      mrp: "",
+      price: 0,
+      mrp: 0,
       stock: 0,
       category: "",
       isAvailable: true,
       images: [],
       shopId: user?.id || 0,
+      // New fields
+      sku: "",
+      barcode: "",
+      weight: undefined,
+      dimensions: undefined,
+      specifications: {},
+      tags: [],
+      minOrderQuantity: 1,
+      maxOrderQuantity: undefined,
+      lowStockThreshold: undefined,
     });
+    setShowAdvancedOptions(false);
   };
 
   return (
@@ -257,7 +343,7 @@ export default function ShopProducts() {
                 {t("add_product")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[800px]">
+            <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingProduct ? t("edit_product") : t("add_product")}
@@ -415,7 +501,260 @@ export default function ShopProducts() {
                           </FormItem>
                         )}
                       />
+                    {/* Advanced Options Section */}
+                    <div className="space-y-4">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                        className="w-full justify-start px-0"
+                      >
+                        {showAdvancedOptions ? 'Hide' : 'Show'} Advanced Options
+                      </Button>
+
+                      {showAdvancedOptions && (
+                        <div className="space-y-4">
+                          <FormField
+                            control={form.control}
+                            name="sku"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>SKU</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="barcode"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Barcode</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="weight"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Weight (kg)</FormLabel>
+                                <FormControl>
+                                  <Input {...field} type="number" min="0" step="0.01" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          {/* Dimensions Section */}
+                          <div className="space-y-2">
+                            <FormLabel>Dimensions (cm)</FormLabel>
+                            <div className="grid gap-4 md:grid-cols-3">
+                              <FormField
+                                control={form.control}
+                                name="dimensions.length"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Length</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} type="number" min="0" step="0.01" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="dimensions.width"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Width</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} type="number" min="0" step="0.01" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="dimensions.height"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Height</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} type="number" min="0" step="0.01" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Specifications Section */}
+                          <div className="space-y-2">
+                            <FormLabel>Specifications</FormLabel>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Key"
+                                value={specKey}
+                                onChange={(e) => setSpecKey(e.target.value)}
+                                className="flex-1"
+                              />
+                              <Input
+                                placeholder="Value"
+                                value={specValue}
+                                onChange={(e) => setSpecValue(e.target.value)}
+                                className="flex-1"
+                              />
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  if (specKey && specValue) {
+                                    const currentSpecs = form.getValues("specifications") || {};
+                                    form.setValue("specifications", { ...currentSpecs, [specKey]: specValue });
+                                    setSpecKey("");
+                                    setSpecValue("");
+                                  }
+                                }}
+                              >
+                                Add Spec
+                              </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {Object.entries(form.watch("specifications") || {}).map(([key, value]) => (
+                                <div key={key} className="bg-secondary text-secondary-foreground px-3 py-1 rounded-full flex items-center gap-1">
+                                  <span>{key}: {value}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-4 w-4 rounded-full"
+                                    onClick={() => {
+                                      const currentSpecs = form.getValues("specifications") || {};
+                                      const newSpecs = { ...currentSpecs };
+                                      delete newSpecs[key];
+                                      form.setValue("specifications", newSpecs);
+                                    }}
+                                  >
+                                    <AlertCircle className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Tags Section */}
+                          <div className="space-y-2">
+                            <FormLabel>Tags</FormLabel>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Add a tag"
+                                value={tagInput}
+                                onChange={(e) => setTagInput(e.target.value)}
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter' && tagInput) {
+                                    e.preventDefault();
+                                    const currentTags = form.getValues("tags") || [];
+                                    if (!currentTags.includes(tagInput)) {
+                                      form.setValue("tags", [...currentTags, tagInput]);
+                                      setTagInput("");
+                                    }
+                                  }
+                                }}
+                                className="flex-1"
+                              />
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  if (tagInput) {
+                                    const currentTags = form.getValues("tags") || [];
+                                    if (!currentTags.includes(tagInput)) {
+                                      form.setValue("tags", [...currentTags, tagInput]);
+                                    }
+                                  }
+                                }}
+                              >
+                                Add Tag
+                              </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {form.watch("tags")?.map((tag, index) => (
+                                <div key={index} className="bg-secondary text-secondary-foreground px-3 py-1 rounded-full flex items-center gap-1">
+                                  <span>{tag}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-4 w-4 rounded-full"
+                                    onClick={() => {
+                                      const currentTags = form.getValues("tags") || [];
+                                      form.setValue("tags", currentTags.filter((_, i) => i !== index));
+                                    }}
+                                  >
+                                    <AlertCircle className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-3">
+                            <FormField
+                              control={form.control}
+                              name="minOrderQuantity"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Min Order Quantity</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} type="number" min="1" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="maxOrderQuantity"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Max Order Quantity</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} type="number" min="1" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="lowStockThreshold"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Low Stock Threshold</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} type="number" min="0" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
+
 
                     <div className="flex justify-end mt-4">
                       <Button
@@ -435,6 +774,7 @@ export default function ShopProducts() {
                         {editingProduct ? t("update_product") : t("create_product")}
                       </Button>
                     </div>
+                  </div>
                   </div>
                 </form>
               </Form>
