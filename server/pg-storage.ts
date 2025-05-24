@@ -306,29 +306,97 @@ export class PostgresStorage implements IStorage {
     // Calculate profile completeness if relevant fields are updated
     let profileCompleteness = updateData.profileCompleteness;
     if (profileCompleteness === undefined) {
-      // If not explicitly set, try to fetch current user to calculate based on existing + new data
       const currentUser = await this.getUser(id);
       if (currentUser) {
         const combinedData = { ...currentUser, ...updateData };
         let completedFields = 0;
-        const totalProfileFields = 10; // Define total number of fields considered for completeness
-        if (combinedData.name) completedFields++;
-        if (combinedData.phone) completedFields++;
-        if (combinedData.email) completedFields++;
-        if (combinedData.addressStreet && combinedData.addressCity && combinedData.addressState && combinedData.addressPostalCode && combinedData.addressCountry) completedFields++;
-        if (combinedData.profilePicture) completedFields++;
-        if (combinedData.bio) completedFields++; // Example field
-        if (combinedData.qualifications) completedFields++; // Example field
-        if (combinedData.shopProfile && combinedData.shopProfile.description) completedFields++; // Example shop fields
-        if (combinedData.verificationStatus === 'verified') completedFields++;
-        // Add more checks for other fields like specializations, certifications, etc.
-        profileCompleteness = Math.round((completedFields / totalProfileFields) * 100);
+        let totalProfileFields = 0;
+
+        if (currentUser.role === 'customer') {
+          totalProfileFields = 4; // For customer: name, phone, email, full address. Profile picture is optional.
+          if (combinedData.name) completedFields++;
+          if (combinedData.phone) completedFields++;
+          if (combinedData.email) completedFields++;
+          if (combinedData.addressStreet && combinedData.addressCity && combinedData.addressState && combinedData.addressPostalCode && combinedData.addressCountry) completedFields++;
+          // Profile picture contributes if present, but isn't required for 100% of these base fields.
+          // If we want it to contribute to a score > 100 or be part of a 'bonus', that's a different logic.
+          // For now, let's say the base 4 fields make it 100% complete.
+          // If profilePicture is present, we can reflect that, but it won't prevent 100% if others are filled.
+          // To make it contribute but optional for 100%: one way is to have base 100% from 4 fields, and profile pic adds to it, or adjust total fields dynamically.
+          // Let's adjust totalProfileFields if profilePicture is present to reflect its contribution without making it mandatory for 100%.
+          // This approach is a bit complex for simple percentage. Simpler: 4 fields = 100%.
+          // If profile picture is present, it's a bonus but doesn't change the 100% from core fields.
+          // Let's stick to the 4 core fields for 100% customer completeness.
+        } else if (currentUser.role === 'provider') {
+          totalProfileFields = 9; // name, phone, email, full address, bio, qualifications, experience, workingHours, languages
+          if (combinedData.name) completedFields++;
+          if (combinedData.phone) completedFields++;
+          if (combinedData.email) completedFields++;
+          if (combinedData.addressStreet && combinedData.addressCity && combinedData.addressState && combinedData.addressPostalCode && combinedData.addressCountry) completedFields++;
+          if (combinedData.bio) completedFields++;
+          if (combinedData.qualifications) completedFields++;
+          if (combinedData.experience) completedFields++;
+          if (combinedData.workingHours) completedFields++;
+          if (combinedData.languages) completedFields++;
+
+          // if (combinedData.verificationStatus === 'verified') completedFields++;
+        } else if (currentUser.role === 'shop') {
+          totalProfileFields = 11; 
+          if (combinedData.name) completedFields++; 
+          if (combinedData.phone) completedFields++;
+          if (combinedData.email) completedFields++;
+          
+          // Address details (user root level)
+          if (combinedData.addressStreet && combinedData.addressCity && combinedData.addressState && combinedData.addressPostalCode && combinedData.addressCountry) {
+            completedFields++;
+          }
+          
+          if (combinedData.shopProfile) {
+            if (combinedData.shopProfile.shopName) completedFields++;
+            if (combinedData.shopProfile.description) completedFields++;
+            if (combinedData.shopProfile.businessType) completedFields++;
+            
+            // Bank Details
+            if (combinedData.shopProfile.bankDetails && 
+                combinedData.shopProfile.bankDetails.accountNumber && 
+                combinedData.shopProfile.bankDetails.accountHolderName && 
+                combinedData.shopProfile.bankDetails.ifscCode) {
+              completedFields++;
+            }
+            
+            // Working Hours
+            if (combinedData.shopProfile.workingHours && 
+                Array.isArray(combinedData.shopProfile.workingHours.days) && 
+                combinedData.shopProfile.workingHours.days.length > 0 && 
+                combinedData.shopProfile.workingHours.from && 
+                combinedData.shopProfile.workingHours.to) {
+              completedFields++;
+            }
+            
+            if (combinedData.shopProfile.shippingPolicy) completedFields++;
+            if (combinedData.shopProfile.returnPolicy) completedFields++;
+          }
+          // Note: GSTIN is optional and not counted towards 100%
+          // Note: shopLogoImageUrl and shopBannerImageUrl are now optional and not counted towards 100%
+        }
+        // Add a general contribution for verification status if it's 'verified', regardless of role, if desired.
+        // For now, profile completeness is based on filling out role-specific fields.
+        if (totalProfileFields > 0) {
+          profileCompleteness = Math.round((completedFields / totalProfileFields) * 100);
+        } else {
+          profileCompleteness = 0; // Default if role doesn't match or no fields defined
+        }
       }
     }
 
     const dataToSet: Partial<User> = { ...updateData };
     if (profileCompleteness !== undefined) {
       dataToSet.profileCompleteness = profileCompleteness;
+      // If profile is 100% complete and current status is unverified, set to verified
+      const existingUser = await this.getUser(id);
+      if (profileCompleteness === 100 && existingUser && (existingUser.verificationStatus === 'unverified' || existingUser.verificationStatus === 'pending')) {
+        dataToSet.verificationStatus = 'verified';
+      }
     }
 
     const result = await db.update(users)

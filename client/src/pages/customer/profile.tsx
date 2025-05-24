@@ -53,7 +53,8 @@ export default function CustomerProfile() {
       return res.json();
     },
     onSuccess: (updatedUser: User) => {
-      queryClient.setQueryData(["/api/user"], updatedUser);
+      // queryClient.setQueryData(["/api/user"], updatedUser); // Can be kept or removed, invalidateQueries is more robust for ensuring fresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       toast({
         title: "Profile updated",
         description: "Your profile has been updated successfully.",

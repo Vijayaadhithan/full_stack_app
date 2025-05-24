@@ -353,18 +353,54 @@ export const shopProfileSchema = z.object({
 });
 
 // Generate insert schemas and types
+
+// Schema for customer profile updates (excluding sensitive/role-specific fields)
+export const customerProfileSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  phone: z.string().min(1, "Phone number is required"),
+  email: z.string().email("Invalid email address"),
+  addressStreet: z.string().optional().nullable(),
+  addressCity: z.string().optional().nullable(),
+  addressState: z.string().optional().nullable(),
+  addressPostalCode: z.string().optional().nullable(),
+  addressCountry: z.string().optional().nullable(),
+  language: z.string().optional().default("en"),
+  profilePicture: z.string().optional().nullable(),
+});
+
 export const insertUserSchema = createInsertSchema(users, {
   shopProfile: shopProfileSchema.optional().nullable(), // Validate shopProfile if provided
-  // Add emailVerified to Zod schema for validation if needed, or rely on DB default
   emailVerified: z.boolean().optional().default(false),
-  // Add razorpayLinkedAccountId to Zod schema
   razorpayLinkedAccountId: z.string().optional().nullable(),
-  // Ensure password is a string, but it will be hashed before actual insertion
-  // Role should be validated against UserRole enum
   role: z.enum(["customer", "provider", "shop", "admin"]),
+  // Fields not directly updatable by generic user update, or handled by specific schemas
+  username: z.string().optional(), // Assuming username might be set at creation and not changed often
+  password: z.string().optional(), // Password updates should be handled separately and securely
 });
+
+export const insertCustomerSchema = insertUserSchema.pick({
+  username: true,
+  password: true,
+  role: true, // Default to 'customer' or ensure it's set
+  name: true,
+  phone: true,
+  email: true,
+  addressStreet: true,
+  addressCity: true,
+  addressState: true,
+  addressPostalCode: true,
+  addressCountry: true,
+  language: true,
+  profilePicture: true,
+  emailVerified: true, // Can be part of initial creation
+}).extend({
+  role: z.literal("customer"), // Ensure role is customer for this schema
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+export type CustomerProfile = z.infer<typeof customerProfileSchema>;
 
 // Update service schema validation
 export const insertServiceSchema = createInsertSchema(services, {
