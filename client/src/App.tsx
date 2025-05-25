@@ -37,6 +37,7 @@ import ShopPromotions from "@/pages/shop/ShopPromotions";
 import ShopReviews from "@/pages/shop/reviews";
 
 import NotFound from "@/pages/not-found";
+import ResetPasswordPage from "@/pages/reset-password-page"; // Import the new page
 
 function Router() {
   return (
@@ -78,6 +79,7 @@ function Router() {
       <ProtectedRoute path="/shop/reviews" component={ShopReviews} />
       
 
+      <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>

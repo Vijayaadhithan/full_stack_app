@@ -20,6 +20,11 @@ const translations = {
     register: "Register",
     username: "Username",
     password: "Password",
+    forgotPassword: "Forgot Password?", // Added
+    requestPasswordReset: "Request Password Reset", // Added
+    sendResetLink: "Send Reset Link", // Added
+    resetLinkSent: "If an account with that email exists, a password reset link has been sent.", // Added
+    backToLogin: "Back to Login", // Added
     role: "Role",
     name: "Full Name",
     phone: "Phone",
@@ -36,6 +41,11 @@ const translations = {
     register: "पंजीकरण",
     username: "उपयोगकर्ता नाम",
     password: "पासवर्ड",
+    forgotPassword: "पासवर्ड भूल गए?", // Added
+    requestPasswordReset: "पासवर्ड रीसेट का अनुरोध करें", // Added
+    sendResetLink: "रीसेट लिंक भेजें", // Added
+    resetLinkSent: "यदि उस ईमेल वाला कोई खाता मौजूद है, तो एक पासवर्ड रीसेट लिंक भेजा गया है।", // Added
+    backToLogin: "लॉगिन पर वापस जाएं", // Added
     role: "भूमिका",
     name: "पूरा नाम",
     phone: "फ़ोन",
@@ -52,6 +62,11 @@ const translations = {
     register: "பதிவு செய்ய",
     username: "பயனர்பெயர்",
     password: "கடவுச்சொல்",
+    forgotPassword: "கடவுச்சொல்லை மறந்துவிட்டீர்களா?", // Added
+    requestPasswordReset: "கடவுச்சொல் மீட்டமைப்பைக் கோருக", // Added
+    sendResetLink: "மீட்டமைப்பு இணைப்பை அனுப்பு", // Added
+    resetLinkSent: "அந்த மின்னஞ்சலுடன் ஒரு கணக்கு இருந்தால், கடவுச்சொல் மீட்டமைப்பு இணைப்பு அனுப்பப்பட்டுள்ளது.", // Added
+    backToLogin: "உள்நுழைவுக்குத் திரும்பு", // Added
     role: "பாத்திரம்",
     name: "முழு பெயர்",
     phone: "தொலைபேசி",
@@ -70,6 +85,10 @@ const loginSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
+const forgotPasswordSchema = z.object({ // Added
+  email: z.string().email("Valid email is required"), // Added
+}); // Added
+
 const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(6, "Password must be at least 6 characters"),
@@ -81,12 +100,15 @@ const registerSchema = z.object({
 
 // Types
 type LoginData = z.infer<typeof loginSchema>;
+type ForgotPasswordData = z.infer<typeof forgotPasswordSchema>; // Added
 type RegisterData = z.infer<typeof registerSchema>;
 
 export default function AuthPage() {
   const { loginMutation, registerMutation, user, isFetching: authIsFetching } = useAuth(); // Destructure isFetching
   const [, setLocation] = useLocation();
   const [language, setLanguage] = useState<keyof typeof translations>("en");
+  const [showForgotPassword, setShowForgotPassword] = useState(false); // Added
+  const [resetMessage, setResetMessage] = useState<string | null>(null); // Added
   const t = translations[language];
 
   const loginForm = useForm<LoginData>({
@@ -96,6 +118,10 @@ export default function AuthPage() {
   const registerForm = useForm<RegisterData>({
     resolver: zodResolver(registerSchema),
   });
+
+  const forgotPasswordForm = useForm<ForgotPasswordData>({ // Added
+    resolver: zodResolver(forgotPasswordSchema), // Added
+  }); // Added
 
   useEffect(() => {
     // When the auth page mounts, invalidate the user query to ensure fresh auth state.
@@ -115,6 +141,57 @@ export default function AuthPage() {
     }
     // Dependencies: user state, auth fetching state, and mutation pending states.
   }, [user, authIsFetching, loginMutation.isPending, registerMutation.isPending, setLocation]);
+
+  const handleRequestPasswordReset = async (data: ForgotPasswordData) => { // Added
+    setResetMessage(null); // Added
+    try { // Added
+      const response = await fetch('/api/request-password-reset', { // Added
+        method: 'POST', // Added
+        headers: { 'Content-Type': 'application/json' }, // Added
+        body: JSON.stringify(data), // Added
+      }); // Added
+      const result = await response.json(); // Added
+      if (response.ok) { // Added
+        setResetMessage(t.resetLinkSent); // Added
+        forgotPasswordForm.reset(); // Added
+      } else { // Added
+        setResetMessage(result.message || "An error occurred."); // Added
+      } // Added
+    } catch (error) { // Added
+      setResetMessage("An error occurred while requesting password reset."); // Added
+      console.error("Password reset request error:", error); // Added
+    } // Added
+  }; // Added
+
+  if (showForgotPassword) { // Added
+    return ( // Added
+      <div className="min-h-screen bg-background flex items-center justify-center p-4"> {/* Added */}
+        <Card className="w-full max-w-lg"> {/* Added */}
+          <CardHeader> {/* Added */}
+            <CardTitle className="text-2xl text-center">{t.requestPasswordReset}</CardTitle> {/* Added */}
+          </CardHeader> {/* Added */}
+          <CardContent> {/* Added */}
+            <form onSubmit={forgotPasswordForm.handleSubmit(handleRequestPasswordReset)} className="space-y-4"> {/* Added */}
+              <div className="space-y-1"> {/* Added */}
+                <Label htmlFor="email-forgot">{t.email}</Label> {/* Added */}
+                <Input id="email-forgot" type="email" {...forgotPasswordForm.register("email")} /> {/* Added */}
+                {forgotPasswordForm.formState.errors.email && ( /* Added */
+                  <p className="text-red-500 text-sm">{forgotPasswordForm.formState.errors.email.message}</p> /* Added */
+                )} {/* Added */}
+              </div> {/* Added */}
+              {resetMessage && <p className={`text-sm ${resetMessage === t.resetLinkSent ? 'text-green-600' : 'text-red-500'}`}>{resetMessage}</p>} {/* Added */}
+              <Button type="submit" className="w-full" disabled={forgotPasswordForm.formState.isSubmitting}> {/* Added */}
+                {forgotPasswordForm.formState.isSubmitting ? <Loader2 className="animate-spin" /> : t.sendResetLink} {/* Added */}
+              </Button> {/* Added */}
+              <Button type="button" variant="link" onClick={() => { setShowForgotPassword(false); setResetMessage(null); }} className="w-full"> {/* Added */}
+                {t.backToLogin} {/* Added */}
+              </Button> {/* Added */}
+            </form> {/* Added */}
+          </CardContent> {/* Added */}
+        </Card> {/* Added */}
+      </div> // Added
+    ); // Added
+  } // Added
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -173,6 +250,12 @@ export default function AuthPage() {
                     </p>
                   )}
                 </div>
+
+                <div className="text-right text-sm"> {/* Added */}
+                  <Button variant="link" type="button" onClick={() => setShowForgotPassword(true)} className="p-0 h-auto"> {/* Added */}
+                    {t.forgotPassword} {/* Added */}
+                  </Button> {/* Added */}
+                </div> {/* Added */}
 
                 <Button
                   type="submit"

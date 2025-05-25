@@ -63,7 +63,6 @@ export const translations = {
     'health_fitness': 'Health & Fitness',
     'education_training': 'Education & Training',
     'basic_info': 'Basic Information',
-    'availability': 'Availability',
     'scheduling': 'Scheduling',
     'max_daily_bookings': 'Maximum Daily Bookings',
     'service_created_successfully': 'Service created successfully',
@@ -119,19 +118,10 @@ export const translations = {
     // Navigation
     'dashboard': 'Dashboard',
     'products': 'Products',
-    'orders': 'Orders',
     'reviews': 'Reviews',
     'analytics': 'Analytics',
     'inventory': 'Inventory',
     'promotions': 'Promotions',
-    //Shop
-    'add_product':'Add Product',
-    'edit_product':'Edit Product',
-    'product_name':'Product Name',
-    'product_description':'Description',
-    'product_price':'Price',
-    'product_stock':'Stock',
-    'product_category':'Category',
     //Bookings
     'accept':'Accept',
     'reject':'Reject',
@@ -174,6 +164,23 @@ export const translations = {
       'friday': 'Friday',
       'saturday': 'Saturday',
       'sunday': 'Sunday'
+    },
+    'resetPassword': {
+      'title': 'Reset Your Password',
+      'description': 'Enter your new password below.',
+      'newPasswordLabel': 'New Password',
+      'confirmPasswordLabel': 'Confirm New Password',
+      'resetButton': 'Reset Password',
+      'resettingButton': 'Resetting...',
+      'successTitle': 'Password Reset Successful',
+      'successMessage': 'Your password has been successfully reset.',
+      'redirectingToLogin': 'Redirecting to login...',
+      'errorTitle': 'Password Reset Failed',
+      'errorMessage': 'Could not reset your password. Please try again.',
+      'invalidOrMissingToken': 'Invalid or missing password reset token.',
+      'networkError': 'A network error occurred. Please check your connection and try again.',
+      'invalidLink': 'Invalid or expired password reset link.',
+      'backToLogin': 'Back to Login'
     },
   },
   hi: {
@@ -251,7 +258,6 @@ export const translations = {
     'health_fitness': 'स्वास्थ्य और फिटनेस', 
     'education_training': 'शिक्षा और प्रशिक्षण', 
     'basic_info': 'मूल जानकारी', 
-    'availability': 'उपलब्धता', 
     'scheduling': 'शेड्यूलिंग', 
     'max_daily_bookings': 'अधिकतम दैनिक बुकिंग', 
     'service_created_successfully': 'सेवा सफलतापूर्वक बनाई गई', 
@@ -293,18 +299,13 @@ export const translations = {
     'mark_as_read': 'पढ़ा हुआ चिह्नित करें', 
 
     // Navigation
+    // Navigation
     'dashboard': 'डैशबोर्ड',
     'products': 'उत्पाद',
-    'orders': 'ऑर्डर',
     'reviews': 'समीक्षाएं',
     'analytics': 'विश्लेषण',
     'inventory': 'इन्वेंटरी',
     'promotions': 'प्रमोशन',
-    //Shop
-    'add_product':'उत्पाद जोड़ें',
-    'edit_product':'उत्पाद संपादित करें',
-    'product_name':'उत्पाद का नाम',
-    'product_description':'विवरण',
     'product_price':'मूल्य',
     'product_stock':'स्टॉक',
     'product_category':'श्रेणी',
@@ -350,6 +351,23 @@ export const translations = {
       'friday': 'शुक्रवार',
       'saturday': 'शनिवार',
       'sunday': 'रविवार'
+    },
+    'resetPassword': {
+      'title': 'अपना पासवर्ड रीसेट करें',
+      'description': 'नीचे अपना नया पासवर्ड दर्ज करें।',
+      'newPasswordLabel': 'नया पासवर्ड',
+      'confirmPasswordLabel': 'नए पासवर्ड की पुष्टि करें',
+      'resetButton': 'पासवर्ड रीसेट करें',
+      'resettingButton': 'रीसेट हो रहा है...',
+      'successTitle': 'पासवर्ड सफलतापूर्वक रीसेट हो गया',
+      'successMessage': 'आपका पासवर्ड सफलतापूर्वक रीसेट कर दिया गया है।',
+      'redirectingToLogin': 'लॉगिन पर रीडायरेक्ट किया जा रहा है...',
+      'errorTitle': 'पासवर्ड रीसेट विफल',
+      'errorMessage': 'आपका पासवर्ड रीसेट नहीं किया जा सका। कृपया पुनः प्रयास करें।',
+      'invalidOrMissingToken': 'अमान्य या अनुपलब्ध पासवर्ड रीसेट टोकन।',
+      'networkError': 'एक नेटवर्क त्रुटि हुई। कृपया अपने कनेक्शन की जांच करें और पुनः प्रयास करें।',
+      'invalidLink': 'अमान्य या समाप्त हो चुका पासवर्ड रीसेट लिंक।',
+      'backToLogin': 'लॉगिन पर वापस जाएं'
     },
   },
   ta: {
@@ -411,6 +429,7 @@ export const translations = {
 
 
     // Service Provider
+    // Service Provider
     'my_services': 'எனது சேவைகள்', 
     'add_service': 'சேவை சேர்',
     'edit_service': 'சேவையைத் திருத்து',
@@ -427,12 +446,10 @@ export const translations = {
     'health_fitness': 'சுகாதாரம் மற்றும் உடற்பயிற்சி', 
     'education_training': 'கல்வி மற்றும் பயிற்சி', 
     'basic_info': 'அடிப்படை தகவல்', 
-    'availability': 'கிடைக்கும் தன்மை', 
     'scheduling': 'அட்டவணை', 
     'max_daily_bookings': 'அதிகபட்ச தினசரி முன்பதிவுகள்', 
     'service_created_successfully': 'சேவை வெற்றிகரமாக உருவாக்கப்பட்டது', 
     'service_updated_successfully': 'சேவை வெற்றிகரமாக புதுப்பிக்கப்பட்டது', 
-
     // Order Management
     'order_management': 'ஆர்டர் மேலாண்மை', 
     'orders': 'ஆர்டர்கள்',
@@ -473,17 +490,12 @@ export const translations = {
 
     // Navigation
     'dashboard': 'டாஷ்போர்டு',
+    // Navigation
     'products': 'பொருட்கள்',
-    'orders': 'ஆர்டர்கள்',
     'reviews': 'விமர்சனங்கள்',
     'analytics': 'பகுப்பாய்வு',
     'inventory': 'சரக்கு',
     'promotions': 'விளம்பரங்கள்',
-    //Shop
-    'add_product':'பொருள் சேர்',
-    'edit_product':'பொருளைத் திருத்து',
-    'product_name':'பொருளின் பெயர்',
-    'product_description':'விளக்கம்',
     'product_price':'விலை',
     'product_stock':'கையிருப்பு',
     'product_category':'வகை',
@@ -529,6 +541,23 @@ export const translations = {
       'friday': 'வெள்ளி',
       'saturday': 'சனி',
       'sunday': 'ஞாயிறு'
+    },
+    'resetPassword': {
+      'title': 'உங்கள் கடவுச்சொல்லை மீட்டமைக்கவும்',
+      'description': 'கீழே உங்கள் புதிய கடவுச்சொல்லை உள்ளிடவும்.',
+      'newPasswordLabel': 'புதிய கடவுச்சொல்',
+      'confirmPasswordLabel': 'புதிய கடவுச்சொல்லை உறுதிப்படுத்தவும்',
+      'resetButton': 'கடவுச்சொல்லை மீட்டமைக்கவும்',
+      'resettingButton': 'மீட்டமைக்கப்படுகிறது...',
+      'successTitle': 'கடவுச்சொல் மீட்டமைப்பு வெற்றி',
+      'successMessage': 'உங்கள் கடவுச்சொல் வெற்றிகரமாக மீட்டமைக்கப்பட்டது.',
+      'redirectingToLogin': 'உள்நுழைவுக்கு திருப்பி விடப்படுகிறது...',
+      'errorTitle': 'கடவுச்சொல் மீட்டமைப்பு தோல்வியுற்றது',
+      'errorMessage': 'உங்கள் கடவுச்சொல்லை மீட்டமைக்க முடியவில்லை. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.',
+      'invalidOrMissingToken': 'தவறான அல்லது காணாமல் போன கடவுச்சொல் மீட்டமைப்பு டோக்கன்.',
+      'networkError': 'ஒரு பிணையப் பிழை ஏற்பட்டது. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.',
+      'invalidLink': 'தவறான அல்லது காலாவதியான கடவுச்சொல் மீட்டமைப்பு இணைப்பு.',
+      'backToLogin': 'உள்நுழைவுக்குத் திரும்பு'
     },
   }
 };

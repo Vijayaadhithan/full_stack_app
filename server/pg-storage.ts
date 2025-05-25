@@ -1,6 +1,7 @@
 import session from "express-session";
 import pgSession from "connect-pg-simple";
 import { db } from "./db";
+import { sendEmail, getGenericNotificationEmailContent } from './emailService'; // Added for sending emails
 import {
   User, InsertUser,
   Service, InsertService,
@@ -948,8 +949,33 @@ export class PostgresStorage implements IStorage {
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
   async createNotification(notification: InsertNotification): Promise<Notification> {
-    const result = await db.insert(notifications).values({ ...notification, type: notification.type as "shop" | "booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request" }).returning();
-    return result[0];
+    const result = await db.insert(notifications).values({ ...notification, type: notification.type as any }).returning();
+    const newNotification = result[0];
+
+    // Define critical notification types that should trigger an email
+    const criticalNotificationTypes: string[] = ["account_security", "payment_failed", "service_unavailable", "booking_expired"];
+
+    if (newNotification && criticalNotificationTypes.includes(newNotification.type)) {
+      try {
+        if (newNotification.userId === null) {
+          throw new Error("Invalid userId: null");
+        }
+        const user = await this.getUser(newNotification.userId);
+        if (user && user.email) {
+          const emailContent = getGenericNotificationEmailContent(user.name || user.username, newNotification.title, newNotification.message);
+          await sendEmail({
+            to: user.email,
+            subject: emailContent.subject,
+            text: emailContent.text,
+            html: emailContent.html,
+          });
+        }
+      } catch (emailError) {
+        console.error(`Error sending critical notification email for notification ID ${newNotification.id}:`, emailError);
+        // Do not let email failure prevent notification creation
+      }
+    }
+    return newNotification;
   }
 
   async getNotificationsByUser(userId: number): Promise<Notification[]> {
@@ -1170,8 +1196,22 @@ export class PostgresStorage implements IStorage {
     console.log(`SMS to ${phone}: ${message}`);
   }
 
-  async sendEmailNotification(email: string, subject: string, message: string): Promise<void> {
-    console.log(`Email to ${email}: ${subject} - ${message}`);
+  async sendEmailNotification(emailAddress: string, subject: string, message: string, userName?: string): Promise<void> {
+    try {
+      const user = await this.getUserByEmail(emailAddress);
+      const recipientName = userName || (user ? (user.name || user.username) : 'User');
+      const emailContent = getGenericNotificationEmailContent(recipientName, subject, message);
+      await sendEmail({
+        to: emailAddress,
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html,
+      });
+      console.log(`Email notification sent to ${emailAddress} with subject "${subject}"`);
+    } catch (error) {
+      console.error(`Failed to send email notification to ${emailAddress}:`, error);
+      // Optionally, rethrow or handle as per application's error handling strategy
+    }
   }
 
   async updateOrderStatus(orderId: number, status: OrderStatus, trackingInfo?: string): Promise<Order> {

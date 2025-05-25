@@ -6,6 +6,7 @@ import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
+import { sendEmail, getWelcomeEmailContent } from './emailService'; // Added for sending emails
 import { User as SelectUser } from "@shared/schema";
 import { insertUserSchema } from "@shared/schema";
 import dotenv from 'dotenv';
@@ -33,7 +34,7 @@ declare global {
 
 const scryptAsync = promisify(scrypt);
 
-async function hashPassword(password: string) {
+export async function hashPasswordInternal(password: string) { // Exported for use in password reset
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString("hex")}.${salt}`;
@@ -154,12 +155,22 @@ export function setupAuth(app: Express) {
             // However, the current schema requires a password. We'll create a placeholder.
             const userToCreate = {
               ...newUser,
-              password: await hashPassword(randomBytes(16).toString('hex')),
+              password: await hashPasswordInternal(randomBytes(16).toString('hex')),
               phone: "" // Ensure phone is provided or handled if it's a required field with no default
             };
             console.log('[Google OAuth] Creating user with data:', JSON.stringify(userToCreate, null, 2));
             const createdUser = await storage.createUser(userToCreate);
             console.log('[Google OAuth] Successfully created new user:', JSON.stringify(createdUser, null, 2));
+
+            // Send welcome email (no verification link needed as Google verifies email)
+            const emailContent = getWelcomeEmailContent(createdUser.name || createdUser.username);
+            await sendEmail({
+              to: createdUser.email,
+              subject: emailContent.subject,
+              text: emailContent.text,
+              html: emailContent.html,
+            });
+
             return done(null, createdUser);
           } catch (err) {
             console.error('[Google OAuth] Error during Google authentication:', err);
@@ -186,7 +197,7 @@ app.post("/api/register", async (req, res, next) => {
 
     const validatedData = validationResult.data;
 
-    const existingUser = await storage.getUserByUsername(validatedData.username);
+    const existingUser = await storage.getUserByUsername(validatedData.username!);
     if (existingUser) {
       return res.status(400).send("Username already exists");
     }
@@ -195,16 +206,63 @@ app.post("/api/register", async (req, res, next) => {
       return res.status(400).json({ message: "Shop profile is required for shop role" });
     }
 
-    const user = await storage.createUser({
-      ...req.body,
-      password: await hashPassword(req.body.password),
+    const userToCreate = {
+      ...validatedData,
+      password: await hashPasswordInternal(validatedData.password!),
+            emailVerified: false, // Email not verified yet for local registration
+    };
+
+    const user = await storage.createUser(userToCreate);
+
+    // Send welcome email with verification link
+    // TODO: Generate a proper verification token and link
+    const verificationToken = randomBytes(32).toString('hex');
+    // Store this token with user ID and expiry in DB for verification
+    // For now, just a placeholder link structure
+    const verificationLink = `${process.env.APP_BASE_URL || 'http://localhost:5000'}/verify-email?token=${verificationToken}&userId=${user.id}`;
+    
+    const emailContent = getWelcomeEmailContent(user.name || user.username, verificationLink);
+    await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      text: emailContent.text,
+      html: emailContent.html,
     });
 
     req.login(user, (err) => {
       if (err) return next(err);
-      res.status(201).json(user);
+      return res.status(201).json(user);
     });
   });
+
+// TODO: Add a new route for email verification
+app.get("/api/verify-email", async (req, res) => {
+  const { token, userId } = req.query;
+  if (!token || !userId) {
+    return res.status(400).send("Missing verification token or user ID.");
+  }
+  // TODO: Implement token verification logic against stored token in DB
+  // 1. Find user by userId
+  // 2. Check if token matches and is not expired
+  // 3. If valid, mark user's email as verified (e.g., user.emailVerified = true)
+  // 4. Delete or invalidate the token
+  // For now, simulate success:
+  try {
+    const id = parseInt(userId as string);
+    const user = await storage.getUser(id);
+    if (user /* && verifyTokenInDB(token, id) */) { // Placeholder for actual token verification
+      await storage.updateUser(id, { emailVerified: true });
+      // Redirect to a success page or login page
+      return res.send("Email verified successfully! You can now log in."); 
+    } else {
+      return res.status(400).send("Invalid or expired verification link.");
+    }
+  } catch (error) {
+    console.error("Email verification error:", error);
+    return res.status(500).send("Error verifying email.");
+  }
+});
+
 
   app.post("/api/login", passport.authenticate("local"), (req, res) => {
     res.status(200).json(req.user);

@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth } from "./auth";
+import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
+import { sendEmail, getPasswordResetEmailContent, getOrderConfirmationEmailContent, getBookingConfirmationEmailContent, getBookingUpdateEmailContent } from './emailService'; // Added for sending emails
 import { storage } from "./storage";
 import { z } from "zod";
 import {
@@ -80,6 +81,14 @@ const razorpay = new Razorpay({
 // Log Razorpay configuration status
 console.log(`Razorpay configuration status: ${isRazorpayConfigured ? 'Configured' : 'Not properly configured'}`);
 
+// Store password reset tokens in memory (for simplicity, in a real app use a database)
+interface PasswordResetToken {
+  userId: number;
+  token: string;
+  expiresAt: Date;
+}
+const passwordResetTokens: PasswordResetToken[] = [];
+
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -98,6 +107,74 @@ function requireRole(roles: string[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Password Reset Routes
+  app.post("/api/request-password-reset", async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    try {
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Important: Don't reveal if the email exists or not for security reasons
+        console.log(`Password reset requested for non-existent email: ${email}`);
+        return res.status(200).json({ message: "If an account with that email exists, a password reset link has been sent." });
+      }
+
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 3600000); // Token expires in 1 hour
+
+      passwordResetTokens.push({ userId: user.id, token, expiresAt });
+
+      const resetLink = `${process.env.APP_BASE_URL || 'http://localhost:5000'}/reset-password?token=${token}`;
+      const emailContent = getPasswordResetEmailContent(user.name || user.username, resetLink);
+      
+      await sendEmail({
+        to: user.email,
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html,
+      });
+
+      return res.status(200).json({ message: "If an account with that email exists, a password reset link has been sent." });
+    } catch (error) {
+      console.error("Error requesting password reset:", error);
+      return res.status(500).json({ message: "Error processing password reset request" });
+    }
+  });
+
+  app.post("/api/reset-password", async (req, res) => {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: "Token and new password are required" });
+    }
+
+    try {
+      const tokenEntryIndex = passwordResetTokens.findIndex(entry => entry.token === token && entry.expiresAt > new Date());
+      if (tokenEntryIndex === -1) {
+        return res.status(400).json({ message: "Invalid or expired password reset token" });
+      }
+
+      const { userId } = passwordResetTokens[tokenEntryIndex];
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const hashedPassword = await hashPasswordInternal(newPassword); // Use the exported hash function
+      await storage.updateUser(userId, { password: hashedPassword });
+
+      // Invalidate the token after use
+      passwordResetTokens.splice(tokenEntryIndex, 1);
+
+      return res.status(200).json({ message: "Password has been reset successfully" });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      return res.status(500).json({ message: "Error resetting password" });
+    }
+  });
+
   setupAuth(app);
 
   // Booking Notification System
@@ -953,6 +1030,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `You have a new booking request for ${service.name}`,
         });
 
+        // Send booking confirmation emails
+        try {
+          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
+          const provider = service.providerId !== null ? await storage.getUser(service.providerId) : undefined;
+
+          if (customer && provider) {
+            // Email to customer
+            const customerEmail = getBookingConfirmationEmailContent(customer.name || customer.username, {
+              bookingId: booking.id,
+              serviceName: service.name,
+              bookingDate: booking.bookingDate.toISOString(),
+              providerName: provider.name || provider.username,
+            });
+            await sendEmail({
+              to: customer.email,
+              subject: customerEmail.subject,
+              text: customerEmail.text,
+              html: customerEmail.html,
+            });
+
+            // Email to provider
+            const providerEmail = getBookingConfirmationEmailContent(provider.name || provider.username, {
+              bookingId: booking.id,
+              serviceName: service.name,
+              bookingDate: booking.bookingDate.toISOString(),
+              customerName: customer.name || customer.username,
+            }, true);
+            await sendEmail({
+              to: provider.email,
+              subject: providerEmail.subject,
+              text: providerEmail.text,
+              html: providerEmail.html,
+            });
+          }
+        } catch (emailError) {
+          console.error("Error sending booking confirmation emails:", emailError);
+        }
+
         // Return booking and order details for frontend payment initiation
         res.status(201).json({ booking, order, paymentRequired: true });
 
@@ -977,6 +1092,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `You have a new booking request for ${service.name}`,
         });
 
+        // Send booking confirmation emails (fallback case)
+        try {
+          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
+          const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
+
+          if (customer && provider) {
+            // Email to customer
+            const customerEmail = getBookingConfirmationEmailContent(customer.name || customer.username, {
+              bookingId: booking.id,
+              serviceName: service.name,
+              bookingDate: booking.bookingDate.toISOString(),
+              providerName: provider.name || provider.username,
+            });
+            await sendEmail({
+              to: customer.email,
+              subject: customerEmail.subject,
+              text: customerEmail.text,
+              html: customerEmail.html,
+            });
+
+            // Email to provider
+            const providerEmail = getBookingConfirmationEmailContent(provider.name || provider.username, {
+              bookingId: booking.id,
+              serviceName: service.name,
+              bookingDate: booking.bookingDate.toISOString(),
+              customerName: customer.name || customer.username,
+            }, true);
+            await sendEmail({
+              to: provider.email,
+              subject: providerEmail.subject,
+              text: providerEmail.text,
+              html: providerEmail.html,
+            });
+          }
+        } catch (emailError) {
+          console.error("Error sending booking confirmation emails (fallback):", emailError);
+        }
         // Inform frontend about the fallback
         res.status(201).json({ booking, paymentRequired: false, message: "Booking request sent. Payment integration failed." });
       }
@@ -1020,6 +1172,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status,
         rejectionReason: status === "rejected" ? rejectionReason : null,
       });
+
+      // Send booking update email to customer
+      try {
+        const customer = await storage.getUser(updatedBooking.customerId!);
+        const serviceDetails = await storage.getService(updatedBooking.serviceId!)
+        if (customer && serviceDetails) {
+          const emailContent = getBookingUpdateEmailContent(
+            customer.name || customer.username,
+            updatedBooking.id,
+            serviceDetails.name,
+            updatedBooking.status,
+            false
+          );
+          await sendEmail({
+            to: customer.email,
+            subject: emailContent.subject,
+            text: emailContent.text,
+            html: emailContent.html,
+          });
+        }
+      } catch (emailError) {
+        console.error("Error sending booking update email:", emailError);
+      }
 
       // Create notification for customer
       const notificationMessage = status === "rejected"
@@ -1800,6 +1975,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Clear cart after order creation
       await storage.clearCart(req.user!.id);
+
+      // Send order confirmation emails
+      try {
+        const customer = req.user!;
+        if (shopId === null) {
+          return res.status(400).json({ message: "Shop information is missing" });
+        }
+        const shop = await storage.getUser(shopId); // Assuming shop owner is a user
+
+        if (customer) {
+          const customerEmailContent = getOrderConfirmationEmailContent(customer.name || customer.username, { orderId: newOrder.id, total: newOrder.total, items });
+          await sendEmail({
+            to: customer.email,
+            subject: customerEmailContent.subject,
+            text: customerEmailContent.text,
+            html: customerEmailContent.html,
+          });
+        }
+
+        if (shop) {
+          const shopEmailContent = getOrderConfirmationEmailContent(shop.name || shop.username, { orderId: newOrder.id, total: newOrder.total, items, customerName: customer.name || customer.username }, true);
+          await sendEmail({
+            to: shop.email,
+            subject: shopEmailContent.subject,
+            text: shopEmailContent.text,
+            html: shopEmailContent.html,
+          });
+        }
+      } catch (emailError) {
+        console.error("Error sending order confirmation emails:", emailError);
+        // Don't let email failure break the order creation flow
+      }
 
       res.status(201).json({ order: newOrder, razorpayOrder: order });
     } catch (error) {
