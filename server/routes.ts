@@ -1,7 +1,18 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
-import { sendEmail, getPasswordResetEmailContent, getOrderConfirmationEmailContent, getBookingConfirmationEmailContent, getBookingUpdateEmailContent } from './emailService'; // Added for sending emails
+import { 
+  sendEmail, 
+  getPasswordResetEmailContent, 
+  getOrderConfirmationEmailContent, 
+  getBookingConfirmationEmailContent, 
+  getBookingUpdateEmailContent,
+  getBookingRequestPendingEmailContent,
+  getBookingAcceptedEmailContent,
+  getBookingRejectedEmailContent,
+  getServicePaymentConfirmedCustomerEmailContent,
+  getServiceProviderPaymentReceivedEmailContent
+} from './emailService'; // Added for sending emails
 import { storage } from "./storage";
 import { z } from "zod";
 import {
@@ -1030,42 +1041,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `You have a new booking request for ${service.name}`,
         });
 
-        // Send booking confirmation emails
+        // Send "New Booking Request" email to provider and "Booking Request Pending" to customer
         try {
           const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
           const provider = service.providerId !== null ? await storage.getUser(service.providerId) : undefined;
 
           if (customer && provider) {
-            // Email to customer
-            const customerEmail = getBookingConfirmationEmailContent(customer.name || customer.username, {
-              bookingId: booking.id,
-              serviceName: service.name,
-              bookingDate: booking.bookingDate.toISOString(),
-              providerName: provider.name || provider.username,
-            });
-            await sendEmail({
-              to: customer.email,
-              subject: customerEmail.subject,
-              text: customerEmail.text,
-              html: customerEmail.html,
-            });
-
-            // Email to provider
-            const providerEmail = getBookingConfirmationEmailContent(provider.name || provider.username, {
-              bookingId: booking.id,
-              serviceName: service.name,
-              bookingDate: booking.bookingDate.toISOString(),
-              customerName: customer.name || customer.username,
-            }, true);
+            // Email to provider: "New Booking Request"
+            const providerBookingEmailContent = getBookingConfirmationEmailContent(
+              provider.name || provider.username,
+              {
+                bookingId: booking.id.toString(), // Ensure bookingId is a string
+                customerName: customer.name || customer.username,
+                serviceName: service.name,
+                bookingDate: booking.bookingDate, // Pass Date object
+              }
+              // customer // Pass full customer object - Removed extra argument
+            );
             await sendEmail({
               to: provider.email,
-              subject: providerEmail.subject,
-              text: providerEmail.text,
-              html: providerEmail.html,
+              subject: providerBookingEmailContent.subject,
+              text: providerBookingEmailContent.text,
+              html: providerBookingEmailContent.html,
             });
+            console.log(`[API] 'New Booking Request' email sent to provider: ${provider.email}`);
+
+            // Email to customer: "Booking Request Pending"
+            const customerPendingEmailContent = getBookingRequestPendingEmailContent(
+              customer.name || customer.username,
+              {
+                serviceName: service.name,
+                bookingDate: booking.bookingDate, // Pass Date object
+              }
+            );
+            await sendEmail({
+              to: customer.email,
+              subject: customerPendingEmailContent.subject,
+              text: customerPendingEmailContent.text,
+              html: customerPendingEmailContent.html,
+            });
+            console.log(`[API] 'Booking Request Pending' email sent to customer: ${customer.email}`);
           }
         } catch (emailError) {
-          console.error("Error sending booking confirmation emails:", emailError);
+          console.error("Error sending booking request emails:", emailError);
         }
 
         // Return booking and order details for frontend payment initiation
@@ -1081,7 +1099,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: "pending",
           paymentStatus: "pending",
           serviceLocation: serviceLocation, // Store service location
-          // Remove providerAddress field
         });
 
         // Create notification for provider
@@ -1092,42 +1109,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `You have a new booking request for ${service.name}`,
         });
 
-        // Send booking confirmation emails (fallback case)
+        // Send "New Booking Request" (provider) and "Booking Request Pending" (customer) emails (fallback case)
         try {
           const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
           const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
 
           if (customer && provider) {
-            // Email to customer
-            const customerEmail = getBookingConfirmationEmailContent(customer.name || customer.username, {
-              bookingId: booking.id,
-              serviceName: service.name,
-              bookingDate: booking.bookingDate.toISOString(),
-              providerName: provider.name || provider.username,
-            });
-            await sendEmail({
-              to: customer.email,
-              subject: customerEmail.subject,
-              text: customerEmail.text,
-              html: customerEmail.html,
-            });
-
-            // Email to provider
-            const providerEmail = getBookingConfirmationEmailContent(provider.name || provider.username, {
-              bookingId: booking.id,
-              serviceName: service.name,
-              bookingDate: booking.bookingDate.toISOString(),
-              customerName: customer.name || customer.username,
-            }, true);
+            const providerBookingEmailContent = getBookingConfirmationEmailContent(
+              provider.name || provider.username,
+              {
+                bookingId: booking.id.toString(), // Ensure bookingId is a string
+                customerName: customer.name || customer.username,
+                serviceName: service.name,
+                bookingDate: booking.bookingDate,
+              }
+              // customer - Removed extra argument
+            );
             await sendEmail({
               to: provider.email,
-              subject: providerEmail.subject,
-              text: providerEmail.text,
-              html: providerEmail.html,
+              subject: providerBookingEmailContent.subject,
+              text: providerBookingEmailContent.text,
+              html: providerBookingEmailContent.html,
             });
+            console.log(`[API] 'New Booking Request' email sent to provider (fallback): ${provider.email}`);
+
+            const customerPendingEmailContent = getBookingRequestPendingEmailContent(
+              customer.name || customer.username,
+              {
+                serviceName: service.name,
+                bookingDate: booking.bookingDate,
+              }
+            );
+            await sendEmail({
+              to: customer.email,
+              subject: customerPendingEmailContent.subject,
+              text: customerPendingEmailContent.text,
+              html: customerPendingEmailContent.html,
+            });
+            console.log(`[API] 'Booking Request Pending' email sent to customer (fallback): ${customer.email}`);
           }
         } catch (emailError) {
-          console.error("Error sending booking confirmation emails (fallback):", emailError);
+          console.error("Error sending booking request emails (fallback):", emailError);
         }
         // Inform frontend about the fallback
         res.status(201).json({ booking, paymentRequired: false, message: "Booking request sent. Payment integration failed." });
@@ -1173,27 +1195,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rejectionReason: status === "rejected" ? rejectionReason : null,
       });
 
-      // Send booking update email to customer
+      // Send appropriate email based on status
       try {
         const customer = await storage.getUser(updatedBooking.customerId!);
+        const provider = await storage.getUser(service.providerId!);
         const serviceDetails = await storage.getService(updatedBooking.serviceId!)
-        if (customer && serviceDetails) {
-          const emailContent = getBookingUpdateEmailContent(
-            customer.name || customer.username,
-            updatedBooking.id,
-            serviceDetails.name,
-            updatedBooking.status,
-            false
-          );
-          await sendEmail({
-            to: customer.email,
-            subject: emailContent.subject,
-            text: emailContent.text,
-            html: emailContent.html,
-          });
+
+        if (customer && serviceDetails && provider) {
+          if (updatedBooking.status === "accepted") {
+            const acceptedEmailContent = getBookingAcceptedEmailContent(
+              customer.name || customer.username,
+              {
+                serviceName: serviceDetails.name,
+                bookingDate: updatedBooking.bookingDate,
+                // location: serviceDetails.location, // Example: if location is needed
+              },
+              provider // Pass provider details
+            );
+            await sendEmail({
+              to: customer.email,
+              subject: acceptedEmailContent.subject,
+              text: acceptedEmailContent.text,
+              html: acceptedEmailContent.html,
+            });
+            console.log(`[API] 'Booking Accepted' email sent to customer: ${customer.email}`);
+          } else if (updatedBooking.status === "rejected") {
+            const rejectedEmailContent = getBookingRejectedEmailContent(
+              customer.name || customer.username,
+              {
+                // Removed bookingId as it is not defined in the expected type
+                serviceName: serviceDetails.name,
+                bookingDate: updatedBooking.bookingDate,
+              },
+              updatedBooking.rejectionReason ?? undefined
+            );
+            await sendEmail({
+              to: customer.email,
+              subject: rejectedEmailContent.subject,
+              text: rejectedEmailContent.text,
+              html: rejectedEmailContent.html,
+            });
+            console.log(`[API] 'Booking Rejected' email sent to customer: ${customer.email}`);
+          }
         }
       } catch (emailError) {
-        console.error("Error sending booking update email:", emailError);
+        console.error("Error sending booking status update email:", emailError);
       }
 
       // Create notification for customer
@@ -1508,25 +1554,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // We'll need to handle this case manually or implement a retry mechanism
       }
       
-      // Create notification for service provider
+      const customer = await storage.getUser(booking.customerId!); // Add non-null assertion
+      const provider = await storage.getUser(service.providerId!); // Add non-null assertion
+
+      if (!customer || !provider) {
+        console.error(`[API] Customer or Provider not found for booking ${bookingId} during payment. Skipping payment emails.`);
+      } else {
+        // Send "Service Payment Confirmed" email to customer
+        const customerPaymentEmailContent = getServicePaymentConfirmedCustomerEmailContent(
+          customer.name || customer.username,
+          {
+            bookingId: updatedBooking.id.toString(), // Ensure bookingId is a string
+            serviceName: service.name,
+            bookingDate: updatedBooking.bookingDate,
+          },
+          {
+            amountPaid: service.price, // Corrected property name and use service.price
+            paymentId: razorpayPaymentId || booking.razorpayPaymentId!,
+          }
+        );
+        await sendEmail({
+          to: customer.email,
+          subject: customerPaymentEmailContent.subject,
+          text: customerPaymentEmailContent.text,
+          html: customerPaymentEmailContent.html,
+        });
+        console.log(`[API] 'Service Payment Confirmed' email sent to customer: ${customer.email}`);
+
+        // Send "Payment Received for Service" email to provider
+        const providerPaymentEmailContent = getServiceProviderPaymentReceivedEmailContent(
+          provider.name || provider.username,
+          {
+            bookingId: updatedBooking.id.toString(), // Ensure bookingId is a string
+            serviceName: service.name,
+            bookingDate: updatedBooking.bookingDate,
+          },
+          {
+            name: customer.name || customer.username, // Corrected property name for customerDetails
+          },
+          {
+            amountReceived: service.price, // Corrected property name and use service.price
+            paymentId: razorpayPaymentId || booking.razorpayPaymentId!,
+          }
+        );
+        await sendEmail({
+          to: provider.email,
+          subject: providerPaymentEmailContent.subject,
+          text: providerPaymentEmailContent.text,
+          html: providerPaymentEmailContent.html,
+        });
+        console.log(`[API] 'Payment Received for Service' email sent to provider: ${provider.email}`);
+      }
+
+      // Create notification for service provider (in-app)
       await storage.createNotification({
         userId: service.providerId,
         type: "payment",
         title: "Payment Received",
         message: `Payment for booking #${bookingId} (${service.name}) has been received.`
       });
+      console.log(`[API] Payment notification (in-app) sent to provider: ID=${service.providerId}`);
       
-      console.log(`[API] Payment notification sent to provider: ID=${service.providerId}`);
-      
-      // Create notification for customer
+      // Create notification for customer (in-app)
       await storage.createNotification({
         userId: booking.customerId,
         type: "payment",
         title: "Payment Successful",
         message: `Your payment for ${service.name} has been processed successfully. Thank you for using our service!`
       });
-      
-      console.log(`[API] Payment confirmation notification sent to customer: ID=${booking.customerId}`);
+      console.log(`[API] Payment confirmation notification (in-app) sent to customer: ID=${booking.customerId}`);
 
       res.json({
         success: true,

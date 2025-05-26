@@ -125,48 +125,81 @@ The IndianBudgetTracker Team`;
   return { subject, text, html, to: '' };
 }
 
+import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+
 export function getOrderConfirmationEmailContent(name: string, orderDetails: any, forShopOwner: boolean = false): MailOptions {
   const subject = forShopOwner ? 'New Order Received!' : 'Your IndianBudgetTracker Order Confirmation';
-  // Customize orderDetails formatting as needed
-  const orderDetailsText = JSON.stringify(orderDetails, null, 2);
+  // Improved HTML formatting for order details
+  let orderDetailsHtml = '<ul>';
+  for (const key in orderDetails) {
+    if (Object.prototype.hasOwnProperty.call(orderDetails, key)) {
+      const value = key.toLowerCase().includes('date') && orderDetails[key] 
+                    ? formatIndianDisplay(new Date(orderDetails[key]), 'datetime') 
+                    : orderDetails[key];
+      orderDetailsHtml += `<li><strong>${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</strong> ${value}</li>`;
+    }
+  }
+  orderDetailsHtml += '</ul>';
+
   const text = `Hi ${name},
 
 ${forShopOwner ? 'A new order has been placed through your shop.' : 'Thank you for your order on IndianBudgetTracker!'}
 
 Order Details:
-${orderDetailsText}
+${JSON.stringify(orderDetails, null, 2)}
 
 Thanks,
 The IndianBudgetTracker Team`;
   const html = `<p>Hi ${name},</p>
 <p>${forShopOwner ? 'A new order has been placed through your shop.' : 'Thank you for your order on IndianBudgetTracker!'}</p>
-<p><strong>Order Details:</strong></p><pre>${orderDetailsText}</pre>
+<p><strong>Order Details:</strong></p>${orderDetailsHtml}
 <p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
   return { subject, text, html, to: '' };
 }
 
-export function getBookingConfirmationEmailContent(name: string, bookingDetails: any, forProvider: boolean = false): MailOptions {
-  const subject = forProvider ? 'New Booking Request!' : 'Your IndianBudgetTracker Booking Confirmation';
-  const bookingDetailsText = JSON.stringify(bookingDetails, null, 2);
-  const text = `Hi ${name},
+// This function is now primarily for the provider's "New Booking Request"
+export function getBookingConfirmationEmailContent(providerName: string, bookingDetails: { bookingId: string; customerName: string; serviceName: string; bookingDate: string | Date; }): MailOptions {
+  const subject = 'New Booking Request!';
+  const text = `Hi ${providerName},
 
-${forProvider ? 'You have a new booking request.' : 'Your booking on IndianBudgetTracker has been confirmed!'}
+You have a new booking request for your service: ${bookingDetails.serviceName}.
 
 Booking Details:
-${bookingDetailsText}
+- Booking ID: ${bookingDetails.bookingId}
+- Customer Name: ${bookingDetails.customerName}
+- Service: ${bookingDetails.serviceName}
+- Requested Date & Time: ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}
+
+Please review and respond to this request in your dashboard.
 
 Thanks,
 The IndianBudgetTracker Team`;
-  const html = `<p>Hi ${name},</p>
-<p>${forProvider ? 'You have a new booking request.' : 'Your booking on IndianBudgetTracker has been confirmed!'}</p>
-<p><strong>Booking Details:</strong></p><pre>${bookingDetailsText}</pre>
+  const html = `<p>Hi ${providerName},</p>
+<p>You have a new booking request for your service: <strong>${bookingDetails.serviceName}</strong>.</p>
+<p><strong>Booking Details:</strong></p>
+<ul>
+    <li><strong>Booking ID:</strong> ${bookingDetails.bookingId}</li>
+    <li><strong>Customer Name:</strong> ${bookingDetails.customerName}</li>
+    <li><strong>Service:</strong> ${bookingDetails.serviceName}</li>
+    <li><strong>Requested Date & Time:</strong> ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</li>
+</ul>
+<p>Please review and respond to this request in your dashboard.</p>
 <p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
   return { subject, text, html, to: '' };
 }
 
-export function getBookingUpdateEmailContent(name: string, bookingDetails: any, oldStatus: string, newStatus: string, forProvider: boolean = false): MailOptions {
+export function getBookingUpdateEmailContent(name: string, bookingDetails: { id: string; serviceName?: string; bookingDate?: string | Date }, oldStatus: string, newStatus: string, forProvider: boolean = false): MailOptions {
   const subject = forProvider ? `Booking Update Notification (ID: ${bookingDetails.id})` : `Your IndianBudgetTracker Booking Has Been Updated (ID: ${bookingDetails.id})`;
-  const bookingDetailsText = JSON.stringify(bookingDetails, null, 2);
+  let bookingDetailsHtml = '<ul>';
+  bookingDetailsHtml += `<li><strong>Booking ID:</strong> ${bookingDetails.id}</li>`;
+  if (bookingDetails.serviceName) {
+    bookingDetailsHtml += `<li><strong>Service:</strong> ${bookingDetails.serviceName}</li>`;
+  }
+  if (bookingDetails.bookingDate) {
+    bookingDetailsHtml += `<li><strong>Date & Time:</strong> ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</li>`;
+  }
+  bookingDetailsHtml += '</ul>';
+
   const text = `Hi ${name},
 
 ${forProvider ? 'A booking has been updated.' : 'There has been an update to your booking on IndianBudgetTracker.'}
@@ -176,7 +209,7 @@ Previous Status: ${oldStatus}
 New Status: ${newStatus}
 
 Booking Details:
-${bookingDetailsText}
+${JSON.stringify(bookingDetails, null, 2)}
 
 Thanks,
 The IndianBudgetTracker Team`;
@@ -185,7 +218,138 @@ The IndianBudgetTracker Team`;
 <p><strong>Booking ID:</strong> ${bookingDetails.id}</p>
 <p><strong>Previous Status:</strong> ${oldStatus}</p>
 <p><strong>New Status:</strong> ${newStatus}</p>
-<p><strong>Booking Details:</strong></p><pre>${bookingDetailsText}</pre>
+<p><strong>Booking Details:</strong></p>${bookingDetailsHtml}
+<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+  return { subject, text, html, to: '' };
+}
+
+
+// --- New Email Template Functions --- //
+
+export function getBookingRequestPendingEmailContent(customerName: string, bookingDetails: { serviceName: string; bookingDate: string | Date; }): MailOptions {
+  const subject = 'Your Booking Request is Pending - IndianBudgetTracker';
+  const text = `Hi ${customerName},
+
+Your request for the service "${bookingDetails.serviceName}" on ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')} has been sent to the provider.
+
+We will notify you once the provider responds.
+
+Thanks,
+The IndianBudgetTracker Team`;
+  const html = `<p>Hi ${customerName},</p>
+<p>Your request for the service "<strong>${bookingDetails.serviceName}</strong>" on <strong>${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</strong> has been sent to the provider.</p>
+<p>We will notify you once the provider responds.</p>
+<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+  return { subject, text, html, to: '' };
+}
+
+export function getBookingAcceptedEmailContent(customerName: string, bookingDetails: { serviceName: string; bookingDate: string | Date; }, providerDetails: { name: string; location?: string }): MailOptions {
+  const subject = 'Your Booking Has Been Accepted! - IndianBudgetTracker';
+  const text = `Hi ${customerName},
+
+Great news! Your booking for "${bookingDetails.serviceName}" on ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')} with ${providerDetails.name} has been accepted.
+
+${providerDetails.location ? `Provider Location: ${providerDetails.location}` : ''}
+
+We look forward to seeing you!
+
+Thanks,
+The IndianBudgetTracker Team`;
+  const html = `<p>Hi ${customerName},</p>
+<p>Great news! Your booking for "<strong>${bookingDetails.serviceName}</strong>" on <strong>${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</strong> with <strong>${providerDetails.name}</strong> has been accepted.</p>
+${providerDetails.location ? `<p><strong>Provider Location:</strong> ${providerDetails.location}</p>` : ''}
+<p>We look forward to seeing you!</p>
+<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+  return { subject, text, html, to: '' };
+}
+
+export function getBookingRejectedEmailContent(customerName: string, bookingDetails: { serviceName: string; bookingDate: string | Date; }, rejectionReason?: string): MailOptions {
+  const subject = 'Your Booking Request Was Rejected - IndianBudgetTracker';
+  let reasonText = '';
+  if (rejectionReason) {
+    reasonText = `Reason for rejection: ${rejectionReason}`;
+  }
+  const text = `Hi ${customerName},
+
+Unfortunately, your booking request for "${bookingDetails.serviceName}" on ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')} has been rejected.
+
+${reasonText}
+
+We apologize for any inconvenience.
+
+Thanks,
+The IndianBudgetTracker Team`;
+  const html = `<p>Hi ${customerName},</p>
+<p>Unfortunately, your booking request for "<strong>${bookingDetails.serviceName}</strong>" on <strong>${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</strong> has been rejected.</p>
+${rejectionReason ? `<p><strong>Reason for rejection:</strong> ${rejectionReason}</p>` : ''}
+<p>We apologize for any inconvenience.</p>
+<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+  return { subject, text, html, to: '' };
+}
+
+export function getServicePaymentConfirmedCustomerEmailContent(customerName: string, bookingDetails: { bookingId: string; serviceName: string; bookingDate: string | Date; }, paymentDetails: { amountPaid: number | string; paymentId: string; }): MailOptions {
+  const subject = 'Service Payment Confirmed - IndianBudgetTracker';
+  const text = `Hi ${customerName},
+
+Your payment for the service booking has been confirmed.
+
+Booking ID: ${bookingDetails.bookingId}
+Service: ${bookingDetails.serviceName}
+Date & Time: ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}
+Amount Paid: ${paymentDetails.amountPaid}
+Payment ID: ${paymentDetails.paymentId}
+
+Thank you for using IndianBudgetTracker!
+
+Thanks,
+The IndianBudgetTracker Team`;
+  const html = `<p>Hi ${customerName},</p>
+<p>Your payment for the service booking has been confirmed.</p>
+<p><strong>Booking Details:</strong></p>
+<ul>
+    <li><strong>Booking ID:</strong> ${bookingDetails.bookingId}</li>
+    <li><strong>Service:</strong> ${bookingDetails.serviceName}</li>
+    <li><strong>Date & Time:</strong> ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</li>
+</ul>
+<p><strong>Payment Details:</strong></p>
+<ul>
+    <li><strong>Amount Paid:</strong> ${paymentDetails.amountPaid}</li>
+    <li><strong>Payment ID:</strong> ${paymentDetails.paymentId}</li>
+</ul>
+<p>Thank you for using IndianBudgetTracker!</p>
+<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+  return { subject, text, html, to: '' };
+}
+
+export function getServiceProviderPaymentReceivedEmailContent(providerName: string, bookingDetails: { bookingId: string; serviceName: string; bookingDate: string | Date; }, customerDetails: { name: string; }, paymentDetails: { amountReceived: number | string; paymentId: string; }): MailOptions {
+  const subject = 'Payment Received for Service - IndianBudgetTracker';
+  const text = `Hi ${providerName},
+
+You have received a payment for a service booking.
+
+Booking ID: ${bookingDetails.bookingId}
+Service: ${bookingDetails.serviceName}
+Date & Time: ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}
+Customer Name: ${customerDetails.name}
+Amount Received: ${paymentDetails.amountReceived}
+Payment ID: ${paymentDetails.paymentId}
+
+Thanks,
+The IndianBudgetTracker Team`;
+  const html = `<p>Hi ${providerName},</p>
+<p>You have received a payment for a service booking.</p>
+<p><strong>Booking Details:</strong></p>
+<ul>
+    <li><strong>Booking ID:</strong> ${bookingDetails.bookingId}</li>
+    <li><strong>Service:</strong> ${bookingDetails.serviceName}</li>
+    <li><strong>Date & Time:</strong> ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</li>
+    <li><strong>Customer Name:</strong> ${customerDetails.name}</li>
+</ul>
+<p><strong>Payment Details:</strong></p>
+<ul>
+    <li><strong>Amount Received:</strong> ${paymentDetails.amountReceived}</li>
+    <li><strong>Payment ID:</strong> ${paymentDetails.paymentId}</li>
+</ul>
 <p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
   return { subject, text, html, to: '' };
 }
