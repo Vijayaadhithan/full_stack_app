@@ -810,21 +810,42 @@ export class PostgresStorage implements IStorage {
       }
 
       // Proceed with adding or updating the cart item
+      // First, get product stock to validate against
+      const productDetails = await db.select({ stock: products.stock }).from(products).where(eq(products.id, productId)).limit(1);
+      if (productDetails.length === 0) {
+        console.error(`Product ID ${productId} not found for stock validation.`);
+        throw new Error("Product not found when trying to add to cart.");
+      }
+      const availableStock = productDetails[0].stock;
+
+      if (quantity > availableStock) {
+        console.error(`Requested quantity ${quantity} for product ID ${productId} exceeds available stock ${availableStock}.`);
+        throw new Error(`Cannot add ${quantity} items. Only ${availableStock} left in stock.`);
+      }
+
+      if (quantity <= 0) {
+        console.log(`Quantity ${quantity} is zero or less for product ID ${productId}. Removing from cart for customer ID ${customerId}.`);
+        await db.delete(cart).where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
+        console.log(`Successfully removed product ID ${productId} from cart for customer ID ${customerId} due to zero/negative quantity.`);
+        return; // Exit after removing
+      }
+
       const existingCartItem = await db.select().from(cart)
         .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)))
         .limit(1);
 
       if (existingCartItem.length > 0) {
-        const newQuantity = existingCartItem[0].quantity + quantity;
-        console.log(`Updating existing cart item for customer ID ${customerId}, product ID ${productId}. New quantity: ${newQuantity}`);
+        // Item exists, update its quantity (direct assignment)
+        console.log(`Updating existing cart item for customer ID ${customerId}, product ID ${productId}. New quantity: ${quantity}`);
         await db.update(cart)
-          .set({ quantity: newQuantity })
+          .set({ quantity: quantity }) // Direct assignment
           .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
       } else {
+        // Item does not exist, insert new cart item
         console.log(`Creating new cart item for customer ID ${customerId}, product ID ${productId} with quantity ${quantity}`);
         await db.insert(cart).values({ customerId, productId, quantity });
       }
-      console.log(`Successfully added/updated product ID ${productId} in cart for customer ID ${customerId}`);
+      console.log(`Successfully added/updated product ID ${productId} with quantity ${quantity} in cart for customer ID ${customerId}`);
     } catch (error) {
       console.error(`Error in addToCart for customer ID ${customerId}, product ID ${productId}:`, error);
       // Re-throw the original error or a new one with context

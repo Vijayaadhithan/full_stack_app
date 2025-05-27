@@ -613,6 +613,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For now, directly pass the body. The storage layer handles partial updates.
       const updateData = req.body;
 
+      // Sanitize numeric fields to prevent 'undefined' string errors
+      const numericFields = ["price", "mrp", "stock"];
+      for (const field of numericFields) {
+        if (updateData.hasOwnProperty(field) && updateData[field] === "undefined") {
+          delete updateData[field];
+        } else if (updateData.hasOwnProperty(field) && typeof updateData[field] === 'string' && updateData[field].trim() === '') {
+          // Also remove if it's an empty string after trimming, as this can also cause issues for numeric types
+          delete updateData[field];
+        } else if (updateData.hasOwnProperty(field) && updateData[field] === null) {
+          // Also remove if it's null
+          delete updateData[field];
+        }
+      }
+
       // The storage.updateProduct method expects Partial<Product>
       const updatedProduct = await storage.updateProduct(productId, updateData);
       console.log("[API] /api/products/:id PATCH - Updated product:", updatedProduct);
@@ -1050,7 +1064,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Email to provider: "New Booking Request"
             console.log(`[API] Attempting to send 'New Booking Request' email to provider: ${provider.email}`);
             const customerAddress = booking.serviceLocation === 'customer' 
-              ? `${customer.addressStreet || ''} ${customer.addressCity || ''} ${customer.addressState || ''} ${customer.addressZip || ''}`.trim() || 'Not specified'
+              ? `${customer.addressStreet || ''} ${customer.addressCity || ''} ${customer.addressState || ''}`.trim() || 'Not specified'
               : 'Provider Location';
             const customerPhone = booking.serviceLocation === 'customer' ? customer.phone : undefined;
 
@@ -1136,7 +1150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (customer && provider && customer.email && provider.email) {
             console.log(`[API] Attempting to send 'New Booking Request' email to provider (fallback): ${provider.email}`);
             const customerAddress = booking.serviceLocation === 'customer'
-              ? `${customer.addressStreet || ''} ${customer.addressCity || ''} ${customer.addressState || ''} ${customer.addressZip || ''}`.trim() || 'Not specified'
+              ? `${customer.addressStreet || ''} ${customer.addressCity || ''} ${customer.addressState || ''}`.trim() || 'Not specified'
               : 'Provider Location';
             const customerPhone = booking.serviceLocation === 'customer' ? customer.phone : undefined;
 

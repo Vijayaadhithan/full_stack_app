@@ -336,7 +336,7 @@ export default function Cart() {
                                 quantity: item.quantity + 1,
                               })
                             }
-                            disabled={updateCartMutation.isPending}
+                            disabled={updateCartMutation.isPending || item.quantity >= item.product.stock}
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
