@@ -63,6 +63,8 @@ export default function Bookings() {
   const { toast } = useToast();
   const [selectedBooking, setSelectedBooking] = useState<BookingWithService>();
   const [rescheduleDate, setRescheduleDate] = useState<Date>();
+  const [rescheduleTime, setRescheduleTime] = useState<string>("");
+  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState("");
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -72,6 +74,55 @@ export default function Bookings() {
   const { data: bookings, isLoading } = useQuery<BookingWithService[]>({
     queryKey: ["/api/bookings"],
   });
+
+  // Fetch available slots for rescheduling
+  const { data: providerAvailability, isLoading: isLoadingAvailability } = useQuery<string[], Error>({
+    queryKey: ["/api/services", selectedBooking?.serviceId, "availability", rescheduleDate ? rescheduleDate.toISOString().split('T')[0] : undefined],
+    queryFn: async () => {
+      if (!selectedBooking?.serviceId || !rescheduleDate) return [];
+      const dateStr = rescheduleDate.toISOString().split('T')[0];
+      const response = await apiRequest("GET", `/api/services/${selectedBooking.serviceId}/availability?date=${dateStr}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to fetch availability");
+      }
+      return response.json();
+    },
+    enabled: !!selectedBooking?.serviceId && !!rescheduleDate,
+  });
+
+  useEffect(() => {
+    if (providerAvailability) {
+      setAvailableTimes(providerAvailability);
+      if (providerAvailability.length > 0) {
+        setRescheduleTime(providerAvailability[0]); // Default to the first available time
+      } else {
+        setRescheduleTime("");
+      }
+    }
+  }, [providerAvailability]);
+
+  useEffect(() => {
+    if (providerAvailability === undefined) return;
+    
+    const queryState = queryClient.getQueryState([
+      "/api/services",
+      selectedBooking?.serviceId,
+      "availability",
+      rescheduleDate ? rescheduleDate.toISOString().split('T')[0] : undefined,
+    ]);
+    const error = queryState?.error;
+    
+    if (error) {
+      toast({
+        title: "Error fetching availability",
+        description: error instanceof Error ? error.message : "Failed to fetch availability",
+        variant: "destructive",
+      });
+      setAvailableTimes([]);
+      setRescheduleTime("");
+    }
+  }, [providerAvailability, queryClient, rescheduleDate, selectedBooking?.serviceId]);
 
   // Fetch existing reviews for selected service
   const { data: existingReviews } = useQuery<Review[]>({
@@ -166,18 +217,37 @@ export default function Bookings() {
     mutationFn: ({
       bookingId,
       date,
+      time,
     }: {
       bookingId: number;
-      date: string;
-    }) =>
-      apiRequest("PATCH", `/api/bookings/${bookingId}`, {
-        bookingDate: date,
-      }).then((r) => r.json()),
+      date: Date; // Changed to Date object
+      time: string;
+    }) => {
+      // Combine date and time
+      const newBookingDate = new Date(date);
+      const [hours, minutes] = time.split(":").map(Number);
+      newBookingDate.setHours(hours, minutes, 0, 0);
+
+      return apiRequest("PATCH", `/api/bookings/${bookingId}`, {
+        bookingDate: newBookingDate.toISOString(), // Send as ISO string
+      }).then((r) => r.json());
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
-        title: "Booking rescheduled",
-        description: "Your booking has been rescheduled successfully.",
+        title: "Reschedule Requested",
+        description: "Your reschedule request has been sent to the provider for confirmation.",
+      });
+      setSelectedBooking(undefined); // Close dialog
+      setRescheduleDate(undefined);
+      setRescheduleTime("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Reschedule Failed",
+        description: error.message || "Could not reschedule booking.",
+        variant: "destructive",
       });
     },
   });
@@ -309,10 +379,11 @@ export default function Bookings() {
   };
 
   const handleReschedule = () => {
-    if (!selectedBooking || !rescheduleDate) return;
+    if (!selectedBooking || !rescheduleDate || !rescheduleTime) return;
     rescheduleMutation.mutate({
       bookingId: selectedBooking.id,
-      date: rescheduleDate.toISOString(),
+      date: rescheduleDate, // Pass Date object
+      time: rescheduleTime,
     });
   };
 
@@ -469,16 +540,41 @@ export default function Bookings() {
                                       selected={rescheduleDate}
                                       onSelect={setRescheduleDate}
                                       disabled={(date) =>
-                                        isBefore(date, new Date()) ||
-                                        isAfter(date, addDays(new Date(), 30))
+                                        isBefore(date, addDays(new Date(), 1)) || // Disable past dates and today
+                                        isAfter(date, addDays(new Date(), 30))  // Disable dates more than 30 days out
                                       }
                                     />
+                                    {rescheduleDate && (
+                                      <div className="space-y-2 pt-2">
+                                        <Label htmlFor="reschedule-time">Select Time</Label>
+                                        {isLoadingAvailability && <p>Loading available times...</p>}
+                                        {!isLoadingAvailability && availableTimes.length === 0 && rescheduleDate && (
+                                          <p className="text-sm text-muted-foreground">
+                                            No available time slots for the selected date. Please choose another date.
+                                          </p>
+                                        )}
+                                        {availableTimes.length > 0 && (
+                                          <Select onValueChange={setRescheduleTime} value={rescheduleTime}>
+                                            <SelectTrigger id="reschedule-time">
+                                              <SelectValue placeholder="Select a time" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {availableTimes.map((time) => (
+                                                <SelectItem key={time} value={time}>
+                                                  {time}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        )}
+                                      </div>
+                                    )}
                                     <Button
                                       className="w-full"
                                       onClick={handleReschedule}
-                                      disabled={!rescheduleDate}
+                                      disabled={!rescheduleDate || !rescheduleTime || rescheduleMutation.isPending || isLoadingAvailability || availableTimes.length === 0}
                                     >
-                                      Confirm Reschedule
+                                      {rescheduleMutation.isPending ? "Confirming..." : "Confirm Reschedule"}
                                     </Button>
                                   </div>
                                 </DialogContent>

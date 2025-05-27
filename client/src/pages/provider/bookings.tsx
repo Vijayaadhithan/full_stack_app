@@ -94,25 +94,29 @@ export default function ProviderBookings() {
 
   const updateBookingMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: BookingActionData }) => {
-      // Prepare payload for the status update endpoint
-      const payload: { status: string; rejectionReason?: string; rescheduleDate?: string } = { 
+      let endpoint = `/api/bookings/${id}/status`;
+      let payload: any = { 
         status: data.status 
       };
-      if (data.status === 'rejected' && data.comments) {
-        payload.rejectionReason = data.comments;
-      }
-      if (data.status === 'rescheduled' && data.rescheduleDate) {
-        payload.rescheduleDate = data.rescheduleDate;
+
+      if (data.status === 'completed') {
+        endpoint = `/api/bookings/${id}/provider-complete`;
+        payload = { comments: data.comments }; // Payload for provider-complete
+      } else {
+        if (data.status === 'rejected' && data.comments) {
+          payload.rejectionReason = data.comments;
+        }
+        if (data.status === 'rescheduled' && data.rescheduleDate) {
+          payload.rescheduleDate = data.rescheduleDate;
+        }
       }
 
-      // Corrected endpoint to PATCH /api/bookings/:id/status
-      const res = await apiRequest("PATCH", `/api/bookings/${id}/status`, payload);
+      const res = await apiRequest("PATCH", endpoint, payload);
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to update booking status");
       }
       const updatedBookingData = await res.json();
-      // Pass along original input data (specifically comments for rejection) for onSuccess
       return { responseData: updatedBookingData, inputData: data }; 
     },
     onSuccess: async (result) => { // result is { responseData: { booking: updatedBookingData, message: string }, inputData: data }

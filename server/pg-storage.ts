@@ -164,8 +164,15 @@ export class PostgresStorage implements IStorage {
     });
   }
 
-  updateReview(id: number, data: { rating?: number; review?: string; }): Promise<Review> {
-    throw new Error("Method not implemented.");
+  async updateReview(id: number, data: { rating?: number; review?: string; providerReply?: string; }): Promise<Review> {
+    const updatedReview = await db.update(reviews)
+      .set(data)
+      .where(eq(reviews.id, id))
+      .returning();
+    if (updatedReview.length === 0) {
+      throw new Error("Review not found or update failed");
+    }
+    return updatedReview[0];
   }
   async processRefund(returnRequestId: number): Promise<void> { // Changed parameter name for clarity
     // Retrieve the return request from the database.
@@ -659,24 +666,51 @@ export class PostgresStorage implements IStorage {
     const currentBooking = await this.getBooking(id);
     if (!currentBooking) throw new Error("Booking not found");
 
-    // Set IST timestamp for any updates
-    const bookingWithIST = {
-      ...booking,
-      updatedAt: getCurrentISTDate()
-    };
+    // Construct the update object, only including defined fields
+    const updateData: Partial<Booking> = {}; // Removed updatedAt: getCurrentISTDate()
+    for (const key in booking) {
+      if (booking[key as keyof Booking] !== undefined) {
+        (updateData as any)[key] = booking[key as keyof Booking];
+      }
+    }
+
+    // If no actual fields to update (other than updatedAt), return current booking
+    if (Object.keys(updateData).length === 1 && (updateData as any).updatedAt) {
+      // Optionally, you might still want to update 'updatedAt' or decide if this scenario is an error
+      // For now, let's assume if only updatedAt is there, no meaningful update was intended beyond timestamp.
+      // To be safe, and if Drizzle handles empty .set() gracefully or errors, this could be db.update().set({updatedAt: updateData.updatedAt})
+      // However, if booking object was empty, this means no change was requested.
+      // Consider if an empty booking object (no status, no comments etc.) should even reach here.
+      // Returning currentBooking if no actual data fields were provided for update.
+      // If an update with only 'undefined' values was passed, this prevents an error.
+      console.warn(`[DB DEBUG] updateBooking called for ID ${id} with no actual data changes.`);
+      // return currentBooking; // Or proceed to update just `updatedAt` if that's desired.
+    }
+    
+    // Ensure there's something to update beyond just `updatedAt` if we don't return early
+    if (Object.keys(updateData).length <= 1 && !booking.status && !booking.comments) {
+        // If only updatedAt is set and no other meaningful fields like status or comments are present in the original 'booking' partial,
+        // it implies no actual change was intended or all provided fields were undefined.
+        // To prevent an empty update or an update with only 'updatedAt' when no other changes are specified,
+        // we can return the current booking. This behavior might need adjustment based on specific requirements.
+        console.log(`[DB DEBUG] updateBooking for ID ${id}: No effective changes provided. Returning current booking.`);
+        return currentBooking;
+    }
 
     const result = await db.update(bookings)
-      .set(bookingWithIST)
+      .set(updateData) // Use the filtered updateData
       .where(eq(bookings.id, id))
       .returning();
 
     // If the status changed, add an entry in the booking history table with IST timestamp
-    if (booking.status && booking.status !== currentBooking.status) {
+    // Ensure booking.status is checked against undefined before using it
+    if (booking.status !== undefined && booking.status !== currentBooking.status) {
       await db.insert(bookingHistory).values({
         bookingId: id,
-        status: booking.status,
+        status: booking.status, // Safe to use booking.status here due to the check
         changedAt: getCurrentISTDate(),
-        comments: booking.comments || `Status changed from ${currentBooking.status} to ${booking.status}`
+        // Use booking.comments if defined, otherwise generate a default message
+        comments: booking.comments !== undefined ? booking.comments : `Status changed from ${currentBooking.status} to ${booking.status}`
       });
       // If status is no longer pending, clear the expiration date
       if (booking.status !== 'pending') {
@@ -686,7 +720,7 @@ export class PostgresStorage implements IStorage {
       }
     }
 
-    if (!result[0]) throw new Error("Booking not found");
+    if (!result[0]) throw new Error("Booking not found or update failed");
     return result[0];
   }
 
@@ -970,7 +1004,7 @@ export class PostgresStorage implements IStorage {
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
   async createNotification(notification: InsertNotification): Promise<Notification> {
-    const result = await db.insert(notifications).values({ ...notification, type: notification.type as any }).returning();
+    const result = await db.insert(notifications).values({ ...notification, type: notification.type as any, relatedBookingId: notification.relatedBookingId ?? null }).returning();
     const newNotification = result[0];
 
     // Define critical notification types that should trigger an email

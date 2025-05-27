@@ -12,7 +12,8 @@ import {
   getBookingRejectedEmailContent,
   getServicePaymentConfirmedCustomerEmailContent,
   getServiceProviderPaymentReceivedEmailContent
-} from './emailService'; // Added for sending emails
+} from './emailService'; 
+import * as emailService from './emailService';// Added for sending emails
 import { storage } from "./storage";
 import { z } from "zod";
 import {
@@ -233,53 +234,160 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Accept or reject a booking request
+  // Accept, reject, or reschedule a booking request
   app.patch("/api/bookings/:id", requireAuth, async (req, res) => {
     try {
       const bookingId = parseInt(req.params.id);
-      const { status, comments, changedBy } = req.body;
-      
-      console.log(`[API] Updating booking ${bookingId} status to ${status}`);
-      
-      // Validate the booking exists
+      // Destructure bookingDate as well, it might be undefined if not a reschedule
+      const { status, comments, bookingDate, changedBy } = req.body;
+      const currentUser = req.user!;
+
+      console.log(`[API] Attempting to update booking ${bookingId} with data:`, req.body);
+
       const booking = await storage.getBooking(bookingId);
       if (!booking) {
+        console.log(`[API] Booking ${bookingId} not found.`);
         return res.status(404).json({ message: "Booking not found" });
       }
-      
-      // For providers: verify they own the service being booked
-      if (req.user!.role === "provider") {
-        const service = await storage.getService(booking.serviceId!);
-        if (!service || service.providerId !== req.user!.id) {
-          return res.status(403).json({ message: "You can only manage bookings for your own services" });
+
+      const service = await storage.getService(booking.serviceId!);
+      if (!service) {
+        console.log(`[API] Service ${booking.serviceId} for booking ${bookingId} not found.`);
+        return res.status(404).json({ message: "Service not found for this booking" });
+      }
+
+      let updatedBookingData = {};
+      let notificationPromises = [];
+      let emailPromise = Promise.resolve(); // To avoid undefined errors if no email is sent
+
+      // Scenario 1: Customer reschedules
+      if (bookingDate && currentUser.role === "customer" && booking.customerId === currentUser.id) {
+        console.log(`[API] Customer ${currentUser.id} rescheduling booking ${bookingId} to ${bookingDate}`);
+        updatedBookingData = {
+          bookingDate: new Date(bookingDate),
+          status: "rescheduled_pending_provider_approval",
+          comments: comments || "Rescheduled by customer",
+        };
+
+        if (service.providerId) {
+          const providerUser = await storage.getUser(service.providerId);
+          if (providerUser) {
+            notificationPromises.push(
+              storage.createNotification({
+                userId: service.providerId,
+                type: "booking_rescheduled_request",
+                title: "Reschedule Request",
+                message: `Customer ${currentUser.name || 'ID: '+currentUser.id} requested to reschedule booking #${bookingId} for '${service.name}' to ${new Date(bookingDate).toLocaleString()}. Please review.`,
+                isRead: false,
+                relatedBookingId: bookingId,
+              })
+            );
+            if (providerUser.email) {
+              emailPromise = emailService.sendBookingRescheduledByCustomerEmail(providerUser.email, {
+                providerName: providerUser.name || 'Provider',
+                customerName: currentUser.name || 'Customer',
+                serviceName: service.name,
+                newBookingDate: new Date(bookingDate).toLocaleString(),
+                bookingId: bookingId.toString(),
+                loginUrl: `${process.env.BASE_URL}/login`,
+                bookingDetailsUrl: `${process.env.BASE_URL}/provider/bookings`
+              }).then(() => {}).catch((err: unknown) => console.error("[API] Failed to send reschedule request email to provider:", err));
+            }
+          }
         }
+      } 
+      // Scenario 2: Provider accepts/rejects a booking (including a rescheduled one)
+      else if (status && currentUser.role === "provider" && service.providerId === currentUser.id) {
+        console.log(`[API] Provider ${currentUser.id} updating booking ${bookingId} status to ${status}`);
+        updatedBookingData = {
+          status,
+          comments: comments || (status === "accepted" ? "Booking confirmed" : "Booking rejected"),
+        };
+
+        if (booking.customerId) {
+          const customerUser = await storage.getUser(booking.customerId);
+          if (customerUser) {
+            let notificationTitle = `Booking ${status === "accepted" ? "Accepted" : "Rejected"}`;
+            let notificationMessage = `Your booking for '${service.name}' has been ${status}${comments ? `: ${comments}` : "."}`;
+            let emailSubject = `Booking ${status === "accepted" ? "Accepted" : "Rejected"}`;
+
+            if (booking.status === 'rescheduled_pending_provider_approval' && status === 'accepted') {
+              notificationTitle = "Reschedule Confirmed";
+              notificationMessage = `Your reschedule request for booking #${bookingId} ('${service.name}') has been accepted. New date: ${booking.bookingDate ? new Date(booking.bookingDate).toLocaleString() : 'N/A'}`;
+              emailSubject = "Reschedule Confirmed";
+            } else if (booking.status === 'rescheduled_pending_provider_approval' && status === 'rejected') {
+              notificationTitle = "Reschedule Rejected";
+              notificationMessage = `Your reschedule request for booking #${bookingId} ('${service.name}') has been rejected. ${comments ? comments : 'Please contact the provider or try rescheduling again.'}`;
+              emailSubject = "Reschedule Rejected";
+            }
+
+            notificationPromises.push(
+              storage.createNotification({
+                userId: booking.customerId,
+                type: status === "accepted" ? "booking_confirmed" : "booking_rejected",
+                title: notificationTitle,
+                message: notificationMessage,
+                isRead: false,
+                relatedBookingId: bookingId,
+              })
+            );
+            if (customerUser.email) {
+              emailPromise = emailService.sendBookingUpdateEmail(customerUser.email, {
+                customerName: customerUser.name || 'Customer',
+                serviceName: service.name,
+                bookingStatus: status,
+                bookingDate: booking.bookingDate ? new Date(booking.bookingDate).toLocaleString() : 'N/A',
+                bookingId: bookingId.toString(),
+                providerName: currentUser.name || 'Provider',
+                comments: comments || '',
+                subject: emailSubject,
+                loginUrl: `${process.env.BASE_URL}/login`,
+                bookingDetailsUrl: `${process.env.BASE_URL}/customer/bookings`
+              }).then(() => {}).catch((err: unknown) => console.error("[API] Failed to send booking update email to customer:", err));
+            }
+          }
+        }
+      } 
+      // Scenario 3: Customer cancels (can be expanded)
+      else if (status === "cancelled" && currentUser.role === "customer" && booking.customerId === currentUser.id) {
+        console.log(`[API] Customer ${currentUser.id} cancelling booking ${bookingId}`);
+        updatedBookingData = {
+            status: "cancelled",
+            comments: comments || "Cancelled by customer",
+        };
+        if (service.providerId) {
+            const providerUser = await storage.getUser(service.providerId);
+            if (providerUser) {
+                notificationPromises.push(
+                    storage.createNotification({
+                        userId: service.providerId,
+                        type: "booking_cancelled_by_customer",
+                        title: "Booking Cancelled",
+                        message: `Booking #${bookingId} for '${service.name}' has been cancelled by the customer.`,
+                        isRead: false,
+                        relatedBookingId: bookingId,
+                    })
+                );
+                // Optional: Email to provider about cancellation
+                if(providerUser.email){
+                    // emailService.sendBookingCancelledByCustomerEmail(...)
+                }
+            }
+        }
+      } else {
+        console.log(`[API] Unauthorized or invalid action for booking ${bookingId} by user ${currentUser.id} with role ${currentUser.role}. Booking owner: ${booking.customerId}, Service provider: ${service.providerId}`);
+        return res.status(403).json({ message: "Unauthorized or invalid action specified" });
       }
+
+      const finalUpdatedBooking = await storage.updateBooking(bookingId, updatedBookingData);
+      await Promise.all(notificationPromises);
+      await emailPromise; // Wait for email to be processed
       
-      // For customers: verify they own the booking
-      if (req.user!.role === "customer" && booking.customerId !== req.user!.id) {
-        return res.status(403).json({ message: "You can only manage your own bookings" });
-      }
-      
-      // Update the booking
-      const updatedBooking = await storage.updateBooking(bookingId, {
-        status,
-        comments,
-      });
-      
-      // Create notification for the customer
-      if (status === "accepted" || status === "rejected") {
-        await storage.createNotification({
-          userId: booking.customerId,
-          type: "booking",
-          title: `Booking ${status === "accepted" ? "Accepted" : "Rejected"}`,
-          message: `Your booking request has been ${status === "accepted" ? "accepted" : "rejected"}${comments ? `: ${comments}` : "."}`,
-          isRead: false,
-        });
-      }
-      
-      res.json(updatedBooking);
+      console.log(`[API] Successfully updated booking ${bookingId}:`, finalUpdatedBooking);
+      res.json(finalUpdatedBooking);
+
     } catch (error) {
-      console.error("Error updating booking:", error);
+      console.error(`[API] Error updating booking ${req.params.id}:`, error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update booking" });
     }
   });
@@ -1285,6 +1393,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating booking status:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update booking status" });
+    }
+  });
+
+  // New endpoint for providers to mark a service as completed
+  app.patch("/api/bookings/:id/provider-complete", requireAuth, requireRole(["provider"]), async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.id);
+      const { service_notes } = req.body; // As seen in the UI modal
+
+      console.log(`[API DEBUG] Provider attempting to complete service. Booking ID: ${bookingId}, Notes: ${service_notes}`);
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        console.log(`[API DEBUG] Booking not found: ID=${bookingId}. Returning 404.`);
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      const service = await storage.getService(booking.serviceId!);
+      if (!service || service.providerId !== req.user!.id) {
+        console.log(`[API DEBUG] Authorization check failed for completing booking ID ${bookingId}. Returning 403.`);
+        return res.status(403).json({ message: "Not authorized to complete this booking" });
+      }
+
+      // Ensure the booking is in a state that can be completed by a provider (e.g., 'accepted')
+      if (booking.status !== 'accepted') {
+        console.log(`[API DEBUG] Invalid status for provider completion: ${booking.status} for booking ID ${bookingId}. Returning 400.`);
+        return res.status(400).json({ message: `Booking cannot be marked as complete by provider. Current status: ${booking.status}. Must be 'accepted'.` });
+      }
+
+      // Update booking status to 'completed' and add provider notes
+      // Using 'comments' field for service_notes for now. Consider a dedicated 'providerNotes' field if needed.
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        status: "completed",
+        comments: service_notes || booking.comments, // Preserve existing comments if new notes are empty
+        // providerNotes: service_notes // Or use a dedicated field
+      });
+
+      console.log(`[API] Booking ID: ${bookingId} marked as 'completed' by provider. Notes: ${service_notes}`);
+
+      // Optional: Create a notification for the customer that the service has been marked complete by the provider
+      await storage.createNotification({
+        userId: booking.customerId,
+        type: "booking_update",
+        title: "Service Marked as Completed by Provider",
+        message: `The service for booking #${bookingId} (${service.name}) has been marked as completed by your provider. Notes: ${service_notes || 'N/A'}`,
+      });
+
+      res.json({
+        booking: updatedBooking,
+        message: "Service marked as completed successfully."
+      });
+    } catch (error) {
+      console.error("Error completing service by provider:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to complete service" });
     }
   });
 

@@ -192,6 +192,66 @@ The IndianBudgetTracker Team`;
   return { subject, text, html, to: '' };
 }
 
+export function sendBookingUpdateEmail(to: string, details: {
+  customerName: string;
+  serviceName: string;
+  bookingStatus: string;
+  bookingDate: string;
+  bookingId: string;
+  providerName: string;
+  comments: string;
+  subject: string;
+  loginUrl: string;
+  bookingDetailsUrl: string;
+}): Promise<boolean> {
+  const { customerName, serviceName, bookingStatus, bookingDate, bookingId, providerName, comments, subject, loginUrl, bookingDetailsUrl } = details;
+  
+  const mailOptions = {
+    to,
+    subject,
+    text: `Hi ${customerName},\n\nYour booking for ${serviceName} has been updated to ${bookingStatus}.\n\nDetails:\n- Booking ID: ${bookingId}\n- Service: ${serviceName}\n- Status: ${bookingStatus}\n- Date: ${bookingDate}\n- Provider: ${providerName}\n\n${comments ? `Comments: ${comments}\n\n` : ''}You can view your booking details here: ${bookingDetailsUrl}\n\nThanks,\nThe IndianBudgetTracker Team`,
+    html: `<p>Hi ${customerName},</p>
+<p>Your booking for <strong>${serviceName}</strong> has been updated to <strong>${bookingStatus}</strong>.</p>
+<p><strong>Details:</strong></p>
+<ul>
+  <li><strong>Booking ID:</strong> ${bookingId}</li>
+  <li><strong>Service:</strong> ${serviceName}</li>
+  <li><strong>Status:</strong> ${bookingStatus}</li>
+  <li><strong>Date:</strong> ${bookingDate}</li>
+  <li><strong>Provider:</strong> ${providerName}</li>
+</ul>
+${comments ? `<p><strong>Comments:</strong> ${comments}</p>` : ''}
+<p>You can <a href="${bookingDetailsUrl}">view your booking details here</a>.</p>
+<p>Thanks,<br/>The IndianBudgetTracker Team</p>`
+  };
+  
+  return sendEmail(mailOptions);
+}
+
+export function sendBookingRescheduledByCustomerEmail(to: string, details: {
+  providerName: string;
+  customerName: string;
+  serviceName: string;
+  newBookingDate: string;
+  bookingId: string;
+  loginUrl: string;
+  bookingDetailsUrl: string;
+}): Promise<boolean> {
+  const { providerName, customerName, serviceName, newBookingDate, bookingId, loginUrl, bookingDetailsUrl } = details;
+  
+  const mailOptions = {
+    to,
+    subject: `Reschedule Request for Booking #${bookingId}`,
+    text: `Hi ${providerName},\n\nCustomer ${customerName} has requested to reschedule booking #${bookingId} for '${serviceName}' to ${newBookingDate}.\n\nPlease review this request in your dashboard: ${bookingDetailsUrl}\n\nThanks,\nThe IndianBudgetTracker Team`,
+    html: `<p>Hi ${providerName},</p>
+<p>Customer <strong>${customerName}</strong> has requested to reschedule booking #${bookingId} for '<strong>${serviceName}</strong>' to <strong>${newBookingDate}</strong>.</p>
+<p>Please <a href="${bookingDetailsUrl}">review this request in your dashboard</a>.</p>
+<p>Thanks,<br/>The IndianBudgetTracker Team</p>`
+  };
+  
+  return sendEmail(mailOptions);
+}
+
 export function getBookingUpdateEmailContent(name: string, bookingDetails: { id: string; serviceName?: string; bookingDate?: string | Date }, oldStatus: string, newStatus: string, forProvider: boolean = false): MailOptions {
   const subject = forProvider ? `Booking Update Notification (ID: ${bookingDetails.id})` : `Your IndianBudgetTracker Booking Has Been Updated (ID: ${bookingDetails.id})`;
   let bookingDetailsHtml = '<ul>';

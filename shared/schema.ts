@@ -134,10 +134,10 @@ export const bookings = pgTable("bookings", {
   customerId: integer("customer_id").references(() => users.id),
   serviceId: integer("service_id").references(() => services.id),
   bookingDate: timestamp("booking_date").notNull(),
-  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired">().notNull(),
+  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired" | "rescheduled_pending_provider_approval">().notNull(),
   paymentStatus: text("payment_status").$type<"pending" | "paid" | "refunded">().notNull(),
   rejectionReason: text("rejection_reason"),
-  rescheduleDate: timestamp("reschedule_date"),
+  rescheduleDate: timestamp("reschedule_date"), // This can store the original date if rescheduled, or the new date if status is 'rescheduled'
   comments: text("comments"),
   eReceiptId: text("e_receipt_id"),
   eReceiptUrl: text("e_receipt_url"),
@@ -313,11 +313,26 @@ export const promotions = pgTable("promotions", {
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
-  type: text("type").$type<"booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request" | "shop">().notNull(),
+  type: text("type").$type<
+    "booking" | 
+    "order" | 
+    "promotion" | 
+    "system" | 
+    "return" | 
+    "service_request" | 
+    "service" | 
+    "booking_request" | 
+    "shop" | 
+    "booking_rescheduled_request" | // Customer requests reschedule, notify provider
+    "booking_confirmed" |           // Provider confirms booking/reschedule, notify customer
+    "booking_rejected" |            // Provider rejects booking/reschedule, notify customer
+    "booking_cancelled_by_customer" // Customer cancels, notify provider
+  >().notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
+  relatedBookingId: integer("related_booking_id").references(() => bookings.id) // Optional: to link notification to a specific booking
 });
 
 export const blockedTimeSlots = pgTable("blocked_time_slots", {

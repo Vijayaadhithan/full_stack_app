@@ -977,14 +977,15 @@ return {
     const id = this.currentId++;
     const newNotification = { ...notification, id };
     this.notifications.set(id, {
-      id,
-      createdAt: newNotification.createdAt || newIndianDate(), // Use newIndianDate() to create dates in IST
-      message: newNotification.message,
-      type: newNotification.type as "shop" | "booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request",
-      userId: newNotification.userId || null,
-      title: newNotification.title,
-      isRead: newNotification.isRead || false
-    });
+          id,
+          createdAt: newNotification.createdAt || newIndianDate(), // Use newIndianDate() to create dates in IST
+          message: newNotification.message,
+          type: newNotification.type as "shop" | "booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request",
+          userId: newNotification.userId || null,
+          title: newNotification.title,
+          isRead: newNotification.isRead || false,
+          relatedBookingId: null
+        });
     const finalNotification: Notification = {
       id: newNotification.id,
       userId: newNotification.userId ?? null,
@@ -992,7 +993,8 @@ return {
       title: newNotification.title,
       message: newNotification.message,
       isRead: newNotification.isRead ?? false,
-      createdAt: newNotification.createdAt ?? newIndianDate() // Use newIndianDate() to create dates in IST
+      createdAt: newNotification.createdAt ?? newIndianDate(), // Use newIndianDate() to create dates in IST
+      relatedBookingId: null
     };
     return finalNotification;
   }
