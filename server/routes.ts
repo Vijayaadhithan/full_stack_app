@@ -1044,46 +1044,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Send "New Booking Request" email to provider and "Booking Request Pending" to customer
         try {
           const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
-          const provider = service.providerId !== null ? await storage.getUser(service.providerId) : undefined;
+          const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
 
-          if (customer && provider) {
+          if (customer && provider && customer.email && provider.email) {
             // Email to provider: "New Booking Request"
+            console.log(`[API] Attempting to send 'New Booking Request' email to provider: ${provider.email}`);
+            const customerAddress = booking.serviceLocation === 'customer' 
+              ? `${customer.addressStreet || ''} ${customer.addressCity || ''} ${customer.addressState || ''} ${customer.addressZip || ''}`.trim() || 'Not specified'
+              : 'Provider Location';
+            const customerPhone = booking.serviceLocation === 'customer' ? customer.phone : undefined;
+
             const providerBookingEmailContent = getBookingConfirmationEmailContent(
               provider.name || provider.username,
               {
-                bookingId: booking.id.toString(), // Ensure bookingId is a string
+                bookingId: booking.id.toString(),
                 customerName: customer.name || customer.username,
                 serviceName: service.name,
-                bookingDate: booking.bookingDate, // Pass Date object
+                bookingDate: booking.bookingDate, // Pass Date object or ISO string
+                customerAddress: customerAddress,
+                customerPhone: customerPhone
               }
-              // customer // Pass full customer object - Removed extra argument
             );
-            await sendEmail({
-              to: provider.email,
-              subject: providerBookingEmailContent.subject,
-              text: providerBookingEmailContent.text,
-              html: providerBookingEmailContent.html,
-            });
-            console.log(`[API] 'New Booking Request' email sent to provider: ${provider.email}`);
+            try {
+              await sendEmail({
+                to: provider.email,
+                subject: providerBookingEmailContent.subject,
+                text: providerBookingEmailContent.text,
+                html: providerBookingEmailContent.html,
+              });
+              console.log(`[API] 'New Booking Request' email sent to provider: ${provider.email}`);
+            } catch (sendError) {
+              console.error(`[API] Failed to send 'New Booking Request' email to ${provider.email}:`, sendError);
+            }
 
             // Email to customer: "Booking Request Pending"
+            console.log(`[API] Attempting to send 'Booking Request Pending' email to customer: ${customer.email}`);
             const customerPendingEmailContent = getBookingRequestPendingEmailContent(
               customer.name || customer.username,
               {
                 serviceName: service.name,
-                bookingDate: booking.bookingDate, // Pass Date object
+                bookingDate: booking.bookingDate, // Pass Date object or ISO string
+                providerName: provider.name || provider.username
               }
             );
-            await sendEmail({
-              to: customer.email,
-              subject: customerPendingEmailContent.subject,
-              text: customerPendingEmailContent.text,
-              html: customerPendingEmailContent.html,
-            });
-            console.log(`[API] 'Booking Request Pending' email sent to customer: ${customer.email}`);
+            try {
+              await sendEmail({
+                to: customer.email,
+                subject: customerPendingEmailContent.subject,
+                text: customerPendingEmailContent.text,
+                html: customerPendingEmailContent.html,
+              });
+              console.log(`[API] 'Booking Request Pending' email sent to customer: ${customer.email}`);
+            } catch (sendError) {
+              console.error(`[API] Failed to send 'Booking Request Pending' email to ${customer.email}:`, sendError);
+            }
+          } else {
+            console.error(`[API] Email not sent for new booking ${booking.id}: Missing required data. Customer: ${!!customer}, Provider: ${!!provider}`);
           }
-        } catch (emailError) {
-          console.error("Error sending booking request emails:", emailError);
+        } catch (fetchError) {
+          console.error(`[API] Error fetching data for new booking emails (Booking ID: ${booking.id}):`, fetchError);
         }
 
         // Return booking and order details for frontend payment initiation
@@ -1114,42 +1133,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
           const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
 
-          if (customer && provider) {
+          if (customer && provider && customer.email && provider.email) {
+            console.log(`[API] Attempting to send 'New Booking Request' email to provider (fallback): ${provider.email}`);
+            const customerAddress = booking.serviceLocation === 'customer'
+              ? `${customer.addressStreet || ''} ${customer.addressCity || ''} ${customer.addressState || ''} ${customer.addressZip || ''}`.trim() || 'Not specified'
+              : 'Provider Location';
+            const customerPhone = booking.serviceLocation === 'customer' ? customer.phone : undefined;
+
             const providerBookingEmailContent = getBookingConfirmationEmailContent(
               provider.name || provider.username,
               {
-                bookingId: booking.id.toString(), // Ensure bookingId is a string
+                bookingId: booking.id.toString(),
                 customerName: customer.name || customer.username,
                 serviceName: service.name,
                 bookingDate: booking.bookingDate,
+                customerAddress: customerAddress,
+                customerPhone: customerPhone
               }
-              // customer - Removed extra argument
             );
-            await sendEmail({
-              to: provider.email,
-              subject: providerBookingEmailContent.subject,
-              text: providerBookingEmailContent.text,
-              html: providerBookingEmailContent.html,
-            });
-            console.log(`[API] 'New Booking Request' email sent to provider (fallback): ${provider.email}`);
+            try {
+              await sendEmail({
+                to: provider.email,
+                subject: providerBookingEmailContent.subject,
+                text: providerBookingEmailContent.text,
+                html: providerBookingEmailContent.html,
+              });
+              console.log(`[API] 'New Booking Request' email sent to provider (fallback): ${provider.email}`);
+            } catch (sendError) {
+              console.error(`[API] Failed to send 'New Booking Request' email to ${provider.email} (fallback):`, sendError);
+            }
 
+            console.log(`[API] Attempting to send 'Booking Request Pending' email to customer (fallback): ${customer.email}`);
             const customerPendingEmailContent = getBookingRequestPendingEmailContent(
               customer.name || customer.username,
               {
                 serviceName: service.name,
                 bookingDate: booking.bookingDate,
+                providerName: provider.name || provider.username
               }
             );
-            await sendEmail({
-              to: customer.email,
-              subject: customerPendingEmailContent.subject,
-              text: customerPendingEmailContent.text,
-              html: customerPendingEmailContent.html,
-            });
-            console.log(`[API] 'Booking Request Pending' email sent to customer (fallback): ${customer.email}`);
+            try {
+              await sendEmail({
+                to: customer.email,
+                subject: customerPendingEmailContent.subject,
+                text: customerPendingEmailContent.text,
+                html: customerPendingEmailContent.html,
+              });
+              console.log(`[API] 'Booking Request Pending' email sent to customer (fallback): ${customer.email}`);
+            } catch (sendError) {
+              console.error(`[API] Failed to send 'Booking Request Pending' email to ${customer.email} (fallback):`, sendError);
+            }
+          } else {
+            console.error(`[API] Email not sent for new booking ${booking.id} (fallback): Missing required data. Customer: ${!!customer}, Provider: ${!!provider}`);
           }
-        } catch (emailError) {
-          console.error("Error sending booking request emails (fallback):", emailError);
+        } catch (fetchError) {
+          console.error(`[API] Error fetching data for new booking emails (fallback, Booking ID: ${booking.id}):`, fetchError);
         }
         // Inform frontend about the fallback
         res.status(201).json({ booking, paymentRequired: false, message: "Booking request sent. Payment integration failed." });
@@ -1165,82 +1203,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status, rejectionReason } = req.body;
       const bookingId = parseInt(req.params.id);
 
-      console.log(`[API] Updating booking status: ID=${bookingId}, Status=${status}, Reason=${rejectionReason || 'N/A'}`);
+      console.log(`[API DEBUG] Attempting to update booking status. Booking ID: ${bookingId}, Received Status: ${status}, Received Rejection Reason: ${rejectionReason}`);
 
       const booking = await storage.getBooking(bookingId);
+      console.log(`[API DEBUG] Fetched booking for ID ${bookingId}:`, booking ? `Found (Customer ID: ${booking.customerId})` : 'Not Found');
       if (!booking) {
-        console.log(`[API] Booking not found: ID=${bookingId}`);
+        console.log(`[API DEBUG] Booking not found: ID=${bookingId}. Returning 404.`);
         return res.status(404).json({ message: "Booking not found" });
       }
 
+      console.log(`[API DEBUG] Attempting to fetch service with ID: ${booking.serviceId} for authorization. Provider ID from token: ${req.user!.id}`);
       const service = await storage.getService(booking.serviceId!);
+      console.log(`[API DEBUG] Fetched service for ID ${booking.serviceId}:`, service ? `Found (Provider ID: ${service.providerId})` : 'Not Found');
       if (!service || service.providerId !== req.user!.id) {
-        console.log(`[API] Not authorized to update booking: ID=${bookingId}`);
+        console.log(`[API DEBUG] Authorization check failed for booking ID ${bookingId}. Service found: ${!!service}, Service Provider ID: ${service?.providerId}, Authenticated User ID: ${req.user!.id}. Returning 403.`);
         return res.status(403).json({ message: "Not authorized to update this booking" });
       }
 
+      console.log(`[API DEBUG] Validating status for booking ID ${bookingId}. Status: ${status}`);
       // Validate status
       if (!['accepted', 'rejected'].includes(status)) {
+        console.log(`[API DEBUG] Invalid status: ${status} for booking ID ${bookingId}. Returning 400.`);
         return res.status(400).json({ message: "Invalid status. Must be 'accepted' or 'rejected'" });
       }
 
+      console.log(`[API DEBUG] Checking for rejection reason for booking ID ${bookingId}. Status: ${status}, Rejection Reason: ${rejectionReason}`);
       // Require rejection reason if status is rejected
       if (status === 'rejected' && !rejectionReason) {
+        console.log(`[API DEBUG] Rejection reason is required but not provided for booking ID ${bookingId} (status: 'rejected'). Rejection Reason: '${rejectionReason}'. Returning 400.`);
         return res.status(400).json({ message: "Rejection reason is required when rejecting a booking" });
       }
 
+      console.log(`[API DEBUG] All pre-update checks passed for booking ID ${bookingId}. Proceeding to update booking status.`);
       // Update booking status
       const updatedBooking = await storage.updateBooking(bookingId, {
         status,
         rejectionReason: status === "rejected" ? rejectionReason : null,
       });
 
-      // Send appropriate email based on status
-      try {
-        const customer = await storage.getUser(updatedBooking.customerId!);
-        const provider = await storage.getUser(service.providerId!);
-        const serviceDetails = await storage.getService(updatedBooking.serviceId!)
-
-        if (customer && serviceDetails && provider) {
-          if (updatedBooking.status === "accepted") {
-            const acceptedEmailContent = getBookingAcceptedEmailContent(
-              customer.name || customer.username,
-              {
-                serviceName: serviceDetails.name,
-                bookingDate: updatedBooking.bookingDate,
-                // location: serviceDetails.location, // Example: if location is needed
-              },
-              provider // Pass provider details
-            );
-            await sendEmail({
-              to: customer.email,
-              subject: acceptedEmailContent.subject,
-              text: acceptedEmailContent.text,
-              html: acceptedEmailContent.html,
-            });
-            console.log(`[API] 'Booking Accepted' email sent to customer: ${customer.email}`);
-          } else if (updatedBooking.status === "rejected") {
-            const rejectedEmailContent = getBookingRejectedEmailContent(
-              customer.name || customer.username,
-              {
-                // Removed bookingId as it is not defined in the expected type
-                serviceName: serviceDetails.name,
-                bookingDate: updatedBooking.bookingDate,
-              },
-              updatedBooking.rejectionReason ?? undefined
-            );
-            await sendEmail({
-              to: customer.email,
-              subject: rejectedEmailContent.subject,
-              text: rejectedEmailContent.text,
-              html: rejectedEmailContent.html,
-            });
-            console.log(`[API] 'Booking Rejected' email sent to customer: ${customer.email}`);
-          }
-        }
-      } catch (emailError) {
-        console.error("Error sending booking status update email:", emailError);
-      }
+      console.log(`[API PATCH /api/bookings/:id/status] Booking ID: ${bookingId}. Status updated to ${updatedBooking.status}. Customer email notifications are now handled by dedicated routes: /api/bookings/:id/notify-customer-accepted and /api/bookings/:id/notify-customer-rejected.`);
+      // Email sending logic for customer acceptance/rejection has been removed from this route.
+      // It is now handled by dedicated endpoints: POST /api/bookings/:id/notify-customer-accepted and POST /api/bookings/:id/notify-customer-rejected.
 
       // Create notification for customer
       const notificationMessage = status === "rejected"
@@ -1268,6 +1271,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating booking status:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update booking status" });
+    }
+  });
+
+  // New dedicated route for sending 'Booking Accepted' email to customer
+  app.post("/api/bookings/:id/notify-customer-accepted", requireAuth, requireRole(["provider"]), async (req, res) => {
+    const bookingId = req.params.id;
+    console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Request received.`);
+    try {
+      const parsedBookingId = parseInt(bookingId);
+      if (isNaN(parsedBookingId)) {
+        console.error(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Invalid booking ID format.`);
+        return res.status(400).json({ message: "Invalid booking ID format." });
+      }
+
+      const booking = await storage.getBooking(parsedBookingId);
+      if (!booking) {
+        console.error(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Booking not found.`);
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      if (booking.status !== "accepted") {
+        console.warn(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Booking status is '${booking.status}', not 'accepted', but proceeding with email as requested by this route.`);
+      }
+
+      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching customer ID: ${booking.customerId}`);
+      const customer = await storage.getUser(booking.customerId!);
+      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched customer:`, customer ? { id: customer.id, name: customer.name, email: customer.email } : 'NOT FOUND');
+
+      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching service details ID: ${booking.serviceId}`);
+      const serviceDetails = await storage.getService(booking.serviceId!);
+      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched serviceDetails:`, serviceDetails ? { id: serviceDetails.id, name: serviceDetails.name, providerId: serviceDetails.providerId } : 'NOT FOUND');
+
+      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching provider ID: ${serviceDetails?.providerId}`);
+      const provider = serviceDetails && serviceDetails.providerId !== null ? await storage.getUser(serviceDetails.providerId) : null;
+      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched provider:`, provider ? { id: provider.id, name: provider.name } : 'NOT FOUND');
+
+      if (!customer || !customer.email || !serviceDetails || !provider) {
+        console.error(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Cannot send 'accepted' email: Essential data missing. Customer: ${!!customer}, Email: ${!!customer?.email}, Service: ${!!serviceDetails}, Provider: ${!!provider}.`);
+        return res.status(500).json({ message: `Cannot send 'accepted' email: Essential data missing for booking ID ${bookingId}.` });
+      }
+
+      const emailContent = getBookingAcceptedEmailContent(
+        customer.name || customer.username,
+        { 
+          serviceName: serviceDetails.name, 
+          bookingDate: booking.bookingDate 
+        },
+        {
+          name: provider.name || provider.username,
+          location: serviceDetails.addressStreet ? `${serviceDetails.addressStreet}, ${serviceDetails.addressCity || ''}`.trim() : serviceDetails.addressCity || "Provider's Location"
+        }
+      );
+
+      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Accepted' email to ${customer.email}`);
+      await sendEmail({
+        to: customer.email,
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html,
+      });
+      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Accepted' email SENT to ${customer.email}`);
+
+      res.status(200).json({ message: "Customer notification for booking acceptance has been queued." });
+    } catch (error) {
+      console.error(`[NEW ACCEPT EMAIL ROUTE ERROR - Booking ID: ${bookingId}]`, error);
+      res.status(500).json({ message: "Failed to send acceptance email." });
+    }
+  });
+
+  // New dedicated route for sending 'Booking Rejected' email to customer
+  app.post("/api/bookings/:id/notify-customer-rejected", requireAuth, requireRole(["provider"]), async (req, res) => {
+    const bookingId = req.params.id;
+    const { rejectionReason } = req.body;
+    console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Request received. Reason: ${rejectionReason || 'None'}`);
+    try {
+      const parsedBookingId = parseInt(bookingId);
+      if (isNaN(parsedBookingId)) {
+        console.error(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Invalid booking ID format.`);
+        return res.status(400).json({ message: "Invalid booking ID format." });
+      }
+
+      const booking = await storage.getBooking(parsedBookingId);
+      if (!booking) {
+        console.error(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Booking not found.`);
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      if (booking.status !== "rejected") {
+        console.warn(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Booking status is '${booking.status}', not 'rejected', but proceeding with email as requested by this route.`);
+      }
+
+      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching customer ID: ${booking.customerId}`);
+      const customer = await storage.getUser(booking.customerId!);
+      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched customer:`, customer ? { id: customer.id, name: customer.name, email: customer.email } : 'NOT FOUND');
+
+      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching service details ID: ${booking.serviceId}`);
+      const serviceDetails = await storage.getService(booking.serviceId!);
+      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched serviceDetails:`, serviceDetails ? { id: serviceDetails.id, name: serviceDetails.name, providerId: serviceDetails.providerId } : 'NOT FOUND');
+
+      // Provider data is not strictly needed for rejection email content but fetching for consistency / future use
+      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching provider ID: ${serviceDetails?.providerId}`);
+      const provider = serviceDetails && serviceDetails.providerId !== null ? await storage.getUser(serviceDetails.providerId) : null;
+      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched provider:`, provider ? { id: provider.id, name: provider.name } : 'NOT FOUND');
+
+      if (!customer || !customer.email || !serviceDetails) { // Provider is optional for rejection email content
+        console.error(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Cannot send 'rejected' email: Essential data missing. Customer: ${!!customer}, Email: ${!!customer?.email}, Service: ${!!serviceDetails}.`);
+        return res.status(500).json({ message: `Cannot send 'rejected' email: Essential data missing for booking ID ${bookingId}.` });
+      }
+
+      const finalRejectionReason = rejectionReason || booking.rejectionReason || 'No specific reason provided.';
+
+      const emailContent = getBookingRejectedEmailContent(
+        customer.name || customer.username,
+        { 
+          serviceName: serviceDetails.name, 
+          bookingDate: booking.bookingDate 
+        },
+        finalRejectionReason
+      );
+
+      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Rejected' email to ${customer.email}`);
+      await sendEmail({
+        to: customer.email,
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html,
+      });
+      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Rejected' email SENT to ${customer.email}`);
+
+      res.status(200).json({ message: "Customer notification for booking rejection has been queued." });
+    } catch (error) {
+      console.error(`[NEW REJECT EMAIL ROUTE ERROR - Booking ID: ${bookingId}]`, error);
+      res.status(500).json({ message: "Failed to send rejection email." });
     }
   });
 

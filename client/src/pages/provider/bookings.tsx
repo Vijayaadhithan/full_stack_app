@@ -94,25 +94,74 @@ export default function ProviderBookings() {
 
   const updateBookingMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: BookingActionData }) => {
-      const res = await apiRequest("PATCH", `/api/bookings/${id}`, data);
+      // Prepare payload for the status update endpoint
+      const payload: { status: string; rejectionReason?: string; rescheduleDate?: string } = { 
+        status: data.status 
+      };
+      if (data.status === 'rejected' && data.comments) {
+        payload.rejectionReason = data.comments;
+      }
+      if (data.status === 'rescheduled' && data.rescheduleDate) {
+        payload.rescheduleDate = data.rescheduleDate;
+      }
+
+      // Corrected endpoint to PATCH /api/bookings/:id/status
+      const res = await apiRequest("PATCH", `/api/bookings/${id}/status`, payload);
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || "Failed to update booking");
+        throw new Error(error.message || "Failed to update booking status");
       }
-      return res.json();
+      const updatedBookingData = await res.json();
+      // Pass along original input data (specifically comments for rejection) for onSuccess
+      return { responseData: updatedBookingData, inputData: data }; 
     },
-    onSuccess: () => {
-      // Invalidate both bookings and notifications queries
+    onSuccess: async (result) => { // result is { responseData: { booking: updatedBookingData, message: string }, inputData: data }
+      const { responseData, inputData } = result;
+      const updatedBooking = responseData.booking; // Access the nested booking object
+
+      // Existing success logic
       queryClient.invalidateQueries({ queryKey: ["/api/bookings/provider"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] }); // Also invalidate customer bookings
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
         title: "Success",
-        description: "Booking updated successfully",
+        description: `Booking status updated to ${updatedBooking.status}`,
       });
       form.reset();
       setActionType(null);
       setSelectedBooking(null);
+
+      // New logic for email notification
+      const bookingId = updatedBooking.id;
+
+      if (updatedBooking.status === "accepted") {
+        console.log(`[FRONTEND bookings.tsx] Booking ${bookingId} accepted. Triggering acceptance email.`);
+        try {
+          await apiRequest("POST", `/api/bookings/${bookingId}/notify-customer-accepted`);
+          console.log(`[FRONTEND bookings.tsx] Acceptance email trigger for booking ${bookingId} sent.`);
+        } catch (emailError) {
+          console.error(`[FRONTEND bookings.tsx] Failed to trigger acceptance email for ${bookingId}:`, emailError);
+          toast({
+            title: "Email Notification Issue",
+            description: "Failed to send acceptance email to customer. Please check logs.",
+            variant: "default",
+          });
+        }
+      } else if (updatedBooking.status === "rejected") {
+        const rejectionReason = inputData.comments;
+        console.log(`[FRONTEND bookings.tsx] Booking ${bookingId} rejected. Triggering rejection email. Reason: ${rejectionReason}`);
+        try {
+          await apiRequest("POST", `/api/bookings/${bookingId}/notify-customer-rejected`, { rejectionReason });
+          console.log(`[FRONTEND bookings.tsx] Rejection email trigger for booking ${bookingId} sent.`);
+        } catch (emailError) {
+          console.error(`[FRONTEND bookings.tsx] Failed to trigger rejection email for ${bookingId}:`, emailError);
+          toast({
+            title: "Email Notification Issue",
+            description: "Failed to send rejection email to customer. Please check logs.",
+            variant: "default",
+          });
+        }
+      }
     },
     onError: (error: Error) => {
       toast({

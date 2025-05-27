@@ -158,32 +158,36 @@ The IndianBudgetTracker Team`;
 }
 
 // This function is now primarily for the provider's "New Booking Request"
-export function getBookingConfirmationEmailContent(providerName: string, bookingDetails: { bookingId: string; customerName: string; serviceName: string; bookingDate: string | Date; }): MailOptions {
+export function getBookingConfirmationEmailContent(providerName: string, bookingDetails: { bookingId: string; customerName: string; serviceName: string; bookingDate: string | Date; customerAddress?: string; customerPhone?: string; }): MailOptions {
   const subject = 'New Booking Request!';
   const text = `Hi ${providerName},
 
-You have a new booking request for your service: ${bookingDetails.serviceName}.
+New booking request for ${bookingDetails.serviceName}.
 
-Booking Details:
+Details:
 - Booking ID: ${bookingDetails.bookingId}
-- Customer Name: ${bookingDetails.customerName}
+- Customer: ${bookingDetails.customerName}
 - Service: ${bookingDetails.serviceName}
-- Requested Date & Time: ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}
+- Date & Time: ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}
+${bookingDetails.customerAddress ? `- Address: ${bookingDetails.customerAddress}` : ''}
+${bookingDetails.customerPhone ? `- Phone: ${bookingDetails.customerPhone}` : ''}
 
-Please review and respond to this request in your dashboard.
+Please review this request in your dashboard.
 
 Thanks,
 The IndianBudgetTracker Team`;
   const html = `<p>Hi ${providerName},</p>
-<p>You have a new booking request for your service: <strong>${bookingDetails.serviceName}</strong>.</p>
-<p><strong>Booking Details:</strong></p>
+<p>New booking request for <strong>${bookingDetails.serviceName}</strong>.</p>
+<p><strong>Details:</strong></p>
 <ul>
     <li><strong>Booking ID:</strong> ${bookingDetails.bookingId}</li>
-    <li><strong>Customer Name:</strong> ${bookingDetails.customerName}</li>
+    <li><strong>Customer:</strong> ${bookingDetails.customerName}</li>
     <li><strong>Service:</strong> ${bookingDetails.serviceName}</li>
-    <li><strong>Requested Date & Time:</strong> ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</li>
+    <li><strong>Date & Time:</strong> ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</li>
+    ${bookingDetails.customerAddress ? `<li><strong>Address:</strong> ${bookingDetails.customerAddress}</li>` : ''}
+    ${bookingDetails.customerPhone ? `<li><strong>Phone:</strong> ${bookingDetails.customerPhone}</li>` : ''}
 </ul>
-<p>Please review and respond to this request in your dashboard.</p>
+<p>Please review this request in your dashboard.</p>
 <p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
   return { subject, text, html, to: '' };
 }
@@ -226,19 +230,19 @@ The IndianBudgetTracker Team`;
 
 // --- New Email Template Functions --- //
 
-export function getBookingRequestPendingEmailContent(customerName: string, bookingDetails: { serviceName: string; bookingDate: string | Date; }): MailOptions {
+export function getBookingRequestPendingEmailContent(customerName: string, bookingDetails: { serviceName: string; bookingDate: string | Date; providerName: string; }): MailOptions {
   const subject = 'Your Booking Request is Pending - IndianBudgetTracker';
   const text = `Hi ${customerName},
 
-Your request for the service "${bookingDetails.serviceName}" on ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')} has been sent to the provider.
+Your request for "${bookingDetails.serviceName}" on ${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')} with ${bookingDetails.providerName} has been sent.
 
-We will notify you once the provider responds.
+We'll notify you of any updates from the provider.
 
 Thanks,
 The IndianBudgetTracker Team`;
   const html = `<p>Hi ${customerName},</p>
-<p>Your request for the service "<strong>${bookingDetails.serviceName}</strong>" on <strong>${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</strong> has been sent to the provider.</p>
-<p>We will notify you once the provider responds.</p>
+<p>Your request for "<strong>${bookingDetails.serviceName}</strong>" on <strong>${formatIndianDisplay(new Date(bookingDetails.bookingDate), 'datetime')}</strong> with <strong>${bookingDetails.providerName}</strong> has been sent.</p>
+<p>We'll notify you of any updates from the provider.</p>
 <p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
   return { subject, text, html, to: '' };
 }
