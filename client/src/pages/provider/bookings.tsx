@@ -327,7 +327,7 @@ export default function ProviderBookings() {
                       )}
                     </div>
 
-                    {booking.status === 'pending' && (
+                    {(booking.status === 'pending' || booking.status === 'rescheduled_pending_provider_approval') && (
                       <div className="flex gap-2">
                         <Dialog>
                           <DialogTrigger asChild>

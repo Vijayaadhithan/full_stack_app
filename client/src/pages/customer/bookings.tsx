@@ -38,6 +38,7 @@ import {
 import { format, isAfter, isBefore, addDays } from "date-fns";
 import { formatIndianDisplay } from "@shared/date-utils";
 import { DialogTrigger } from "@radix-ui/react-dialog";
+import { Input } from "@/components/ui/input"; // Added Input for datetime-local
 
 type BookingWithService = Booking & {
   service: Service;
@@ -62,67 +63,71 @@ declare global {
 export default function Bookings() {
   const { toast } = useToast();
   const [selectedBooking, setSelectedBooking] = useState<BookingWithService>();
-  const [rescheduleDate, setRescheduleDate] = useState<Date>();
-  const [rescheduleTime, setRescheduleTime] = useState<string>("");
-  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  // const [rescheduleDate, setRescheduleDate] = useState<Date>();
+  // const [rescheduleTime, setRescheduleTime] = useState<string>("");
+  const [newRescheduleDateTime, setNewRescheduleDateTime] = useState<string>(""); // New state for datetime-local
+  const [rescheduleComments, setRescheduleComments] = useState<string>(""); // Added for comments
+  // const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState("");
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [order, setOrder] = useState<any>(null);
 
   // Fetch bookings
-  const { data: bookings, isLoading } = useQuery<BookingWithService[]>({
+  const { data: bookings, isLoading } = useQuery<BookingWithService[]> ({
     queryKey: ["/api/bookings"],
   });
 
-  // Fetch available slots for rescheduling
-  const { data: providerAvailability, isLoading: isLoadingAvailability } = useQuery<string[], Error>({
-    queryKey: ["/api/services", selectedBooking?.serviceId, "availability", rescheduleDate ? rescheduleDate.toISOString().split('T')[0] : undefined],
-    queryFn: async () => {
-      if (!selectedBooking?.serviceId || !rescheduleDate) return [];
-      const dateStr = rescheduleDate.toISOString().split('T')[0];
-      const response = await apiRequest("GET", `/api/services/${selectedBooking.serviceId}/availability?date=${dateStr}`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch availability");
-      }
-      return response.json();
-    },
-    enabled: !!selectedBooking?.serviceId && !!rescheduleDate,
-  });
+  // REMOVED: Fetch available slots for rescheduling (providerAvailability query and related useEffects)
+  // const { data: providerAvailability, isLoading: isLoadingAvailability } = useQuery<string[], Error>({
+  //   queryKey: ["/api/services", selectedBooking?.serviceId, "availability", rescheduleDate ? rescheduleDate.toISOString().split('T')[0] : undefined],
+  //   queryFn: async () => {
+  //     if (!selectedBooking?.serviceId || !rescheduleDate) return [];
+  //     const dateStr = rescheduleDate.toISOString().split('T')[0];
+  //     const response = await apiRequest("GET", `/api/services/${selectedBooking.serviceId}/availability?date=${dateStr}`);
+  //     if (!response.ok) {
+  //       const errorData = await response.json();
+  //       throw new Error(errorData.message || "Failed to fetch availability");
+  //     }
+  //     return response.json();
+  //   },
+  //   enabled: !!selectedBooking?.serviceId && !!rescheduleDate,
+  // });
 
-  useEffect(() => {
-    if (providerAvailability) {
-      setAvailableTimes(providerAvailability);
-      if (providerAvailability.length > 0) {
-        setRescheduleTime(providerAvailability[0]); // Default to the first available time
-      } else {
-        setRescheduleTime("");
-      }
-    }
-  }, [providerAvailability]);
+  // REMOVED: useEffect for providerAvailability
+  // useEffect(() => {
+  //   if (providerAvailability) {
+  //     setAvailableTimes(providerAvailability);
+  //     if (providerAvailability.length > 0) {
+  //       setRescheduleTime(providerAvailability[0]); // Default to the first available time
+  //     } else {
+  //       setRescheduleTime("");
+  //     }
+  //   }
+  // }, [providerAvailability]);
 
-  useEffect(() => {
-    if (providerAvailability === undefined) return;
+  // REMOVED: useEffect for providerAvailability error handling
+  // useEffect(() => {
+  //   if (providerAvailability === undefined) return;
     
-    const queryState = queryClient.getQueryState([
-      "/api/services",
-      selectedBooking?.serviceId,
-      "availability",
-      rescheduleDate ? rescheduleDate.toISOString().split('T')[0] : undefined,
-    ]);
-    const error = queryState?.error;
+  //   const queryState = queryClient.getQueryState([
+  //     "/api/services",
+  //     selectedBooking?.serviceId,
+  //     "availability",
+  //     rescheduleDate ? rescheduleDate.toISOString().split('T')[0] : undefined,
+  //   ]);
+  //   const error = queryState?.error;
     
-    if (error) {
-      toast({
-        title: "Error fetching availability",
-        description: error instanceof Error ? error.message : "Failed to fetch availability",
-        variant: "destructive",
-      });
-      setAvailableTimes([]);
-      setRescheduleTime("");
-    }
-  }, [providerAvailability, queryClient, rescheduleDate, selectedBooking?.serviceId]);
+  //   if (error) {
+  //     toast({
+  //       title: "Error fetching availability",
+  //       description: error instanceof Error ? error.message : "Failed to fetch availability",
+  //       variant: "destructive",
+  //     });
+  //     setAvailableTimes([]);
+  //     setRescheduleTime("");
+  //   }
+  // }, [providerAvailability, queryClient, rescheduleDate, selectedBooking?.serviceId]);
 
   // Fetch existing reviews for selected service
   const { data: existingReviews } = useQuery<Review[]>({
@@ -218,10 +223,12 @@ export default function Bookings() {
       bookingId,
       date,
       time,
+      comments, // Added comments
     }: {
       bookingId: number;
       date: Date; // Changed to Date object
       time: string;
+      comments?: string; // Added comments
     }) => {
       // Combine date and time
       const newBookingDate = new Date(date);
@@ -230,6 +237,7 @@ export default function Bookings() {
 
       return apiRequest("PATCH", `/api/bookings/${bookingId}`, {
         bookingDate: newBookingDate.toISOString(), // Send as ISO string
+        comments: comments, // Send comments
       }).then((r) => r.json());
     },
     onSuccess: () => {
@@ -240,8 +248,8 @@ export default function Bookings() {
         description: "Your reschedule request has been sent to the provider for confirmation.",
       });
       setSelectedBooking(undefined); // Close dialog
-      setRescheduleDate(undefined);
-      setRescheduleTime("");
+      setNewRescheduleDateTime("");
+      setRescheduleComments(""); // Reset comments
     },
     onError: (error: any) => {
       toast({
@@ -249,6 +257,7 @@ export default function Bookings() {
         description: error.message || "Could not reschedule booking.",
         variant: "destructive",
       });
+      setRescheduleComments(""); // Reset comments on error as well
     },
   });
 
@@ -290,6 +299,7 @@ export default function Bookings() {
         description: errorMessage,
         variant: "destructive",
       });
+      setRescheduleComments(""); // Reset comments on error as well
     },
   });
 
@@ -335,6 +345,7 @@ export default function Bookings() {
         description: error.message,
         variant: "destructive",
       });
+      setRescheduleComments(""); // Reset comments on error as well
     },
   });
 
@@ -379,11 +390,27 @@ export default function Bookings() {
   };
 
   const handleReschedule = () => {
-    if (!selectedBooking || !rescheduleDate || !rescheduleTime) return;
+    if (!selectedBooking || !newRescheduleDateTime) return;
+
+    // Basic validation for datetime-local input (e.g., not empty)
+    // More sophisticated validation (e.g., ensuring it's in the future) can be added here or on the backend
+    if (new Date(newRescheduleDateTime) <= new Date()) {
+        toast({
+            title: "Invalid Date/Time",
+            description: "Please select a future date and time for rescheduling.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    const newDate = new Date(newRescheduleDateTime);
+    const timeString = newRescheduleDateTime.split("T")[1];
+
     rescheduleMutation.mutate({
       bookingId: selectedBooking.id,
-      date: rescheduleDate, // Pass Date object
-      time: rescheduleTime,
+      date: newDate,
+      time: timeString,
+      comments: rescheduleComments,
     });
   };
 
@@ -535,7 +562,8 @@ export default function Bookings() {
                                     <DialogTitle>Reschedule Booking</DialogTitle>
                                   </DialogHeader>
                                   <div className="space-y-4 pt-4">
-                                    <Calendar
+                                    {/* REMOVED: Calendar and Time Select */}
+                                    {/* <Calendar
                                       mode="single"
                                       selected={rescheduleDate}
                                       onSelect={setRescheduleDate}
@@ -568,11 +596,31 @@ export default function Bookings() {
                                           </Select>
                                         )}
                                       </div>
-                                    )}
+                                    )} */}
+                                    <div>
+                                      <Label htmlFor="newRescheduleDateTime">New Date and Time</Label>
+                                      <Input 
+                                        type="datetime-local"
+                                        id="newRescheduleDateTime"
+                                        value={newRescheduleDateTime}
+                                        onChange={(e) => setNewRescheduleDateTime(e.target.value)}
+                                        className="mt-1"
+                                      />
+                                    </div>
+                                    <div className="mt-4">
+                                      <Label htmlFor="rescheduleComments">Reason for Rescheduling (Optional)</Label>
+                                      <Textarea
+                                        id="rescheduleComments"
+                                        value={rescheduleComments}
+                                        onChange={(e) => setRescheduleComments(e.target.value)}
+                                        placeholder="Enter any comments for the provider..."
+                                        className="mt-1"
+                                      />
+                                    </div>
                                     <Button
-                                      className="w-full"
+                                      className="w-full mt-4"
                                       onClick={handleReschedule}
-                                      disabled={!rescheduleDate || !rescheduleTime || rescheduleMutation.isPending || isLoadingAvailability || availableTimes.length === 0}
+                                      disabled={!newRescheduleDateTime || rescheduleMutation.isPending}
                                     >
                                       {rescheduleMutation.isPending ? "Confirming..." : "Confirm Reschedule"}
                                     </Button>

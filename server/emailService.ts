@@ -233,22 +233,54 @@ export function sendBookingRescheduledByCustomerEmail(to: string, details: {
   customerName: string;
   serviceName: string;
   newBookingDate: string;
+  originalBookingDate: string;
   bookingId: string;
   loginUrl: string;
   bookingDetailsUrl: string;
 }): Promise<boolean> {
-  const { providerName, customerName, serviceName, newBookingDate, bookingId, loginUrl, bookingDetailsUrl } = details;
+  const { providerName, customerName, serviceName, newBookingDate, originalBookingDate, bookingId, loginUrl, bookingDetailsUrl } = details;
   
   const mailOptions = {
     to,
-    subject: `Reschedule Request for Booking #${bookingId}`,
-    text: `Hi ${providerName},\n\nCustomer ${customerName} has requested to reschedule booking #${bookingId} for '${serviceName}' to ${newBookingDate}.\n\nPlease review this request in your dashboard: ${bookingDetailsUrl}\n\nThanks,\nThe IndianBudgetTracker Team`,
+    subject: `Customer Reschedule Request for Booking #${bookingId}`,
+    text: `Hi ${providerName},\n\nCustomer ${customerName} has requested to reschedule booking #${bookingId} for '${serviceName}'.\nOriginal Date: ${originalBookingDate}\nNew Requested Date: ${newBookingDate}.\n\nPlease review this request in your dashboard: ${bookingDetailsUrl}\n\nThanks,\nThe IndianBudgetTracker Team`,
     html: `<p>Hi ${providerName},</p>
-<p>Customer <strong>${customerName}</strong> has requested to reschedule booking #${bookingId} for '<strong>${serviceName}</strong>' to <strong>${newBookingDate}</strong>.</p>
+<p>Customer <strong>${customerName}</strong> has requested to reschedule booking #${bookingId} for '<strong>${serviceName}</strong>'.</p>
+<p>Original Date: <strong>${originalBookingDate}</strong></p>
+<p>New Requested Date: <strong>${newBookingDate}</strong></p>
 <p>Please <a href="${bookingDetailsUrl}">review this request in your dashboard</a>.</p>
 <p>Thanks,<br/>The IndianBudgetTracker Team</p>`
   };
   
+  return sendEmail(mailOptions);
+}
+
+export function sendBookingRescheduledByProviderEmail(to: string, details: {
+  customerName: string;
+  providerName: string;
+  serviceName: string;
+  newBookingDate: string;
+  originalBookingDate: string;
+  bookingId: string;
+  comments?: string;
+  loginUrl: string;
+  bookingDetailsUrl: string;
+}): Promise<boolean> {
+  const { customerName, providerName, serviceName, newBookingDate, originalBookingDate, bookingId, comments, loginUrl, bookingDetailsUrl } = details;
+
+  const mailOptions = {
+    to,
+    subject: `Booking #${bookingId} Has Been Rescheduled by Provider`,
+    text: `Hi ${customerName},\n\nYour booking #${bookingId} for '${serviceName}' with ${providerName} has been rescheduled.\nOriginal Date: ${originalBookingDate}\nNew Date: ${newBookingDate}.\n\n${comments ? `Provider's reason: ${comments}\n` : ''}\nPlease check your updated booking details: ${bookingDetailsUrl}\n\nThanks,\nThe IndianBudgetTracker Team`,
+    html: `<p>Hi ${customerName},</p>
+<p>Your booking #${bookingId} for '<strong>${serviceName}</strong>' with <strong>${providerName}</strong> has been rescheduled.</p>
+<p>Original Date: <strong>${originalBookingDate}</strong></p>
+<p>New Date: <strong>${newBookingDate}</strong></p>
+${comments ? `<p>Provider's reason: ${comments}</p>` : ''}
+<p>Please <a href="${bookingDetailsUrl}">check your updated booking details</a>.</p>
+<p>Thanks,<br/>The IndianBudgetTracker Team</p>`
+  };
+
   return sendEmail(mailOptions);
 }
 

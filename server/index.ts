@@ -1,5 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import { registerRoutes } from "./routes"; // Changed from ./routes/index
 import { setupVite, serveStatic, log } from "./vite";
 import { storage as dbStorage } from "./storage";
 import { config } from "dotenv";
@@ -83,11 +83,11 @@ setupScheduledTasks();
   
   if (process.env.NODE_ENV === "production") {
     // In production, serve the static files from the dist directory
-    app.use(express.static(path.join(__dirname, "../client/dist")));
+    app.use(express.static(path.join(__dirname, "public")));
 
     // For any other request, send the index.html file
     app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+      res.sendFile(path.join(__dirname, "public", "index.html"));
     });
 
     server.listen(PORT, () => {

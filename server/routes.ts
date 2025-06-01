@@ -119,6 +119,18 @@ function requireRole(roles: string[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Endpoint to list all available API routes
+  app.get("/api", (req, res) => {
+    const routes = app._router.stack
+      .filter((r: any) => r.route && r.route.path)
+      .map((r: any) => ({
+        path: r.route.path,
+        methods: Object.keys(r.route.methods).join(", ").toUpperCase(),
+      }))
+      .filter((r: any) => r.path.startsWith("/api/") && r.path !== "/api"); // Filter for API routes and exclude itself
+    res.json({ available_endpoints: routes });
+  });
+
   // Password Reset Routes
   app.post("/api/request-password-reset", async (req, res) => {
     const { email } = req.body;
@@ -263,6 +275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Scenario 1: Customer reschedules
       if (bookingDate && currentUser.role === "customer" && booking.customerId === currentUser.id) {
         console.log(`[API] Customer ${currentUser.id} rescheduling booking ${bookingId} to ${bookingDate}`);
+        const originalBookingDate = booking.bookingDate; // Capture original booking date
         updatedBookingData = {
           bookingDate: new Date(bookingDate),
           status: "rescheduled_pending_provider_approval",
@@ -287,6 +300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 providerName: providerUser.name || 'Provider',
                 customerName: currentUser.name || 'Customer',
                 serviceName: service.name,
+                originalBookingDate: originalBookingDate ? new Date(originalBookingDate).toLocaleString() : 'N/A',
                 newBookingDate: new Date(bookingDate).toLocaleString(),
                 bookingId: bookingId.toString(),
                 loginUrl: `${process.env.BASE_URL}/login`,
@@ -295,8 +309,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
         }
-      } 
-      // Scenario 2: Provider accepts/rejects a booking (including a rescheduled one)
+      }
+      // Scenario 2: Provider reschedules
+      else if (bookingDate && currentUser.role === "provider" && service.providerId === currentUser.id) {
+        console.log(`[API] Provider ${currentUser.id} rescheduling booking ${bookingId} to ${bookingDate}`);
+        const originalBookingDate = booking.bookingDate; // Capture original booking date
+        updatedBookingData = {
+          bookingDate: new Date(bookingDate),
+          status: "rescheduled_by_provider", // Or a more appropriate status like "accepted" if provider reschedule implies auto-acceptance
+          comments: comments || "Rescheduled by provider",
+        };
+
+        if (booking.customerId) {
+          const customerUser = await storage.getUser(booking.customerId);
+          if (customerUser) {
+            notificationPromises.push(
+              storage.createNotification({
+                userId: booking.customerId,
+                type: "booking_rescheduled_by_provider",
+                title: "Booking Rescheduled by Provider",
+                message: `Provider ${currentUser.name || 'ID: '+currentUser.id} has rescheduled your booking #${bookingId} for '${service.name}' to ${new Date(bookingDate).toLocaleString()}. ${comments ? 'Comments: ' + comments : ''}`,
+                isRead: false,
+                relatedBookingId: bookingId,
+              })
+            );
+            if (customerUser.email) {
+              emailPromise = emailService.sendBookingRescheduledByProviderEmail(customerUser.email, {
+                customerName: customerUser.name || 'Customer',
+                providerName: currentUser.name || 'Provider',
+                serviceName: service.name,
+                originalBookingDate: originalBookingDate ? new Date(originalBookingDate).toLocaleString() : 'N/A',
+                newBookingDate: new Date(bookingDate).toLocaleString(),
+                bookingId: bookingId.toString(),
+                comments: comments || undefined,
+                loginUrl: `${process.env.BASE_URL}/login`,
+                bookingDetailsUrl: `${process.env.BASE_URL}/customer/bookings` 
+              }).then(() => {}).catch((err: unknown) => console.error("[API] Failed to send reschedule by provider email to customer:", err));
+            }
+          }
+        }
+      }
+      // Scenario 3: Provider accepts/rejects a booking (including a customer's reschedule request)
       else if (status && currentUser.role === "provider" && service.providerId === currentUser.id) {
         console.log(`[API] Provider ${currentUser.id} updating booking ${bookingId} status to ${status}`);
         updatedBookingData = {
@@ -1344,9 +1397,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[API DEBUG] Validating status for booking ID ${bookingId}. Status: ${status}`);
       // Validate status
-      if (!['accepted', 'rejected'].includes(status)) {
+      if (!['accepted', 'rejected', 'rescheduled'].includes(status)) {
         console.log(`[API DEBUG] Invalid status: ${status} for booking ID ${bookingId}. Returning 400.`);
-        return res.status(400).json({ message: "Invalid status. Must be 'accepted' or 'rejected'" });
+        return res.status(400).json({ message: "Invalid status. Must be 'accepted', 'rejected', or 'rescheduled'" });
       }
 
       console.log(`[API DEBUG] Checking for rejection reason for booking ID ${bookingId}. Status: ${status}, Rejection Reason: ${rejectionReason}`);
