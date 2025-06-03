@@ -5,8 +5,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth";
 import { LanguageProvider } from "@/contexts/language-context";
 import { ProtectedRoute } from "./lib/protected-route";
+import { initializePushNotifications, getCurrentPosition, writeFileToStorage, scheduleLocalNotification } from '@/lib/permissions'; // Added imports
+import PermissionRequester from '@/components/PermissionRequester'; // Import the new component
+import React, {useEffect} from 'react';
 
 // Import all pages...
+// import HomePage from "@/pages/home-page"; // Removed import for HomePage as it's not used and file doesn't exist
 import AuthPage from "@/pages/auth-page";
 import CustomerDashboard from "@/pages/customer/dashboard";
 import BrowseServices from "@/pages/customer/browse-services";
@@ -87,11 +91,30 @@ function Router() {
 }
 
 function App() {
+  // Initialize Push Notifications early
+  useEffect(() => {
+    initializePushNotifications();
+
+    // Example usage (you would typically call these based on user actions):
+    // const testPermissions = async () => {
+    //   console.log('Attempting to get current position...');
+    //   await getCurrentPosition();
+    //   console.log('Attempting to write a test file...');
+    //   await writeFileToStorage('test.txt', 'Hello Capacitor!');
+    //   console.log('Attempting to schedule a local notification...');
+    //   await scheduleLocalNotification();
+    // };
+
+    // Call testPermissions for demonstration if needed, or integrate into UI
+    // testPermissions(); 
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
         <AuthProvider>
-          <Router />
+          {/* Use the existing Router function component here */}
+          <Router /> 
           <Toaster />
         </AuthProvider>
       </LanguageProvider>

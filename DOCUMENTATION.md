@@ -90,28 +90,32 @@ This section guides you through setting up the project environment.
 *   **ORM:** Drizzle ORM
 *   **Authentication:** Passport.js (Local Strategy) with express-session
 *   **File Uploads:** Multer
-*   **Payments:** Razorpay (Integration planned/partially implemented)
+*   **Payments:** Razorpay (Integrated for processing payments, managing vendor payouts, and handling payment splits)
 *   **Environment Variables:** `dotenv`
 
 ### 2.2. Project Structure (`/server`)
 
 *   `index.ts`: Main entry point for the server. Sets up Express, CORS, JSON parsing, file uploads (Multer), static file serving, scheduled tasks (booking expiration), Vite integration (for development), and error handling.
-*   `routes.ts`: Defines all API endpoints. Organizes routes for users, services, bookings, products, orders, reviews, notifications, returns, promotions, payments, and file uploads.
+*   `routes.ts`: Defines all API endpoints. Organizes routes for users, services, bookings, products, orders, reviews, notifications, returns, promotions, payments (including Razorpay integration), and file uploads. It coordinates with various services, including those in the `services/` directory.
 *   `routes/`: Contains modular route handlers (e.g., `promotions.ts`, `shops.ts`).
 *   `db.ts`: Configures the PostgreSQL database connection using `postgres` and initializes Drizzle ORM.
 *   `auth.ts`: Sets up Passport.js for authentication, including local strategy, password hashing (scrypt), session management, and login/register/logout routes.
 *   `storage.ts`: Acts as a data access layer, abstracting database operations using Drizzle ORM. Contains functions to interact with various tables (users, services, bookings, etc.).
 *   `vite.ts`: Handles integration with Vite for development mode.
-*   `ist-utils.ts`: (Likely contains utility functions related to Indian Standard Time, though not viewed).
-*   `pg-storage.ts`: (Likely related to session storage using PostgreSQL, though not viewed).
+*   `ist-utils.ts`: Provides utility functions for handling Indian Standard Time (IST). This includes converting JavaScript dates to IST strings for database storage, getting the current date and time in IST, converting database timestamp strings back to IST Date objects, calculating expiration dates in IST, and converting arrays of dates to IST. These functions are crucial for ensuring consistent date and time handling across server operations, especially for features like booking expirations and logging.
+*   `pg-storage.ts`: Implements the `IStorage` interface using PostgreSQL as the backend, managed with Drizzle ORM. It handles various data operations such as fetching users by email or Google ID, deleting users and their associated data (services, bookings, products, orders, reviews, notifications), updating product reviews, and processing refunds. It leverages utility functions from `ist-utils.ts` for correct IST date handling in database interactions. It is also used by `connect-pg-simple` for session storage.
+*   `services/`: Contains business logic services that are used by the routes.
+    *   `razorpay-route.ts`: Manages Razorpay integration. This includes creating Razorpay linked accounts for vendors, calculating platform fees, and handling payment splits for orders and bookings. It interacts directly with the Razorpay API.
 
 ### 2.3. Key Features & API Endpoints
 
-*   **Authentication:**
+*   **Authentication & Password Reset:**
     *   `POST /api/register`: User registration.
     *   `POST /api/login`: User login.
     *   `POST /api/logout`: User logout.
     *   `GET /api/user`: Get current authenticated user details.
+    *   `POST /api/forgot-password`: Initiates the password reset process by sending a reset link/token to the user's email.
+    *   `POST /api/reset-password`: Allows users to set a new password using a valid reset token.
 *   **Users:**
     *   `GET /api/users/:id`: Get user details.
     *   `PATCH /api/users/:id`: Update user details (including profile, shop profile, address).
@@ -159,6 +163,12 @@ This section guides you through setting up the project environment.
 *   **File Uploads:**
     *   `POST /api/upload`: Upload a file (e.g., profile picture, product image).
     *   `/uploads/*`: Serves uploaded files statically.
+*   **Payment Processing (Razorpay):**
+    *   The system integrates with Razorpay for handling payments for bookings and orders.
+    *   Vendor Onboarding: Supports creating Razorpay linked accounts for service providers and shops to facilitate direct payouts.
+    *   Fee Calculation: Automatically calculates platform fees on transactions.
+    *   Payment Splitting: Manages the distribution of funds between vendors and the platform for completed orders and bookings.
+    *   Secure payment verification is handled via backend endpoints interacting with Razorpay.
 *   **Promotions (Shops):** (Managed via `routes/promotions.ts`)
     *   Endpoints for creating, managing, and applying promotions.
 *   **Shop Management:** (Managed via `routes/shops.ts`)
@@ -226,7 +236,7 @@ This section guides you through setting up the project environment.
 
 *   `schema.ts`: Defines the database table structures using Drizzle ORM (`pgTable`) and generates Zod schemas (`createInsertSchema`) for data validation on both frontend and backend. Includes types for `UserRole`, `PaymentMethod`, `ShopProfile`, `WorkingHours`, `BreakTime`, etc.
 *   `date-utils.ts`: Utility functions for handling dates, likely focusing on formatting for Indian display (`formatIndianDisplay`) and potentially timezone conversions.
-*   `updateProductSchema.ts`: (Likely contains a specific Zod schema for updating products, though not viewed).
+*   `updateProductSchema.ts`: Defines a Zod schema (`updateProductSchema`) for validating partial updates to product information. It ensures that at least one field is provided when updating a product, preventing empty update requests.
 
 ## 5. Database Schema
 
@@ -251,7 +261,7 @@ Defined in `/shared/schema.ts` using Drizzle ORM. Key tables include:
 ## 6. Storage
 
 *   **Database:** PostgreSQL is the primary data store, managed via Drizzle ORM.
-*   **Session Storage:** User sessions are stored in the PostgreSQL database (`sessions` table) via `connect-pg-simple` (inferred from `pg-storage.ts` and `storage.ts` usage).
+*   **Session Storage:** User sessions are stored in the PostgreSQL database (`sessions` table). This is managed using `connect-pg-simple` which integrates with Express sessions, and the `PostgresStorage` class (defined in `pg-storage.ts`) provides the underlying store mechanism.
 *   **File Storage:** Uploaded files (images, etc.) are stored on the server's local filesystem in the `/uploads` directory (configured via Multer in `server/index.ts`).
 
 ## 8. Android Expansion Strategy
