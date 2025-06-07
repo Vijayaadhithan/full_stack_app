@@ -41,7 +41,10 @@ export default function BrowseServices() {
   const [filters, setFilters] = useState({
     searchTerm: "",
     category: "All",
-    // Future filters can be added here e.g. location, minRating
+    minPrice: "",
+    maxPrice: "",
+    locationCity: "",
+    locationState: "",
   });
 
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
@@ -54,7 +57,10 @@ export default function BrowseServices() {
       const params = new URLSearchParams();
       if (filters.searchTerm) params.append("searchTerm", filters.searchTerm);
       if (filters.category && filters.category !== "All") params.append("category", filters.category);
-      // Add other filters here if backend supports them
+      if (filters.minPrice) params.append("minPrice", filters.minPrice);
+      if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
+      if (filters.locationCity) params.append("locationCity", filters.locationCity);
+      if (filters.locationState) params.append("locationState", filters.locationState);
 
       const queryString = params.toString();
       const response = await apiRequest("GET", `/api/services${queryString ? `?${queryString}` : ""}`);
@@ -113,9 +119,7 @@ export default function BrowseServices() {
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
-            {/* Placeholder for more advanced filters if needed in the future */}
-            {/* 
+            </Select> 
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-full sm:w-auto">
@@ -124,21 +128,41 @@ export default function BrowseServices() {
               </PopoverTrigger>
               <PopoverContent className="w-80 p-4 space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  <Input id="location" placeholder="e.g., City, Pincode" />
+                <Label htmlFor="minPrice">Min Price (₹)</Label>
+                  <Input
+                    id="minPrice"
+                    type="number"
+                    value={filters.minPrice}
+                    onChange={(e) => handleFilterChange("minPrice", e.target.value)}
+                  />
                 </div>
                  <div className="space-y-2">
-                  <Label htmlFor="minRating">Min Rating</Label>
-                  <Select>
-                    <SelectTrigger><SelectValue placeholder="Any Rating" /></SelectTrigger>
-                    <SelectContent>
-                      {[1,2,3,4,5].map(r => <SelectItem key={r} value={String(r)}>{r} Star{r>1 && 's'}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                 <Label htmlFor="maxPrice">Max Price (₹)</Label>
+                  <Input
+                    id="maxPrice"
+                    type="number"
+                    value={filters.maxPrice}
+                    onChange={(e) => handleFilterChange("maxPrice", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    value={filters.locationCity}
+                    onChange={(e) => handleFilterChange("locationCity", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <Input
+                    id="state"
+                    value={filters.locationState}
+                    onChange={(e) => handleFilterChange("locationState", e.target.value)}
+                  />
                 </div>
               </PopoverContent>
             </Popover>
-            */}
           </div>
         </div>
 

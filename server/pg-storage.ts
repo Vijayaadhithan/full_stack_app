@@ -216,12 +216,13 @@ export class PostgresStorage implements IStorage {
   }
 
   async getProducts(filters?: any): Promise<Product[]> {
-    // Base query: select non-deleted products
-    let conditions = [eq(products.isDeleted, false)];
-    let query = db.select().from(products);
+    // Always filter out soft deleted products
+    const conditions = [eq(products.isDeleted, false)];
+    let query: any = db.select().from(products);
+    let joinedUsers = false;
 
     if (filters) {
-      const conditions = [];
+      
       if (filters.category) {
         conditions.push(eq(products.category, filters.category));
       }
@@ -240,12 +241,10 @@ export class PostgresStorage implements IStorage {
       }
       if (filters.tags && filters.tags.length > 0) {
         // Assuming tags is an array field in the DB. If it's text, this needs adjustment.
-        // This example assumes tags are stored as an array of strings.
         conditions.push(sql`${products.tags} @> ARRAY[${filters.tags.join(',')}]`);
       }
       if (filters.attributes) {
         // Assuming attributes are stored in a JSONB column named 'specifications'
-        // This is a simplified example; complex attribute filtering might require more specific JSONB operators
         for (const key in filters.attributes) {
           if (Object.prototype.hasOwnProperty.call(filters.attributes, key)) {
             conditions.push(sql`${products.specifications}->>${key} = ${filters.attributes[key]}`);
@@ -253,11 +252,27 @@ export class PostgresStorage implements IStorage {
         }
       }
 
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions)) as typeof query;
+      if (filters.locationCity || filters.locationState) {
+        query = query.leftJoin(users, eq(products.shopId, users.id));
+        joinedUsers = true;
+        if (filters.locationCity) {
+          conditions.push(eq(users.addressCity, filters.locationCity));
+        }
+        if (filters.locationState) {
+          conditions.push(eq(users.addressState, filters.locationState));
+        }
       }
     }
-    return await query;
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
+    }
+
+    const results = await query;
+    if (joinedUsers) {
+      // When joined with users, drizzle returns objects with `products` key
+      return results.map((r: any) => r.products as Product);
+    }
+    return results as Product[];
   }
 
   async getPromotionsByShop(shopId: number): Promise<Promotion[]> {
@@ -599,6 +614,9 @@ export class PostgresStorage implements IStorage {
       }
       if (filters.locationCity) {
         conditions.push(eq(services.addressCity, filters.locationCity));
+      }
+      if (filters.locationState) {
+        conditions.push(eq(services.addressState, filters.locationState));
       }
       if (filters.locationPostalCode) {
         conditions.push(eq(services.addressPostalCode, filters.locationPostalCode));

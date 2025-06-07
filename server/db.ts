@@ -13,7 +13,22 @@ if (!process.env.DATABASE_URL) {
 
 // Create postgres connection
 const connectionString = process.env.DATABASE_URL;
-const client = postgres(connectionString, { max: 10 });
+const slowThreshold = Number(process.env.DB_SLOW_THRESHOLD_MS || 200);
+const client = postgres(connectionString, {
+  max: 10,
+  debug: (connection, query, parameters) => {
+    const start = Date.now();
+    return (error?: Error) => {
+      const duration = Date.now() - start;
+      const msg = `${query} \u2013 ${duration}ms`;
+      if (duration > slowThreshold) {
+        console.warn(`[DB SLOW] ${msg}`, parameters);
+      } else {
+        console.log(`[DB] ${msg}`);
+      }
+    };
+  },
+});
 
 // Create drizzle database instance
 export const db = drizzle(client, { schema });

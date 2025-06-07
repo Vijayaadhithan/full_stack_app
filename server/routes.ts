@@ -879,6 +879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         searchTerm,
         providerId,
         locationCity,
+        locationState,
         locationPostalCode,
         availabilityDate // YYYY-MM-DD
       } = req.query;
@@ -2799,7 +2800,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tags, // comma-separated string
         searchTerm,
         shopId,
-        attributes // JSON string for specific attributes e.g. {"color":"red", "size":"M"}
+        attributes, // JSON string for specific attributes e.g. {"color":"red", "size":"M"}
+        locationCity,
+        locationState
       } = req.query;
 
       const filters: any = {};
@@ -2817,7 +2820,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Optionally return a 400 error or ignore the filter
         }
       }
-
+      if (locationCity) filters.locationCity = String(locationCity);
+      if (locationState) filters.locationState = String(locationState);
+      
       const products = await storage.getProducts(filters);
       res.json(products);
     } catch (error) {

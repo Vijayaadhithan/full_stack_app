@@ -42,7 +42,10 @@ export default function BrowseProducts() {
     category: undefined as string | undefined,
     minPrice: "",
     maxPrice: "",
-    // TODO: Add tags, attributes if needed
+    locationCity: "",
+    locationState: "",
+    color: "",
+    size: "",
   });
 
   const handleFilterChange = (key: keyof typeof filters, value: string | undefined) => {
@@ -57,7 +60,12 @@ export default function BrowseProducts() {
       if (filters.category && filters.category !== "all") params.append("category", filters.category);
       if (filters.minPrice) params.append("minPrice", filters.minPrice);
       if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
-      // Add other filters like tags if implemented
+      if (filters.locationCity) params.append("locationCity", filters.locationCity);
+      if (filters.locationState) params.append("locationState", filters.locationState);
+      const attr: Record<string,string> = {};
+      if (filters.color) attr.color = filters.color;
+      if (filters.size) attr.size = filters.size;
+      if (Object.keys(attr).length > 0) params.append("attributes", JSON.stringify(attr));
 
       const queryString = params.toString();
       const response = await apiRequest("GET", `/api/products${queryString ? `?${queryString}` : ""}`);
@@ -198,7 +206,38 @@ export default function BrowseProducts() {
                     onChange={(e) => handleFilterChange("maxPrice", e.target.value)}
                   />
                 </div>
-                {/* TODO: Add more filters like tags, ratings etc. */}
+                <div className="space-y-2">
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    value={filters.locationCity}
+                    onChange={(e) => handleFilterChange("locationCity", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <Input
+                    id="state"
+                    value={filters.locationState}
+                    onChange={(e) => handleFilterChange("locationState", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="color">Color</Label>
+                  <Input
+                    id="color"
+                    value={filters.color}
+                    onChange={(e) => handleFilterChange("color", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="size">Size</Label>
+                  <Input
+                    id="size"
+                    value={filters.size}
+                    onChange={(e) => handleFilterChange("size", e.target.value)}
+                  />
+                </div>
               </PopoverContent>
             </Popover>
           </div>
