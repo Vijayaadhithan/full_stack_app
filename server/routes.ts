@@ -303,8 +303,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 originalBookingDate: originalBookingDate ? new Date(originalBookingDate).toLocaleString() : 'N/A',
                 newBookingDate: new Date(bookingDate).toLocaleString(),
                 bookingId: bookingId.toString(),
-                loginUrl: `${process.env.BASE_URL}/login`,
-                bookingDetailsUrl: `${process.env.BASE_URL}/provider/bookings`
+                loginUrl: `${process.env.APP_BASE_URL}/login`,
+                bookingDetailsUrl: `${process.env.APP_BASE_URL}/provider/bookings`
               }).then(() => {}).catch((err: unknown) => console.error("[API] Failed to send reschedule request email to provider:", err));
             }
           }
