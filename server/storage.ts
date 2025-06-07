@@ -106,13 +106,11 @@ export interface IStorage {
   createReview(review: InsertReview): Promise<Review>;
   getReviewsByService(serviceId: number): Promise<Review[]>;
   getReviewsByProvider(providerId: number): Promise<Review[]>;
-  getReviewsByCustomer(customerId: number): Promise<Review[]>; // Added
-  getReviewsByCustomer(customerId: number): Promise<Review[]>; // Added
+  getReviewsByCustomer(customerId: number): Promise<Review[]>; 
   getReviewById(id: number): Promise<Review | undefined>;
   updateReview(id: number, data: { rating?: number; review?: string }): Promise<Review>;
-  updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review>; // Added for customer-specific update
-  updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review>; // Added for customer-specific update
-
+  updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review>;
+  
   // Notification operations
   createNotification(notification: InsertNotification): Promise<Notification>;
   getNotificationsByUser(userId: number): Promise<Notification[]>;
@@ -375,9 +373,17 @@ export class MemStorage implements IStorage {
   }
 
   // Add implementation for getProducts
-  async getProducts(): Promise<Product[]> {
-    // Filter out deleted products as well
-    return Array.from(this.products.values()).filter(p => !p.isDeleted);
+  async getProducts(filters?: { category?: string; isAvailable?: boolean }): Promise<Product[]> {
+    let results = Array.from(this.products.values()).filter(p => !p.isDeleted);
+    if (filters) {
+      if (filters.category) {
+        results = results.filter(p => p.category === filters.category);
+      }
+      if (typeof filters.isAvailable === 'boolean') {
+        results = results.filter(p => p.isAvailable === filters.isAvailable);
+      }
+    }
+    return results;
   }
 
   // User operations
@@ -954,7 +960,14 @@ return {
   }
 
   async getReviewsByCustomer(customerId: number): Promise<Review[]> { // Added
-    throw new Error("Method not implemented.");
+    const results = Array.from(this.reviews.values()).filter(
+      r => r.customerId === customerId,
+    );
+
+    return results.map(r => {
+      const serviceName = r.serviceId ? this.services.get(r.serviceId)?.name ?? 'Service Not Found' : null;
+      return { ...r, serviceName } as Review & { serviceName: string | null };
+    });
   }
 
   async getReviewById(id: number): Promise<Review | undefined> {
@@ -970,7 +983,16 @@ return {
   }
 
   async updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review> { // Added
-    throw new Error("Method not implemented.");
+    const review = this.reviews.get(reviewId);
+    if (!review) throw new Error("Review not found");
+    if (review.customerId !== customerId) {
+      throw new Error("Customer is not authorized to update this review");
+    }
+
+    if (data.rating !== undefined) review.rating = data.rating;
+    if (data.review !== undefined) review.review = data.review;
+    this.reviews.set(reviewId, review);
+    return review;
   }
 
   // Notification operations
