@@ -4,10 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Loader2, Store, MapPin, Star } from "lucide-react";
+import { Loader2, Store, MapPin, Filter } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
 import { useState } from "react";
-import { User, ShopProfile } from "@shared/schema";
+import { User} from "@shared/schema";
 import { motion } from "framer-motion";
+import { apiRequest } from "@/lib/queryClient";
 
 // Helper function to format address
 const formatAddress = (user: User): string => {
@@ -35,16 +38,36 @@ const item = {
 };
 
 export default function BrowseShops() {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState({
+    searchQuery: "",
+    locationCity: "",
+    locationState: "",
+  });
+
+  const handleFilterChange = (key: keyof typeof filters, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
 
   const { data: shops, isLoading } = useQuery<User[]>({
-    queryKey: ["/api/shops"],
+    queryKey: ["/api/shops", filters.locationCity, filters.locationState],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.locationCity) params.append("locationCity", filters.locationCity);
+      if (filters.locationState) params.append("locationState", filters.locationState);
+      const queryString = params.toString();
+      const response = await apiRequest("GET", `/api/shops${queryString ? `?${queryString}` : ""}`);
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error);
+      }
+      return response.json();
+    }
   });
 
   const filteredShops = shops?.filter(shop => 
     shop.role === "shop" &&
-    (shop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     shop.shopProfile?.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+    (shop.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
+     shop.shopProfile?.description?.toLowerCase().includes(filters.searchQuery.toLowerCase()))
   );
 
   return (
@@ -60,10 +83,35 @@ export default function BrowseShops() {
           <div className="relative flex-1 w-full sm:max-w-xs">
             <Input
               placeholder="Search shops..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={filters.searchQuery}
+              onChange={(e) => handleFilterChange("searchQuery", e.target.value)}
             />
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto">
+                <Filter className="mr-2 h-4 w-4" /> More Filters
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="city">City</Label>
+                <Input
+                  id="city"
+                  value={filters.locationCity}
+                  onChange={(e) => handleFilterChange("locationCity", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="state">State</Label>
+                <Input
+                  id="state"
+                  value={filters.locationState}
+                  onChange={(e) => handleFilterChange("locationState", e.target.value)}
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         {isLoading ? (

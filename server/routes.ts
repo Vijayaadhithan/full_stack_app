@@ -690,8 +690,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all shops
   app.get("/api/shops", requireAuth, async (req, res) => {
     try {
-      // Fetch users with the 'shop' role directly from the database
-      const shops = await db.select().from(users).where(eq(users.role, 'shop'));
+      const { locationCity, locationState } = req.query;
+      const filters: any = {};
+      if (locationCity) filters.locationCity = String(locationCity);
+      if (locationState) filters.locationState = String(locationState);
+
+      const shops = await storage.getShops(filters);
       
       res.json(shops);
     } catch (error) {
@@ -891,6 +895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (searchTerm) filters.searchTerm = String(searchTerm);
       if (providerId) filters.providerId = parseInt(String(providerId));
       if (locationCity) filters.locationCity = String(locationCity);
+      if (locationState) filters.locationState = String(locationState);
       if (locationPostalCode) filters.locationPostalCode = String(locationPostalCode);
       if (availabilityDate) filters.availabilityDate = String(availabilityDate); // Will be parsed in storage layer
 

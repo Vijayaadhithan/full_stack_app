@@ -294,6 +294,19 @@ export class PostgresStorage implements IStorage {
     return await db.select().from(users);
   }
 
+  async getShops(filters?: { locationCity?: string; locationState?: string }): Promise<User[]> {
+    const conditions = [eq(users.role, 'shop')];
+    if (filters) {
+      if (filters.locationCity) {
+        conditions.push(eq(users.addressCity, filters.locationCity));
+      }
+      if (filters.locationState) {
+        conditions.push(eq(users.addressState, filters.locationState));
+      }
+    }
+    return await db.select().from(users).where(and(...conditions));
+  }
+
   async createUser(user: InsertUser): Promise<User> {
     // Explicitly construct the object for insertion
     const insertData = {

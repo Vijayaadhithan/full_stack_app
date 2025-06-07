@@ -47,6 +47,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>; // Added for Google OAuth
   getUserByGoogleId(googleId: string): Promise<User | undefined>; // Added for Google OAuth
   getAllUsers(): Promise<User[]>;
+  getShops(filters?: { locationCity?: string; locationState?: string }): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User>; // Updated to accept all partial User fields
 
@@ -421,6 +422,19 @@ export class MemStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return Array.from(this.users.values());
+  }
+
+  async getShops(filters?: { locationCity?: string; locationState?: string }): Promise<User[]> {
+    let shops = Array.from(this.users.values()).filter(u => u.role === 'shop');
+    if (filters) {
+      if (filters.locationCity) {
+        shops = shops.filter(s => s.addressCity === filters.locationCity);
+      }
+      if (filters.locationState) {
+        shops = shops.filter(s => s.addressState === filters.locationState);
+      }
+    }
+    return shops;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
