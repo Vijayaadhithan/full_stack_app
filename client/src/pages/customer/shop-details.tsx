@@ -11,7 +11,7 @@ import { motion } from "framer-motion";
 import { Search, ShoppingCart, Heart, Store, MapPin, ArrowLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useParams, Link } from "wouter";
-
+import Meta from "@/components/meta";
 // Helper function to format address
 const formatAddress = (user: User | undefined): string => {
   if (!user) return "Location not specified";
@@ -154,6 +154,7 @@ export default function ShopDetails() {
   if (isLoading) {
     return (
       <DashboardLayout>
+        <Meta title="Loading Shop..." />
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
@@ -164,6 +165,7 @@ export default function ShopDetails() {
   if (!shop) {
     return (
       <DashboardLayout>
+        <Meta title="Shop Not Found" />
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
           <h2 className="text-2xl font-bold mb-4">Shop not found</h2>
           <Link href="/customer/browse-shops">
@@ -176,6 +178,17 @@ export default function ShopDetails() {
 
   return (
     <DashboardLayout>
+      <Meta
+        title={`${shop.shopProfile?.shopName || shop.name} - Shop`}
+        description={`Explore products available from ${shop.shopProfile?.shopName || shop.name}.`}
+        schema={{
+          "@context": "https://schema.org",
+          "@type": "Store",
+          name: shop.shopProfile?.shopName || shop.name,
+          image: shop.profilePicture,
+          address: formatAddress(shop),
+        }}
+      />
       <motion.div
         variants={container}
         initial="hidden"

@@ -7,6 +7,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useParams, Link } from "wouter";
 import { ShoppingCart, Heart, ArrowLeft, Store } from "lucide-react";
+import Meta from "@/components/meta";
 
 export default function ProductDetails() {
   const { toast } = useToast();
@@ -84,6 +85,7 @@ export default function ProductDetails() {
   if (isLoadingProduct || isLoadingShop) {
     return (
       <DashboardLayout>
+        <Meta title="Loading Product..." />
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
         </div>
@@ -94,6 +96,7 @@ export default function ProductDetails() {
   if (!product || !shop) {
     return (
       <DashboardLayout>
+        <Meta title="Product Not Found" />
         <div className="text-center py-10">
           <p>Product or Shop not found.</p>
           <Link href="/customer/browse-products">
@@ -108,6 +111,22 @@ export default function ProductDetails() {
 
   return (
     <DashboardLayout>
+      <Meta
+        title={`${product.name} - ${shop.shopProfile?.shopName || shop.name}`}
+        description={`View details and buy ${product.name} from ${shop.shopProfile?.shopName || shop.name}.`}
+        schema={{
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: product.name,
+          description: product.description,
+          image: product.images?.[0],
+          offers: {
+            "@type": "Offer",
+            priceCurrency: "INR",
+            price: product.price,
+          },
+        }}
+      />
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
         <Link href="/customer/browse-products">
           <Button variant="outline" size="sm">

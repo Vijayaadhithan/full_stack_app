@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Service } from "@shared/schema";
 import { motion } from "framer-motion";
 import { Loader2, MapPin, Star, Clock } from 'lucide-react';
+import Meta from "@/components/meta";
 
 type ServiceDetails = Service & {
   provider: {
@@ -50,6 +51,7 @@ export default function ServiceDetails() {
   if (isLoading) {
     return (
       <DashboardLayout>
+        <Meta title="Loading Service..." />
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
@@ -60,6 +62,7 @@ export default function ServiceDetails() {
   if (!service) {
     return (
       <DashboardLayout>
+        <Meta title="Service Not Found" />
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
           <h2 className="text-2xl font-bold mb-4">Service not found</h2>
           <Link href="/customer/browse-services">
@@ -72,6 +75,20 @@ export default function ServiceDetails() {
 
   return (
     <DashboardLayout>
+      <Meta
+        title={`${service.name} - Service`}
+        description={`Learn about ${service.name} offered by ${service.provider?.name}.`}
+        schema={{
+          "@context": "https://schema.org",
+          "@type": "Service",
+          name: service.name,
+          description: service.description,
+          provider: {
+            "@type": "Person",
+            name: service.provider?.name,
+          },
+        }}
+      />
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
