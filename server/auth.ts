@@ -78,7 +78,7 @@ export function setupAuth(app: Express) {
           passReqToCallback: true, // Added to access req in callback for role selection
           clientID: GOOGLE_CLIENT_ID,
           clientSecret: GOOGLE_CLIENT_SECRET,
-          callbackURL: "http://localhost:5000/auth/google/callback",
+          callbackURL: `${process.env.APP_BASE_URL}/auth/google/callback`,
           scope: ["profile", "email"],
           proxy: true,
         },

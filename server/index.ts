@@ -99,7 +99,7 @@ setupScheduledTasks();
     
     server.listen({
       port: PORT,
-      host: "127.0.0.1",
+      host: "0.0.0.0", // Changed from 127.0.0.1
       reusePort: true,
     }, () => {
       log(`Server running on port ${PORT}`);

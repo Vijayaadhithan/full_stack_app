@@ -634,6 +634,7 @@ export class MemStorage implements IStorage {
       tags: product.tags === undefined ? null : product.tags,
       minOrderQuantity: product.minOrderQuantity === undefined ? null : product.minOrderQuantity,
       maxOrderQuantity: product.maxOrderQuantity === undefined ? null : product.maxOrderQuantity,
+      lowStockThreshold: product.lowStockThreshold === undefined ? null : product.lowStockThreshold,
       mrp: product.mrp === undefined ? product.price : product.mrp
     };
     this.products.set(id, {
