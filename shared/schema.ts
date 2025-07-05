@@ -74,7 +74,6 @@ export const users = pgTable("users", {
   shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
   googleId: text("google_id").unique(), // Added for Google OAuth
   emailVerified: boolean("email_verified").default(false), // Added for Google OAuth
-  razorpayLinkedAccountId: text("razorpay_linked_account_id"), // Added for Razorpay Route integration
   // Provider profile fields
   bio: text("bio"),
   qualifications: text("qualifications"),
@@ -91,6 +90,8 @@ export const users = pgTable("users", {
   shopLogoImageUrl: text("shop_logo_image_url"), // For shops
   yearsInBusiness: integer("years_in_business"),
   socialMediaLinks: jsonb("social_media_links").$type<Record<string, string>>(), // e.g., { facebook: "url", instagram: "url" }
+  upiId: text("upi_id"),
+  upiQrCodeUrl: text("upi_qr_code_url"),
 });
 
 // Update services table with new availability fields and soft deletion
@@ -134,7 +135,7 @@ export const bookings = pgTable("bookings", {
   customerId: integer("customer_id").references(() => users.id),
   serviceId: integer("service_id").references(() => services.id),
   bookingDate: timestamp("booking_date").notNull(),
-  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired" | "rescheduled_pending_provider_approval">().notNull(),
+  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired" | "rescheduled_pending_provider_approval" | "awaiting_payment">().notNull(),
   paymentStatus: text("payment_status").$type<"pending" | "paid" | "refunded">().notNull(),
   rejectionReason: text("rejection_reason"),
   rescheduleDate: timestamp("reschedule_date"), // This can store the original date if rescheduled, or the new date if status is 'rescheduled'
@@ -142,8 +143,7 @@ export const bookings = pgTable("bookings", {
   eReceiptId: text("e_receipt_id"),
   eReceiptUrl: text("e_receipt_url"),
   eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
-  razorpayOrderId: text("razorpay_order_id"),
-  razorpayPaymentId: text("razorpay_payment_id"),
+  paymentReference: text("payment_reference"),
   createdAt: timestamp("created_at").defaultNow(),
   expiresAt: timestamp("expires_at"),
   serviceLocation: text("service_location").$type<'customer' | 'provider'>(), // Added service location type
@@ -243,8 +243,7 @@ export const orders = pgTable("orders", {
   eReceiptId: text("e_receipt_id"),
   eReceiptUrl: text("e_receipt_url"),
   eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
-  razorpayOrderId: text("razorpay_order_id"),
-  razorpayPaymentId: text("razorpay_payment_id"),
+  paymentReference: text("payment_reference"),
   orderDate: timestamp("order_date").defaultNow(),
   returnRequested: boolean("return_requested").default(false), // Add this line
 });
@@ -386,7 +385,6 @@ export const customerProfileSchema = z.object({
 export const insertUserSchema = createInsertSchema(users, {
   shopProfile: shopProfileSchema.optional().nullable(), // Validate shopProfile if provided
   emailVerified: z.boolean().optional().default(false),
-  razorpayLinkedAccountId: z.string().optional().nullable(),
   role: z.enum(["customer", "provider", "shop", "admin"]),
   // Fields not directly updatable by generic user update, or handled by specific schemas
   username: z.string().optional(), // Assuming username might be set at creation and not changed often
@@ -521,7 +519,7 @@ export const Booking = z.object({
   providerId: z.number(),
   serviceId: z.number(),
   bookingDate: z.string(), // ISO string format
-  status: z.enum(["pending", "accepted", "rejected", "rescheduled", "completed", "cancelled"]), // Removed 'expired' as it's handled internally
+  status: z.enum(["pending", "accepted", "rejected", "rescheduled", "completed", "cancelled", "awaiting_payment"]), // Removed 'expired' as it's handled internally
   comments: z.string().optional(),
   rejectionReason: z.string().optional(),
   rescheduleDate: z.string().optional(), // ISO string format

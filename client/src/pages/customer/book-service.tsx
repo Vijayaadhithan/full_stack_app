@@ -22,12 +22,6 @@ import { Label } from "@/components/ui/label";
 
 const timeZone = 'Asia/Kolkata'; // Define IST timezone
 
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
-
 type TimeSlot = {
   start: Date;
   end: Date;
@@ -325,10 +319,7 @@ export default function BookService() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date()); // Represents the *day* selected, time part is ignored
   const [selectedTime, setSelectedTime] = useState<string>(); // Store the selected UTC start time string
   const [serviceLocation, setServiceLocation] = useState<'customer' | 'provider'>('provider'); // Default to provider location
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [order, setOrder] = useState<any>(null);
-
   // Fetch service with provider info
   const { data: service, isLoading: serviceLoading } = useQuery<Service & { provider: User, reviews: any[], workingHours: any, breakTime: any[], breakTimes: any[], bookings: any[] }>({    
     queryKey: [`/api/services/${id}`],
@@ -500,110 +491,6 @@ export default function BookService() {
       });
     },
   });
-
-  const initiatePaymentMutation = useMutation({
-    mutationFn: async (bookingId: number) => {
-      const res = await apiRequest("POST", `/api/bookings/${bookingId}/initiate-payment`, {});
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Payment initiation failed");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setOrder(data.order);
-      setPaymentDialogOpen(true);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Payment Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handlePaymentSuccess = useMutation({
-    mutationFn: async (paymentData: any) => {
-      const res = await apiRequest("POST", "/api/payments/verify", paymentData);
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Payment verification failed");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Successful",
-        description: "Your payment has been processed.",
-      });
-      setPaymentDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Payment Verification Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const loadRazorpay = () => {
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
-  const displayRazorpay = async () => {
-    const res = await loadRazorpay();
-    if (!res) {
-      toast({ title: "Razorpay SDK failed to load. Are you online?" });
-      return;
-    }
-
-    const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: order.amount.toString(),
-      currency: order.currency,
-      name: "Your Service Booking",
-      description: `Payment for ${service?.name}`,
-      order_id: order.id,
-      handler: function (response: any) {
-        handlePaymentSuccess.mutate({
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature,
-          bookingId: order.notes.bookingId, // Assuming bookingId is passed in notes
-        });
-      },
-      prefill: {
-        // You can prefill customer details here if available
-        // name: "Customer Name",
-        // email: "customer@example.com",
-        // contact: "9999999999",
-      },
-      notes: {
-        address: "Your Company Address",
-      },
-      theme: {
-        color: "#3399cc",
-      },
-    };
-
-    const paymentObject = new window.Razorpay(options);
-    paymentObject.open();
-  };
-
-  useEffect(() => {
-    if (paymentDialogOpen && order) {
-      displayRazorpay();
-    }
-  }, [paymentDialogOpen, order]);
 
   const handleBookingRequest = () => {
     if (!selectedTime) {
@@ -883,17 +770,6 @@ export default function BookService() {
                 Confirm & Request
               </Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Payment Dialog */}
-        <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Complete Payment</DialogTitle>
-            </DialogHeader>
-            {/* Razorpay checkout will be initiated here */}
-            <p className="text-center text-muted-foreground">Redirecting to payment gateway...</p>
           </DialogContent>
         </Dialog>
 

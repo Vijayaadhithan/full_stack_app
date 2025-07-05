@@ -35,12 +35,12 @@ import {
 } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import Razorpay from "razorpay";
+//import Razorpay from "razorpay";
 import crypto from 'crypto';
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
-import { razorpayRouteService, RazorpayRouteService } from "./services/razorpay-route"; // Import Razorpay Route service
+//import { razorpayRouteService, RazorpayRouteService } from "./services/razorpay-route"; // Import Razorpay Route service
 
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null {
@@ -77,21 +77,10 @@ function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null
   }
 }
 
-// Check if Razorpay is properly configured with valid keys
-const isRazorpayConfigured = 
-  process.env.RAZORPAY_KEY_ID && 
-  process.env.RAZORPAY_KEY_ID !== "your-razorpay-key" && 
-  process.env.RAZORPAY_KEY_SECRET && 
-  process.env.RAZORPAY_KEY_SECRET !== "your-razorpay-secret";
-
-// Initialize Razorpay with proper error handling
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_1234567890",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || "secret_test_1234567890"
-});
-
-// Log Razorpay configuration status
-console.log(`Razorpay configuration status: ${isRazorpayConfigured ? 'Configured' : 'Not properly configured'}`);
+// Payment gateway has been removed. The following constants previously
+// configured Razorpay; they are kept as stubs for backward compatibility.
+const isRazorpayConfigured = false;
+const razorpay: any = {};
 
 // Store password reset tokens in memory (for simplicity, in a real app use a database)
 interface PasswordResetToken {
@@ -1147,232 +1136,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid service location. Must be 'customer' or 'provider'." });
       }
 
-      // Check if Razorpay is properly configured
-      if (!isRazorpayConfigured) {
-        console.log("Razorpay is not properly configured. Creating booking without payment integration.");
+      const booking = await storage.createBooking({
+        customerId: req.user!.id,
+        serviceId,
+        bookingDate: bookingDateTime,
+        status: "pending",
+        paymentStatus: "pending",
+        serviceLocation,
+      });
 
-        // Create booking record without Razorpay integration
-        const booking = await storage.createBooking({
-          customerId: req.user!.id,
-          serviceId,
-          bookingDate: bookingDateTime, // Use the validated Date object
-          status: "pending",
-          paymentStatus: "pending",
-          serviceLocation: serviceLocation, // Store service location
-          // Remove providerAddress field
-        });
+      await storage.createNotification({
+        userId: service.providerId,
+        type: "booking_request",
+        title: "New Booking Request",
+        message: `You have a new booking request for ${service.name}`,
+      });
 
-        // Create notification for provider
-        await storage.createNotification({
-          userId: service.providerId,
-          type: "booking_request",
-          title: "New Booking Request",
-          message: `You have a new booking request for ${service.name}`,
-        });
-
-        return res.status(201).json({ booking, paymentRequired: false, message: "Booking request sent. Payment integration unavailable." });
-      }
 
       // --- Razorpay Integration Logic (if configured) ---
       try {
-        // Create Razorpay order
-        const amount = parseInt(service.price); // Ensure price is stored as string or number
-        if (isNaN(amount) || amount <= 0) {
-          return res.status(400).json({ message: "Invalid service price for payment." });
-        }
+        const customer = await storage.getUser(booking.customerId!);
+        const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
+        if (customer && provider && customer.email && provider.email) {
+          const customerAddress = booking.serviceLocation === 'customer'
+            ? `${customer.addressStreet || ''} ${customer.addressCity || ''} ${customer.addressState || ''}`.trim() || 'Not specified'
+            : 'Provider Location';
+          const customerPhone = booking.serviceLocation === 'customer' ? customer.phone : undefined;
 
-        const orderOptions = {
-          amount: amount * 100, // Convert to paisa
-          currency: "INR",
-          receipt: `booking_${Date.now()}_${serviceId}`,
-          notes: {
-            serviceId: serviceId,
-            customerId: req.user!.id,
-            // Add other relevant notes if needed
-          }
-        };
-
-        const order = await razorpay.orders.create(orderOptions);
-
-        // Create booking record with Razorpay order ID
-        const booking = await storage.createBooking({
-          customerId: req.user!.id,
-          serviceId,
-          bookingDate: bookingDateTime, // Use the validated Date object
-          status: "pending", // Or 'awaiting_payment' if payment is immediate
-          paymentStatus: "pending",
-          razorpayOrderId: order.id,
-          serviceLocation: serviceLocation, // Store service location
-          // Remove providerAddress field
-        });
-
-        // Add bookingId to order notes for verification webhook (important!)
-        // We need to update the order *after* creating the booking to get the booking ID.
-        // This might require a separate Razorpay API call if notes can't be updated easily,
-        // or store the bookingId -> orderId mapping elsewhere for the webhook.
-        // For simplicity here, we assume the webhook can retrieve bookingId from receipt or other means.
-        // If not, the verification logic needs adjustment.
-        // Example: await razorpay.orders.edit(order.id, { notes: { ...order.notes, bookingId: booking.id } });
-
-        // Create notification for provider
-        await storage.createNotification({
-          userId: service.providerId,
-          type: "booking_request",
-          title: "New Booking Request",
-          message: `You have a new booking request for ${service.name}`,
-        });
-
-        // Send "New Booking Request" email to provider and "Booking Request Pending" to customer
-        try {
-          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
-          const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
-
-          if (customer && provider && customer.email && provider.email) {
-            // Email to provider: "New Booking Request"
-            console.log(`[API] Attempting to send 'New Booking Request' email to provider: ${provider.email}`);
-            const customerAddress = booking.serviceLocation === 'customer' 
-              ? `${customer.addressStreet || ''} ${customer.addressCity || ''} ${customer.addressState || ''}`.trim() || 'Not specified'
-              : 'Provider Location';
-            const customerPhone = booking.serviceLocation === 'customer' ? customer.phone : undefined;
-
-            const providerBookingEmailContent = getBookingConfirmationEmailContent(
-              provider.name || provider.username,
-              {
-                bookingId: booking.id.toString(),
-                customerName: customer.name || customer.username,
-                serviceName: service.name,
-                bookingDate: booking.bookingDate, // Pass Date object or ISO string
-                customerAddress: customerAddress,
-                customerPhone: customerPhone
-              }
-            );
-            try {
-              await sendEmail({
-                to: provider.email,
-                subject: providerBookingEmailContent.subject,
-                text: providerBookingEmailContent.text,
-                html: providerBookingEmailContent.html,
-              });
-              console.log(`[API] 'New Booking Request' email sent to provider: ${provider.email}`);
-            } catch (sendError) {
-              console.error(`[API] Failed to send 'New Booking Request' email to ${provider.email}:`, sendError);
+          const providerBookingEmailContent = getBookingConfirmationEmailContent(
+            provider.name || provider.username,
+            {
+              bookingId: booking.id.toString(),
+              customerName: customer.name || customer.username,
+              serviceName: service.name,
+              bookingDate: booking.bookingDate,
+              customerAddress,
+              customerPhone,
             }
-
-            // Email to customer: "Booking Request Pending"
-            console.log(`[API] Attempting to send 'Booking Request Pending' email to customer: ${customer.email}`);
-            const customerPendingEmailContent = getBookingRequestPendingEmailContent(
-              customer.name || customer.username,
-              {
-                serviceName: service.name,
-                bookingDate: booking.bookingDate, // Pass Date object or ISO string
-                providerName: provider.name || provider.username
-              }
-            );
-            try {
-              await sendEmail({
-                to: customer.email,
-                subject: customerPendingEmailContent.subject,
-                text: customerPendingEmailContent.text,
-                html: customerPendingEmailContent.html,
-              });
-              console.log(`[API] 'Booking Request Pending' email sent to customer: ${customer.email}`);
-            } catch (sendError) {
-              console.error(`[API] Failed to send 'Booking Request Pending' email to ${customer.email}:`, sendError);
+          );
+          await sendEmail({
+            to: provider.email,
+            subject: providerBookingEmailContent.subject,
+            text: providerBookingEmailContent.text,
+            html: providerBookingEmailContent.html,
+          });
+          const customerPendingEmailContent = getBookingRequestPendingEmailContent(
+            customer.name || customer.username,
+            {
+              serviceName: service.name,
+              bookingDate: booking.bookingDate,
+              providerName: provider.name || provider.username,
             }
-          } else {
-            console.error(`[API] Email not sent for new booking ${booking.id}: Missing required data. Customer: ${!!customer}, Provider: ${!!provider}`);
+            );
+          await sendEmail({
+            to: customer.email,
+            subject: customerPendingEmailContent.subject,
+            text: customerPendingEmailContent.text,
+            html: customerPendingEmailContent.html,
+          });
           }
         } catch (fetchError) {
-          console.error(`[API] Error fetching data for new booking emails (Booking ID: ${booking.id}):`, fetchError);
-        }
-
-        // Return booking and order details for frontend payment initiation
-        res.status(201).json({ booking, order, paymentRequired: true });
-
-      } catch (razorpayError) {
-        console.error("Razorpay order creation error:", razorpayError);
-        // Fallback: Create booking without payment if Razorpay fails
-        const booking = await storage.createBooking({
-          customerId: req.user!.id,
-          serviceId,
-          bookingDate: bookingDateTime, // Use the validated Date object
-          status: "pending",
-          paymentStatus: "pending",
-          serviceLocation: serviceLocation, // Store service location
-        });
-
-        // Create notification for provider
-        await storage.createNotification({
-          userId: service.providerId,
-          type: "booking_request",
-          title: "New Booking Request",
-          message: `You have a new booking request for ${service.name}`,
-        });
-
-        // Send "New Booking Request" (provider) and "Booking Request Pending" (customer) emails (fallback case)
-        try {
-          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null;
-          const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
-
-          if (customer && provider && customer.email && provider.email) {
-            console.log(`[API] Attempting to send 'New Booking Request' email to provider (fallback): ${provider.email}`);
-            const customerAddress = booking.serviceLocation === 'customer'
-              ? `${customer.addressStreet || ''} ${customer.addressCity || ''} ${customer.addressState || ''}`.trim() || 'Not specified'
-              : 'Provider Location';
-            const customerPhone = booking.serviceLocation === 'customer' ? customer.phone : undefined;
-
-            const providerBookingEmailContent = getBookingConfirmationEmailContent(
-              provider.name || provider.username,
-              {
-                bookingId: booking.id.toString(),
-                customerName: customer.name || customer.username,
-                serviceName: service.name,
-                bookingDate: booking.bookingDate,
-                customerAddress: customerAddress,
-                customerPhone: customerPhone
-              }
-            );
-            try {
-              await sendEmail({
-                to: provider.email,
-                subject: providerBookingEmailContent.subject,
-                text: providerBookingEmailContent.text,
-                html: providerBookingEmailContent.html,
-              });
-              console.log(`[API] 'New Booking Request' email sent to provider (fallback): ${provider.email}`);
-            } catch (sendError) {
-              console.error(`[API] Failed to send 'New Booking Request' email to ${provider.email} (fallback):`, sendError);
-            }
-
-            console.log(`[API] Attempting to send 'Booking Request Pending' email to customer (fallback): ${customer.email}`);
-            const customerPendingEmailContent = getBookingRequestPendingEmailContent(
-              customer.name || customer.username,
-              {
-                serviceName: service.name,
-                bookingDate: booking.bookingDate,
-                providerName: provider.name || provider.username
-              }
-            );
-            try {
-              await sendEmail({
-                to: customer.email,
-                subject: customerPendingEmailContent.subject,
-                text: customerPendingEmailContent.text,
-                html: customerPendingEmailContent.html,
-              });
-              console.log(`[API] 'Booking Request Pending' email sent to customer (fallback): ${customer.email}`);
-            } catch (sendError) {
-              console.error(`[API] Failed to send 'Booking Request Pending' email to ${customer.email} (fallback):`, sendError);
-            }
-          } else {
-            console.error(`[API] Email not sent for new booking ${booking.id} (fallback): Missing required data. Customer: ${!!customer}, Provider: ${!!provider}`);
-          }
-        } catch (fetchError) {
-          console.error(`[API] Error fetching data for new booking emails (fallback, Booking ID: ${booking.id}):`, fetchError);
-        }
-        // Inform frontend about the fallback
-        res.status(201).json({ booking, paymentRequired: false, message: "Booking request sent. Payment integration failed." });
+        console.error(`[API] Error sending booking emails (Booking ID: ${booking.id}):`, fetchError);
       }
+      res.status(201).json({ booking, paymentRequired: false });
     } catch (error) {
       console.error("Error creating booking:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create booking" });
@@ -1703,25 +1529,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[API] Notification sent to provider: ID=${service.providerId}`);
 
-      // If the service was satisfactory and payment is pending, process payment
+      // If the service was satisfactory and payment is pending, mark as paid
       if (isSatisfactory && booking.paymentStatus === "pending") {
-        console.log(`[API] Processing payment for completed service: ID=${bookingId}`);
-        
-        // If there's a Razorpay order ID, we need to handle payment through the frontend
-        if (booking.razorpayOrderId) {
-          console.log(`[API] Razorpay payment required: OrderID=${booking.razorpayOrderId}`);
-          return res.json({
-            booking: updatedBooking,
-            paymentRequired: true,
-            razorpayOrderId: booking.razorpayOrderId,
-            message: "Please complete the payment for this service"
-          });
-        } else {
-          // For services without Razorpay integration, mark as paid directly
-          const paidBooking = await storage.updateBooking(bookingId, {
-            paymentStatus: "paid"
-          });
-          
+      const paidBooking = await storage.updateBooking(bookingId, {
+          paymentStatus: "paid"
+        });
           console.log(`[API] Booking marked as paid: ID=${bookingId}`);
           
           // Notify provider about payment
@@ -1733,13 +1545,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           
           console.log(`[API] Payment notification sent to provider: ID=${service.providerId}`);
-          
-          return res.json({
-            booking: paidBooking,
-            paymentRequired: false,
-            message: "Service completed and payment recorded"
-          });
-        }
+
+        return res.json({
+          booking: paidBooking,
+          paymentRequired: false,
+          message: "Service completed and payment recorded"
+        });
       }
 
       res.json({
@@ -1751,258 +1562,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error completing booking:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to complete booking" });
-    }
-  });
-
-  // Initiate payment for a booking
-  app.post("/api/bookings/:id/initiate-payment", requireAuth, requireRole(["customer"]), async (req, res) => {
-    try {
-      const bookingId = parseInt(req.params.id);
-      console.log(`[API] Initiating payment for booking: ID=${bookingId}`);
-
-      const booking = await storage.getBooking(bookingId);
-      if (!booking) {
-        console.log(`[API] Booking not found for payment initiation: ID=${bookingId}`);
-        return res.status(404).json({ message: "Booking not found" });
-      }
-
-      // Verify this booking belongs to the customer
-      if (booking.customerId !== req.user!.id) {
-        console.log(`[API] Not authorized to initiate payment: User=${req.user!.id}, Owner=${booking.customerId}`);
-        return res.status(403).json({ message: "Not authorized to initiate payment for this booking" });
-      }
-
-      // Check if booking is in a state where payment can be initiated (e.g., accepted or completed)
-      // The client-side logic seems to allow payment for 'accepted' bookings before completion.
-      if (!['accepted', 'completed'].includes(booking.status)) {
-        console.log(`[API] Invalid booking status for payment initiation: ID=${bookingId}, Status=${booking.status}`);
-        return res.status(400).json({ 
-          message: "Payment can only be initiated for accepted or completed bookings",
-          currentStatus: booking.status
-        });
-      }
-      
-      // Check if already paid
-      if (booking.paymentStatus === 'paid') {
-        console.log(`[API] Booking already paid: ID=${bookingId}`);
-        return res.status(400).json({ message: "This booking has already been paid" });
-      }
-
-      // Get service details to determine the amount
-      const service = await storage.getService(booking.serviceId!); 
-      if (!service) {
-        console.log(`[API] Service not found for booking: ServiceID=${booking.serviceId}`);
-        return res.status(404).json({ message: "Service associated with booking not found" });
-      }
-
-      // Initialize Razorpay Route service
-      const razorpayRoute = razorpayRouteService(storage);
-      
-      // Calculate the total amount including the platform fee
-      const originalAmount = Number(service.price);
-      const totalAmount = razorpayRoute.calculateTotalWithCustomerFee(originalAmount);
-      const amountInPaise = Math.round(totalAmount * 100); // Convert price to paise
-
-      if (!isRazorpayConfigured) {
-        console.error("[API] Razorpay is not configured. Cannot initiate payment.");
-        return res.status(500).json({ message: "Payment gateway is not configured." });
-      }
-
-      // Create Razorpay order
-      const options = {
-        amount: amountInPaise,
-        currency: "INR",
-        receipt: `booking_${bookingId}_${Date.now()}`,
-        notes: {
-          bookingId: bookingId.toString(),
-          customerId: req.user!.id.toString(),
-          serviceId: service.id.toString(),
-          originalAmount: originalAmount.toString(),
-          platformFee: "3", // Fixed 3rs platform fee for customer
-          totalAmount: totalAmount.toString()
-        }
-      };
-
-      console.log(`[API] Creating Razorpay order for booking ${bookingId} with options:`, options);
-      const order = await razorpay.orders.create(options);
-      console.log(`[API] Razorpay order created: ID=${order.id}`);
-
-      // Store the razorpayOrderId in the booking record
-      await storage.updateBooking(bookingId, { razorpayOrderId: order.id });
-      console.log(`[API] Stored Razorpay Order ID ${order.id} in booking ${bookingId}`);
-
-      // Return order details needed by Razorpay checkout on the client
-      res.json({ 
-        id: order.id, 
-        amount: order.amount, 
-        currency: order.currency, 
-        booking // Include booking details for context on the client
-      });
-
-    } catch (error) {
-      console.error("Error initiating payment:", error);
-      // Check if the error is from Razorpay
-      if (error instanceof Error && 'statusCode' in error) {
-        const razorpayError = error as any; // Type assertion for Razorpay error
-        console.error("Razorpay Error Details:", razorpayError.error);
-        return res.status(razorpayError.statusCode || 500).json({ 
-          message: razorpayError.error?.description || "Failed to initiate payment with payment gateway",
-          code: razorpayError.error?.code
-        });
-      }
-      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to initiate payment" });
-    }
-  });
-
-  // Process payment verification after Razorpay checkout
-  app.post("/api/bookings/:id/payment", requireAuth, requireRole(["customer"]), async (req, res) => {
-    try {
-      const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
-      const bookingId = parseInt(req.params.id);
-      
-      console.log(`[API] Processing payment for booking: ID=${bookingId}, PaymentID=${razorpayPaymentId || 'N/A'}`);
-
-      const booking = await storage.getBooking(bookingId);
-      if (!booking) {
-        console.log(`[API] Booking not found: ID=${bookingId}`);
-        return res.status(404).json({ message: "Booking not found" });
-      }
-
-      // Verify this booking belongs to the customer
-      if (booking.customerId !== req.user!.id) {
-        console.log(`[API] Not authorized to process payment: User=${req.user!.id}, Owner=${booking.customerId}`);
-        return res.status(403).json({ message: "Not authorized to process payment for this booking" });
-      }
-
-      // Verify the booking is in 'completed' status
-      if (booking.status !== "completed") {
-        console.log(`[API] Invalid booking status for payment: ID=${bookingId}, Status=${booking.status}`);
-        return res.status(400).json({ 
-          message: "Only completed bookings can be paid",
-          currentStatus: booking.status
-        });
-      }
-
-      // Get service details
-      const service = await storage.getService(booking.serviceId!);
-      if (!service) {
-        console.log(`[API] Service not found: ID=${booking.serviceId}`);
-        return res.status(404).json({ message: "Service not found" });
-      }
-
-      // Verify payment if Razorpay is configured
-      if (isRazorpayConfigured && razorpayPaymentId && razorpayOrderId && razorpaySignature) {
-        console.log(`[API] Verifying Razorpay payment signature: OrderID=${razorpayOrderId}`);
-        // Verify the payment signature
-        const generatedSignature = crypto
-          .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
-          .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-          .digest("hex");
-
-        if (generatedSignature !== razorpaySignature) {
-          console.log(`[API] Invalid payment signature: Expected=${generatedSignature}, Received=${razorpaySignature}`);
-          return res.status(400).json({ message: "Invalid payment signature" });
-        }
-        console.log(`[API] Payment signature verified successfully`);
-      }
-
-      // Update booking payment status
-      const updatedBooking = await storage.updateBooking(bookingId, {
-        paymentStatus: "paid",
-        razorpayPaymentId: razorpayPaymentId || booking.razorpayPaymentId
-      });
-      
-      console.log(`[API] Booking payment status updated to paid: ID=${bookingId}`);
-      
-      // Process payment split using Razorpay Route
-      try {
-        const razorpayRoute = razorpayRouteService(storage);
-        await razorpayRoute.processBookingPaymentSplit(bookingId, razorpayPaymentId || booking.razorpayPaymentId);
-        console.log(`[API] Payment split processed successfully for booking: ID=${bookingId}`);
-      } catch (splitError) {
-        console.error(`[API] Error processing payment split for booking ${bookingId}:`, splitError);
-        // Continue with the payment process even if the split fails
-        // We'll need to handle this case manually or implement a retry mechanism
-      }
-      
-      const customer = await storage.getUser(booking.customerId!); // Add non-null assertion
-      const provider = await storage.getUser(service.providerId!); // Add non-null assertion
-
-      if (!customer || !provider) {
-        console.error(`[API] Customer or Provider not found for booking ${bookingId} during payment. Skipping payment emails.`);
-      } else {
-        // Send "Service Payment Confirmed" email to customer
-        const customerPaymentEmailContent = getServicePaymentConfirmedCustomerEmailContent(
-          customer.name || customer.username,
-          {
-            bookingId: updatedBooking.id.toString(), // Ensure bookingId is a string
-            serviceName: service.name,
-            bookingDate: updatedBooking.bookingDate,
-          },
-          {
-            amountPaid: service.price, // Corrected property name and use service.price
-            paymentId: razorpayPaymentId || booking.razorpayPaymentId!,
-          }
-        );
-        await sendEmail({
-          to: customer.email,
-          subject: customerPaymentEmailContent.subject,
-          text: customerPaymentEmailContent.text,
-          html: customerPaymentEmailContent.html,
-        });
-        console.log(`[API] 'Service Payment Confirmed' email sent to customer: ${customer.email}`);
-
-        // Send "Payment Received for Service" email to provider
-        const providerPaymentEmailContent = getServiceProviderPaymentReceivedEmailContent(
-          provider.name || provider.username,
-          {
-            bookingId: updatedBooking.id.toString(), // Ensure bookingId is a string
-            serviceName: service.name,
-            bookingDate: updatedBooking.bookingDate,
-          },
-          {
-            name: customer.name || customer.username, // Corrected property name for customerDetails
-          },
-          {
-            amountReceived: service.price, // Corrected property name and use service.price
-            paymentId: razorpayPaymentId || booking.razorpayPaymentId!,
-          }
-        );
-        await sendEmail({
-          to: provider.email,
-          subject: providerPaymentEmailContent.subject,
-          text: providerPaymentEmailContent.text,
-          html: providerPaymentEmailContent.html,
-        });
-        console.log(`[API] 'Payment Received for Service' email sent to provider: ${provider.email}`);
-      }
-
-      // Create notification for service provider (in-app)
-      await storage.createNotification({
-        userId: service.providerId,
-        type: "payment",
-        title: "Payment Received",
-        message: `Payment for booking #${bookingId} (${service.name}) has been received.`
-      });
-      console.log(`[API] Payment notification (in-app) sent to provider: ID=${service.providerId}`);
-      
-      // Create notification for customer (in-app)
-      await storage.createNotification({
-        userId: booking.customerId,
-        type: "payment",
-        title: "Payment Successful",
-        message: `Your payment for ${service.name} has been processed successfully. Thank you for using our service!`
-      });
-      console.log(`[API] Payment confirmation notification (in-app) sent to customer: ID=${booking.customerId}`);
-
-      res.json({
-        success: true,
-        booking: updatedBooking,
-        message: "Payment processed successfully"
-      });
-    } catch (error) {
-      console.error("Error processing payment:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to process payment" });
     }
   });
 
@@ -2084,48 +1643,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/bookings/:id/payment", requireAuth, requireRole(["customer"]), async (req, res) => {
-    try {
-      const { razorpayPaymentId, razorpaySignature } = req.body;
-      const bookingId = parseInt(req.params.id);
-
-      const booking = await storage.getBooking(bookingId);
-      if (!booking) {
-        return res.status(404).json({ message: "Booking not found" });
-      }
-
-      // Verify payment signature
-      const body = booking.razorpayOrderId + "|" + razorpayPaymentId;
-      const expectedSignature = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
-        .update(body.toString())
-        .digest("hex");
-
-      if (expectedSignature !== razorpaySignature) {
-        return res.status(400).json({ message: "Invalid payment signature" });
-      }
-
-      // Update booking payment status
-      const updatedBooking = await storage.updateBooking(bookingId, {
-        paymentStatus: "paid",
-        razorpayPaymentId,
-      });
-
-      // Notify provider about payment
-      const service = await storage.getService(booking.serviceId!);
-      if (service) {
-        await storage.createNotification({
-          userId: service.providerId,
-          type: "payment",
-          title: "Payment Received",
-          message: `Payment received for booking #${booking.id}`,
-        });
-      }
-
-      res.json(updatedBooking);
-    } catch (error) {
-      console.error("Error verifying payment:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to verify payment" });
-    }
+    res.status(200).json({ message: "Payment functionality has been disabled." });
   });
 
   app.get("/api/bookings/customer", requireAuth, requireRole(["customer"]), async (req, res) => {
@@ -2383,36 +1901,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         promotionCode = promotion.code || null;
       }
 
-      // Initialize Razorpay Route service
-      const razorpayRoute = razorpayRouteService(storage);
-      
-      // Calculate the total amount including the platform fee
+      // Payment gateway removed. Create the order directly without initiating payment.
       const originalAmount = parseFloat(total.toString());
-      const totalWithFee = razorpayRoute.calculateTotalWithCustomerFee(originalAmount);
-
-      // Create Razorpay order
-      let order;
-      try {
-        // Check if Razorpay is properly configured
-        if (!isRazorpayConfigured) {
-          console.error("Razorpay is not properly configured. Please check your API keys.");
-          return res.status(500).json({ message: "Payment gateway not configured. Please contact the administrator." });
-        }
-        
-        order = await razorpay.orders.create({
-          amount: Math.round(totalWithFee * 100), // Convert to paisa
-          currency: "INR",
-          receipt: `order_${Date.now()}`,
-          notes: {
-            originalAmount: originalAmount.toString(),
-            platformFee: "3", // Fixed 3rs platform fee for customer
-            totalWithFee: totalWithFee.toString()
-          }
-        });
-      } catch (error) {
-        console.error("Razorpay order creation error:", error);
-        return res.status(500).json({ message: "Failed to create payment order. Please try again later." });
-      }
+      
 
       const newOrder = await storage.createOrder({
         customerId: req.user!.id,
@@ -2420,7 +1911,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "pending",
         paymentStatus: "pending",
         total: total.toString(),
-        razorpayOrderId: order.id,
         orderDate: new Date(),
         shippingAddress: "",
         billingAddress: "",
@@ -2475,7 +1965,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Don't let email failure break the order creation flow
       }
 
-      res.status(201).json({ order: newOrder, razorpayOrder: order });
+      res.status(201).json({ order: newOrder});
     } catch (error) {
       console.error("Order creation error:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create order" });
@@ -2483,73 +1973,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/orders/:id/payment", requireAuth, requireRole(["customer"]), async (req, res) => {
-    try {
-      const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
-      const orderId = parseInt(req.params.id);
-      
-      console.log(`[API] Processing payment for order: ID=${orderId}, PaymentID=${razorpayPaymentId || 'N/A'}`);
-
-      // Verify payment if Razorpay is configured
-      if (isRazorpayConfigured && razorpayPaymentId && razorpayOrderId && razorpaySignature) {
-        console.log(`[API] Verifying Razorpay payment signature: OrderID=${razorpayOrderId}`);
-        // Verify the payment signature
-        const generatedSignature = crypto
-          .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
-          .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-          .digest("hex");
-
-        if (generatedSignature !== razorpaySignature) {
-          console.log(`[API] Invalid payment signature: Expected=${generatedSignature}, Received=${razorpaySignature}`);
-          return res.status(400).json({ message: "Invalid payment signature" });
-        }
-        console.log(`[API] Payment signature verified successfully`);
-      }
-
-      // Update order payment status
-      const order = await storage.updateOrder(orderId, {
-        razorpayPaymentId,
-        status: "confirmed",
-        paymentStatus: "paid",
-      });
-      
-      console.log(`[API] Order payment status updated to paid: ID=${orderId}`);
-      
-      // Process payment split using Razorpay Route
-      try {
-        const razorpayRoute = razorpayRouteService(storage);
-        await razorpayRoute.processOrderPaymentSplit(orderId, razorpayPaymentId);
-        console.log(`[API] Payment split processed successfully for order: ID=${orderId}`);
-      } catch (splitError) {
-        console.error(`[API] Error processing payment split for order ${orderId}:`, splitError);
-        // Continue with the payment process even if the split fails
-        // We'll need to handle this case manually or implement a retry mechanism
-      }
-
-      // Create notification for customer
-      await storage.createNotification({
-        userId: order.customerId,
-        type: "order",
-        title: "Order Confirmed",
-        message: "Your order has been confirmed and will be processed soon.",
-      });
-      
-      // Create notification for shop
-      await storage.createNotification({
-        userId: order.shopId,
-        type: "order",
-        title: "New Order Received",
-        message: `You have received a new order (#${orderId}). Please process it soon.`,
-      });
-
-      res.json({
-        success: true,
-        order,
-        message: "Payment processed successfully"
-      });
-    } catch (error) {
-      console.error("Error processing order payment:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to process payment" });
-    }
+    res.status(200).json({ message: "Payment functionality has been disabled." });
   });
 
   app.get("/api/orders/customer", requireAuth, requireRole(["customer"]), async (req, res) => {
@@ -2560,54 +1984,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/orders/shop", requireAuth, requireRole(["shop"]), async (req, res) => {
     const orders = await storage.getOrdersByShop(req.user!.id);
     res.json(orders);
-  });
-
-  // Razorpay Route - Vendor Onboarding
-  app.post("/api/razorpay/onboard", requireAuth, requireRole(["shop", "provider"]), async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const { bankDetails } = req.body;
-      
-      // Validate bank details
-      if (!bankDetails || !bankDetails.accountNumber || !bankDetails.ifscCode || !bankDetails.accountHolderName) {
-        return res.status(400).json({ message: "Bank details are required for onboarding" });
-      }
-      
-      // Initialize Razorpay Route service
-      const razorpayRoute = razorpayRouteService(storage);
-      
-      // Create linked account
-      const linkedAccount = await razorpayRoute.createLinkedAccount(userId, bankDetails);
-      
-      res.json({
-        success: true,
-        message: "Successfully onboarded to Razorpay Route",
-        linkedAccountId: linkedAccount.id
-      });
-    } catch (error) {
-      console.error("Error onboarding vendor to Razorpay Route:", error);
-      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to onboard vendor" });
-    }
-  });
-  
-  // Get Razorpay Route onboarding status
-  app.get("/api/razorpay/onboard-status", requireAuth, requireRole(["shop", "provider"]), async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const user = await storage.getUser(userId);
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      res.json({
-        isOnboarded: !!user.razorpayLinkedAccountId,
-        linkedAccountId: user.razorpayLinkedAccountId || null
-      });
-    } catch (error) {
-      console.error("Error getting onboarding status:", error);
-      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to get onboarding status" });
-    }
   });
 
   // Add an endpoint to get service availability

@@ -6,7 +6,7 @@ import { Product, Promotion } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { Minus, Plus, Trash2, CreditCard, Tag, RefreshCw, Check } from "lucide-react";
+import { Minus, Plus, Trash2, Tag, RefreshCw, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -195,10 +195,8 @@ export default function Cart() {
       return res.json();
     },
     onSuccess: async (data) => {
-      console.log("Order created:", data); // Debug log
+      console.log("Order created:", data);
 
-      // Handle Razorpay payment
-      // If a promotion was used, update its usage count
       if (selectedPromotion) {
         try {
           await apiRequest("POST", `/api/promotions/${selectedPromotion.id}/apply`, {
@@ -208,50 +206,9 @@ export default function Cart() {
           console.error("Error updating promotion usage:", error);
         }
       }
-
-      const options = {
-        key: "rzp_test_WIK4gEdE7PPhgw", // Using the provided test key directly
-        amount: parseInt(data.razorpayOrder.amount),
-        currency: data.razorpayOrder.currency,
-        name: "Your Shop Name",
-        description: "Order payment",
-        order_id: data.razorpayOrder.id,
-        handler: async (response: any) => {
-          console.log("Payment response:", response); // Debug log
-          try {
-            const res = await apiRequest("POST", `/api/orders/${data.order.id}/payment`, {
-              razorpayPaymentId: response.razorpay_payment_id,
-            });
-
-            if (!res.ok) {
-              throw new Error("Failed to confirm payment");
-            }
-
-            toast({
-              title: "Payment successful",
-              description: "Your order has been placed successfully.",
-            });
-            queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
-            setIsCheckingOut(false);
-          } catch (error) {
-            toast({
-              title: "Payment confirmation failed",
-              description: error instanceof Error ? error.message : "Please contact support",
-              variant: "destructive",
-            });
-          }
-        },
-        prefill: {
-          name: "Customer Name",
-          email: "customer@example.com",
-        },
-        theme: {
-          color: "#000000",
-        },
-      };
-
-      const rzp = new (window as any).Razorpay(options);
-      rzp.open();
+      toast({ title: "Order placed", description: "Your order has been created." });
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      setIsCheckingOut(false);
     },
     onError: (error: Error) => {
       toast({
@@ -488,11 +445,10 @@ export default function Cart() {
                   disabled={
                     isCheckingOut ||
                     createOrderMutation.isPending ||
-                    !cartItems || cartItems.length === 0 // Explicit check
+                    !cartItems || cartItems.length === 0 
                   }
                 >
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Proceed to Checkout
+                Place Order
                 </Button>
               </CardContent>
             </Card>

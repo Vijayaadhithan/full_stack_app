@@ -54,12 +54,6 @@ type BookingWithService = Booking & {
   } | null;
 };
 
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
-
 export default function Bookings() {
   const { toast } = useToast();
   const [selectedBooking, setSelectedBooking] = useState<BookingWithService>();
@@ -70,8 +64,6 @@ export default function Bookings() {
   // const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState("");
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [order, setOrder] = useState<any>(null);
 
   // Fetch bookings
   const { data: bookings, isLoading } = useQuery<BookingWithService[]> ({
@@ -149,58 +141,6 @@ export default function Bookings() {
       setReview(userReview.review || "");
     }
   }, [userReview]);
-
-  // Razorpay script loader (must be above the return)
-  useEffect(() => {
-    if (!order) return;
-
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    script.onload = () => {
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || "", // Use environment variable
-        amount: order.amount, // Amount should be in the smallest currency unit (e.g., paise for INR)
-        currency: order.currency,
-        name: "Service Booking Payment", // Keep it simple or fetch service name if needed
-        description: `Payment for booking #${order.bookingId}`, // Use bookingId from order state
-        order_id: order.id, // This is the Razorpay Order ID from the order state
-        handler: async (response: any) => {
-          try {
-            const res = await apiRequest(
-              "POST",
-              `/api/bookings/${order.booking.id}/payment`,
-              {
-                razorpayPaymentId: response.razorpay_payment_id,
-                razorpaySignature: response.razorpay_signature,
-              }
-            );
-            if (!res.ok) throw new Error("Payment verification failed");
-            queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-            queryClient.invalidateQueries({
-              queryKey: ["/api/notifications"],
-            });
-            toast({
-              title: "Payment successful",
-              description:
-                "Your booking has been confirmed and payment processed.",
-            });
-            setPaymentDialogOpen(false);
-          } catch (err: any) {
-            toast({
-              title: "Payment failed",
-              description: err.message,
-              variant: "destructive",
-            });
-          }
-        },
-        theme: { color: "#10B981" },
-      };
-      new window.Razorpay(options).open();
-    };
-    document.body.appendChild(script);
-    return () => void document.body.removeChild(script);
-  }, [order, toast]);
 
   // Cancel mutation
   const cancelMutation = useMutation({
@@ -330,14 +270,8 @@ export default function Bookings() {
         title: "Service marked as completed",
         description: data.message || "Thank you for your feedback",
       });
-      // If payment is required, initiate the payment flow
-      if (data.paymentRequired) {
-        initiatePaymentMutation.mutate(variables.bookingId); // Call initiatePaymentMutation
-      } else {
-        // If no payment needed, just invalidate queries
-        queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-      }
+    queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
     onError: (error: Error) => {
       toast({
@@ -347,36 +281,6 @@ export default function Bookings() {
       });
       setRescheduleComments(""); // Reset comments on error as well
     },
-  });
-
-  // Initiate payment (if needed)
-  const initiatePaymentMutation = useMutation({
-    mutationFn: (bookingId: number) =>
-      apiRequest("POST", `/api/bookings/${bookingId}/initiate-payment`, {}).then(
-        async (r) => {
-          if (!r.ok) {
-            const errorBody = await r.json().catch(() => ({ message: "Payment initiation failed" }));
-            throw new Error(errorBody.message || "Payment initiation failed");
-          }
-          return r.json(); // Expects { razorpayOrderId: string, amount: number, currency: string, bookingId: number }
-        }
-      ),
-    onSuccess: (data) => {
-      // Set the order state with the specific details needed for Razorpay
-      setOrder({
-        id: data.razorpayOrderId, // This is the Razorpay Order ID
-        amount: data.amount,
-        currency: data.currency,
-        bookingId: data.bookingId, // Keep booking ID for reference/description
-      });
-      setPaymentDialogOpen(true); // Open the dialog (which contains the button to trigger useEffect)
-    },
-    onError: (error: Error) =>
-      toast({
-        title: "Payment initiation failed",
-        description: error.message,
-        variant: "destructive",
-      }),
   });
 
   const handleCancel = (booking: BookingWithService) => {
@@ -697,15 +601,6 @@ export default function Bookings() {
                               {/* The DialogContent is handled below, outside the map */}
                             </Dialog>
                           )}
-                          {/* Payment Button if needed (Should ideally be handled before completion, but kept for safety) */}
-                          {booking.status === 'accepted' && booking.paymentStatus !== 'paid' && Number(booking.service.price) > 0 && (
-                            <Button 
-                              onClick={() => initiatePaymentMutation.mutate(booking.id)}
-                              disabled={initiatePaymentMutation.isPending}
-                            >
-                              {initiatePaymentMutation.isPending ? 'Processing...' : 'Pay Now'}
-                            </Button>
-                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -763,15 +658,6 @@ export default function Bookings() {
         </Dialog>
       </motion.div>
 
-      {/* Payment Dialog */}
-      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Complete your payment</DialogTitle>
-          </DialogHeader>
-          <p>Please wait while we initialize the payment...</p>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 }

@@ -468,7 +468,6 @@ export class MemStorage implements IStorage {
       languages: null,
       googleId: null,
       emailVerified: null,
-      razorpayLinkedAccountId: null,
       verificationStatus: null,
       verificationDocuments: null,
       profileCompleteness: null,
@@ -477,7 +476,9 @@ export class MemStorage implements IStorage {
       shopBannerImageUrl: null,
       shopLogoImageUrl: null,
       yearsInBusiness: null,
-      socialMediaLinks: null
+      socialMediaLinks: null,
+      upiId: null,
+      upiQrCodeUrl: null
     };
     this.users.set(id, user);
     return user;
@@ -597,11 +598,10 @@ export class MemStorage implements IStorage {
       rescheduleDate: booking.rescheduleDate === undefined ? null : booking.rescheduleDate,
       comments: booking.comments === undefined ? null : booking.comments,
       paymentStatus: "pending",
+      paymentReference: booking.paymentReference === undefined ? null : booking.paymentReference,
       eReceiptId: null,
       eReceiptUrl: null,
       eReceiptGeneratedAt: null,
-      razorpayPaymentId: null,
-      razorpayOrderId: null,
       expiresAt: null
     };
     this.bookings.set(id, newBooking);
@@ -848,7 +848,7 @@ return {
   async createOrder(order: InsertOrder): Promise<Order> {
     const id = this.currentId++;
     // Exclude properties that can cause type conflicts
-    const { status, paymentStatus, returnRequested, eReceiptId, eReceiptUrl, eReceiptGeneratedAt, razorpayPaymentId, razorpayOrderId, ...rest } = order;
+    const { status, paymentStatus, returnRequested, eReceiptId, eReceiptUrl, eReceiptGeneratedAt, ...rest } = order;
     const newOrder = { 
       ...rest,
       id,
@@ -864,12 +864,11 @@ return {
       notes: order.notes === undefined ? null : order.notes,
       // Removed shippingMethod property as it does not exist on type InsertOrder.
       paymentMethod: order.paymentMethod === undefined ? null : order.paymentMethod,
+      paymentReference: order.paymentReference === undefined ? null : order.paymentReference,
       trackingInfo: null,
       eReceiptId: null,
       eReceiptUrl: null,
-      eReceiptGeneratedAt: null,
-      razorpayPaymentId: null,
-      razorpayOrderId: null
+      eReceiptGeneratedAt: null
     };
     this.orders.set(id, newOrder);
     return newOrder;
