@@ -1,5 +1,6 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
+import { relations } from "drizzle-orm";
 import { z } from "zod";
 
 export type UserRole = "customer" | "provider" | "shop" | "admin";
@@ -13,7 +14,7 @@ export type ShopProfile = {
   shopName: string;
   description: string;
   businessType: string;
-  gstin?: string;
+  gstin?: string| null;
   bankDetails?: {
     accountNumber: string;
     ifscCode: string;
@@ -92,6 +93,7 @@ export const users = pgTable("users", {
   socialMediaLinks: jsonb("social_media_links").$type<Record<string, string>>(), // e.g., { facebook: "url", instagram: "url" }
   upiId: text("upi_id"),
   upiQrCodeUrl: text("upi_qr_code_url"),
+  //rating: decimal("rating", { precision: 2, scale: 1 }),
   averageRating: decimal("average_rating").default("0"),
   totalReviews: integer("total_reviews").default(0),
 });
@@ -182,6 +184,10 @@ export const reviews = pgTable("reviews", {
   createdAt: timestamp("created_at").defaultNow(),
   providerReply: text("provider_reply"),
   isVerifiedService: boolean("is_verified_service").default(false),
+}, (table) => {
+  return {
+    customerBookingUnique: unique("customer_booking_unique").on(table.customerId, table.bookingId),
+  };
 });
 
 export const waitlist = pgTable("waitlist", {

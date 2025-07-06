@@ -32,9 +32,10 @@ import {
   insertPromotionSchema,
   insertBlockedTimeSlotSchema, // Added import
   promotions, // Import promotions table for direct updates
-  users // Import the users table schema
+  users, // Import the users table schema
+  reviews
 } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "./db";
 import crypto from 'crypto';
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
@@ -425,116 +426,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error(`[API] Error updating booking ${req.params.id}:`, error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update booking" });
-    }
-  });
-
-  // ─── REVIEW OPERATIONS ───────────────────────────────────────────
-
-  // Get provider details with reviews and ratings
-  app.get('/api/providers/:providerId', requireAuth, requireRole(['provider']), async (req, res) => {
-    try {
-      const providerId = parseInt(req.params.providerId);
-      const provider = await storage.getUser(providerId);
-      const reviews = await storage.getReviewsByProvider(providerId);
-      
-      res.json({
-        ...provider,
-        reviews,
-        averageRating: reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : null,
-        totalReviews: reviews.length
-      });
-    } catch (error) {
-      console.error('Error fetching provider details:', error);
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch provider details' });
-    }
-  });
-
-    // Get reviews for a specific provider
-  app.get('/api/reviews/provider/:providerId', async (req, res) => {
-    try {
-      const providerId = parseInt(req.params.providerId);
-      const reviews = await storage.getReviewsByProvider(providerId);
-      res.json(reviews);
-    } catch (error) {
-      console.error('Error fetching provider reviews:', error);
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch provider reviews' });
-    }
-  });
-
-  // Calculate and update provider ratings
-  async function updateProviderRatings(providerId: number) {
-    const reviews = await storage.getReviewsByProvider(providerId);
-    const total = reviews.reduce((sum, review) => sum + review.rating, 0);
-    const average = reviews.length > 0 ? total / reviews.length : 0;
-    // If you want to persist the average rating, implement updateProviderRating in your storage layer.
-    // For now, this function just calculates the average and does not persist it.
-    // Example: await storage.updateUser(providerId, { averageRating: average, totalReviews: reviews.length });
-  }
-
-  // Create/Update review with provider association
-  app.post('/api/reviews', requireAuth, requireRole(['customer']), async (req, res) => {
-    try {
-      const { serviceId, rating, review } = req.body;
-      const service = await storage.getService(serviceId);
-      if (!service || !service.providerId) throw new Error('Service not found');
-
-      // Check if the customer already has a review for this service
-      const existingReviews = await storage.getReviewsByService(serviceId);
-      const userReview = existingReviews.find(r => r.customerId === req.user!.id);
-
-      if (userReview) {
-        return res.status(409).json({ message: "You have already reviewed this service. You can edit your existing review." });
-      }
-
-      const newReview = await storage.createReview({
-        customerId: req.user!.id,
-        serviceId,
-        rating,
-        review
-      });
-
-      await storage.updateProviderRating(service.providerId);
-      res.json(newReview);
-    } catch (error) {
-      console.error('Error saving review:', error);
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to save review' });
-    }
-  });
-
-  // Update a specific review owned by the customer
-  const updateReviewSchema = z.object({
-    rating: z.number().int().min(1).max(5).optional(),
-    review: z.string().min(1).optional(),
-  }).strip(); // Use strip to remove extra fields
-
-  app.put("/api/reviews/:id", requireAuth, requireRole(["customer"]), async (req, res) => {
-    try {
-      const reviewId = parseInt(req.params.id);
-      const customerId = req.user!.id;
-
-      // Validate request body
-      const validationResult = updateReviewSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({ message: "Invalid input", errors: validationResult.error.errors });
-      }
-      const updateData = validationResult.data;
-
-      // Ensure there's something to update
-      if (!updateData.rating && !updateData.review) {
-        return res.status(400).json({ message: "No update data provided (rating or review required)" });
-      }
-
-      // Update the review using the specific customer update method
-      const updatedReview = await storage.updateCustomerReview(reviewId, customerId, updateData);
-
-      res.json(updatedReview);
-    } catch (error) {
-      console.error("Error updating review:", error);
-      // Handle specific errors like 'Review not found' or 'Unauthorized'
-      if (error instanceof Error && (error.message.includes("not found") || error.message.includes("authorized"))) {
-        return res.status(404).json({ message: error.message }); // Use 404 for not found/authorized in this context
-      }
-      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to update review" });
     }
   });
 
@@ -1855,42 +1746,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Review routes
-  app.post("/api/reviews", requireAuth, requireRole(["customer"]), async (req, res) => {
-    try {
-      const result = insertReviewSchema.safeParse(req.body);
-      if (!result.success) return res.status(400).json(result.error);
-      
-      // Check if user has already reviewed this service for this booking
-      if (result.data.serviceId == null) {
-        return res.status(400).json({ message: "Invalid or missing serviceId" });
-      }
-      const existingReviews = await storage.getReviewsByService(result.data.serviceId);
-      const userReview = existingReviews.find(r => 
-        r.customerId === req.user!.id && 
-        r.bookingId === result.data.bookingId
-      );
-      
-      if (userReview) {
-        // Return 409 Conflict for duplicate review attempts
-        return res.status(409).json({ 
-          message: "You have already reviewed this booking. You can edit your existing review."
-        });
-      }
-      
-      const review = await storage.createReview({
-        ...result.data,
-        customerId: req.user!.id,
-      });
-      const service = await storage.getService(result.data.serviceId);
-      if (service?.providerId) {
-        await storage.updateProviderRating(service.providerId);
-      }
-      res.status(201).json(review);
-    } catch (error) {
-      console.error("Error creating review:", error);
-      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to create review" });
+  app.post('/api/reviews', requireAuth, requireRole(['customer']), async (req, res) => {
+  try {
+    const result = insertReviewSchema.safeParse(req.body);
+    if (!result.success) return res.status(400).json(result.error);
+    
+    const { serviceId, bookingId, rating, review } = result.data;
+
+    if (!serviceId || !bookingId) {
+      return res.status(400).json({ message: "Invalid or missing serviceId or bookingId" });
     }
-  });
+
+    // More direct check for an existing review for the same booking by the same customer
+    const booking = await storage.getBooking(bookingId);
+    if (!booking || booking.customerId !== req.user!.id) {
+        return res.status(403).json({ message: "You can only review your own bookings." });
+    }
+
+    const existingReview = await db.select().from(reviews).where(and(eq(reviews.customerId, req.user!.id), eq(reviews.bookingId, bookingId))).limit(1);
+
+    if (existingReview.length > 0) {
+      return res.status(409).json({ 
+        message: "You have already reviewed this booking. You can edit your existing review."
+      });
+    }
+
+    const service = await storage.getService(serviceId);
+    if (!service || !service.providerId) throw new Error('Service not found');
+    
+    const newReview = await storage.createReview({
+      customerId: req.user!.id,
+      serviceId,
+      bookingId,
+      rating,
+      review
+    });
+
+    await storage.updateProviderRating(service.providerId);
+    res.status(201).json(newReview);
+  } catch (error) {
+    console.error('Error saving review:', error);
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to save review' });
+  }
+});
 
   // Add endpoint to update an existing review
   app.patch("/api/reviews/:id", requireAuth, requireRole(["customer"]), async (req, res) => {

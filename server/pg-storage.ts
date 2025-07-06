@@ -501,19 +501,26 @@ export class PostgresStorage implements IStorage {
 
   // ─── REVIEW OPERATIONS ───────────────────────────────────────────
   async createReview(review: InsertReview): Promise<Review> {
+    if (review.bookingId && review.customerId) {
+      const existing = await db
+        .select()
+        .from(reviews)
+        .where(
+          and(
+            eq(reviews.bookingId, review.bookingId),
+            eq(reviews.customerId, review.customerId)
+          )
+        );
+      if (existing[0]) {
+        throw new Error('Duplicate review');
+      }
+    }
     const result = await db.insert(reviews).values(review).returning();
     return result[0];
   }
 
   async getReviewsByService(serviceId: number): Promise<Review[]> {
-    const rows = await db
-      .select()
-      .from(reviews)
-      .innerJoin(bookings, eq(reviews.bookingId, bookings.id))
-      .where(and(eq(reviews.serviceId, serviceId), eq(bookings.status, 'completed')));
-
-    // Drizzle returns objects with nested table names, map to plain Review objects
-    return rows.map((row: any) => row.reviews as Review);
+    return await db.select().from(reviews).where(eq(reviews.serviceId, serviceId));
   }
 
   async getReviewsByProvider(providerId: number): Promise<Review[]> {
@@ -524,10 +531,8 @@ export class PostgresStorage implements IStorage {
     const rows = await db
       .select()
       .from(reviews)
-      .innerJoin(bookings, eq(reviews.bookingId, bookings.id))
-      .where(and(sql`${reviews.serviceId} IN ${serviceIds}`, eq(bookings.status, 'completed')));
-
-    return rows.map((row: any) => row.reviews as Review);
+      .where(sql`${reviews.serviceId} IN ${serviceIds}`);
+    return rows as Review[];
   }
 
   async getReviewsByCustomer(customerId: number): Promise<(Review & { serviceName: string | null })[]> {
@@ -607,7 +612,7 @@ export class PostgresStorage implements IStorage {
     const total = ratings.reduce((sum, r) => sum + r.rating, 0);
     const average = ratings.length > 0 ? total / ratings.length : null;
     await db.execute(
-      sql`UPDATE users SET average_rating = ${average} WHERE id = ${providerId}`,
+      sql`UPDATE users SET average_rating = ${average}, total_reviews = ${ratings.length} WHERE id = ${providerId}`,
     );
   }
 

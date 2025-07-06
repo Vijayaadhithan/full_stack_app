@@ -950,6 +950,14 @@ return {
 
   // Review operations
   async createReview(review: InsertReview): Promise<Review> {
+    if (review.bookingId && review.customerId) {
+      const existing = Array.from(this.reviews.values()).find(r =>
+        r.bookingId === review.bookingId && r.customerId === review.customerId
+      );
+      if (existing) {
+        throw new Error('Duplicate review');
+      }
+    }
     const id = this.currentId++;
     const newReview = { ...review, id };
     this.reviews.set(id, {
@@ -1040,6 +1048,7 @@ return {
     const user = this.users.get(providerId);
     if (user) {
       (user as any).averageRating = average;
+      (user as any).totalReviews = providerReviews.length;
     }
   }
 

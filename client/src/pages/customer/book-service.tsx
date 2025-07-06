@@ -12,7 +12,7 @@ import { useLanguage } from "@/contexts/language-context";
 import { motion } from "framer-motion";
 import { Loader2, MapPin, Clock, Star, AlertCircle } from "lucide-react";
 import { useState, useEffect, useMemo } from "react"; // Add useMemo
-import { format as formatBase, addDays, isBefore, isAfter, addMinutes, isWithinInterval, parse } from "date-fns";
+import { format as formatBase, addDays, isBefore, isAfter, addMinutes, isWithinInterval, parse, format } from "date-fns";
 import { formatInTimeZone, fromZonedTime, toZonedTime } from 'date-fns-tz'; // Import date-fns-tz functions
 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -780,28 +780,29 @@ export default function BookService() {
           </CardHeader>
           <CardContent>
             {service.reviews && service.reviews.length > 0 ? (
-              <div className="space-y-4">
-                {service.reviews.map((review) => (
-                  <div key={review.id} className="border-b pb-4 last:border-b-0">
-                    <div className="flex items-center mb-1">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-4 w-4 ${i < review.rating ? 'fill-yellow-400 text-yellow-500' : 'text-muted-foreground'}`}
-                        />
-                      ))}
-                      <span className="ml-2 text-sm font-medium">{review.rating}.0</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-1">
-                      {review.createdAt ? formatBase(new Date(review.createdAt), 'PP') : ''} - By {review.customerName || 'Anonymous'}
-                    </p>
-                    <p className="text-sm">{review.review}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No reviews yet.</p>
-            )}
+  <div className="space-y-4">
+    {service.reviews.map((review) => (
+      <div key={review.id} className="border-b pb-4 last:border-b-0">
+        <div className="flex items-center mb-1">
+          {[...Array(5)].map((_, i) => (
+            <Star
+              key={i}
+              className={`h-4 w-4 ${i < review.rating ? 'fill-yellow-400 text-yellow-500' : 'text-muted-foreground'}`}
+            />
+          ))}
+          <span className="ml-2 text-sm font-medium">{review.rating}.0</span>
+        </div>
+        <p className="text-sm text-muted-foreground mb-1">
+          {review.createdAt ? format(new Date(review.createdAt), 'PP') : ''} - By {review.customerName || 'Anonymous'}
+        </p>
+        <p className="text-sm">{review.review}</p>
+      </div>
+    ))}
+  </div>
+) : (
+  <p className="text-sm text-muted-foreground">No reviews yet.</p>
+)}
+
           </CardContent>
         </Card>
       </motion.div>
