@@ -85,9 +85,15 @@ export class PostgresStorage implements IStorage {
 
       const allBookingIds = Array.from(new Set([...customerBookingIds, ...providerServiceBookingIds]));
 
-      // Orders related to the user (as customer)
-      const userOrders = await tx.select({ id: orders.id }).from(orders).where(eq(orders.customerId, userId));
-      const orderIds = userOrders.map(o => o.id);
+      // Orders related to the user either as customer or as shop owner
+      const customerOrdersQuery = tx.select({ id: orders.id }).from(orders).where(eq(orders.customerId, userId));
+      const shopOrdersQuery = tx.select({ id: orders.id }).from(orders).where(eq(orders.shopId, userId));
+
+      const [customerOrders, shopOrders] = await Promise.all([customerOrdersQuery, shopOrdersQuery]);
+
+      const orderIds = customerOrders.map(o => o.id);
+      const shopOrderIds = shopOrders.map(o => o.id);
+      const allOrderIds = Array.from(new Set([...orderIds, ...shopOrderIds]));
 
       // Products related to the user (as shop owner)
       const userProducts = await tx.select({ id: products.id }).from(products).where(eq(products.shopId, userId));
@@ -110,28 +116,31 @@ export class PostgresStorage implements IStorage {
       if (allBookingIds.length > 0) {
         await tx.delete(bookingHistory).where(sql`${bookingHistory.bookingId} IN ${allBookingIds}`);
       }
-
+       // Notifications linked to these bookings (for any user)
+      if (allBookingIds.length > 0) {
+        await tx.delete(notifications).where(sql`${notifications.relatedBookingId} IN ${allBookingIds}`);
+      }
       // Now delete bookings
       if (allBookingIds.length > 0) {
           await tx.delete(bookings).where(sql`${bookings.id} IN ${allBookingIds}`);
       }
 
-      // Order items (linked to orders by customer, and products by shop owner)
-      if (orderIds.length > 0) { // OrderItems for customer's orders
-        await tx.delete(orderItems).where(sql`${orderItems.orderId} IN ${orderIds}`);
+      // Order items (linked to orders by customer and shop owner, and products by shop owner)
+      if (allOrderIds.length > 0) {
+        await tx.delete(orderItems).where(sql`${orderItems.orderId} IN ${allOrderIds}`);
       }
       if (productIds.length > 0) { // OrderItems for shop owner's products
         await tx.delete(orderItems).where(sql`${orderItems.productId} IN ${productIds}`);
       }
 
       // Returns (linked to orders)
-      if (orderIds.length > 0) {
-        await tx.delete(returns).where(sql`${returns.orderId} IN ${orderIds}`);
+      if (allOrderIds.length > 0) {
+        await tx.delete(returns).where(sql`${returns.orderId} IN ${allOrderIds}`);
       }
 
-      // Now delete orders (customer's orders)
-      if (orderIds.length > 0) {
-        await tx.delete(orders).where(eq(orders.customerId, userId));
+      // Now delete orders (customer's orders and shop's orders)
+      if (allOrderIds.length > 0) {
+        await tx.delete(orders).where(sql`${orders.id} IN ${allOrderIds}`);
       }
 
       // Promotions (linked to shop)
@@ -578,6 +587,28 @@ export class PostgresStorage implements IStorage {
       throw new Error("Failed to update review");
     }
     return result[0];
+  }
+  async updateProviderRating(providerId: number): Promise<void> {
+    const providerServices = await db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.providerId, providerId));
+    const serviceIds = providerServices.map((s) => s.id);
+    if (serviceIds.length === 0) {
+      await db.execute(
+        sql`UPDATE users SET average_rating = NULL WHERE id = ${providerId}`,
+      );
+      return;
+    }
+    const ratings = await db
+      .select({ rating: reviews.rating })
+      .from(reviews)
+      .where(sql`${reviews.serviceId} IN ${serviceIds}`);
+    const total = ratings.reduce((sum, r) => sum + r.rating, 0);
+    const average = ratings.length > 0 ? total / ratings.length : null;
+    await db.execute(
+      sql`UPDATE users SET average_rating = ${average} WHERE id = ${providerId}`,
+    );
   }
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────

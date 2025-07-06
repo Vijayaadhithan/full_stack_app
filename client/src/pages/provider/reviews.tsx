@@ -34,7 +34,11 @@ export default function ProviderReviews() {
 
   const { data: reviews, isLoading } = useQuery<Review[]>({
     queryKey: [`/api/reviews/provider/${user?.id}`],
+    queryFn: () =>
+      apiRequest("GET", `/api/reviews/provider/${user?.id}`).then((r) => r.json()),
     enabled: !!user?.id,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   const replyMutation = useMutation({

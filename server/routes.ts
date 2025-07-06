@@ -493,7 +493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         review
       });
 
-      await updateProviderRatings(service.providerId);
+      await storage.updateProviderRating(service.providerId);
       res.json(newReview);
     } catch (error) {
       console.error('Error saving review:', error);
@@ -1449,16 +1449,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         title: 'Payment Confirmed',
         message: `Provider confirmed payment for booking #${bookingId}.`
       });
-
+      let customer: Awaited<ReturnType<typeof storage.getUser>> | undefined;
       if (booking.customerId) {
-        const customer = await storage.getUser(booking.customerId);
+        customer = await storage.getUser(booking.customerId);
         if (customer?.email) {
-          const mail = emailService.getGenericNotificationEmailContent(customer.name, 'Booking Completed', `Your provider confirmed payment for booking #${bookingId}.`);
+          const mail = emailService.getServicePaymentConfirmedCustomerEmailContent(
+            customer.name || customer.username,
+            {
+              bookingId: bookingId.toString(),
+              serviceName: service.name,
+              bookingDate: booking.bookingDate
+            },
+            {
+              amountPaid: service.price,
+              paymentId: booking.paymentReference || 'N/A'
+            }
+          );
           mail.to = customer.email;
           await sendEmail(mail);
         }
       }
-
+      const provider = await storage.getUser(service.providerId!);
+      if (provider?.email) {
+        const mail = emailService.getServiceProviderPaymentReceivedEmailContent(
+          provider.name || provider.username,
+          {
+            bookingId: bookingId.toString(),
+            serviceName: service.name,
+            bookingDate: booking.bookingDate
+          },
+          { name: customer?.name || customer?.username || 'Customer' },
+          {
+            amountReceived: service.price,
+            paymentId: booking.paymentReference || 'N/A'
+          }
+        );
+        mail.to = provider.email;
+        await sendEmail(mail);
+      }
       res.json({ booking: updatedBooking });
     } catch (error) {
       console.error("Error completing service by provider:", error);
@@ -1689,8 +1717,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return {
             ...booking,
             service: service || { name: "Unknown Service" },
-            providerName: provider?.name || 'Unknown Provider', // Add provider name
-            displayAddress: displayAddress // Add the determined address
+            providerName: provider?.name || 'Unknown Provider',
+            displayAddress: displayAddress,
+            provider: provider
+              ? {
+                  id: provider.id,
+                  name: provider.name,
+                  phone: provider.phone,
+                  upiId: (provider as any).upiId ?? null,
+                  upiQrCodeUrl: (provider as any).upiQrCodeUrl ?? null,
+                  addressStreet: provider.addressStreet,
+                  addressCity: provider.addressCity,
+                  addressState: provider.addressState,
+                  addressPostalCode: provider.addressPostalCode,
+                  addressCountry: provider.addressCountry,
+                }
+              : null,
           };
         })
       );
@@ -1839,6 +1881,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...result.data,
         customerId: req.user!.id,
       });
+      const service = await storage.getService(result.data.serviceId);
+      if (service?.providerId) {
+        await storage.updateProviderRating(service.providerId);
+      }
       res.status(201).json(review);
     } catch (error) {
       console.error("Error creating review:", error);

@@ -92,6 +92,8 @@ export const users = pgTable("users", {
   socialMediaLinks: jsonb("social_media_links").$type<Record<string, string>>(), // e.g., { facebook: "url", instagram: "url" }
   upiId: text("upi_id"),
   upiQrCodeUrl: text("upi_qr_code_url"),
+  averageRating: decimal("average_rating").default("0"),
+  totalReviews: integer("total_reviews").default(0),
 });
 
 // Update services table with new availability fields and soft deletion
@@ -396,7 +398,9 @@ export const insertUserSchema = createInsertSchema(users, {
         type: z.enum(['card', 'upi']),
         details: z.record(z.string())
       })
-    ).optional()
+    ).optional(),
+    averageRating: z.string().optional().default('0'),
+    totalReviews: z.number().int().optional().default(0)
   });
 
 export const insertCustomerSchema = insertUserSchema.pick({

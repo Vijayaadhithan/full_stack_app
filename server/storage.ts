@@ -112,7 +112,7 @@ export interface IStorage {
   getReviewById(id: number): Promise<Review | undefined>;
   updateReview(id: number, data: { rating?: number; review?: string }): Promise<Review>;
   updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review>;
-  
+  updateProviderRating(providerId: number): Promise<void>;
   // Notification operations
   createNotification(notification: InsertNotification): Promise<Notification>;
   getNotificationsByUser(userId: number): Promise<Notification[]>;
@@ -1022,6 +1022,23 @@ return {
     if (data.review !== undefined) review.review = data.review;
     this.reviews.set(reviewId, review);
     return review;
+  }
+
+  async updateProviderRating(providerId: number): Promise<void> {
+    const providerServices = Array.from(this.services.values()).filter(
+      (s) => s.providerId === providerId,
+    );
+    const serviceIds = providerServices.map((s) => s.id);
+    const providerReviews = Array.from(this.reviews.values()).filter((r) =>
+      serviceIds.includes(r.serviceId!),
+    );
+    const total = providerReviews.reduce((sum, r) => sum + r.rating, 0);
+    const average =
+      providerReviews.length > 0 ? total / providerReviews.length : 0;
+    const user = this.users.get(providerId);
+    if (user) {
+      (user as any).averageRating = average;
+    }
   }
 
   // Notification operations

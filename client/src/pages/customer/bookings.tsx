@@ -229,6 +229,13 @@ export default function Bookings() {
       queryClient.invalidateQueries({
         queryKey: ["/api/reviews/service/", selectedBooking?.serviceId],
       });
+      if (selectedBooking?.provider?.id) {
+        queryClient.invalidateQueries({
+          queryKey: [
+            `/api/reviews/provider/${selectedBooking.provider.id}`,
+          ],
+        });
+      }
       toast({
         title: userReview ? "Review updated" : "Review submitted",
         description: "Thank you for your feedback!",
@@ -437,9 +444,35 @@ export default function Bookings() {
                                   <DialogTitle>Submit Payment</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-4 pt-4">
-                                  <p>Send payment to UPI ID: <strong>{booking.provider?.upiId}</strong></p>
+                                  <div className="flex items-center gap-2">
+                                    <p>
+                                      Send payment to UPI ID:{" "}
+                                      <strong>{booking.provider?.upiId}</strong>
+                                    </p>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => {
+                                        if (booking.provider?.upiId) {
+                                          navigator.clipboard.writeText(
+                                            booking.provider.upiId,
+                                          );
+                                          toast({
+                                            title: "Copied",
+                                            description: "UPI ID copied to clipboard",
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      Copy
+                                    </Button>
+                                  </div>
                                   {booking.provider?.upiQrCodeUrl && (
-                                    <img src={booking.provider.upiQrCodeUrl} alt="QR" className="h-32" />
+                                    <img
+                                      src={booking.provider.upiQrCodeUrl}
+                                      alt="QR"
+                                      className="h-32"
+                                    />
                                   )}
                                   <Input
                                     placeholder="Transaction reference"
