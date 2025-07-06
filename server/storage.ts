@@ -479,7 +479,9 @@ export class MemStorage implements IStorage {
       yearsInBusiness: null,
       socialMediaLinks: null,
       upiId: null,
-      upiQrCodeUrl: null
+      upiQrCodeUrl: null,
+      averageRating: null,
+      totalReviews: null
     };
     this.users.set(id, user);
     return user;
@@ -1433,7 +1435,9 @@ return {
       language: "en",
       profilePicture: null,
       paymentMethods: undefined,
-      emailVerified: false
+      emailVerified: false,
+      averageRating: "",
+      totalReviews: 0
     });
 
     console.log("Created provider:", provider);
@@ -1512,7 +1516,9 @@ return {
       language: "en",
       profilePicture: null,
       paymentMethods: undefined,
-      emailVerified: false
+      emailVerified: false,
+      averageRating: "",
+      totalReviews: 0
     });
 
     // Create sample products
