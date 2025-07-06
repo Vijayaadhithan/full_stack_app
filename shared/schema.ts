@@ -135,7 +135,7 @@ export const bookings = pgTable("bookings", {
   customerId: integer("customer_id").references(() => users.id),
   serviceId: integer("service_id").references(() => services.id),
   bookingDate: timestamp("booking_date").notNull(),
-  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired" | "rescheduled_pending_provider_approval" | "awaiting_payment">().notNull(),
+  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired" | "rescheduled_pending_provider_approval" | "awaiting_payment" | "disputed">().notNull(),
   paymentStatus: text("payment_status").$type<"pending" | "paid" | "refunded">().notNull(),
   rejectionReason: text("rejection_reason"),
   rescheduleDate: timestamp("reschedule_date"), // This can store the original date if rescheduled, or the new date if status is 'rescheduled'
@@ -144,6 +144,7 @@ export const bookings = pgTable("bookings", {
   eReceiptUrl: text("e_receipt_url"),
   eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
   paymentReference: text("payment_reference"),
+  disputeReason: text("dispute_reason"),
   createdAt: timestamp("created_at").defaultNow(),
   expiresAt: timestamp("expires_at"),
   serviceLocation: text("service_location").$type<'customer' | 'provider'>(), // Added service location type
@@ -383,13 +384,20 @@ export const customerProfileSchema = z.object({
 });
 
 export const insertUserSchema = createInsertSchema(users, {
-  shopProfile: shopProfileSchema.optional().nullable(), // Validate shopProfile if provided
+  shopProfile: shopProfileSchema.optional().nullable(),
   emailVerified: z.boolean().optional().default(false),
   role: z.enum(["customer", "provider", "shop", "admin"]),
-  // Fields not directly updatable by generic user update, or handled by specific schemas
-  username: z.string().optional(), // Assuming username might be set at creation and not changed often
-  password: z.string().optional(), // Password updates should be handled separately and securely
-});
+  username: z.string().optional(),
+  password: z.string().optional(),
+})
+  .extend({
+    paymentMethods: z.array(
+      z.object({
+        type: z.enum(['card', 'upi']),
+        details: z.record(z.string())
+      })
+    ).optional()
+  });
 
 export const insertCustomerSchema = insertUserSchema.pick({
   username: true,
@@ -519,7 +527,7 @@ export const Booking = z.object({
   providerId: z.number(),
   serviceId: z.number(),
   bookingDate: z.string(), // ISO string format
-  status: z.enum(["pending", "accepted", "rejected", "rescheduled", "completed", "cancelled", "awaiting_payment"]), // Removed 'expired' as it's handled internally
+  status: z.enum(["pending", "accepted", "rejected", "rescheduled", "completed", "cancelled", "awaiting_payment", "disputed"]), // Removed 'expired' as it's handled internally
   comments: z.string().optional(),
   rejectionReason: z.string().optional(),
   rescheduleDate: z.string().optional(), // ISO string format
@@ -527,4 +535,5 @@ export const Booking = z.object({
   updatedAt: z.string(), // ISO string format
   serviceLocation: z.enum(["customer", "provider"]).optional(), // Updated service location
   providerAddress: z.string().optional().nullable(), // Updated provider address (nullable)
+  disputeReason: z.string().optional(),
 });

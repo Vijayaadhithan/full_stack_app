@@ -164,6 +164,11 @@ export class PostgresStorage implements IStorage {
     });
   }
 
+  // async getReviewsByCustomer(customerId: number): Promise<Review[]> {
+    // const result = await db.select().from(reviews).where(eq(reviews.customerId, customerId));
+    // return result;
+  //}
+
   async updateReview(id: number, data: { rating?: number; review?: string; providerReply?: string; }): Promise<Review> {
     const updatedReview = await db.update(reviews)
       .set(data)
@@ -492,7 +497,14 @@ export class PostgresStorage implements IStorage {
   }
 
   async getReviewsByService(serviceId: number): Promise<Review[]> {
-    return await db.select().from(reviews).where(eq(reviews.serviceId, serviceId));
+    const rows = await db
+      .select()
+      .from(reviews)
+      .innerJoin(bookings, eq(reviews.bookingId, bookings.id))
+      .where(and(eq(reviews.serviceId, serviceId), eq(bookings.status, 'completed')));
+
+    // Drizzle returns objects with nested table names, map to plain Review objects
+    return rows.map((row: any) => row.reviews as Review);
   }
 
   async getReviewsByProvider(providerId: number): Promise<Review[]> {
@@ -500,7 +512,13 @@ export class PostgresStorage implements IStorage {
     const providerServices = await db.select({ id: services.id }).from(services).where(eq(services.providerId, providerId));
     const serviceIds = providerServices.map(s => s.id);
     if (serviceIds.length === 0) return [];
-    return await db.select().from(reviews).where(sql`${reviews.serviceId} IN ${serviceIds}`);
+    const rows = await db
+      .select()
+      .from(reviews)
+      .innerJoin(bookings, eq(reviews.bookingId, bookings.id))
+      .where(and(sql`${reviews.serviceId} IN ${serviceIds}`, eq(bookings.status, 'completed')));
+
+    return rows.map((row: any) => row.reviews as Review);
   }
 
   async getReviewsByCustomer(customerId: number): Promise<(Review & { serviceName: string | null })[]> {
@@ -639,7 +657,10 @@ export class PostgresStorage implements IStorage {
          conditions.push(eq(services.isAvailable, true)); 
       }
     }
-    // Apply all conditions at once
+    // Exclude providers with many unresolved payments
+    const exclusion = sql`SELECT s.provider_id FROM ${bookings} b JOIN ${services} s ON b.service_id = s.id WHERE b.status = 'awaiting_payment' GROUP BY s.provider_id HAVING COUNT(*) > 5`;
+
+    conditions.push(sql`${services.providerId} NOT IN (${exclusion})`);
     const query = db.select().from(services).where(and(...conditions));
     return await query;
   }
@@ -690,6 +711,10 @@ export class PostgresStorage implements IStorage {
       allBookings = [...allBookings, ...serviceBookings];
     }
     return allBookings;
+  }
+
+  async getBookingsByStatus(status: string): Promise<Booking[]> {
+    return await db.select().from(bookings).where(eq(bookings.status, status as any));
   }
 
   async updateBooking(id: number, booking: Partial<Booking>): Promise<Booking> {

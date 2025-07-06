@@ -65,6 +65,7 @@ export interface IStorage {
   getBooking(id: number): Promise<Booking | undefined>;
   getBookingsByCustomer(customerId: number): Promise<Booking[]>;
   getBookingsByProvider(providerId: number): Promise<Booking[]>;
+  getBookingsByStatus(status: string): Promise<Booking[]>;
   updateBooking(id: number, booking: Partial<Booking>): Promise<Booking>;
   getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]>; // Added
   getBookingHistoryForProvider(providerId: number): Promise<Booking[]>; // Added
@@ -577,7 +578,17 @@ export class MemStorage implements IStorage {
   }
 
   async getServices(): Promise<Service[]> {
-    return Array.from(this.services.values());
+    const counts: Record<number, number> = {};
+    for (const b of Array.from(this.bookings.values())) {
+      if (b.status === 'awaiting_payment' && b.serviceId) {
+        const s = this.services.get(b.serviceId);
+        if (s?.providerId) {
+          counts[s.providerId] = (counts[s.providerId] || 0) + 1;
+        }
+      }
+    }
+    const blocked = Object.entries(counts).filter(([_, c]) => c > 5).map(([id]) => Number(id));
+    return Array.from(this.services.values()).filter(s => !blocked.includes(s.providerId!));
   }
 
   // Booking operations
@@ -602,7 +613,8 @@ export class MemStorage implements IStorage {
       eReceiptId: null,
       eReceiptUrl: null,
       eReceiptGeneratedAt: null,
-      expiresAt: null
+      expiresAt: null,
+      disputeReason: booking.disputeReason === undefined ? null : booking.disputeReason
     };
     this.bookings.set(id, newBooking);
     return newBooking;
@@ -624,6 +636,10 @@ export class MemStorage implements IStorage {
       const service = this.services.get(booking.serviceId);
       return service?.providerId === providerId;
     });
+  }
+
+  async getBookingsByStatus(status: string): Promise<Booking[]> {
+    return Array.from(this.bookings.values()).filter(b => b.status === status);
   }
 
   async updateBooking(id: number, booking: Partial<Booking>): Promise<Booking> {
@@ -1399,7 +1415,7 @@ return {
       addressCountry: null,
       language: "en",
       profilePicture: null,
-      paymentMethods: null,
+      paymentMethods: undefined,
       emailVerified: false
     });
 
@@ -1478,7 +1494,7 @@ return {
       addressCountry: "India",
       language: "en",
       profilePicture: null,
-      paymentMethods: null,
+      paymentMethods: undefined,
       emailVerified: false
     });
 

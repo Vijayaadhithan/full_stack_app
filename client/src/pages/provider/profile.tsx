@@ -30,6 +30,8 @@ const profileSchema = z.object({
   experience: z.string().optional(),
   workingHours: z.string().optional(),
   languages: z.string().optional(),
+  upiId: z.string().optional(),
+  upiQrCodeUrl: z.string().optional(),
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -39,6 +41,7 @@ export default function ProviderProfile() {
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
   const [profileData, setProfileData] = useState<ProfileFormData | null>(null);
+  const [qrPreview, setQrPreview] = useState<string | null>(null);
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -56,6 +59,8 @@ export default function ProviderProfile() {
       experience: user?.experience || "",
       workingHours: user?.workingHours || "",
       languages: user?.languages || "",
+      upiId: user?.upiId || "",
+      upiQrCodeUrl: user?.upiQrCodeUrl || "",
     },
   });
   
@@ -76,6 +81,8 @@ export default function ProviderProfile() {
         experience: user.experience || "",
         workingHours: user.workingHours || "",
         languages: user.languages || "",
+        upiId: user.upiId || "",
+        upiQrCodeUrl: user.upiQrCodeUrl || "",
       });
       setProfileData({
         name: user.name || "",
@@ -91,6 +98,8 @@ export default function ProviderProfile() {
         experience: user.experience || "",
         workingHours: user.workingHours || "",
         languages: user.languages || "",
+        upiId: user.upiId || "",
+        upiQrCodeUrl: user.upiQrCodeUrl || "",
       });
     }
   }, [user, form]);
@@ -149,7 +158,9 @@ export default function ProviderProfile() {
       qualifications: data.qualifications,
       experience: data.experience,
       workingHours: data.workingHours,
-      languages: data.languages
+      languages: data.languages,
+      upiId: data.upiId,
+      upiQrCodeUrl: data.upiQrCodeUrl
     });
   };
 
@@ -425,7 +436,40 @@ export default function ProviderProfile() {
                     </FormItem>
                   )}
                 />
-
+                <div className="mt-4">
+                  <h3 className="font-semibold mb-2">Payment Details</h3>
+                  <FormField
+                    control={form.control}
+                    name="upiId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>UPI ID</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="mt-2">
+                    <Label>UPI QR Code</Label>
+                    <Input type="file" disabled={!editMode} onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const formData = new FormData();
+                      formData.append('qr', file);
+                      const res = await apiRequest('POST', '/api/users/upload-qr', formData);
+                      if (res.ok) {
+                        const data = await res.json();
+                        form.setValue('upiQrCodeUrl', data.url);
+                        setQrPreview(data.url);
+                      }
+                    }} />
+                    {qrPreview || form.watch('upiQrCodeUrl') ? (
+                      <img src={qrPreview || form.watch('upiQrCodeUrl')!} alt="QR" className="mt-2 h-32" />
+                    ) : null}
+                  </div>
+                </div>
                 <div className="flex justify-end gap-2">
                   {editMode ? (
                     <>

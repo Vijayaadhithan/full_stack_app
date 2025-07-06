@@ -44,6 +44,7 @@ export default function ProviderBookings() {
   const [dateFilter, setDateFilter] = useState<string>("");
   const [actionType, setActionType] = useState<"accept" | "reject" | "reschedule" | "complete" | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [disputeReason, setDisputeReason] = useState('');
 
   // Fetch all bookings including accepted ones
   const { data: bookings, isLoading } = useQuery<BookingWithDetails[]>({ // Use BookingWithDetails
@@ -175,6 +176,30 @@ export default function ProviderBookings() {
       });
     },
   });
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest('PATCH', `/api/bookings/${id}/provider-complete`);
+      if (!res.ok) throw new Error('Failed to confirm payment');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/provider"] });
+      toast({ title: 'Booking completed' });
+    }
+  });
+
+  const disputeMutation = useMutation({
+    mutationFn: async ({ bookingId, reason }: { bookingId: number; reason: string }) => {
+      const res = await apiRequest('POST', `/api/bookings/${bookingId}/report-dispute`, { reason });
+      if (!res.ok) throw new Error('Failed to report issue');
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Issue reported' });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/provider"] });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' })
+  });
 
   const filteredBookings = bookings?.filter(booking => {
     if (selectedStatus !== "all" && booking.status !== selectedStatus) return false;
@@ -262,7 +287,7 @@ export default function ProviderBookings() {
         ) : (
           <div className="space-y-4">
             {filteredBookings.map((booking) => (
-              <Card key={booking.id}>
+              <Card key={booking.id} className={booking.status === 'awaiting_payment' ? 'border-yellow-500 bg-yellow-50' : ''}>
                 <CardContent className="p-6">
                   <div className="flex justify-between items-start">
                     <div className="space-y-2">
@@ -503,6 +528,38 @@ export default function ProviderBookings() {
                           </Form>
                         </DialogContent>
                       </Dialog>
+                    )}
+                    {booking.status === 'awaiting_payment' && (
+                      <div className="space-x-2">
+                        <p className="text-sm">Ref: {booking.paymentReference}</p>
+                        <Button
+                          variant="outline"
+                          className="text-blue-600"
+                          onClick={() => confirmPaymentMutation.mutate(booking.id)}
+                        >
+                          {confirmPaymentMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                          Confirm Payment & Complete
+                        </Button>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="destructive" onClick={() => setSelectedBooking(booking)}>
+                              Report Issue
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Report Issue</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 pt-4">
+                              <Textarea value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Describe the issue" />
+                              <Button onClick={() => disputeMutation.mutate({ bookingId: booking.id, reason: disputeReason })} className="w-full">
+                                {disputeMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                Submit
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
                     )}
                   </div>
                 </CardContent>

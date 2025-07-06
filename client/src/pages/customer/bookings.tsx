@@ -34,6 +34,7 @@ import {
   Calendar as CalendarIcon,
   Clock,
   MapPin as LocationIcon,
+  Loader2,
 } from "lucide-react";
 import { format, isAfter, isBefore, addDays } from "date-fns";
 import { formatIndianDisplay } from "@shared/date-utils";
@@ -46,6 +47,8 @@ type BookingWithService = Booking & {
     id: number;
     name: string;
     phone: string;
+    upiId?: string;
+    upiQrCodeUrl?: string;
     addressStreet?: string;
     addressCity?: string;
     addressState?: string;
@@ -64,6 +67,8 @@ export default function Bookings() {
   // const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState("");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [disputeReason, setDisputeReason] = useState("");
 
   // Fetch bookings
   const { data: bookings, isLoading } = useQuery<BookingWithService[]> ({
@@ -243,44 +248,55 @@ export default function Bookings() {
     },
   });
 
-  // Complete service mutation
-  const completeServiceMutation = useMutation({
-    mutationFn: async ({
-      bookingId,
-      isSatisfactory,
-      comments,
-    }: {
-      bookingId: number;
-      isSatisfactory: boolean;
-      comments?: string;
-    }) => {
-      const res = await apiRequest(
-        "PATCH",
-        `/api/bookings/${bookingId}/complete`,
-        { isSatisfactory, comments }
-      );
+  // Submit payment reference mutation
+  const paymentMutation = useMutation({
+    mutationFn: async ({ bookingId, paymentReference }: { bookingId: number; paymentReference: string }) => {
+      const res = await apiRequest('PATCH', `/api/bookings/${bookingId}/customer-complete`, { paymentReference });
       if (!res.ok) {
         const body = await res.json();
-        throw new Error(body.message || "Failed to complete service");
+        throw new Error(body.message || 'Failed to submit payment');
       }
       return res.json();
     },
-    onSuccess: (data, variables) => { // Added variables to access bookingId
-      toast({
-        title: "Service marked as completed",
-        description: data.message || "Thank you for your feedback",
-      });
-    queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    onSuccess: () => {
+      toast({ title: 'Payment submitted, awaiting provider confirmation' });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Service completion failed",
-        description: error.message,
-        variant: "destructive",
-      });
-      setRescheduleComments(""); // Reset comments on error as well
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     },
+  });
+
+  const updateReferenceMutation = useMutation({
+    mutationFn: async ({ bookingId, paymentReference }: { bookingId: number; paymentReference: string }) => {
+      const res = await apiRequest('PATCH', `/api/bookings/${bookingId}/update-reference`, { paymentReference });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.message || 'Failed to update reference');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Payment reference updated' });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' })
+  });
+
+  const disputeMutation = useMutation({
+    mutationFn: async ({ bookingId, reason }: { bookingId: number; reason: string }) => {
+      const res = await apiRequest('POST', `/api/bookings/${bookingId}/report-dispute`, { reason });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.message || 'Failed to report issue');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Issue reported' });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' })
   });
 
   const handleCancel = (booking: BookingWithService) => {
@@ -413,45 +429,73 @@ export default function Bookings() {
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button onClick={() => setSelectedBooking(booking)}>
-                                  Mark Complete
+                                  Mark Service as Complete & Pay
                                 </Button>
                               </DialogTrigger>
                               <DialogContent>
                                 <DialogHeader>
-                                  <DialogTitle>Service Completion</DialogTitle>
+                                  <DialogTitle>Submit Payment</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-4 pt-4">
-                                  <p>Was the service completed satisfactorily?</p>
-                                  <div className="flex gap-4">
-                                    <Button
-                                      className="flex-1"
-                                      onClick={() =>
-                                        completeServiceMutation.mutate({
-                                          bookingId: booking.id,
-                                          isSatisfactory: true,
-                                          comments: "Service was satisfactory",
-                                        })
-                                      }
-                                    >
-                                      Yes, Proceed to Payment
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      className="flex-1"
-                                      onClick={() =>
-                                        completeServiceMutation.mutate({
-                                          bookingId: booking.id,
-                                          isSatisfactory: false,
-                                          comments: "Service had issues",
-                                        })
-                                      }
-                                    >
-                                      No, Report Issues
-                                    </Button>
-                                  </div>
+                                  <p>Send payment to UPI ID: <strong>{booking.provider?.upiId}</strong></p>
+                                  {booking.provider?.upiQrCodeUrl && (
+                                    <img src={booking.provider.upiQrCodeUrl} alt="QR" className="h-32" />
+                                  )}
+                                  <Input
+                                    placeholder="Transaction reference"
+                                    value={paymentReference}
+                                    onChange={(e) => setPaymentReference(e.target.value)}
+                                  />
+                                  <Button onClick={() => paymentMutation.mutate({ bookingId: booking.id, paymentReference })} className="w-full">
+                                    {paymentMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                    Submit and Confirm Payment
+                                  </Button>
                                 </div>
                               </DialogContent>
                             </Dialog>
+                          )}
+                          {booking.status === "awaiting_payment" && (
+                            <>
+                              <p className="text-sm">Reference: {booking.paymentReference}</p>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" onClick={() => { setSelectedBooking(booking); setPaymentReference(booking.paymentReference || ""); }}>
+                                    Edit Reference
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Update Payment Reference</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4 pt-4">
+                                    <Input value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Transaction reference" />
+                                    <Button onClick={() => updateReferenceMutation.mutate({ bookingId: booking.id, paymentReference })} className="w-full">
+                                      {updateReferenceMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                      Save
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="destructive" onClick={() => { setSelectedBooking(booking); }}>
+                                    Report Issue
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Report Issue</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4 pt-4">
+                                    <Textarea value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Describe the issue" />
+                                    <Button onClick={() => disputeMutation.mutate({ bookingId: booking.id, reason: disputeReason })} className="w-full">
+                                      {disputeMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                      Submit
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            </>
                           )}
                           {booking.status === "pending" && (
                             <>
@@ -588,6 +632,49 @@ export default function Bookings() {
                           )}
                         </div>
                         <div className="space-x-2">
+                          {booking.status === 'awaiting_payment' && (
+                            <>
+                              <p className="text-sm">Reference: {booking.paymentReference}</p>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" onClick={() => { setSelectedBooking(booking); setPaymentReference(booking.paymentReference || ""); }}>
+                                    Edit Reference
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Update Payment Reference</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4 pt-4">
+                                    <Input value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Transaction reference" />
+                                    <Button onClick={() => updateReferenceMutation.mutate({ bookingId: booking.id, paymentReference })} className="w-full">
+                                      {updateReferenceMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                      Save
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="destructive" onClick={() => { setSelectedBooking(booking); }}>
+                                    Report Issue
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Report Issue</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4 pt-4">
+                                    <Textarea value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Describe the issue" />
+                                    <Button onClick={() => disputeMutation.mutate({ bookingId: booking.id, reason: disputeReason })} className="w-full">
+                                      {disputeMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                      Submit
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            </>
+                          )}
                           {/* Review Button for Completed Bookings */}
                           {booking.status === 'completed' && (
                             <Dialog>

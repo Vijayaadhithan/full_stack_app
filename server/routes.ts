@@ -23,6 +23,7 @@ import {
   insertOrderSchema,
   insertOrderItemSchema,
   insertReviewSchema,
+  insertUserSchema,
   insertNotificationSchema,
   insertReturnRequestSchema,
   InsertReturnRequest,
@@ -35,12 +36,10 @@ import {
 } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-//import Razorpay from "razorpay";
 import crypto from 'crypto';
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
-//import { razorpayRouteService, RazorpayRouteService } from "./services/razorpay-route"; // Import Razorpay Route service
 
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null {
@@ -76,11 +75,6 @@ function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null
     return null;
   }
 }
-
-// Payment gateway has been removed. The following constants previously
-// configured Razorpay; they are kept as stubs for backward compatibility.
-const isRazorpayConfigured = false;
-const razorpay: any = {};
 
 // Store password reset tokens in memory (for simplicity, in a real app use a database)
 interface PasswordResetToken {
@@ -436,16 +430,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── REVIEW OPERATIONS ───────────────────────────────────────────
 
-  // Get reviews submitted by the currently logged-in customer
-  app.get("/api/reviews/customer", requireAuth, requireRole(["customer"]), async (req, res) => {
+  // Get provider details with reviews and ratings
+  app.get('/api/providers/:providerId', requireAuth, requireRole(['provider']), async (req, res) => {
     try {
-      const customerId = req.user!.id;
-      const reviews = await storage.getReviewsByCustomer(customerId);
-      // Optionally, enrich reviews with service/product details if needed
+      const providerId = parseInt(req.params.providerId);
+      const provider = await storage.getUser(providerId);
+      const reviews = await storage.getReviewsByProvider(providerId);
+      
+      res.json({
+        ...provider,
+        reviews,
+        averageRating: reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : null,
+        totalReviews: reviews.length
+      });
+    } catch (error) {
+      console.error('Error fetching provider details:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch provider details' });
+    }
+  });
+
+    // Get reviews for a specific provider
+  app.get('/api/reviews/provider/:providerId', async (req, res) => {
+    try {
+      const providerId = parseInt(req.params.providerId);
+      const reviews = await storage.getReviewsByProvider(providerId);
       res.json(reviews);
     } catch (error) {
-      console.error("Error fetching customer reviews:", error);
-      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch reviews" });
+      console.error('Error fetching provider reviews:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch provider reviews' });
+    }
+  });
+
+  // Calculate and update provider ratings
+  async function updateProviderRatings(providerId: number) {
+    const reviews = await storage.getReviewsByProvider(providerId);
+    const total = reviews.reduce((sum, review) => sum + review.rating, 0);
+    const average = reviews.length > 0 ? total / reviews.length : 0;
+    // If you want to persist the average rating, implement updateProviderRating in your storage layer.
+    // For now, this function just calculates the average and does not persist it.
+    // Example: await storage.updateUser(providerId, { averageRating: average, totalReviews: reviews.length });
+  }
+
+  // Create/Update review with provider association
+  app.post('/api/reviews', requireAuth, requireRole(['customer']), async (req, res) => {
+    try {
+      const { serviceId, rating, review } = req.body;
+      const service = await storage.getService(serviceId);
+      if (!service || !service.providerId) throw new Error('Service not found');
+
+      // Check if the customer already has a review for this service
+      const existingReviews = await storage.getReviewsByService(serviceId);
+      const userReview = existingReviews.find(r => r.customerId === req.user!.id);
+
+      if (userReview) {
+        return res.status(409).json({ message: "You have already reviewed this service. You can edit your existing review." });
+      }
+
+      const newReview = await storage.createReview({
+        customerId: req.user!.id,
+        serviceId,
+        rating,
+        review
+      });
+
+      await updateProviderRatings(service.providerId);
+      res.json(newReview);
+    } catch (error) {
+      console.error('Error saving review:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to save review' });
     }
   });
 
@@ -649,7 +701,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Report a dispute on an awaiting payment booking
+  app.post('/api/bookings/:id/report-dispute', requireAuth, async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.id);
+      const { reason } = req.body;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: 'Booking not found' });
+      if (booking.status !== 'awaiting_payment') return res.status(400).json({ message: 'Booking not awaiting payment' });
+      if (booking.customerId !== req.user!.id && (await storage.getService(booking.serviceId!))?.providerId !== req.user!.id) {
+        return res.status(403).json({ message: 'Not authorized' });
+      }
+      const updated = await storage.updateBooking(bookingId, { status: 'disputed', disputeReason: reason });
+      res.json({ booking: updated });
+    } catch (error) {
+      console.error('Error reporting dispute:', error);
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to report dispute' });
+    }
+  });
+
+  // Admin resolves disputed booking
+  app.patch('/api/admin/bookings/:id/resolve', requireAuth, requireRole(["admin"]), async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.id);
+      const { resolutionStatus } = req.body as { resolutionStatus: 'completed' | 'cancelled' };
+      if (!['completed','cancelled'].includes(resolutionStatus)) return res.status(400).json({ message: 'Invalid resolutionStatus' });
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: 'Booking not found' });
+      if (booking.status !== 'disputed') return res.status(400).json({ message: 'Booking not disputed' });
+      const updated = await storage.updateBooking(bookingId, { status: resolutionStatus });
+      res.json({ booking: updated });
+    } catch (error) {
+      console.error('Error resolving dispute:', error);
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to resolve dispute' });
+    }
+  });
+
+  // Admin list disputes
+  app.get('/api/admin/disputes', requireAuth, requireRole(["admin"]), async (_req, res) => {
+    try {
+      const disputes = await storage.getBookingsByStatus('disputed');
+      res.json(disputes);
+    } catch (error) {
+      console.error('Error fetching disputes:', error);
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to fetch disputes' });
+    }
+  });
+
   // Shop Profile Management
+  const profileUpdateSchema = insertUserSchema.partial().extend({
+    upiId: z.string().regex(/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/).optional().nullable(),
+    upiQrCodeUrl: z.string().optional().nullable(),
+  });
+
   app.patch("/api/users/:id", requireAuth, async (req, res) => {
     try {
       const userId = parseInt(req.params.id);
@@ -657,17 +761,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Can only update own profile" });
       }
 
-      console.log("[API] Updating user profile:", { userId, data: req.body });
-      
-      // Update the user in the database
-      const updatedUser = await storage.updateUser(userId, req.body);
-      
-      // Update the user in the session
-      if (req.user) {
-        Object.assign(req.user, updatedUser);
+      const result = profileUpdateSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json(result.error);
+
+      // Providers can update UPI fields
+      if (req.user!.role !== 'provider') {
+        delete (result.data as any).upiId;
+        delete (result.data as any).upiQrCodeUrl;
       }
       
-      console.log("[API] Updated user profile:", updatedUser);
+      // Sanitize paymentMethods to ensure it's an array of PaymentMethod, null, or undefined
+      let updateData = { ...result.data };
+      if ('paymentMethods' in updateData) {
+        if (
+          updateData.paymentMethods == null ||
+          Array.isArray(updateData.paymentMethods)
+        ) {
+          // Already valid: array, null, or undefined
+        } else if (
+          typeof updateData.paymentMethods === 'object' &&
+          updateData.paymentMethods !== null &&
+          Array.isArray(updateData.paymentMethods)
+        ) {
+          // Already an array, filter out invalid entries
+          updateData.paymentMethods = (updateData.paymentMethods as any[]).filter(
+            (pm: any) =>
+              pm &&
+              typeof pm === 'object' &&
+              typeof pm.type === 'string' &&
+              typeof pm.details === 'object'
+          );
+        } else {
+          // If it's not valid, set to undefined
+          updateData.paymentMethods = undefined;
+        }
+      }
+      const updatedUser = await storage.updateUser(userId, updateData);
+
+      if (req.user) Object.assign(req.user, updatedUser);
       res.json(updatedUser);
     } catch (error) {
       console.error("Error updating user:", error);
@@ -1281,54 +1412,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // New endpoint for providers to mark a service as completed
+  app.get("/api/reviews/customer", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const customerId = req.user!.id;
+      const customerReviews = await storage.getReviewsByCustomer(customerId);
+      res.json(customerReviews);
+    } catch (error) {
+      console.error("Error fetching customer reviews:", error);
+      res.status(500).json({ message: "Failed to fetch reviews" });
+    }
+  });
+
+  // Endpoint for providers to confirm payment and complete booking
   app.patch("/api/bookings/:id/provider-complete", requireAuth, requireRole(["provider"]), async (req, res) => {
     try {
       const bookingId = parseInt(req.params.id);
-      const { service_notes } = req.body; // As seen in the UI modal
-
-      console.log(`[API DEBUG] Provider attempting to complete service. Booking ID: ${bookingId}, Notes: ${service_notes}`);
-
+      
       const booking = await storage.getBooking(bookingId);
-      if (!booking) {
-        console.log(`[API DEBUG] Booking not found: ID=${bookingId}. Returning 404.`);
-        return res.status(404).json({ message: "Booking not found" });
-      }
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
 
       const service = await storage.getService(booking.serviceId!);
       if (!service || service.providerId !== req.user!.id) {
-        console.log(`[API DEBUG] Authorization check failed for completing booking ID ${bookingId}. Returning 403.`);
-        return res.status(403).json({ message: "Not authorized to complete this booking" });
+        return res.status(403).json({ message: "Not authorized" });
       }
 
       // Ensure the booking is in a state that can be completed by a provider (e.g., 'accepted')
-      if (booking.status !== 'accepted') {
-        console.log(`[API DEBUG] Invalid status for provider completion: ${booking.status} for booking ID ${bookingId}. Returning 400.`);
-        return res.status(400).json({ message: `Booking cannot be marked as complete by provider. Current status: ${booking.status}. Must be 'accepted'.` });
+      if (booking.status !== 'awaiting_payment') {
+        return res.status(400).json({ message: 'Booking not awaiting payment' });
       }
 
-      // Update booking status to 'completed' and add provider notes
-      // Using 'comments' field for service_notes for now. Consider a dedicated 'providerNotes' field if needed.
-      const updatedBooking = await storage.updateBooking(bookingId, {
-        status: "completed",
-        comments: service_notes || booking.comments, // Preserve existing comments if new notes are empty
-        // providerNotes: service_notes // Or use a dedicated field
-      });
+      const updatedBooking = await storage.updateBooking(bookingId, { status: 'completed' });
 
-      console.log(`[API] Booking ID: ${bookingId} marked as 'completed' by provider. Notes: ${service_notes}`);
-
-      // Optional: Create a notification for the customer that the service has been marked complete by the provider
       await storage.createNotification({
         userId: booking.customerId,
-        type: "booking_update",
-        title: "Service Marked as Completed by Provider",
-        message: `The service for booking #${bookingId} (${service.name}) has been marked as completed by your provider. Notes: ${service_notes || 'N/A'}`,
+        type: 'booking_update',
+        title: 'Payment Confirmed',
+        message: `Provider confirmed payment for booking #${bookingId}.`
       });
 
-      res.json({
-        booking: updatedBooking,
-        message: "Service marked as completed successfully."
-      });
+      if (booking.customerId) {
+        const customer = await storage.getUser(booking.customerId);
+        if (customer?.email) {
+          const mail = emailService.getGenericNotificationEmailContent(customer.name, 'Booking Completed', `Your provider confirmed payment for booking #${bookingId}.`);
+          mail.to = customer.email;
+          await sendEmail(mail);
+        }
+      }
+
+      res.json({ booking: updatedBooking });
     } catch (error) {
       console.error("Error completing service by provider:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to complete service" });
@@ -1468,100 +1599,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // New endpoint for customers to mark service as completed and confirm satisfaction
-  app.patch("/api/bookings/:id/complete", requireAuth, requireRole(["customer"]), async (req, res) => {
+  // Customer submits payment reference and marks booking awaiting provider confirmation
+  app.patch("/api/bookings/:id/customer-complete", requireAuth, requireRole(["customer"]), async (req, res) => {
     try {
-      const { isSatisfactory, comments } = req.body;
+      const { paymentReference } = req.body;
       const bookingId = parseInt(req.params.id);
       
-      console.log(`[API] Customer marking booking as completed: ID=${bookingId}, Satisfactory=${isSatisfactory}, Comments=${comments || 'N/A'}`);
-
-      if (isSatisfactory === undefined) {
-        return res.status(400).json({ message: "Satisfaction status (isSatisfactory) is required" });
-      }
-
       const booking = await storage.getBooking(bookingId);
-      if (!booking) {
-        console.log(`[API] Booking not found: ID=${bookingId}`);
-        return res.status(404).json({ message: "Booking not found" });
-      }
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      if (booking.customerId !== req.user!.id) return res.status(403).json({ message: "Not authorized" });
 
-      // Verify this booking belongs to the customer
-      if (booking.customerId !== req.user!.id) {
-        console.log(`[API] Not authorized to update booking: ID=${bookingId}, User=${req.user!.id}, Owner=${booking.customerId}`);
-        return res.status(403).json({ message: "Not authorized to update this booking" });
-      }
-
-      // Verify the booking is in 'accepted' status
-      if (booking.status !== "accepted") {
-        console.log(`[API] Invalid booking status for completion: ID=${bookingId}, Status=${booking.status}`);
-        return res.status(400).json({ 
-          message: "Only accepted bookings can be marked as completed",
-          currentStatus: booking.status
-        });
-      }
-
-      const service = await storage.getService(booking.serviceId!);
-      if (!service) {
-        console.log(`[API] Service not found: ID=${booking.serviceId}`);
-        return res.status(404).json({ message: "Service not found" });
+      if (booking.status !== 'accepted') {
+        return res.status(400).json({ message: 'Booking not confirmed' });
       }
 
       // Update booking status to completed
       const updatedBooking = await storage.updateBooking(bookingId, {
-        status: "completed",
-        comments: comments || null,
+        status: 'awaiting_payment',
+        paymentReference
       });
       
-      console.log(`[API] Booking marked as completed: ID=${bookingId}`);
-
-      // Create notification for service provider
-      const notificationMessage = isSatisfactory
-        ? `Customer has marked the booking for ${service.name} as completed and was satisfied with the service.`
-        : `Customer has marked the booking for ${service.name} as completed but had some concerns with the service.`;
-
+      
       await storage.createNotification({
-        userId: service.providerId,
-        type: "booking_update",
-        title: "Service Completed",
-        message: notificationMessage
+        userId: (await storage.getService(booking.serviceId!))!.providerId,
+        type: 'booking_update',
+        title: 'Payment Submitted',
+        message: `Customer submitted payment reference for booking #${bookingId}.`
       });
-      
-      console.log(`[API] Notification sent to provider: ID=${service.providerId}`);
-
-      // If the service was satisfactory and payment is pending, mark as paid
-      if (isSatisfactory && booking.paymentStatus === "pending") {
-      const paidBooking = await storage.updateBooking(bookingId, {
-          paymentStatus: "paid"
-        });
-          console.log(`[API] Booking marked as paid: ID=${bookingId}`);
-          
-          // Notify provider about payment
-          await storage.createNotification({
-            userId: service.providerId,
-            type: "payment",
-            title: "Payment Received",
-            message: `Payment for booking #${bookingId} has been marked as received.`
-          });
-          
-          console.log(`[API] Payment notification sent to provider: ID=${service.providerId}`);
-
-        return res.json({
-          booking: paidBooking,
-          paymentRequired: false,
-          message: "Service completed and payment recorded"
-        });
+      const service = await storage.getService(booking.serviceId!);
+      if (service?.providerId) {
+        const provider = await storage.getUser(service.providerId);
+        if (provider?.email) {
+          const mail = emailService.getGenericNotificationEmailContent(
+            provider.name,
+            'Payment Submitted',
+            `Customer submitted payment reference for booking #${bookingId}. Please confirm receipt.`
+          );
+          mail.to = provider.email;
+          await sendEmail(mail);
+        }
       }
 
-      res.json({
-        booking: updatedBooking,
-        message: isSatisfactory 
-          ? "Thank you for your positive feedback! Please proceed to payment." 
-          : "Thank you for your feedback. We're sorry to hear you had concerns with the service."
-      });
+      res.json({ booking: updatedBooking });
     } catch (error) {
-      console.error("Error completing booking:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to complete booking" });
+      console.error("Error submitting payment:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to submit payment" });
+    }
+  });
+
+  // Allow customer to update payment reference while awaiting provider confirmation
+  app.patch("/api/bookings/:id/update-reference", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const { paymentReference } = req.body;
+      const bookingId = parseInt(req.params.id);
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: 'Booking not found' });
+      if (booking.customerId !== req.user!.id) return res.status(403).json({ message: 'Not authorized' });
+      if (booking.status !== 'awaiting_payment') return res.status(400).json({ message: 'Cannot update reference for this booking' });
+
+      const updatedBooking = await storage.updateBooking(bookingId, { paymentReference });
+      res.json({ booking: updatedBooking });
+    } catch (error) {
+      console.error('Error updating payment reference:', error);
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update reference' });
     }
   });
 
