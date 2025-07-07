@@ -25,6 +25,7 @@ import Cart from "@/pages/customer/cart";
 import Wishlist from "@/pages/customer/wishlist";
 import Bookings from "@/pages/customer/bookings";
 import OrderDetails from "@/pages/customer/order-details";
+import Orders from "@/pages/customer/orders";
 import CustomerProfile from "@/pages/customer/profile"; // Add this import
 import MyReviews from "@/pages/customer/MyReviews"; // Add import for the new page
 import ProviderDashboard from "@/pages/provider/dashboard";
@@ -62,7 +63,7 @@ function Router() {
       <ProtectedRoute path="/customer/wishlist" component={Wishlist} />
       <ProtectedRoute path="/customer/bookings" component={Bookings} />
       <ProtectedRoute path="/customer/order/:id" component={OrderDetails} />
-      <ProtectedRoute path="/customer/orders" component={OrderDetails} />
+      <ProtectedRoute path="/customer/orders" component={Orders} />
       <ProtectedRoute path="/customer/profile" component={CustomerProfile} /> {/* Add this route */}
       <ProtectedRoute path="/customer/my-reviews" component={MyReviews} /> {/* Add route for My Reviews page */}
 

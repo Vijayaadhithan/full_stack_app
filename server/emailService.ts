@@ -127,34 +127,74 @@ The IndianBudgetTracker Team`;
 
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
 
-export function getOrderConfirmationEmailContent(name: string, orderDetails: any, forShopOwner: boolean = false): MailOptions {
-  const subject = forShopOwner ? 'New Order Received!' : 'Your IndianBudgetTracker Order Confirmation';
-  // Improved HTML formatting for order details
-  let orderDetailsHtml = '<ul>';
-  for (const key in orderDetails) {
-    if (Object.prototype.hasOwnProperty.call(orderDetails, key)) {
-      const value = key.toLowerCase().includes('date') && orderDetails[key] 
-                    ? formatIndianDisplay(new Date(orderDetails[key]), 'datetime') 
-                    : orderDetails[key];
-      orderDetailsHtml += `<li><strong>${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</strong> ${value}</li>`;
-    }
-  }
-  orderDetailsHtml += '</ul>';
+export interface OrderItemInfo {
+  name: string;
+  quantity: number;
+  price: string | number;
+}
 
+function formatItemsText(items: OrderItemInfo[]): string {
+  return items
+    .map((item) => `- ${item.name} x${item.quantity} @ ₹${item.price}`)
+    .join("\n");
+}
+
+function formatItemsHtml(items: OrderItemInfo[]): string {
+  return (
+    "<ul>" +
+    items
+      .map(
+        (item) =>
+          `<li>${item.name} x${item.quantity} @ ₹${item.price}</li>`
+      )
+      .join("") +
+    "</ul>"
+  );
+}
+
+export function getOrderConfirmationEmailContent(
+  name: string,
+  orderSummary: { orderId: number | string; total: string | number; customerName?: string },
+  items: OrderItemInfo[],
+  forShopOwner: boolean = false,
+): MailOptions {
+  const subject = forShopOwner
+    ? "New Order Received!"
+    : "Your IndianBudgetTracker Order Confirmation";
+
+  const orderDetailsTextLines = [
+    `Order ID: ${orderSummary.orderId}`,
+    `Total: ${orderSummary.total}`,
+  ];
+  if (orderSummary.customerName) {
+    orderDetailsTextLines.push(`Customer: ${orderSummary.customerName}`);
+  }
+
+  const orderDetailsHtmlParts = [
+    `<li><strong>Order ID:</strong> ${orderSummary.orderId}</li>`,
+    `<li><strong>Total:</strong> ${orderSummary.total}</li>`,
+  ];
+  if (orderSummary.customerName) {
+    orderDetailsHtmlParts.push(
+      `<li><strong>Customer:</strong> ${orderSummary.customerName}</li>`
+    );
+  }
   const text = `Hi ${name},
 
-${forShopOwner ? 'A new order has been placed through your shop.' : 'Thank you for your order on IndianBudgetTracker!'}
+${forShopOwner ? "A new order has been placed through your shop." : "Thank you for your order on IndianBudgetTracker!"}
 
-Order Details:
-${JSON.stringify(orderDetails, null, 2)}
-
+${orderDetailsTextLines.join("\n")}
+Items:\n${formatItemsText(items)}
 Thanks,
 The IndianBudgetTracker Team`;
   const html = `<p>Hi ${name},</p>
-<p>${forShopOwner ? 'A new order has been placed through your shop.' : 'Thank you for your order on IndianBudgetTracker!'}</p>
-<p><strong>Order Details:</strong></p>${orderDetailsHtml}
+<p>${forShopOwner ? "A new order has been placed through your shop." : "Thank you for your order on IndianBudgetTracker!"}</p>
+<p><strong>Order Details:</strong></p>
+<ul>${orderDetailsHtmlParts.join("")}</ul>
+<p><strong>Items:</strong></p>
+${formatItemsHtml(items)}
 <p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
-  return { subject, text, html, to: '' };
+  return { subject, text, html, to: "" };
 }
 
 // This function is now primarily for the provider's "New Booking Request"

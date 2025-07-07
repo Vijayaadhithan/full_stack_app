@@ -1986,25 +1986,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const shop = await storage.getUser(shopId); // Assuming shop owner is a user
 
-        if (customer) {
-          const customerEmailContent = getOrderConfirmationEmailContent(customer.name || customer.username, { orderId: newOrder.id, total: newOrder.total, items });
-          await sendEmail({
-            to: customer.email,
-            subject: customerEmailContent.subject,
-            text: customerEmailContent.text,
-            html: customerEmailContent.html,
-          });
-        }
+      if (customer) {
+        // Build itemsWithNames for email
+        const itemsWithNames = await Promise.all(
+          items.map(async (item) => {
+            const product = await storage.getProduct(item.productId);
+            return {
+              name: product?.name ?? "",
+              quantity: item.quantity,
+              price: item.price,
+            };
+          })
+        );
+        const customerEmailContent = getOrderConfirmationEmailContent(
+          customer.name || customer.username,
+          { orderId: newOrder.id, total: newOrder.total },
+          itemsWithNames
+        );
+        await sendEmail({
+          to: customer.email,
+          subject: customerEmailContent.subject,
+          text: customerEmailContent.text,
+          html: customerEmailContent.html,
+        });
+      }
 
-        if (shop) {
-          const shopEmailContent = getOrderConfirmationEmailContent(shop.name || shop.username, { orderId: newOrder.id, total: newOrder.total, items, customerName: customer.name || customer.username }, true);
-          await sendEmail({
-            to: shop.email,
-            subject: shopEmailContent.subject,
-            text: shopEmailContent.text,
-            html: shopEmailContent.html,
-          });
-        }
+      if (shop) {
+        // Use the same itemsWithNames for shop email
+        const itemsWithNames = await Promise.all(
+          items.map(async (item) => {
+            const product = await storage.getProduct(item.productId);
+            return {
+              name: product?.name ?? "",
+              quantity: item.quantity,
+              price: item.price,
+            };
+          })
+        );
+        const shopEmailContent = getOrderConfirmationEmailContent(
+          shop.name || shop.username,
+          { orderId: newOrder.id, total: newOrder.total, customerName: customer.name || customer.username },
+          itemsWithNames,
+          true
+        );
+        await sendEmail({
+          to: shop.email,
+          subject: shopEmailContent.subject,
+          text: shopEmailContent.text,
+          html: shopEmailContent.html,
+        });
+      }
       } catch (emailError) {
         console.error("Error sending order confirmation emails:", emailError);
         // Don't let email failure break the order creation flow
