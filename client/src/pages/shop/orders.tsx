@@ -56,11 +56,21 @@ export default function ShopOrders() {
   const { data: orders, isLoading } = useQuery<OrderWithDetails[]>({
     queryKey: ["/api/orders/shop", user?.id],
     enabled: !!user?.id,
+    queryFn: async () => {
+      const res = await fetch("/api/orders/shop", { credentials: "include" });
+      if (!res.ok) throw new Error("Network response was not ok");
+      return res.json();
+    },
   });
 
   const { data: returns } = useQuery<ReturnRequest[]>({
     queryKey: ["/api/returns/shop", user?.id],
     enabled: !!user?.id,
+    queryFn: async () => {
+      const res = await fetch("/api/returns/shop", { credentials: "include" });
+      if (!res.ok) throw new Error("Network response was not ok");
+      return res.json();
+    },
   });
 
   const form = useForm<OrderStatusData>({
@@ -198,15 +208,15 @@ export default function ShopOrders() {
                       <div className="space-y-4">
                         <div>
                           <h4 className="font-medium mb-2">{t("customer_details")}</h4>
-                          <p className="text-sm">{order.customer.name}</p>
-                          <p className="text-sm text-muted-foreground">{order.customer.phone}</p>
-                          <p className="text-sm text-muted-foreground">{order.customer.email}</p>
+                          <p className="text-sm">{order.customer?.name ?? "N/A"}</p>
+                          <p className="text-sm text-muted-foreground">{order.customer?.phone ?? "N/A"}</p>
+                          <p className="text-sm text-muted-foreground">{order.customer?.email ?? "N/A"}</p>
                         </div>
 
                         <div>
                           <h4 className="font-medium mb-2">{t("order_items")}</h4>
                           <div className="space-y-2">
-                            {order.items.map((item) => (
+                            {order.items?.map((item) => (
                               <div key={item.id} className="flex justify-between items-center">
                                 <div>
                                   <p className="font-medium">{item.name}</p>

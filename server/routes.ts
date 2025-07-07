@@ -1960,7 +1960,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shippingAddress: "",
         billingAddress: "",
       });
-
+      console.log("Created order:", newOrder);
       // Create order items
       for (const item of items) {
         await storage.createOrderItem({
@@ -2023,12 +2023,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/orders/customer", requireAuth, requireRole(["customer"]), async (req, res) => {
     const orders = await storage.getOrdersByCustomer(req.user!.id);
-    res.json(orders);
+    const detailed = await Promise.all(
+      orders.map(async (order) => {
+        const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+        const items = await Promise.all(
+          itemsRaw.map(async (item) => {
+            const product = item.productId !== null ? await storage.getProduct(item.productId) : null;
+            return {
+              id: item.id,
+              productId: item.productId,
+              name: product?.name ?? "",
+              quantity: item.quantity,
+              price: item.price,
+              total: item.total,
+            };
+          })
+        );
+        const shop = order.shopId !== null ? await storage.getUser(order.shopId) : undefined;
+        return { ...order, items, shop: shop ? { name: shop.name, phone: shop.phone, email: shop.email } : undefined };
+      })
+    );
+    res.json(detailed);
   });
 
   app.get("/api/orders/shop", requireAuth, requireRole(["shop"]), async (req, res) => {
     const orders = await storage.getOrdersByShop(req.user!.id);
-    res.json(orders);
+    const detailed = await Promise.all(
+      orders.map(async (order) => {
+        const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+        const items = await Promise.all(
+          itemsRaw.map(async (item) => {
+            const product = item.productId !== null ? await storage.getProduct(item.productId) : null;
+            return {
+              id: item.id,
+              productId: item.productId,
+              name: product?.name ?? "",
+              quantity: item.quantity,
+              price: item.price,
+              total: item.total,
+            };
+          })
+        );
+        const customer = order.customerId !== null ? await storage.getUser(order.customerId) : undefined;
+        return { ...order, items, customer: customer ? { name: customer.name, phone: customer.phone, email: customer.email } : undefined };
+      })
+    );
+    res.json(detailed);
+  });
+
+  app.get("/api/orders/:id", requireAuth, async (req, res) => {
+    const orderId = parseInt(req.params.id);
+    if (isNaN(orderId)) {
+      return res.status(400).json({ message: "Invalid order id" });
+    }
+    const order = await storage.getOrder(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.customerId !== req.user!.id && order.shopId !== req.user!.id) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+    const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+    const items = await Promise.all(
+      itemsRaw.map(async (item) => {
+        const product = item.productId !== null ? await storage.getProduct(item.productId) : null;
+        return {
+          id: item.id,
+          productId: item.productId,
+          name: product?.name ?? "",
+          quantity: item.quantity,
+          price: item.price,
+          total: item.total,
+        };
+      })
+    );
+    const customer = order.customerId !== null ? await storage.getUser(order.customerId) : undefined;
+    const shop = order.shopId !== null ? await storage.getUser(order.shopId) : undefined;
+    res.json({
+      ...order,
+      items,
+      customer: customer ? { name: customer.name, phone: customer.phone, email: customer.email } : undefined,
+      shop: shop ? { name: shop.name, phone: shop.phone, email: shop.email } : undefined,
+    });
   });
 
   // Add an endpoint to get service availability
@@ -2083,15 +2157,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Order tracking routes
   app.get("/api/orders/:id/timeline", requireAuth, async (req, res) => {
-    const timeline = await storage.getOrderTimeline(parseInt(req.params.id));
+    const orderId = parseInt(req.params.id);
+    if (isNaN(orderId)) return res.status(400).json({ message: "Invalid order id" });
+    const timeline = await storage.getOrderTimeline(orderId);
     res.json(timeline);
   });
 
   app.patch("/api/orders/:id/status", requireAuth, requireRole(["shop"]), async (req, res) => {
     try {
       const { status, trackingInfo } = req.body;
+      const orderId = parseInt(req.params.id);
+      if (isNaN(orderId)) {
+        return res.status(400).json({ message: "Invalid order id" });
+      }
       const order = await storage.updateOrderStatus(
-        parseInt(req.params.id),
+        orderId,
         status,
         trackingInfo
       );
@@ -2127,7 +2207,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const result = insertReturnRequestSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json(result.error);
 
-    const order = await storage.getOrder(parseInt(req.params.orderId));
+    const orderId = parseInt(req.params.orderId);
+    if (isNaN(orderId)) return res.status(400).json({ message: "Invalid order id" });
+
+    const order = await storage.getOrder(orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
     if (order.status === "delivered") {

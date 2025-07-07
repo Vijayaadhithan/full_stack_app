@@ -20,12 +20,7 @@ const itemVariants = {
 
 export default function Orders() {
   const { data: orders, isLoading } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
-    queryFn: async () => {
-      const res = await fetch("/api/orders");
-      if (!res.ok) throw new Error("Network response was not ok");
-      return res.json();
-    },
+    queryKey: ["/api/orders/customer"],
   });
 
   return (
@@ -81,6 +76,7 @@ export default function Orders() {
                       </div>
                       <div className="flex flex-col items-end justify-between">
                         <p className="font-semibold">₹{order.total}</p>
+                        <p className="text-sm text-muted-foreground capitalize">{order.status}</p>
                         <Link href={`/customer/order/${order.id}`}>
                           <Button size="sm" variant="outline" className="mt-2">
                             View Details{" "}
