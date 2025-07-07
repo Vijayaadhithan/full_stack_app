@@ -25,7 +25,7 @@ export default function ShopDashboard() {
   });
 
   const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
-    queryKey: [`/api/orders/shop/${user?.id}`],
+    queryKey: ['/api/orders/shop/recent'],
     enabled: !!user?.id,
   });
 

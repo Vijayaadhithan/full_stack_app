@@ -98,6 +98,7 @@ export interface IStorage {
   getOrder(id: number): Promise<Order | undefined>;
   getOrdersByCustomer(customerId: number): Promise<Order[]>;
   getOrdersByShop(shopId: number): Promise<Order[]>;
+  getRecentOrdersByShop(shopId: number): Promise<Order[]>;
   updateOrder(id: number, order: Partial<Order>): Promise<Order>;
 
   // Order items operations
@@ -906,6 +907,17 @@ return {
     return Array.from(this.orders.values()).filter(
       (order) => order.shopId === shopId,
     );
+  }
+
+  async getRecentOrdersByShop(shopId: number): Promise<Order[]> {
+    return Array.from(this.orders.values())
+      .filter(order => order.shopId === shopId)
+      .sort((a, b) => {
+        const aDate = a.orderDate ? new Date(a.orderDate).getTime() : 0;
+        const bDate = b.orderDate ? new Date(b.orderDate).getTime() : 0;
+        return bDate - aDate;
+      })
+      .slice(0, 5);
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {

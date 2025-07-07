@@ -2077,6 +2077,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(detailed);
   });
 
+  app.get("/api/orders/shop/recent", requireAuth, requireRole(["shop"]), async (req, res) => {
+    const orders = await storage.getRecentOrdersByShop(req.user!.id);
+    const detailed = await Promise.all(
+      orders.map(async (order) => {
+        const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+        const items = await Promise.all(
+          itemsRaw.map(async (item) => {
+            const product = item.productId !== null ? await storage.getProduct(item.productId) : null;
+            return {
+              id: item.id,
+              productId: item.productId,
+              name: product?.name ?? "",
+              quantity: item.quantity,
+              price: item.price,
+              total: item.total,
+            };
+          })
+        );
+        const customer = order.customerId !== null ? await storage.getUser(order.customerId) : undefined;
+        return { ...order, items, customer: customer ? { name: customer.name, phone: customer.phone, email: customer.email } : undefined };
+      })
+    );
+    res.json(detailed);
+  });
+
   app.get("/api/orders/shop", requireAuth, requireRole(["shop"]), async (req, res) => {
     const orders = await storage.getOrdersByShop(req.user!.id);
     const detailed = await Promise.all(

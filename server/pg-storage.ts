@@ -20,7 +20,7 @@ import {
   UserRole
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
-import { eq, and, lt, ne, sql } from "drizzle-orm";
+import { eq, and, lt, ne, sql, desc } from "drizzle-orm";
 import { toISTForStorage, getCurrentISTDate, fromDatabaseToIST, getExpirationDate, convertArrayDatesToIST } from "./ist-utils";
 // Import date utilities for IST handling
 
@@ -1061,6 +1061,17 @@ export class PostgresStorage implements IStorage {
 
   async getOrdersByShop(shopId: number): Promise<Order[]> {
     return await db.select().from(orders).where(eq(orders.shopId, shopId));
+  }
+
+  async getRecentOrdersByShop(shopId: number): Promise<Order[]> {
+    const result = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.shopId, shopId))
+      .orderBy(desc(orders.orderDate))
+      .limit(5);
+
+    return result;
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {
