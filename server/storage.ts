@@ -24,7 +24,13 @@ export interface OrderStatusUpdate {
   trackingInfo?: string;
   timestamp: Date;
 }
-
+export interface DashboardStats {
+  pendingOrders: number;
+  ordersInProgress: number;
+  completedOrders: number;
+  totalProducts: number;
+  lowStockItems: number;
+}
 interface BlockedTimeSlot {
   id: number;
   serviceId: number;
@@ -97,8 +103,9 @@ export interface IStorage {
   createOrder(order: InsertOrder): Promise<Order>;
   getOrder(id: number): Promise<Order | undefined>;
   getOrdersByCustomer(customerId: number): Promise<Order[]>;
-  getOrdersByShop(shopId: number): Promise<Order[]>;
+  getOrdersByShop(shopId: number, status?: string): Promise<Order[]>;
   getRecentOrdersByShop(shopId: number): Promise<Order[]>;
+  getShopDashboardStats(shopId: number): Promise<DashboardStats>;
   updateOrder(id: number, order: Partial<Order>): Promise<Order>;
 
   // Order items operations
@@ -903,10 +910,10 @@ return {
     );
   }
 
-  async getOrdersByShop(shopId: number): Promise<Order[]> {
-    return Array.from(this.orders.values()).filter(
-      (order) => order.shopId === shopId,
-    );
+  async getOrdersByShop(shopId: number, status?: string): Promise<Order[]> {
+    return Array.from(this.orders.values())
+      .filter(order => order.shopId === shopId)
+      .filter(order => !status || status === 'all_orders' || order.status === status);
   }
 
   async getRecentOrdersByShop(shopId: number): Promise<Order[]> {
@@ -918,6 +925,18 @@ return {
         return bDate - aDate;
       })
       .slice(0, 5);
+  }
+
+  async getShopDashboardStats(shopId: number) {
+    const ordersByShop = Array.from(this.orders.values()).filter(o => o.shopId === shopId);
+    const pendingOrders = ordersByShop.filter(o => o.status === 'pending').length;
+    const ordersInProgress = ordersByShop.filter(o => o.status === 'packed').length;
+    const completedOrders = ordersByShop.filter(o => o.status === 'delivered').length;
+    const productsByShop = Array.from(this.products.values()).filter(p => p.shopId === shopId);
+    const totalProducts = productsByShop.length;
+    const lowStockItems = productsByShop.filter(p => p.stock < 10).length;
+
+    return { pendingOrders, ordersInProgress, completedOrders, totalProducts, lowStockItems };
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {

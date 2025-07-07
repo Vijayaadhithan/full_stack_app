@@ -20,7 +20,7 @@ import {
   UserRole
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
-import { eq, and, lt, ne, sql, desc } from "drizzle-orm";
+import { eq, and, lt, ne, sql, desc, count } from "drizzle-orm";
 import { toISTForStorage, getCurrentISTDate, fromDatabaseToIST, getExpirationDate, convertArrayDatesToIST } from "./ist-utils";
 // Import date utilities for IST handling
 
@@ -1059,8 +1059,17 @@ export class PostgresStorage implements IStorage {
     return await db.select().from(orders).where(eq(orders.customerId, customerId));
   }
 
-  async getOrdersByShop(shopId: number): Promise<Order[]> {
-    return await db.select().from(orders).where(eq(orders.shopId, shopId));
+  async getOrdersByShop(shopId: number, status?: string): Promise<Order[]> {
+    const conditions = [eq(orders.shopId, shopId)];
+    if (status && status !== 'all_orders') {
+      conditions.push(eq(orders.status, status as any));
+    }
+
+    return await db
+      .select()
+      .from(orders)
+      .where(and(...conditions))
+      .orderBy(desc(orders.orderDate));
   }
 
   async getRecentOrdersByShop(shopId: number): Promise<Order[]> {
@@ -1072,6 +1081,37 @@ export class PostgresStorage implements IStorage {
       .limit(5);
 
     return result;
+  }
+
+  async getShopDashboardStats(shopId: number) {
+    const [pendingResult] = await db
+      .select({ value: count() })
+      .from(orders)
+      .where(and(eq(orders.shopId, shopId), eq(orders.status, 'pending')));
+    const [inProgressResult] = await db
+      .select({ value: count() })
+      .from(orders)
+      .where(and(eq(orders.shopId, shopId), eq(orders.status, 'packed')));
+    const [completedResult] = await db
+      .select({ value: count() })
+      .from(orders)
+      .where(and(eq(orders.shopId, shopId), eq(orders.status, 'delivered')));
+    const [totalProductsResult] = await db
+      .select({ value: count() })
+      .from(products)
+      .where(eq(products.shopId, shopId));
+    const [lowStockResult] = await db
+      .select({ value: count() })
+      .from(products)
+      .where(and(eq(products.shopId, shopId), lt(products.stock, 10)));
+
+    return {
+      pendingOrders: pendingResult.value,
+      ordersInProgress: inProgressResult.value,
+      completedOrders: completedResult.value,
+      totalProducts: totalProductsResult.value,
+      lowStockItems: lowStockResult.value,
+    };
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {

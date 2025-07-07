@@ -49,15 +49,15 @@ export default function ShopOrders() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const { toast } = useToast();
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all_orders");
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
   const [actionType, setActionType] = useState<"update" | "return" | null>(null);
 
   const { data: orders, isLoading } = useQuery<OrderWithDetails[]>({
-    queryKey: ["/api/orders/shop", user?.id],
+    queryKey: ["orders", "shop", selectedStatus],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await fetch("/api/orders/shop", { credentials: "include" });
+      const res = await fetch(`/api/orders/shop?status=${selectedStatus}`, { credentials: "include" });
       if (!res.ok) throw new Error("Network response was not ok");
       return res.json();
     },
@@ -87,7 +87,7 @@ export default function ShopOrders() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders/shop", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["orders", "shop"] });
       toast({
         title: t("success"),
         description: t("order_status_updated"),
@@ -154,7 +154,7 @@ export default function ShopOrders() {
                 <SelectValue placeholder={t("filter_by_status")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{t("all_orders")}</SelectItem>
+                <SelectItem value="all_orders">{t("all_orders")}</SelectItem>
                 <SelectItem value="confirmed">{t("confirmed")}</SelectItem>
                 <SelectItem value="packed">{t("packed")}</SelectItem>
                 <SelectItem value="dispatched">{t("dispatched")}</SelectItem>

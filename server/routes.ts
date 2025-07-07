@@ -2077,6 +2077,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(detailed);
   });
 
+  app.get("/api/shops/dashboard-stats", requireAuth, requireRole(["shop"]), async (req, res) => {
+    const stats = await storage.getShopDashboardStats(req.user!.id);
+    res.json(stats);
+  });
+
   app.get("/api/orders/shop/recent", requireAuth, requireRole(["shop"]), async (req, res) => {
     const orders = await storage.getRecentOrdersByShop(req.user!.id);
     const detailed = await Promise.all(
@@ -2103,7 +2108,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/orders/shop", requireAuth, requireRole(["shop"]), async (req, res) => {
-    const orders = await storage.getOrdersByShop(req.user!.id);
+    const { status } = req.query;
+    const orders = await storage.getOrdersByShop(req.user!.id, status as string | undefined);
     const detailed = await Promise.all(
       orders.map(async (order) => {
         const itemsRaw = await storage.getOrderItemsByOrder(order.id);

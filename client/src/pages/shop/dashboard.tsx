@@ -4,6 +4,14 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { Product, Order, ProductReview } from "@shared/schema";
+
+interface DashboardStats {
+  pendingOrders: number;
+  ordersInProgress: number;
+  completedOrders: number;
+  totalProducts: number;
+  lowStockItems: number;
+}
 import { Link } from "wouter";
 import {
   Loader2,
@@ -15,17 +23,20 @@ import {
   Plus
 } from "lucide-react";
 import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+import { apiRequest} from "@/lib/queryClient";
 
 export default function ShopDashboard() {
   const { user } = useAuth();
 
-  const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
-    queryKey: [`/api/products/shop/${user?.id}`],
+  const { data: stats, isLoading: isLoadingStats } = useQuery<DashboardStats>({
+    queryKey: ["shopDashboardStats"],
+    queryFn: () =>
+      apiRequest("GET", "/api/shops/dashboard-stats").then((r: Response) => r.json()),
     enabled: !!user?.id,
   });
 
   const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
-    queryKey: ['/api/orders/shop/recent'],
+    queryKey: ["/api/orders/shop/recent"],
     enabled: !!user?.id,
   });
 
@@ -57,10 +68,10 @@ export default function ShopDashboard() {
               <Package className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {productsLoading ? (
+              {isLoadingStats ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <div className="text-2xl font-bold">{products?.length || 0}</div>
+                 <div className="text-2xl font-bold">{stats?.totalProducts}</div>
               )}
             </CardContent>
           </Card>
@@ -71,28 +82,56 @@ export default function ShopDashboard() {
               <ShoppingCart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {ordersLoading ? (
+              {isLoadingStats ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <div className="text-2xl font-bold">
-                  {orders?.filter(order => order.status === "pending").length || 0}
-                </div>
+                <div className="text-2xl font-bold">{stats?.pendingOrders}</div>
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Orders in Progress</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoadingStats ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <div className="text-2xl font-bold">{stats?.ordersInProgress}</div>
+              )}
+            </CardContent>
+          </Card>
+              <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Completed Orders</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoadingStats ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <div className="text-2xl font-bold">{stats?.completedOrders}</div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {products?.filter(p => p.stock <= (p.lowStockThreshold || 5)).length || 0}
-              </div>
+              {isLoadingStats ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <div className="text-2xl font-bold">{stats?.lowStockItems}</div>
+              )}
             </CardContent>
-          </Card>
-
+          </Card>       
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Avg Rating</CardTitle>
@@ -122,7 +161,7 @@ export default function ShopDashboard() {
                 <p className="text-center text-muted-foreground py-6">No orders yet</p>
               ) : (
                 <div className="space-y-4">
-                  {orders.slice(0, 5).map(order => (
+                  {orders.map(order => (
                     <div key={order.id} className="flex items-center justify-between">
                       <div>
                         <p className="font-medium">Order #{order.id}</p>
