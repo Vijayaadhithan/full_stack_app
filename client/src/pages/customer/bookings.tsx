@@ -126,7 +126,12 @@ export default function Bookings() {
   //   }
   // }, [providerAvailability, queryClient, rescheduleDate, selectedBooking?.serviceId]);
 
-  // Fetch existing reviews for selected service
+// Fetch all reviews left by the logged-in customer
+  const { data: customerReviews } = useQuery<Review[]>({
+    queryKey: ["/api/reviews/customer"],
+  });
+
+  // Fetch existing reviews for selected service when leaving/editing a review
   const { data: existingReviews } = useQuery<Review[]>({
     queryKey: ["/api/reviews/service/", selectedBooking?.serviceId],
     enabled: !!selectedBooking?.serviceId,
@@ -229,6 +234,7 @@ export default function Bookings() {
       queryClient.invalidateQueries({
         queryKey: ["/api/reviews/service/", selectedBooking?.serviceId],
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/reviews/customer"] });
       if (selectedBooking?.provider?.id) {
         queryClient.invalidateQueries({
           queryKey: [
@@ -240,6 +246,9 @@ export default function Bookings() {
         title: userReview ? "Review updated" : "Review submitted",
         description: "Thank you for your feedback!",
       });
+      setSelectedBooking(undefined); // Close the review dialog
+      setRating(5);
+      setReview("");
     },
     onError: (error: any) => {
       // Log the full error object for detailed debugging
@@ -713,7 +722,7 @@ export default function Bookings() {
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button variant="outline" onClick={() => setSelectedBooking(booking)}>
-                                  {existingReviews?.some((r) => r.bookingId === booking.id)
+                                  {customerReviews?.some((r) => r.bookingId === booking.id)
                                     ? "Edit Review"
                                     : "Leave Review"}
                                 </Button>
