@@ -655,8 +655,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = profileUpdateSchema.safeParse(req.body);
       if (!result.success) return res.status(400).json(result.error);
 
-      // Providers can update UPI fields
-      if (req.user!.role !== 'provider') {
+     // Allow both providers and shops to update UPI fields
+      if (!['provider', 'shop'].includes(req.user!.role)) {
         delete (result.data as any).upiId;
         delete (result.data as any).upiQrCodeUrl;
       }

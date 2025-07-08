@@ -15,11 +15,6 @@ export type ShopProfile = {
   description: string;
   businessType: string;
   gstin?: string| null;
-  bankDetails?: {
-    accountNumber: string;
-    ifscCode: string;
-    accountHolderName: string;
-  };
   workingHours: {
     from: string;
     to: string;
@@ -361,11 +356,6 @@ export const shopProfileSchema = z.object({
   description: z.string().min(1, "Shop description is required"),
   businessType: z.string().min(1, "Business type is required"),
   gstin: z.string().optional().nullable(),
-  bankDetails: z.object({
-    accountNumber: z.string().min(1, "Account number is required"),
-    ifscCode: z.string().min(1, "IFSC code is required"),
-    accountHolderName: z.string().min(1, "Account holder name is required"),
-  }).optional().nullable(),
   workingHours: z.object({
     from: z.string().min(1, "'From' time is required"),
     to: z.string().min(1, "'To' time is required"),

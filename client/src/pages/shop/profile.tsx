@@ -34,11 +34,10 @@ const shopProfileSchema = z.object({
   description: z.string().min(10, "Description must be at least 10 characters"),
   businessType: z.string().min(1, "Business type is required"),
   gstin: z.string().optional(),
-  bankDetails: z.object({
-    accountNumber: z.string().min(1, "Account number is required"),
-    ifscCode: z.string().min(1, "IFSC code is required"),
-    accountHolderName: z.string().min(1, "Account holder name is required"),
-  }),
+  phone: z.string().min(10, "Valid phone number is required"),
+  email: z.string().email("Valid email is required"),
+  upiId: z.string().optional(),
+  upiQrCodeUrl: z.string().optional(),
   workingHours: z.object({
     from: z.string().min(1, "Opening time is required"),
     to: z.string().min(1, "Closing time is required"),
@@ -68,11 +67,10 @@ export default function ShopProfile() {
       description: user?.shopProfile?.description || "",
       businessType: user?.shopProfile?.businessType || "",
       gstin: user?.shopProfile?.gstin || "",
-      bankDetails: user?.shopProfile?.bankDetails || {
-        accountNumber: "",
-        ifscCode: "",
-        accountHolderName: "",
-      },
+      phone: user?.phone || "",
+      email: user?.email || "",
+      upiId: user?.upiId || "",
+      upiQrCodeUrl: user?.upiQrCodeUrl || "",
       workingHours: user?.shopProfile?.workingHours || {
         from: "09:00",
         to: "18:00",
@@ -96,11 +94,10 @@ export default function ShopProfile() {
         description: user.shopProfile.description || "",
         businessType: user.shopProfile.businessType || "",
         gstin: user.shopProfile.gstin || "",
-        bankDetails: user.shopProfile.bankDetails || {
-          accountNumber: "",
-          ifscCode: "",
-          accountHolderName: "",
-        },
+        phone: user.phone || "",
+        email: user.email || "",
+        upiId: user.upiId || "",
+        upiQrCodeUrl: user.upiQrCodeUrl || "",
         workingHours: user.shopProfile.workingHours || {
           from: "09:00",
           to: "18:00",
@@ -124,7 +121,18 @@ export default function ShopProfile() {
       if (!user?.id) throw new Error("User not found");
 
       // Separate shopProfile fields from address fields
-      const { addressStreet, addressCity, addressState, addressPostalCode, addressCountry, ...shopProfileData } = data;
+      const {
+        addressStreet,
+        addressCity,
+        addressState,
+        addressPostalCode,
+        addressCountry,
+        phone,
+        email,
+        upiId,
+        upiQrCodeUrl,
+        ...shopProfileData
+      } = data;
       const updatePayload = {
         shopProfile: shopProfileData,
         addressStreet,
@@ -132,6 +140,10 @@ export default function ShopProfile() {
         addressState,
         addressPostalCode,
         addressCountry,
+        phone,
+        email,
+        upiId,
+        upiQrCodeUrl,
       };
 
       console.log("Updating user profile with data:", updatePayload);
@@ -164,6 +176,8 @@ export default function ShopProfile() {
   });
 
   const onSubmit = (data: ShopProfileFormData) => {
+    // Log form data before sending to server for debugging
+    console.log("[ShopProfile] submitting", data);
     updateProfileMutation.mutate(data);
   };
 
@@ -299,6 +313,33 @@ export default function ShopProfile() {
                       </FormItem>
                     )}
                   />
+                   <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone</FormLabel>
+                        <FormControl>
+                          <Input {...field} type="tel" disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input {...field} type="email" disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 <FormField
@@ -403,28 +444,14 @@ export default function ShopProfile() {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="font-medium">Bank Details</h3>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <h3 className="font-medium">Payment Details</h3>
+                  <div className="space-y-4">
                     <FormField
                       control={form.control}
-                      name="bankDetails.accountNumber"
+                      name="upiId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Account Number</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="text" disabled={!editMode} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="bankDetails.ifscCode"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>IFSC Code</FormLabel>
+                          <FormLabel>UPI ID</FormLabel>
                           <FormControl>
                             <Input {...field} disabled={!editMode} />
                           </FormControl>
@@ -433,19 +460,34 @@ export default function ShopProfile() {
                       )}
                     />
 
-                    <FormField
-                      control={form.control}
-                      name="bankDetails.accountHolderName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Account Holder Name</FormLabel>
-                          <FormControl>
-                            <Input {...field} disabled={!editMode} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
+                  <div className="space-y-2">
+                      <Label>UPI QR Code</Label>
+                      <Input
+                        type="file"
+                        disabled={!editMode}
+                        onChange={async (e) => {
+                          if (!e.target.files || e.target.files.length === 0) return;
+                          const file = e.target.files[0];
+                          const formData = new FormData();
+                          formData.append("qr", file);
+                          try {
+                            const res = await apiRequest("POST", "/api/users/upload-qr", formData);
+                            if (res.ok) {
+                              const data = await res.json();
+                              form.setValue("upiQrCodeUrl", data.url);
+                            } else {
+                              const err = await res.json();
+                              toast({ title: "Upload Failed", description: err.message || "Failed to upload QR code", variant: "destructive" });
+                            }
+                          } catch (err) {
+                            toast({ title: "Upload Failed", description: (err as Error).message, variant: "destructive" });
+                          }
+                        }}
+                      />
+                      {form.watch("upiQrCodeUrl") && (
+                        <img src={form.watch("upiQrCodeUrl")!} alt="QR Code" className="h-32 w-32 object-contain border mt-2" />
                       )}
-                    />
+                    </div>
                   </div>
                 </div>
 

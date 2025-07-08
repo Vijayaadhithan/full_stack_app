@@ -361,7 +361,8 @@ export class PostgresStorage implements IStorage {
         const combinedData = { ...currentUser, ...updateData };
         let completedFields = 0;
         let totalProfileFields = 0;
-
+        // Diagnostic logging to inspect calculation inputs
+        console.log("[updateUser] Combined data for user", id, combinedData);
         if (currentUser.role === 'customer') {
           totalProfileFields = 4; // For customer: name, phone, email, full address. Profile picture is optional.
           if (combinedData.name) completedFields++;
@@ -391,7 +392,7 @@ export class PostgresStorage implements IStorage {
 
           // if (combinedData.verificationStatus === 'verified') completedFields++;
         } else if (currentUser.role === 'shop') {
-          totalProfileFields = 11; 
+          totalProfileFields = 12; 
           if (combinedData.name) completedFields++; 
           if (combinedData.phone) completedFields++;
           if (combinedData.email) completedFields++;
@@ -406,13 +407,9 @@ export class PostgresStorage implements IStorage {
             if (combinedData.shopProfile.description) completedFields++;
             if (combinedData.shopProfile.businessType) completedFields++;
             
-            // Bank Details
-            if (combinedData.shopProfile.bankDetails && 
-                combinedData.shopProfile.bankDetails.accountNumber && 
-                combinedData.shopProfile.bankDetails.accountHolderName && 
-                combinedData.shopProfile.bankDetails.ifscCode) {
-              completedFields++;
-            }
+            // Payment Details
+            if (combinedData.upiId) completedFields++;
+            if (combinedData.upiQrCodeUrl) completedFields++;
             
             // Working Hours
             if (combinedData.shopProfile.workingHours && 
@@ -436,6 +433,10 @@ export class PostgresStorage implements IStorage {
         } else {
           profileCompleteness = 0; // Default if role doesn't match or no fields defined
         }
+        // Diagnostic logging for calculation results
+        console.log(
+          `[updateUser] Fields complete: ${completedFields}/${totalProfileFields} -> ${profileCompleteness}%`
+        );
       }
     }
 
