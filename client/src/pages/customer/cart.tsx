@@ -39,6 +39,17 @@ export default function Cart() {
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [shopId, setShopId] = useState<number | null>(null);
+  const [deliveryMethod, setDeliveryMethod] = useState<"delivery" | "pickup">("pickup");
+
+  const { data: shopInfo } = useQuery<any>({
+    queryKey: ["shop-info", shopId],
+    enabled: !!shopId,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/users/${shopId}`);
+      if (!res.ok) throw new Error("Failed to fetch shop info");
+      return res.json();
+    },
+  });
 
   const { data: cartItems, isLoading } = useQuery<CartItem[]>({ // Ensure correct type
     queryKey: ["/api/cart"],
@@ -53,6 +64,16 @@ export default function Cart() {
       setShopId(null); // Reset shopId if cart is empty or undefined
     }
   }, [cartItems]);
+
+  useEffect(() => {
+    if (shopInfo) {
+      if (shopInfo.pickupAvailable && !shopInfo.deliveryAvailable) {
+        setDeliveryMethod("pickup");
+      } else if (!shopInfo.pickupAvailable && shopInfo.deliveryAvailable) {
+        setDeliveryMethod("delivery");
+      }
+    }
+  }, [shopInfo]);
 
   console.log("Cart items:", cartItems); // Debug log
 
@@ -184,6 +205,7 @@ export default function Cart() {
         subtotal: subtotal.toString(),
         discount: discountAmount.toString(),
         promotionId: selectedPromotion?.id,
+        deliveryMethod,
       };
 
       const res = await apiRequest("POST", "/api/orders", orderData);
@@ -394,6 +416,33 @@ export default function Cart() {
                       ))}
                     </RadioGroup>
                   )}
+                </CardContent>
+              </Card>
+            )}
+
+            {shopInfo && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Delivery Method</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <RadioGroup 
+                    value={deliveryMethod} 
+                    onValueChange={(value: "delivery" | "pickup") => setDeliveryMethod(value)}
+                  >
+                    {shopInfo.pickupAvailable && (
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="pickup" id="pickup" />
+                        <Label htmlFor="pickup">In-Store Pickup</Label>
+                      </div>
+                    )}
+                    {shopInfo.deliveryAvailable && (
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="delivery" id="delivery" />
+                        <Label htmlFor="delivery">Home Delivery</Label>
+                      </div>
+                    )}
+                  </RadioGroup>
                 </CardContent>
               </Card>
             )}

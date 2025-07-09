@@ -713,7 +713,10 @@ export class PostgresStorage implements IStorage {
       status: booking.status as "pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired",
       paymentStatus: booking.paymentStatus as "pending" | "paid" | "refunded"
     };
-    const result = await db.insert(bookings).values(bookingWithDefaults).returning();
+const result = await db.insert(bookings).values({
+  ...bookingWithDefaults,
+  paymentStatus: bookingWithDefaults.paymentStatus as "pending" | "verifying" | "paid" | "failed"
+}).returning();
 
     // Add entry to booking history with IST timestamp
     await db.insert(bookingHistory).values({
@@ -1045,7 +1048,7 @@ export class PostgresStorage implements IStorage {
     const orderToInsert = {
       ...order,
       status: order.status as "pending" | "cancelled" | "confirmed" | "processing" | "packed" | "shipped" | "delivered" | "returned",
-      paymentStatus: order.paymentStatus as "pending" | "paid" | "refunded",
+      paymentStatus: order.paymentStatus as "pending" | "verifying" | "paid" | "failed",
     };
     const result = await db.insert(orders).values(orderToInsert).returning();
     return result[0];

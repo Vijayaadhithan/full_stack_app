@@ -1,6 +1,6 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Form, FormField, FormItem, FormLabel, FormMessage, FormControl } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState, useEffect } from "react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Added for delete confirmation
+import { Switch } from "@/components/ui/switch";
 
 const daysOfWeek = [
   "Monday",
@@ -37,6 +38,8 @@ const shopProfileSchema = z.object({
   phone: z.string().min(10, "Valid phone number is required"),
   email: z.string().email("Valid email is required"),
   upiId: z.string().optional(),
+  pickupAvailable: z.boolean().optional(),
+  deliveryAvailable: z.boolean().optional(),
   upiQrCodeUrl: z.string().optional(),
   workingHours: z.object({
     from: z.string().min(1, "Opening time is required"),
@@ -71,6 +74,8 @@ export default function ShopProfile() {
       email: user?.email || "",
       upiId: user?.upiId || "",
       upiQrCodeUrl: user?.upiQrCodeUrl || "",
+      pickupAvailable: user?.pickupAvailable ?? true,
+      deliveryAvailable: user?.deliveryAvailable ?? false,
       workingHours: user?.shopProfile?.workingHours || {
         from: "09:00",
         to: "18:00",
@@ -98,6 +103,8 @@ export default function ShopProfile() {
         email: user.email || "",
         upiId: user.upiId || "",
         upiQrCodeUrl: user.upiQrCodeUrl || "",
+        pickupAvailable: user.pickupAvailable ?? true,
+        deliveryAvailable: user.deliveryAvailable ?? false,
         workingHours: user.shopProfile.workingHours || {
           from: "09:00",
           to: "18:00",
@@ -110,6 +117,8 @@ export default function ShopProfile() {
         addressState: user.addressState || "",
         addressPostalCode: user.addressPostalCode || "",
         addressCountry: user.addressCountry || "",
+        //pickupAvailable: user.pickupAvailable ?? true,
+        //deliveryAvailable: user.deliveryAvailable ?? false,
       };
       form.reset(shopData);
       setProfileData(shopData);
@@ -131,6 +140,8 @@ export default function ShopProfile() {
         email,
         upiId,
         upiQrCodeUrl,
+        pickupAvailable,
+        deliveryAvailable,
         ...shopProfileData
       } = data;
       const updatePayload = {
@@ -459,7 +470,35 @@ export default function ShopProfile() {
                         </FormItem>
                       )}
                     />
+                  <FormField
+                      control={form.control}
+                      name="pickupAvailable"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between rounded-md border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Enable In-Store Pickup</FormLabel>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!editMode} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
 
+                    <FormField
+                      control={form.control}
+                      name="deliveryAvailable"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between rounded-md border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Enable Local Delivery</FormLabel>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!editMode} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
                   <div className="space-y-2">
                       <Label>UPI QR Code</Label>
                       <Input

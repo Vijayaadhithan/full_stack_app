@@ -489,7 +489,9 @@ export class MemStorage implements IStorage {
       upiId: null,
       upiQrCodeUrl: null,
       averageRating: null,
-      totalReviews: null
+      totalReviews: null,
+      deliveryAvailable: null,
+      pickupAvailable: null
     };
     this.users.set(id, user);
     return user;
@@ -615,10 +617,11 @@ export class MemStorage implements IStorage {
       serviceId: booking.serviceId ?? null,
       rejectionReason: booking.rejectionReason ?? null,
       providerAddress: booking.providerAddress ?? null,
+      deliveryMethod: booking.deliveryMethod ?? null,
       bookingDate: booking.bookingDate,
       rescheduleDate: booking.rescheduleDate === undefined ? null : booking.rescheduleDate,
       comments: booking.comments === undefined ? null : booking.comments,
-      paymentStatus: "pending",
+      paymentStatus: (booking.paymentStatus ?? "pending") as "pending" | "verifying" | "paid" | "failed",
       paymentReference: booking.paymentReference === undefined ? null : booking.paymentReference,
       eReceiptId: null,
       eReceiptUrl: null,
@@ -881,7 +884,7 @@ return {
       customerId: order.customerId === undefined ? null : order.customerId,
       shopId: order.shopId === undefined ? null : order.shopId,
       status: "pending" as "pending",
-      paymentStatus: order.paymentStatus === undefined ? "pending" as "pending" | "paid" | "refunded" : order.paymentStatus as "pending" | "paid" | "refunded",
+      paymentStatus: (order.paymentStatus ?? "pending") as "pending" | "verifying" | "paid" | "failed",
       returnRequested: order.returnRequested === undefined ? null : order.returnRequested,
       billingAddress: order.billingAddress === undefined ? null : order.billingAddress,
       shippingAddress: order.shippingAddress === undefined || order.shippingAddress === null ? "" : order.shippingAddress,
@@ -892,6 +895,7 @@ return {
       paymentMethod: order.paymentMethod === undefined ? null : order.paymentMethod,
       paymentReference: order.paymentReference === undefined ? null : order.paymentReference,
       trackingInfo: null,
+      deliveryMethod: order.deliveryMethod ?? null,
       eReceiptId: null,
       eReceiptUrl: null,
       eReceiptGeneratedAt: null

@@ -33,7 +33,8 @@ import {
   insertBlockedTimeSlotSchema, // Added import
   promotions, // Import promotions table for direct updates
   users, // Import the users table schema
-  reviews
+  reviews,
+  User
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { db } from "./db";
@@ -662,7 +663,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Sanitize paymentMethods to ensure it's an array of PaymentMethod, null, or undefined
-      let updateData = { ...result.data };
+      let updateData: Partial<User> = { ...result.data } as Partial<User>;
       if ('paymentMethods' in updateData) {
         if (
           updateData.paymentMethods == null ||
@@ -685,6 +686,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           // If it's not valid, set to undefined
           updateData.paymentMethods = undefined;
+        }
+      }
+      if (updateData.shopProfile) {
+        if (updateData.shopProfile.shippingPolicy === null) {
+          delete updateData.shopProfile.shippingPolicy;
+        }
+        if (updateData.shopProfile.returnPolicy === null) {
+          delete updateData.shopProfile.returnPolicy;
         }
       }
       const updatedUser = await storage.updateUser(userId, updateData);
@@ -1888,12 +1897,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: z.string().or(z.number()).optional(),
         discount: z.string().or(z.number()).optional(),
         promotionId: z.number().optional(),
+        deliveryMethod: z.enum(["delivery", "pickup"]),
       });
 
       const result = orderSchema.safeParse(req.body);
       if (!result.success) return res.status(400).json(result.error);
 
-      const { items, total, subtotal, discount, promotionId } = result.data;
+      const { items, total, subtotal, discount, promotionId, deliveryMethod } = result.data;
 
       // Validate that all products exist and have sufficient stock
       for (const item of items) {
@@ -1955,6 +1965,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shopId,
         status: "pending",
         paymentStatus: "pending",
+        deliveryMethod,
         total: total.toString(),
         orderDate: new Date(),
         shippingAddress: "",
@@ -2163,8 +2174,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ...order,
       items,
       customer: customer ? { name: customer.name, phone: customer.phone, email: customer.email } : undefined,
-      shop: shop ? { name: shop.name, phone: shop.phone, email: shop.email } : undefined,
+      shop: shop ? { name: shop.name, phone: shop.phone, email: shop.email, upiId: (shop as any).upiId } : undefined,
     });
+  });
+
+  // Customer submits payment reference for manual verification
+  app.post("/api/orders/:id/submit-payment-reference", requireAuth, async (req, res) => {
+    const orderId = parseInt(req.params.id);
+    const { paymentReference } = req.body as { paymentReference: string };
+    if (isNaN(orderId) || !paymentReference) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    const order = await storage.getOrder(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.customerId !== req.user!.id) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+    const updated = await storage.updateOrder(orderId, { paymentStatus: "verifying", paymentReference });
+    if (order.shopId) {
+      await storage.createNotification({
+        userId: order.shopId,
+        type: "order",
+        title: "Action Required",
+        message: `Payment reference for Order #${orderId} has been submitted. Please verify.`,
+      });
+    }
+    res.json(updated);
+  });
+
+  // Shop confirms payment after manual verification
+  app.post("/api/orders/:id/confirm-payment", requireAuth, requireRole(["shop"]), async (req, res) => {
+    const orderId = parseInt(req.params.id);
+    if (isNaN(orderId)) return res.status(400).json({ message: "Invalid order id" });
+    const order = await storage.getOrder(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.shopId !== req.user!.id) return res.status(403).json({ message: "Not authorized" });
+    if (order.paymentStatus !== "verifying") {
+      return res.status(400).json({ message: "Order is not awaiting verification" });
+    }
+    const updated = await storage.updateOrder(orderId, { paymentStatus: "paid", status: "confirmed" });
+    if (order.customerId) {
+      await storage.createNotification({
+        userId: order.customerId,
+        type: "order",
+        title: "Payment Confirmed",
+        message: `Payment Confirmed! Your Order #${orderId} is now being processed.`,
+      });
+    }
+    res.json(updated);
   });
 
   // Add an endpoint to get service availability

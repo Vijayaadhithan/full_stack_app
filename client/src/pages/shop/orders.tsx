@@ -6,7 +6,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useLanguage } from "@/contexts/language-context";
@@ -102,6 +102,24 @@ export default function ShopOrders() {
         description: error.message,
         variant: "destructive",
       });
+    },
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async (orderId: number) => {
+      const res = await apiRequest("POST", `/api/orders/${orderId}/confirm-payment`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to confirm payment");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders", "shop"] });
+      toast({ title: t("success"), description: "Payment confirmed" });
+    },
+    onError: (error: Error) => {
+      toast({ title: t("error"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -201,6 +219,9 @@ export default function ShopOrders() {
                           <div className="flex items-center gap-2">
                             {getStatusIcon(order.status)}
                             <span className="text-sm">{t(order.status)}</span>
+                            {order.paymentStatus === "verifying" && (
+                              <Badge className="bg-yellow-200 text-yellow-900">Verification Needed</Badge>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -229,7 +250,16 @@ export default function ShopOrders() {
                             ))}
                           </div>
                         </div>
-
+                          
+                          {order.paymentStatus === "verifying" && (
+                          <div className="p-4 rounded-md bg-yellow-100 border text-sm space-y-2">
+                            <p className="font-medium">Payment Reference: {order.paymentReference}</p>
+                            <Button size="sm" onClick={() => confirmPaymentMutation.mutate(order.id)}>
+                              Confirm Payment
+                            </Button>
+                          </div>
+                        )}
+                        
                         <div className="flex justify-end gap-2">
                           <Dialog
                             open={actionType === "update" && selectedOrder?.id === order.id}

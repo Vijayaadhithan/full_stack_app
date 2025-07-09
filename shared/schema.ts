@@ -89,6 +89,8 @@ export const users = pgTable("users", {
   upiId: text("upi_id"),
   upiQrCodeUrl: text("upi_qr_code_url"),
   //rating: decimal("rating", { precision: 2, scale: 1 }),
+  deliveryAvailable: boolean("delivery_available").default(false),
+  pickupAvailable: boolean("pickup_available").default(true),
   averageRating: decimal("average_rating").default("0"),
   totalReviews: integer("total_reviews").default(0),
 });
@@ -135,7 +137,10 @@ export const bookings = pgTable("bookings", {
   serviceId: integer("service_id").references(() => services.id),
   bookingDate: timestamp("booking_date").notNull(),
   status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired" | "rescheduled_pending_provider_approval" | "awaiting_payment" | "disputed">().notNull(),
-  paymentStatus: text("payment_status").$type<"pending" | "paid" | "refunded">().notNull(),
+  paymentStatus: text("payment_status", { enum: ["pending", "verifying", "paid", "failed"] })
+    .$type<"pending" | "verifying" | "paid" | "failed">()
+    .default("pending"),
+  deliveryMethod: text("delivery_method", { enum: ["delivery", "pickup"] }),
   rejectionReason: text("rejection_reason"),
   rescheduleDate: timestamp("reschedule_date"), // This can store the original date if rescheduled, or the new date if status is 'rescheduled'
   comments: text("comments"),
@@ -237,7 +242,10 @@ export const orders = pgTable("orders", {
   customerId: integer("customer_id").references(() => users.id),
   shopId: integer("shop_id").references(() => users.id),
   status: text("status").$type<"pending" | "cancelled" | "confirmed" | "processing" | "packed" | "shipped" | "delivered" | "returned">().notNull(),
-  paymentStatus: text("payment_status").$type<"pending" | "paid" | "refunded">().notNull(),
+  paymentStatus: text("payment_status", { enum: ["pending", "verifying", "paid", "failed"] })
+    .$type<"pending" | "verifying" | "paid" | "failed">()
+    .default("pending"),
+  deliveryMethod: text("delivery_method", { enum: ["delivery", "pickup"] }),
   total: decimal("total").notNull(),
   shippingAddress: text("shipping_address").notNull(),
   billingAddress: text("billing_address"),

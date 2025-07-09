@@ -11,11 +11,13 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { useParams } from "wouter";
+import { Input } from "@/components/ui/input";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Order, ReturnRequest } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { motion } from "framer-motion";
 import {
@@ -34,7 +36,14 @@ interface TimelineUpdate {
   trackingInfo?: string;
   timestamp: string | Date;
 }
-
+interface DetailedOrder extends Order {
+  shop?: {
+    upiId?: string | null;
+    phone?: string | null;
+    name?: string | null;
+    email?: string | null;
+  };
+}
 const returnRequestSchema = z.object({
   reason: z.string().min(10, "Please provide a detailed reason"),
   items: z.array(z.object({
@@ -49,7 +58,7 @@ export default function OrderDetails() {
   const { id } = useParams();
   const { toast } = useToast();
 
-  const { data: order, isLoading: orderLoading } = useQuery<Order>({
+  const { data: order, isLoading: orderLoading } = useQuery<DetailedOrder>({
     queryKey: [`/api/orders/${id}`],
   });
 
@@ -64,6 +73,24 @@ export default function OrderDetails() {
       reason: "",
       items: [],
     },
+  });
+
+  const [reference, setReference] = useState("");
+
+  const submitPaymentMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/orders/${id}/submit-payment-reference`, { paymentReference: reference });
+      if (!res.ok) throw new Error("Failed to submit reference");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${id}`] });
+      toast({ title: "Payment reference submitted" });
+      setReference("");
+    },
+    onError: (e: Error) => {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
   });
 
   const returnMutation = useMutation({
@@ -111,6 +138,37 @@ export default function OrderDetails() {
           </Button>
           <h1 className="text-2xl font-bold">Order #{order?.id}</h1>
         </div>
+
+        {order?.paymentStatus === "pending" && order?.shopId && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Complete Payment</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="font-medium">Step 1: Pay ₹{order?.total} to {order?.shop?.upiId}</p>
+                <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(order.shop!.upiId!)}>
+                  Copy UPI ID
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Transaction ID" />
+                <Button size="sm" onClick={() => submitPaymentMutation.mutate()} disabled={submitPaymentMutation.isPending || !reference}>
+                  {submitPaymentMutation.isPending && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
+                  Submit Confirmation
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {order?.paymentStatus === "verifying" && (
+          <Card>
+            <CardContent>
+              <p className="text-sm">Payment verification in progress. The shop owner has been notified and will confirm your payment shortly.</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
@@ -181,6 +239,13 @@ export default function OrderDetails() {
                   </Button>
                 </form>
               </Form>
+            </CardContent>
+          </Card>
+        )}
+        {order && order.shop && (
+          <Card>
+            <CardContent>
+              <p className="text-sm">For questions about your order, you can contact the shop owner at: {order.shop?.phone}</p>
             </CardContent>
           </Card>
         )}
