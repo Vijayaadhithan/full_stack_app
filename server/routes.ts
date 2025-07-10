@@ -644,6 +644,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const profileUpdateSchema = insertUserSchema.partial().extend({
     upiId: z.string().regex(/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/).optional().nullable(),
     upiQrCodeUrl: z.string().optional().nullable(),
+    pickupAvailable: z.boolean().optional(),
+    deliveryAvailable: z.boolean().optional(),
   });
 
   app.patch("/api/users/:id", requireAuth, async (req, res) => {
@@ -2289,7 +2291,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(orderId)) {
         return res.status(400).json({ message: "Invalid order id" });
       }
-      const order = await storage.updateOrderStatus(
+      const order = await storage.getOrder(orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      if (order.shopId !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const updated = await storage.updateOrderStatus(
         orderId,
         status,
         trackingInfo
@@ -2297,24 +2305,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create notification for status update
       await storage.createNotification({
-        userId: order.customerId,
+        userId: updated.customerId,
         type: "order",
         title: `Order ${status}`,
-        message: `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`,
+        message: `Your order #${updated.id} has been ${status}. ${trackingInfo || ""}`,
       });
 
       // Send SMS notification for important status updates
       if (["confirmed", "shipped", "delivered"].includes(status)) {
-        const customer = order.customerId !== null ? await storage.getUser(order.customerId) : undefined;
+         const customer = updated.customerId !== null ? await storage.getUser(updated.customerId) : undefined;
         if (customer) {
           await storage.sendSMSNotification(
             customer.phone,
-            `Your order #${order.id} has been ${status}. ${trackingInfo || ""}`
+            `Your order #${updated.id} has been ${status}. ${trackingInfo || ""}`
           );
         }
       }
 
-      res.json(order);
+      res.json(updated);
     } catch (error) {
       console.error("Error updating order status:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update order status" });

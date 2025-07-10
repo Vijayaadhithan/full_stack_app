@@ -346,6 +346,10 @@ export class PostgresStorage implements IStorage {
       googleId: user.googleId, // Added to ensure Google ID is saved
       emailVerified: user.emailVerified, // Added to ensure email verification status is saved
       // Ensure any other fields from InsertUser intended for direct insertion are listed here
+      upiId: user.upiId,
+      upiQrCodeUrl: user.upiQrCodeUrl,
+      pickupAvailable: user.pickupAvailable ?? true,
+      deliveryAvailable: user.deliveryAvailable ?? false,
     };
 
     const result = await db.insert(users).values(insertData as any).returning(); // Used 'as any' to simplify if InsertUser and table schema have slight mismatches handled by DB defaults/nulls for unlisted fields.

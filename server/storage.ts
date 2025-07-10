@@ -627,7 +627,7 @@ export class MemStorage implements IStorage {
       eReceiptUrl: null,
       eReceiptGeneratedAt: null,
       expiresAt: null,
-      disputeReason: booking.disputeReason === undefined ? null : booking.disputeReason
+      disputeReason: booking.disputeReason === undefined ? null : booking.disputeReason,
     };
     this.bookings.set(id, newBooking);
     return newBooking;
