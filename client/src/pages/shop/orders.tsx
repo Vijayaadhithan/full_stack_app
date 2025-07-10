@@ -86,8 +86,12 @@ export default function ShopOrders() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["orders", "shop"] });
+      if (variables.orderId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/orders/${variables.orderId}`] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/customer"] });
       toast({
         title: t("success"),
         description: t("order_status_updated"),

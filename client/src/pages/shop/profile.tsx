@@ -41,6 +41,7 @@ const shopProfileSchema = z.object({
   upiId: z.string().optional(),
   pickupAvailable: z.boolean().optional(),
   deliveryAvailable: z.boolean().optional(),
+  returnsEnabled: z.boolean().optional(),
   upiQrCodeUrl: z.string().optional(),
   workingHours: z.object({
     from: z.string().min(1, "Opening time is required"),
@@ -78,6 +79,7 @@ export default function ShopProfile() {
       upiQrCodeUrl: user?.upiQrCodeUrl || "",
       pickupAvailable: user?.pickupAvailable ?? true,
       deliveryAvailable: user?.deliveryAvailable ?? false,
+      returnsEnabled: user?.returnsEnabled ?? true,
       workingHours: user?.shopProfile?.workingHours || {
         from: "09:00",
         to: "18:00",
@@ -107,7 +109,8 @@ export default function ShopProfile() {
         upiId: user.upiId || "",
         upiQrCodeUrl: user.upiQrCodeUrl || "",
         pickupAvailable: user.pickupAvailable ?? true,
-        deliveryAvailable: user.deliveryAvailable ?? false,
+       deliveryAvailable: user.deliveryAvailable ?? false,
+       returnsEnabled: user.returnsEnabled ?? true,
         workingHours: user.shopProfile.workingHours || {
           from: "09:00",
           to: "18:00",
@@ -146,6 +149,7 @@ export default function ShopProfile() {
         upiQrCodeUrl,
         pickupAvailable,
         deliveryAvailable,
+        returnsEnabled,
         ...shopProfileData
       } = data;
       const updatePayload = {
@@ -161,6 +165,7 @@ export default function ShopProfile() {
         upiId,
         upiQrCodeUrl,
         pickupAvailable,
+        returnsEnabled,
         deliveryAvailable,
       };
 
@@ -512,6 +517,20 @@ export default function ShopProfile() {
                         <FormItem className="flex items-center justify-between rounded-md border p-3 shadow-sm">
                           <div className="space-y-0.5">
                             <FormLabel>Enable Local Delivery</FormLabel>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!editMode} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="returnsEnabled"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between rounded-md border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Allow Returns</FormLabel>
                           </div>
                           <FormControl>
                             <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!editMode} />

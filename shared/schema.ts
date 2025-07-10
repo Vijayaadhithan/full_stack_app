@@ -91,6 +91,7 @@ export const users = pgTable("users", {
   //rating: decimal("rating", { precision: 2, scale: 1 }),
   deliveryAvailable: boolean("delivery_available").default(false),
   pickupAvailable: boolean("pickup_available").default(true),
+  returnsEnabled: boolean("returns_enabled").default(true),
   averageRating: decimal("average_rating").default("0"),
   totalReviews: integer("total_reviews").default(0),
 });

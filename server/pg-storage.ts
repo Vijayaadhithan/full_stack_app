@@ -13,10 +13,12 @@ import {
   Notification, InsertNotification,
   ReturnRequest, InsertReturnRequest, // Type
   Promotion, InsertPromotion,
+  ProductReview, InsertProductReview,
   ShopProfile, // Added ShopProfile import
   // Ensure bookingHistory is exported from your shared schema if available.
   users, services, bookings, bookingHistory, products, orders, orderItems, reviews, notifications,
-  cart, wishlist, promotions, returns, // Changed returnRequests to returns
+  cart, wishlist, promotions, returns, productReviews,
+  
   UserRole
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
@@ -345,11 +347,11 @@ export class PostgresStorage implements IStorage {
       languages: user.languages,
       googleId: user.googleId, // Added to ensure Google ID is saved
       emailVerified: user.emailVerified, // Added to ensure email verification status is saved
-      // Ensure any other fields from InsertUser intended for direct insertion are listed here
       upiId: user.upiId,
       upiQrCodeUrl: user.upiQrCodeUrl,
       pickupAvailable: user.pickupAvailable ?? true,
       deliveryAvailable: user.deliveryAvailable ?? false,
+      returnsEnabled: user.returnsEnabled ?? true,
     };
 
     const result = await db.insert(users).values(insertData as any).returning(); // Used 'as any' to simplify if InsertUser and table schema have slight mismatches handled by DB defaults/nulls for unlisted fields.
@@ -1361,6 +1363,28 @@ const result = await db.insert(bookings).values({
     return result[0];
   }
 
+  async createProductReview(review: InsertProductReview): Promise<ProductReview> {
+    const result = await db.insert(productReviews).values(review).returning();
+    return result[0];
+  }
+
+  async getProductReviewsByProduct(productId: number): Promise<ProductReview[]> {
+    return await db.select().from(productReviews).where(eq(productReviews.productId, productId));
+  }
+
+  async getProductReviewById(id: number): Promise<ProductReview | undefined> {
+    const result = await db.select().from(productReviews).where(eq(productReviews.id, id));
+    return result[0];
+  }
+
+  async updateProductReview(id: number, data: { shopReply?: string }): Promise<ProductReview> {
+    const result = await db.update(productReviews)
+      .set({ shopReply: data.shopReply, repliedAt: new Date() })
+      .where(eq(productReviews.id, id))
+      .returning();
+    if (!result[0]) throw new Error("Review not found");
+    return result[0];
+  }
   // Add new methods for blocked time slots
   async getBlockedTimeSlots(serviceId: number): Promise<BlockedTimeSlot[]> {
     // Query blocked time slots table (implementation required)
@@ -1442,15 +1466,20 @@ const result = await db.insert(bookings).values({
     const order = await this.getOrder(orderId);
     if (!order) throw new Error("Order not found");
     
+
+    const placed = fromDatabaseToIST((order as any).orderDate || new Date()) as Date;
     // Mock timeline data with IST timestamps
     // Use order.placedAt if available, otherwise fallback to new Date()
     const timeline: OrderStatusUpdate[] = [
-      {
-      orderId,
-      status: "pending",
-      timestamp: fromDatabaseToIST((order as any).placedAt || new Date()) as Date,
-      }
+      { orderId, status: "pending", timestamp: placed }
     ];
+    const deliveryStages: OrderStatus[] = ["confirmed", "packed", "shipped", "delivered"];
+    const pickupStages: OrderStatus[] = ["confirmed", "packed", "shipped", "delivered"];
+    const stages = order.deliveryMethod === 'pickup' ? pickupStages : deliveryStages;
+    for (const status of stages) {
+      timeline.push({ orderId, status, timestamp: placed });
+      if (status === order.status) break;
+    }
     return timeline;
   }
 

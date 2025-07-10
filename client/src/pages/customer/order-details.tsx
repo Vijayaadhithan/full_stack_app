@@ -10,6 +10,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useParams } from "wouter";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -27,12 +29,13 @@ import {
   AlertCircle,
   ArrowLeft,
   RefreshCw,
+  Star,
 } from "lucide-react";
 import { z } from "zod";
 import { formatIndianDisplay } from '@shared/date-utils'; 
 // Define the type for timeline updates
 interface TimelineUpdate {
-  status: 'pending' | 'confirmed' | 'shipped' | 'delivered'; // Use specific statuses if known
+  status: 'pending' | 'confirmed' | 'packed' | 'shipped' | 'delivered';
   trackingInfo?: string;
   timestamp: string | Date;
 }
@@ -42,7 +45,16 @@ interface DetailedOrder extends Order {
     phone?: string | null;
     name?: string | null;
     email?: string | null;
+    returnsEnabled?: boolean;
   };
+  items?: {
+    id: number;
+    productId: number | null;
+    name: string;
+    quantity: number;
+    price: string;
+    total: string;
+  }[];
 }
 const returnRequestSchema = z.object({
   reason: z.string().min(10, "Please provide a detailed reason"),
@@ -107,6 +119,30 @@ export default function OrderDetails() {
     },
   });
 
+  const [selectedProduct, setSelectedProduct] = useState<{ id: number; name: string } | null>(null);
+  const [rating, setRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+
+  const reviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedProduct || !order) return;
+      const res = await apiRequest("POST", "/api/product-reviews", {
+        productId: selectedProduct.id,
+        orderId: order.id,
+        rating,
+        review: reviewText,
+      });
+      if (!res.ok) throw new Error("Failed to submit review");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Review submitted" });
+      setSelectedProduct(null);
+      setReviewText("");
+      setRating(5);
+    },
+  });
+
   if (orderLoading) {
     return (
       <DashboardLayout>
@@ -120,8 +156,19 @@ export default function OrderDetails() {
   const statusIcon: Record<TimelineUpdate['status'], React.ReactElement> = {
     pending: <AlertCircle className="h-5 w-5 text-yellow-500" />,
     confirmed: <CheckCircle className="h-5 w-5 text-green-500" />,
+    packed: <Package className="h-5 w-5 text-blue-500" />,
     shipped: <Truck className="h-5 w-5 text-blue-500" />,
     delivered: <Package className="h-5 w-5 text-green-500" />,
+  };
+
+  const getStatusLabel = (status: TimelineUpdate['status']) => {
+    if (order?.deliveryMethod === 'pickup') {
+      if (status === 'shipped') return 'Ready to Collect';
+      if (status === 'delivered') return 'Collected';
+    } else {
+      if (status === 'shipped') return 'Dispatched';
+    }
+    return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   return (
@@ -169,7 +216,23 @@ export default function OrderDetails() {
             </CardContent>
           </Card>
         )}
-
+        <Card>
+          <CardHeader>
+            <CardTitle>Items</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {order?.items?.map((item: NonNullable<DetailedOrder['items']>[number]) => (
+              <div key={item.id} className="flex justify-between items-center">
+                <p>{item.name} × {item.quantity}</p>
+                {order?.status === 'delivered' && (
+                  <Button size="sm" variant="outline" onClick={() => item.productId && setSelectedProduct({ id: item.productId, name: item.name })}>
+                    Leave Review
+                  </Button>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Order Timeline</CardTitle>
@@ -183,7 +246,7 @@ export default function OrderDetails() {
                 >
                   {statusIcon[update.status]}
                   <div>
-                    <p className="font-medium">Order {update.status}</p>
+                    <p className="font-medium">{getStatusLabel(update.status)}</p>
                     {update.trackingInfo && (
                       <p className="text-sm text-muted-foreground">
                         {update.trackingInfo}
@@ -199,7 +262,7 @@ export default function OrderDetails() {
           </CardContent>
         </Card>
 
-        {order?.status === "delivered" && !order.returnRequested && (
+        {order?.shop?.returnsEnabled && order?.status === "delivered" && !order.returnRequested && (
           <Card>
             <CardHeader>
               <CardTitle>Return Request</CardTitle>
@@ -249,6 +312,33 @@ export default function OrderDetails() {
             </CardContent>
           </Card>
         )}
+        <Dialog open={!!selectedProduct} onOpenChange={(o) => { if (!o) setSelectedProduct(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Leave a Review for {selectedProduct?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div>
+                <Label>Rating</Label>
+                <div className="flex items-center gap-1">
+                  {[1,2,3,4,5].map(v => (
+                    <Button key={v} variant="ghost" size="sm" className={`p-0 ${v <= rating ? 'text-yellow-500' : 'text-gray-300'}`} onClick={() => setRating(v)}>
+                      <Star className="h-6 w-6 fill-current" />
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label>Review</Label>
+                <Textarea value={reviewText} onChange={(e) => setReviewText(e.target.value)} placeholder="Share your experience..." />
+              </div>
+              <Button className="w-full" onClick={() => reviewMutation.mutate()} disabled={reviewMutation.isPending || !reviewText}>
+                {reviewMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+                Submit Review
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </motion.div>
     </DashboardLayout>
   );

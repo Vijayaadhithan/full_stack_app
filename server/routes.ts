@@ -646,6 +646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     upiQrCodeUrl: z.string().optional().nullable(),
     pickupAvailable: z.boolean().optional(),
     deliveryAvailable: z.boolean().optional(),
+    returnsEnabled: z.boolean().optional(),
   });
 
   app.patch("/api/users/:id", requireAuth, async (req, res) => {
@@ -2176,7 +2177,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ...order,
       items,
       customer: customer ? { name: customer.name, phone: customer.phone, email: customer.email } : undefined,
-      shop: shop ? { name: shop.name, phone: shop.phone, email: shop.email, upiId: (shop as any).upiId } : undefined,
+      shop: shop
+        ? { name: shop.name, phone: shop.phone, email: shop.email, upiId: (shop as any).upiId, returnsEnabled: (shop as any).returnsEnabled }
+        : undefined,
     });
   });
 
@@ -2549,7 +2552,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Product Reviews
   app.get("/api/reviews/product/:id", requireAuth, async (req, res) => {
     try {
-      const reviews = await storage.getReviewsByProvider(parseInt(req.params.id));
+      const productId = parseInt(req.params.id);
+      const reviews = await storage.getProductReviewsByProduct(productId);
       res.json(reviews);
     } catch (error) {
       console.error("Error fetching product reviews:", error);
@@ -2557,22 +2561,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/reviews/product/:id/reply", requireAuth, requireRole(["shop"]), async (req, res) => {
+  app.post("/api/product-reviews", requireAuth, requireRole(["customer"]), async (req, res) => {
+    const result = insertProductReviewSchema.safeParse(req.body);
+    if (!result.success) return res.status(400).json(result.error);
+
+    const orderId = result.data.orderId;
+    if (!orderId) {
+      return res.status(400).json({ message: "Order ID is required" });
+    }
+    const order = await storage.getOrder(orderId);
+    if (!order || order.customerId !== req.user!.id) {
+      return res.status(403).json({ message: "Cannot review this order" });
+    }
+
+    try {
+      const review = await storage.createProductReview({
+        ...result.data,
+        customerId: req.user!.id,
+        isVerifiedPurchase: true,
+      });
+      res.status(201).json(review);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to save review" });
+    }
+  });
+
+  app.post("/api/product-reviews/:id/reply", requireAuth, requireRole(["shop"]), async (req, res) => {
     try {
       const { reply } = req.body;
       const reviewId = parseInt(req.params.id);
-      const existingReview = await storage.getReviewById(reviewId);
+      const existingReview = await storage.getProductReviewById(reviewId);
       if (!existingReview) {
         return res.status(404).json({ message: "Review not found" });
       }
-      if (existingReview.serviceId === null) {
-        return res.status(400).json({ message: "The review does not have a valid serviceId." });
-      }
-      const product = await storage.getProduct(existingReview.serviceId);
+      const product = existingReview.productId ? await storage.getProduct(existingReview.productId) : null;
       if (!product || product.shopId !== req.user!.id) {
         return res.status(403).json({ message: "You can only reply to reviews for your own products" });
       }
-      const review = await storage.updateReview(reviewId, { providerReply: reply } as any);
+      const review = await storage.updateProductReview(reviewId, { shopReply: reply });
       res.json(review);
     } catch (error) {
       console.error("Error replying to review:", error);

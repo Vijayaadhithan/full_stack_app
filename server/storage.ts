@@ -9,6 +9,7 @@ import {
   OrderItem, InsertOrderItem,
   Review, InsertReview,
   Notification, InsertNotification,
+  ProductReview, InsertProductReview,
   ReturnRequest, InsertReturnRequest,
   Promotion, InsertPromotion,
   UserRole
@@ -17,7 +18,15 @@ import { newIndianDate, formatIndianDisplay } from "../shared/date-utils";
 
 const MemoryStore = createMemoryStore(session);
 
-export type OrderStatus = "pending" | "confirmed" | "cancelled" | "shipped" | "delivered";
+export type OrderStatus =
+  | "pending"
+  | "cancelled"
+  | "confirmed"
+  | "processing"
+  | "packed"
+  | "shipped"
+  | "delivered"
+  | "returned";
 export interface OrderStatusUpdate {
   orderId: number;
   status: OrderStatus;
@@ -121,6 +130,10 @@ export interface IStorage {
   updateReview(id: number, data: { rating?: number; review?: string }): Promise<Review>;
   updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review>;
   updateProviderRating(providerId: number): Promise<void>;
+  createProductReview(review: InsertProductReview): Promise<ProductReview>;
+  getProductReviewsByProduct(productId: number): Promise<ProductReview[]>;
+  getProductReviewById(id: number): Promise<ProductReview | undefined>;
+  updateProductReview(id: number, data: { shopReply?: string }): Promise<ProductReview>;
   // Notification operations
   createNotification(notification: InsertNotification): Promise<Notification>;
   getNotificationsByUser(userId: number): Promise<Notification[]>;
@@ -211,6 +224,7 @@ export class MemStorage implements IStorage {
   private waitlist: Map<number, Map<number, Date>>; // serviceId -> (customerId -> preferredDate)
   private returnRequests: Map<number, ReturnRequest>;
   private orderStatusUpdates: Map<number, OrderStatusUpdate[]>;
+  private productReviews: Map<number, ProductReview>;
   private blockedTimeSlots: Map<number, BlockedTimeSlot[]>; // Add new map for blocked slots
   sessionStore: session.Store;
   private currentId: number;
@@ -234,6 +248,7 @@ export class MemStorage implements IStorage {
     this.waitlist = new Map();
     this.returnRequests = new Map();
     this.orderStatusUpdates = new Map();
+    this.productReviews = new Map();
     this.currentId = 1;
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
@@ -491,6 +506,7 @@ export class MemStorage implements IStorage {
       averageRating: null,
       totalReviews: null,
       deliveryAvailable: null,
+      returnsEnabled: true,
       pickupAvailable: null
     };
     this.users.set(id, user);
@@ -1085,6 +1101,32 @@ return {
       (user as any).averageRating = average;
       (user as any).totalReviews = providerReviews.length;
     }
+  }
+
+  async createProductReview(review: InsertProductReview): Promise<ProductReview> {
+    const id = this.currentId++;
+    const newReview = { ...review, id };
+    this.productReviews.set(id, newReview as ProductReview);
+    return newReview as ProductReview;
+  }
+
+  async getProductReviewsByProduct(productId: number): Promise<ProductReview[]> {
+    return Array.from(this.productReviews.values()).filter(r => r.productId === productId);
+  }
+
+  async getProductReviewById(id: number): Promise<ProductReview | undefined> {
+    return this.productReviews.get(id);
+  }
+
+  async updateProductReview(id: number, data: { shopReply?: string }): Promise<ProductReview> {
+    const review = this.productReviews.get(id);
+    if (!review) throw new Error("Review not found");
+    if (data.shopReply !== undefined) {
+      (review as any).shopReply = data.shopReply;
+      (review as any).repliedAt = new Date();
+    }
+    this.productReviews.set(id, review as ProductReview);
+    return review as ProductReview;
   }
 
   // Notification operations
