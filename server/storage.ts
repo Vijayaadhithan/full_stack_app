@@ -11,7 +11,7 @@ import {
   Notification, InsertNotification,
   ProductReview, InsertProductReview,
   ReturnRequest, InsertReturnRequest,
-  Promotion, InsertPromotion,
+  Promotion, InsertPromotion,orderStatusUpdates,
   UserRole
 } from "@shared/schema";
 import { newIndianDate, formatIndianDisplay } from "../shared/date-utils";
@@ -30,7 +30,7 @@ export type OrderStatus =
 export interface OrderStatusUpdate {
   orderId: number;
   status: OrderStatus;
-  trackingInfo?: string;
+  trackingInfo?: string | null;
   timestamp: Date;
 }
 export interface DashboardStats {
@@ -132,6 +132,8 @@ export interface IStorage {
   updateProviderRating(providerId: number): Promise<void>;
   createProductReview(review: InsertProductReview): Promise<ProductReview>;
   getProductReviewsByProduct(productId: number): Promise<ProductReview[]>;
+  getProductReviewsByShop(shopId: number): Promise<ProductReview[]>;
+  getProductReviewsByCustomer(customerId: number): Promise<ProductReview[]>;
   getProductReviewById(id: number): Promise<ProductReview | undefined>;
   updateProductReview(id: number, data: { shopReply?: string }): Promise<ProductReview>;
   // Notification operations
@@ -917,6 +919,9 @@ return {
       eReceiptGeneratedAt: null
     };
     this.orders.set(id, newOrder);
+    this.orderStatusUpdates.set(id, [
+      { orderId: id, status: "pending", trackingInfo: null, timestamp: newOrder.orderDate ?? new Date() }
+    ]);
     return newOrder;
   }
 
@@ -1102,8 +1107,7 @@ return {
       (user as any).totalReviews = providerReviews.length;
     }
   }
-
-  async createProductReview(review: InsertProductReview): Promise<ProductReview> {
+async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     const id = this.currentId++;
     const newReview = { ...review, id };
     this.productReviews.set(id, newReview as ProductReview);
@@ -1112,6 +1116,17 @@ return {
 
   async getProductReviewsByProduct(productId: number): Promise<ProductReview[]> {
     return Array.from(this.productReviews.values()).filter(r => r.productId === productId);
+  }
+
+  async getProductReviewsByShop(shopId: number): Promise<ProductReview[]> {
+    const productIds = Array.from(this.products.values())
+      .filter(p => p.shopId === shopId)
+      .map(p => p.id);
+    return Array.from(this.productReviews.values()).filter(r => r.productId !== null && productIds.includes(r.productId));
+  }
+
+  async getProductReviewsByCustomer(customerId: number): Promise<ProductReview[]> {
+    return Array.from(this.productReviews.values()).filter(r => r.customerId === customerId);
   }
 
   async getProductReviewById(id: number): Promise<ProductReview | undefined> {

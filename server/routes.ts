@@ -2561,15 +2561,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+ app.get("/api/reviews/shop/:id", requireAuth, async (req, res) => {
+    try {
+      const shopId = parseInt(req.params.id);
+      const reviews = await storage.getProductReviewsByShop(shopId);
+      res.json(reviews);
+    } catch (error) {
+      console.error("Error fetching shop product reviews:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch reviews" });
+    }
+  });
+
+  app.get("/api/product-reviews/customer", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const reviews = await storage.getProductReviewsByCustomer(req.user!.id);
+      res.json(reviews);
+    } catch (error) {
+      console.error("Error fetching customer product reviews:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch reviews" });
+    }
+  });
+
   app.post("/api/product-reviews", requireAuth, requireRole(["customer"]), async (req, res) => {
     const result = insertProductReviewSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json(result.error);
 
-    const orderId = result.data.orderId;
-    if (!orderId) {
-      return res.status(400).json({ message: "Order ID is required" });
+    if (!result.data.orderId) {
+      return res.status(400).json({ message: "Order id required" });
     }
-    const order = await storage.getOrder(orderId);
+    const order = await storage.getOrder(result.data.orderId);
     if (!order || order.customerId !== req.user!.id) {
       return res.status(403).json({ message: "Cannot review this order" });
     }
@@ -2593,6 +2613,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingReview = await storage.getProductReviewById(reviewId);
       if (!existingReview) {
         return res.status(404).json({ message: "Review not found" });
+      }
+      if (existingReview.productId === null) {
+        return res.status(400).json({ message: "Invalid review" });
       }
       const product = existingReview.productId ? await storage.getProduct(existingReview.productId) : null;
       if (!product || product.shopId !== req.user!.id) {

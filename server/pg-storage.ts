@@ -18,7 +18,7 @@ import {
   // Ensure bookingHistory is exported from your shared schema if available.
   users, services, bookings, bookingHistory, products, orders, orderItems, reviews, notifications,
   cart, wishlist, promotions, returns, productReviews,
-  
+  orderStatusUpdates,
   UserRole
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
@@ -1057,7 +1057,14 @@ const result = await db.insert(bookings).values({
       paymentStatus: order.paymentStatus as "pending" | "verifying" | "paid" | "failed",
     };
     const result = await db.insert(orders).values(orderToInsert).returning();
-    return result[0];
+    const created = result[0];
+    await db.insert(orderStatusUpdates).values({
+      orderId: created.id,
+      status: "pending",
+      trackingInfo: created.trackingInfo,
+      timestamp: created.orderDate ?? new Date(),
+    });
+    return created;
   }
 
   async getOrder(id: number): Promise<Order | undefined> {
@@ -1363,13 +1370,27 @@ const result = await db.insert(bookings).values({
     return result[0];
   }
 
-  async createProductReview(review: InsertProductReview): Promise<ProductReview> {
+ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     const result = await db.insert(productReviews).values(review).returning();
     return result[0];
   }
 
   async getProductReviewsByProduct(productId: number): Promise<ProductReview[]> {
     return await db.select().from(productReviews).where(eq(productReviews.productId, productId));
+  }
+
+  async getProductReviewsByShop(shopId: number): Promise<ProductReview[]> {
+    const productIds = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.shopId, shopId));
+    const ids = productIds.map(p => p.id);
+    if (ids.length === 0) return [];
+    return await db.select().from(productReviews).where(sql`${productReviews.productId} in ${ids}`);
+  }
+
+  async getProductReviewsByCustomer(customerId: number): Promise<ProductReview[]> {
+    return await db.select().from(productReviews).where(eq(productReviews.customerId, customerId));
   }
 
   async getProductReviewById(id: number): Promise<ProductReview | undefined> {
@@ -1452,35 +1473,33 @@ const result = await db.insert(bookings).values({
     // Only include updatedAt if it exists in the Order type
     const updateData: any = { 
       status, 
-      trackingInfo: trackingInfo || order.trackingInfo
+      trackingInfo: trackingInfo || order.trackingInfo,
     };
     if ("updatedAt" in order) {
       updateData.updatedAt = getCurrentISTDate();
     }
-    return await this.updateOrder(orderId, updateData);
+    const updated = await this.updateOrder(orderId, updateData);
+    await db.insert(orderStatusUpdates).values({
+      orderId,
+      status,
+      trackingInfo: trackingInfo || order.trackingInfo,
+      timestamp: getCurrentISTDate(),
+    });
+    return updated;
   }
 
   async getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]> {
-    // This would typically be fetched from a dedicated order_status_history table
-    // For this example, we'll return a mock timeline
-    const order = await this.getOrder(orderId);
-    if (!order) throw new Error("Order not found");
-    
-
-    const placed = fromDatabaseToIST((order as any).orderDate || new Date()) as Date;
-    // Mock timeline data with IST timestamps
-    // Use order.placedAt if available, otherwise fallback to new Date()
-    const timeline: OrderStatusUpdate[] = [
-      { orderId, status: "pending", timestamp: placed }
-    ];
-    const deliveryStages: OrderStatus[] = ["confirmed", "packed", "shipped", "delivered"];
-    const pickupStages: OrderStatus[] = ["confirmed", "packed", "shipped", "delivered"];
-    const stages = order.deliveryMethod === 'pickup' ? pickupStages : deliveryStages;
-    for (const status of stages) {
-      timeline.push({ orderId, status, timestamp: placed });
-      if (status === order.status) break;
-    }
-    return timeline;
+   const updates = await db
+      .select()
+      .from(orderStatusUpdates)
+      .where(eq(orderStatusUpdates.orderId, orderId))
+      .orderBy(orderStatusUpdates.timestamp);
+    return updates.map(u => ({
+      orderId: u.orderId!,
+      status: u.status as OrderStatus,
+      trackingInfo: u.trackingInfo ?? undefined,
+      timestamp: fromDatabaseToIST(u.timestamp as Date) as Date,
+    }));
   }
 
   async updateProviderProfile(id: number, profile: Partial<User>): Promise<User> {

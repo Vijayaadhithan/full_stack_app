@@ -358,6 +358,13 @@ export const blockedTimeSlots = pgTable("blocked_time_slots", {
   recurringEndDate: timestamp("recurring_end_date"),
 });
 
+export const orderStatusUpdates = pgTable("order_status_updates", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").references(() => orders.id),
+  status: text("status").notNull(),
+  trackingInfo: text("tracking_info"),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
 
 // Zod schema for ShopProfile
 export const shopProfileSchema = z.object({
@@ -529,6 +536,10 @@ export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
 export const insertBlockedTimeSlotSchema = createInsertSchema(blockedTimeSlots);
 export type InsertBlockedTimeSlot = z.infer<typeof insertBlockedTimeSlotSchema>;
 export type BlockedTimeSlotSelect = typeof blockedTimeSlots.$inferSelect;
+
+export const insertOrderStatusUpdateSchema = createInsertSchema(orderStatusUpdates);
+export type OrderStatusUpdateRecord = typeof orderStatusUpdates.$inferSelect;
+export type InsertOrderStatusUpdate = z.infer<typeof insertOrderStatusUpdateSchema>;
 
 export const Booking = z.object({
   id: z.number(),
