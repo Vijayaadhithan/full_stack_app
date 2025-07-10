@@ -263,9 +263,11 @@ export default function ShopOrders() {
                         <div className="flex justify-end gap-2">
                           <Dialog
                             open={actionType === "update" && selectedOrder?.id === order.id}
-                            onOpenChange={() => {
-                              setActionType(null);
-                              setSelectedOrder(null);
+                            onOpenChange={(open) => {
+                              if (!open) {
+                                setActionType(null);
+                                setSelectedOrder(null);
+                              }
                             }}
                           >
                             <DialogTrigger asChild>

@@ -31,6 +31,7 @@ const daysOfWeek = [
 ] as const;
 
 const shopProfileSchema = z.object({
+  name: z.string().min(1, "Owner name is required"),
   shopName: z.string().min(1, "Shop name is required"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   businessType: z.string().min(1, "Business type is required"),
@@ -66,6 +67,7 @@ export default function ShopProfile() {
   const form = useForm<ShopProfileFormData>({
     resolver: zodResolver(shopProfileSchema),
     defaultValues: {
+      name: user?.name || "",
       shopName: user?.shopProfile?.shopName || "",
       description: user?.shopProfile?.description || "",
       businessType: user?.shopProfile?.businessType || "",
@@ -95,6 +97,7 @@ export default function ShopProfile() {
   useEffect(() => {
     if (user?.shopProfile) {
       const shopData = {
+        name: user.name || "",
         shopName: user.shopProfile.shopName || "",
         description: user.shopProfile.description || "",
         businessType: user.shopProfile.businessType || "",
@@ -137,6 +140,7 @@ export default function ShopProfile() {
         addressPostalCode,
         addressCountry,
         phone,
+        name,
         email,
         upiId,
         upiQrCodeUrl,
@@ -153,8 +157,11 @@ export default function ShopProfile() {
         addressCountry,
         phone,
         email,
+        name,
         upiId,
         upiQrCodeUrl,
+        pickupAvailable,
+        deliveryAvailable,
       };
 
       console.log("Updating user profile with data:", updatePayload);
@@ -283,6 +290,19 @@ export default function ShopProfile() {
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <div className="grid gap-6 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Owner Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={!editMode} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name="shopName"
