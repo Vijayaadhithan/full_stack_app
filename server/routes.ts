@@ -2606,6 +2606,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/product-reviews/:id", requireAuth, requireRole(["customer"]), async (req, res) => {
+    try {
+      const reviewId = parseInt(req.params.id);
+      const { rating, review } = req.body;
+
+      const existing = await storage.getProductReviewById(reviewId);
+      if (!existing) {
+        return res.status(404).json({ message: "Review not found" });
+      }
+      if (existing.customerId !== req.user!.id) {
+        return res.status(403).json({ message: "You can only edit your own reviews" });
+      }
+
+      const updated = await storage.updateProductReview(reviewId, { rating, review });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating product review:", error);
+      res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update review" });
+    }
+  });
   app.post("/api/product-reviews/:id/reply", requireAuth, requireRole(["shop"]), async (req, res) => {
     try {
       const { reply } = req.body;

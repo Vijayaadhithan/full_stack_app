@@ -7,13 +7,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Star, AlertCircle } from 'lucide-react'; // Import icons
-import { Review } from '@shared/schema';
+import { Review, ProductReview } from '@shared/schema';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from "@/hooks/use-auth";
 
 // Use the updated Review type from the backend modification
 interface ReviewWithService extends Review {
   serviceName: string | null; // Service name is now directly available
+}
+
+interface ProductReviewWithProduct extends ProductReview {
+  productName?: string | null;
 }
 
 const StarRating = ({ rating, readOnly = false, onRate, size = 5 }: { rating: number | null, readOnly?: boolean, onRate?: (rating: number) => void, size?: number }) => {
@@ -40,9 +44,11 @@ const StarRating = ({ rating, readOnly = false, onRate, size = 5 }: { rating: nu
 
 const MyReviews: React.FC = () => {
   const [reviews, setReviews] = useState<ReviewWithService[]>([]);
+  const [productReviews, setProductReviews] = useState<ProductReviewWithProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [editingReview, setEditingReview] = useState<ReviewWithService | null>(null);
+  const [editingProductReview, setEditingProductReview] = useState<ProductReviewWithProduct | null>(null);
   const [editRating, setEditRating] = useState<number | null>(null);
   const [editComment, setEditComment] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -55,13 +61,19 @@ const MyReviews: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch reviews directly, serviceName is included from the backend now
-      const response = await apiRequest('GET', '/api/reviews/customer');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const reviewsData = await response.json() as ReviewWithService[];
-      setReviews(reviewsData);
+      const [serviceRes, productRes] = await Promise.all([
+        apiRequest('GET', '/api/reviews/customer'),
+        apiRequest('GET', '/api/product-reviews/customer'),
+      ]);
+
+      if (!serviceRes.ok) throw new Error(`HTTP error! status: ${serviceRes.status}`);
+      if (!productRes.ok) throw new Error(`HTTP error! status: ${productRes.status}`);
+
+      const serviceData = await serviceRes.json() as ReviewWithService[];
+      const productData = await productRes.json() as ProductReviewWithProduct[];
+
+      setReviews(serviceData);
+      setProductReviews(productData);
     } catch (err: any) {
       console.error('Failed to fetch reviews:', err);
       setError(`Failed to load your reviews: ${err.message || 'Please try again later.'}`);
@@ -76,6 +88,15 @@ const MyReviews: React.FC = () => {
 
   const handleEditClick = (review: ReviewWithService) => {
     setEditingReview(review);
+    setEditingProductReview(null);
+    setEditRating(review.rating);
+    setEditComment(review.review || '');
+    setSubmitError(null);
+  };
+
+  const handleProductEditClick = (review: ProductReviewWithProduct) => {
+    setEditingProductReview(review);
+    setEditingReview(null);
     setEditRating(review.rating);
     setEditComment(review.review || '');
     setSubmitError(null);
@@ -83,18 +104,22 @@ const MyReviews: React.FC = () => {
 
   const handleCloseDialog = () => {
     setEditingReview(null);
+    setEditingProductReview(null);
     setEditRating(null);
     setEditComment('');
   };
 
   const handleSaveChanges = async () => {
-    if (!editingReview || editRating === null) return;
-
+    const currentReview = editingReview || editingProductReview;
+    if (!currentReview || editRating === null) return;
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
-      const response = await apiRequest('PUT', `/api/reviews/${editingReview.id}`, {
+      const url = editingReview
+        ? `/api/reviews/${editingReview.id}`
+        : `/api/product-reviews/${editingProductReview!.id}`;
+      const response = await apiRequest('PATCH', url, {
         rating: editRating,
         review: editComment,
       });
@@ -103,12 +128,20 @@ const MyReviews: React.FC = () => {
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
       // Update local state immediately
-      const updatedReview = await response.json() as ReviewWithService; // Assuming the API returns the updated review
-      setReviews(prevReviews =>
-        prevReviews.map(review =>
-          review.id === editingReview.id ? { ...review, ...updatedReview, serviceName: review.serviceName } : review // Preserve serviceName if not returned by API
-        )
-      );
+      const updatedReview = await response.json();
+      if (editingReview) {
+        setReviews(prevReviews =>
+          prevReviews.map(review =>
+            review.id === editingReview.id ? { ...review, ...(updatedReview as ReviewWithService), serviceName: review.serviceName } : review
+          )
+        );
+      } else if (editingProductReview) {
+        setProductReviews(prevReviews =>
+          prevReviews.map(review =>
+            review.id === editingProductReview.id ? { ...review, ...(updatedReview as ProductReviewWithProduct) } : review
+          )
+        );
+      }
       // No need to fetch all reviews again
       // await fetchReviews();
       handleCloseDialog();
@@ -177,13 +210,41 @@ const MyReviews: React.FC = () => {
             ))}
           </div>
         )}
+        <h2 className="text-2xl font-semibold mt-8">Product Reviews</h2>
+        {productReviews.length === 0 ? (
+          <p>You haven't submitted any product reviews yet.</p>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {productReviews.map((review) => (
+              <Card key={review.id}>
+                <CardHeader>
+                  <CardTitle>{review.productName || `Product ID: ${review.productId}`}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <StarRating rating={review.rating} readOnly />
+                  <p className="text-sm text-muted-foreground">
+                    {review.review || 'No comment provided.'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Reviewed on: {review.createdAt ? new Date(review.createdAt).toLocaleDateString() : 'Date Unavailable'}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => handleProductEditClick(review)}>
+                    Edit Review
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Edit Review Dialog using Shadcn UI */}
-      <Dialog open={!!editingReview} onOpenChange={(open) => !open && handleCloseDialog()}>
+      <Dialog open={!!editingReview || !!editingProductReview} onOpenChange={(open) => !open && handleCloseDialog()}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Edit Review for {editingReview?.serviceName}</DialogTitle>
+            <DialogTitle>
+              Edit Review for {editingReview ? editingReview.serviceName : editingProductReview?.productName || `Product ID: ${editingProductReview?.productId}`}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             {submitError && (

@@ -132,7 +132,6 @@ export default function OrderDetails() {
         rating,
         review: reviewText,
       });
-      if (!res.ok) throw new Error("Failed to submit review");
       return res.json();
     },
     onSuccess: () => {
@@ -140,6 +139,13 @@ export default function OrderDetails() {
       setSelectedProduct(null);
       setReviewText("");
       setRating(5);
+    },
+    onError: (err: Error) => {
+      let message = err.message;
+      if (message.includes("Duplicate review")) {
+        message = "You have already reviewed this product for this order.";
+      }
+      toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
 

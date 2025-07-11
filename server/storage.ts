@@ -135,7 +135,7 @@ export interface IStorage {
   getProductReviewsByShop(shopId: number): Promise<ProductReview[]>;
   getProductReviewsByCustomer(customerId: number): Promise<ProductReview[]>;
   getProductReviewById(id: number): Promise<ProductReview | undefined>;
-  updateProductReview(id: number, data: { shopReply?: string }): Promise<ProductReview>;
+  updateProductReview(id: number, data: { rating?: number; review?: string; shopReply?: string }): Promise<ProductReview>;
   // Notification operations
   createNotification(notification: InsertNotification): Promise<Notification>;
   getNotificationsByUser(userId: number): Promise<Notification[]>;
@@ -1108,6 +1108,13 @@ return {
     }
   }
 async createProductReview(review: InsertProductReview): Promise<ProductReview> {
+    if (review.orderId && review.customerId && review.productId) {
+      for (const r of Array.from(this.productReviews.values())) {
+        if (r.orderId === review.orderId && r.customerId === review.customerId && r.productId === review.productId) {
+          throw new Error('Duplicate review');
+        }
+      }
+    }
     const id = this.currentId++;
     const newReview = { ...review, id };
     this.productReviews.set(id, newReview as ProductReview);
@@ -1125,20 +1132,30 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     return Array.from(this.productReviews.values()).filter(r => r.productId !== null && productIds.includes(r.productId));
   }
 
-  async getProductReviewsByCustomer(customerId: number): Promise<ProductReview[]> {
-    return Array.from(this.productReviews.values()).filter(r => r.customerId === customerId);
+  async getProductReviewsByCustomer(customerId: number): Promise<(ProductReview & { productName: string | null })[]> {
+    return Array.from(this.productReviews.values())
+      .filter(r => r.customerId === customerId)
+      .map(r => ({
+        ...r,
+        productName: r.productId ? this.products.get(r.productId)?.name ?? null : null,
+      }));
   }
 
   async getProductReviewById(id: number): Promise<ProductReview | undefined> {
     return this.productReviews.get(id);
   }
 
-  async updateProductReview(id: number, data: { shopReply?: string }): Promise<ProductReview> {
+ async updateProductReview(
+    id: number,
+    data: { rating?: number; review?: string; shopReply?: string }
+  ): Promise<ProductReview> {
     const review = this.productReviews.get(id);
     if (!review) throw new Error("Review not found");
+    if (data.rating !== undefined) (review as ProductReview).rating = data.rating;
+    if (data.review !== undefined) (review as ProductReview).review = data.review;
     if (data.shopReply !== undefined) {
-      (review as any).shopReply = data.shopReply;
-      (review as any).repliedAt = new Date();
+      (review as ProductReview).shopReply = data.shopReply;
+      (review as ProductReview).repliedAt = new Date();
     }
     this.productReviews.set(id, review as ProductReview);
     return review as ProductReview;

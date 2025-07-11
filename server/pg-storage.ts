@@ -1371,6 +1371,14 @@ const result = await db.insert(bookings).values({
   }
 
  async createProductReview(review: InsertProductReview): Promise<ProductReview> {
+    if (review.orderId && review.customerId && review.productId) {
+      const existing = await db
+        .select()
+        .from(productReviews)
+        .where(and(eq(productReviews.orderId, review.orderId), eq(productReviews.customerId, review.customerId), eq(productReviews.productId, review.productId)))
+        .limit(1);
+      if (existing[0]) throw new Error('Duplicate review');
+    }
     const result = await db.insert(productReviews).values(review).returning();
     return result[0];
   }
@@ -1389,8 +1397,30 @@ const result = await db.insert(bookings).values({
     return await db.select().from(productReviews).where(sql`${productReviews.productId} in ${ids}`);
   }
 
-  async getProductReviewsByCustomer(customerId: number): Promise<ProductReview[]> {
-    return await db.select().from(productReviews).where(eq(productReviews.customerId, customerId));
+  async getProductReviewsByCustomer(customerId: number): Promise<(ProductReview & { productName: string | null })[]> {
+    const results = await db
+      .select({
+        id: productReviews.id,
+        productId: productReviews.productId,
+        customerId: productReviews.customerId,
+        orderId: productReviews.orderId,
+        rating: productReviews.rating,
+        review: productReviews.review,
+        images: productReviews.images,
+        createdAt: productReviews.createdAt,
+        shopReply: productReviews.shopReply,
+        repliedAt: productReviews.repliedAt,
+        isVerifiedPurchase: productReviews.isVerifiedPurchase,
+        productName: products.name,
+      })
+      .from(productReviews)
+      .leftJoin(products, eq(productReviews.productId, products.id))
+      .where(eq(productReviews.customerId, customerId));
+
+    return results.map(r => ({
+      ...r,
+      productName: r.productName ?? null,
+    }));
   }
 
   async getProductReviewById(id: number): Promise<ProductReview | undefined> {
@@ -1398,9 +1428,19 @@ const result = await db.insert(bookings).values({
     return result[0];
   }
 
-  async updateProductReview(id: number, data: { shopReply?: string }): Promise<ProductReview> {
+  async updateProductReview(
+    id: number,
+    data: { rating?: number; review?: string; shopReply?: string }
+  ): Promise<ProductReview> {
+    const updateData: Partial<ProductReview> = {};
+    if (data.rating !== undefined) updateData.rating = data.rating;
+    if (data.review !== undefined) updateData.review = data.review;
+    if (data.shopReply !== undefined) {
+      updateData.shopReply = data.shopReply;
+      updateData.repliedAt = new Date();
+    }
     const result = await db.update(productReviews)
-      .set({ shopReply: data.shopReply, repliedAt: new Date() })
+      .set(updateData)
       .where(eq(productReviews.id, id))
       .returning();
     if (!result[0]) throw new Error("Review not found");
