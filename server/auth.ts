@@ -156,7 +156,9 @@ export function setupAuth(app: Express) {
             const userToCreate = {
               ...newUser,
               password: await hashPasswordInternal(randomBytes(16).toString('hex')),
-              phone: "" // Ensure phone is provided or handled if it's a required field with no default
+              phone: "", // Ensure phone is provided or handled if it's a required field with no default
+              averageRating: "0",
+              totalReviews: 0,
             };
             console.log('[Google OAuth] Creating user with data:', JSON.stringify(userToCreate, null, 2));
             const createdUser = await storage.createUser(userToCreate);

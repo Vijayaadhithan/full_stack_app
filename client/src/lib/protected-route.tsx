@@ -9,9 +9,9 @@ export function ProtectedRoute({
   path: string;
   component: React.ComponentType<any>;
 }) {
-  const { user, isLoading } = useAuth();
+  const { user, isFetching } = useAuth();
 
-  if (isLoading) {
+  if (isFetching) {
     return (
       <Route path={path}>
         <div className="flex items-center justify-center min-h-screen">

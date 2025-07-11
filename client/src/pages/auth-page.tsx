@@ -299,7 +299,12 @@ export default function AuthPage() {
             <TabsContent value="register">
               <form
                 onSubmit={registerForm.handleSubmit((data) =>
-                  registerMutation.mutate({ ...data, emailVerified: false })
+                  registerMutation.mutate({
+                    ...data,
+                    emailVerified: false,
+                    averageRating: "0",
+                    totalReviews: 0,
+                  })
                 )}
                 className="space-y-4"
               >
