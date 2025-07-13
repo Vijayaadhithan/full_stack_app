@@ -34,6 +34,7 @@ import {
   promotions, // Import promotions table for direct updates
   users, // Import the users table schema
   reviews,
+  passwordResetTokens as passwordResetTokensTable,
   User
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
@@ -77,15 +78,6 @@ function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null
     return null;
   }
 }
-
-// Store password reset tokens in memory (for simplicity, in a real app use a database)
-interface PasswordResetToken {
-  userId: number;
-  token: string;
-  expiresAt: Date;
-}
-const passwordResetTokens: PasswordResetToken[] = [];
-
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -134,7 +126,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const token = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + 3600000); // Token expires in 1 hour
 
-      passwordResetTokens.push({ userId: user.id, token, expiresAt });
+      await db.insert(passwordResetTokensTable).values({
+        userId: user.id,
+        token,
+        expiresAt
+      });
 
       const resetLink = `${process.env.APP_BASE_URL || 'http://localhost:5000'}/reset-password?token=${token}`;
       const emailContent = getPasswordResetEmailContent(user.name || user.username, resetLink);
@@ -160,22 +156,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const tokenEntryIndex = passwordResetTokens.findIndex(entry => entry.token === token && entry.expiresAt > new Date());
-      if (tokenEntryIndex === -1) {
+      const tokenRecords = await db.select().from(passwordResetTokensTable).where(eq(passwordResetTokensTable.token, token)).limit(1);
+      const tokenEntry = tokenRecords[0];
+      if (!tokenEntry || tokenEntry.expiresAt < new Date()) {
         return res.status(400).json({ message: "Invalid or expired password reset token" });
       }
 
-      const { userId } = passwordResetTokens[tokenEntryIndex];
-      const user = await storage.getUser(userId);
+      const user = await storage.getUser(tokenEntry.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
 
       const hashedPassword = await hashPasswordInternal(newPassword); // Use the exported hash function
-      await storage.updateUser(userId, { password: hashedPassword });
+      await storage.updateUser(tokenEntry.userId, { password: hashedPassword });
 
       // Invalidate the token after use
-      passwordResetTokens.splice(tokenEntryIndex, 1);
+      await db.delete(passwordResetTokensTable).where(eq(passwordResetTokensTable.token, token));
 
       return res.status(200).json({ message: "Password has been reset successfully" });
     } catch (error) {

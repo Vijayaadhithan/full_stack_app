@@ -173,7 +173,12 @@ export const sessions = pgTable("sessions", {
   expire: timestamp("expire", { precision: 6 }).notNull(),
 });
 
-
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
 // Update the reviews table to link with e-receipt
 export const reviews = pgTable("reviews", {
   id: serial("id").primaryKey(),
@@ -540,6 +545,9 @@ export type BlockedTimeSlotSelect = typeof blockedTimeSlots.$inferSelect;
 export const insertOrderStatusUpdateSchema = createInsertSchema(orderStatusUpdates);
 export type OrderStatusUpdateRecord = typeof orderStatusUpdates.$inferSelect;
 export type InsertOrderStatusUpdate = z.infer<typeof insertOrderStatusUpdateSchema>;
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens);
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
 
 export const Booking = z.object({
   id: z.number(),
