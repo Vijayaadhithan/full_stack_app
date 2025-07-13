@@ -7,6 +7,8 @@ import path from "path";
 import cors from "cors";
 import multer from "multer";
 import { fileURLToPath } from "url";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./swagger";
 // Import your email service here
 import { sendEmail } from "./emailService";
 
@@ -18,6 +20,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -32,7 +35,25 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Handle file uploads
+/**
+ * @openapi
+ * /api/upload:
+ *   post:
+ *     summary: Upload a file
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Upload successful
+ */
 app.post("/api/upload", upload.single("file"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded" });
@@ -43,7 +64,25 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
   });
 });
 
-// Endpoint specifically for provider QR code uploads
+/**
+ * @openapi
+ * /api/users/upload-qr:
+ *   post:
+ *     summary: Upload provider QR code
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               qr:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Upload successful
+ */
 app.post("/api/users/upload-qr", upload.single("qr"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded" });

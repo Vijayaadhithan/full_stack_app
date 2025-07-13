@@ -96,7 +96,15 @@ function requireRole(roles: string[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Endpoint to list all available API routes
+  /**
+   * @openapi
+   * /api:
+   *   get:
+   *     summary: List all API endpoints
+   *     responses:
+   *       200:
+   *         description: A JSON array of available endpoints
+   */
   app.get("/api", (req, res) => {
     const routes = app._router.stack
       .filter((r: any) => r.route && r.route.path)
