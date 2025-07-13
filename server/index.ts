@@ -10,7 +10,9 @@ import { fileURLToPath } from "url";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./swagger";
 // Import your email service here
-import { sendEmail } from "./emailService";
+//import { sendEmail } from "./emailService";
+import { startBookingExpirationJob } from "./jobs/bookingExpirationJob";
+import { startPaymentReminderJob } from "./jobs/paymentReminderJob";
 
 config();
 
@@ -94,63 +96,9 @@ app.post("/api/users/upload-qr", upload.single("qr"), (req, res) => {
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
-// Set up scheduled task to process expired bookings
-const BOOKING_EXPIRATION_CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
-const PAYMENT_REMINDER_DAYS = parseInt(process.env.PAYMENT_REMINDER_DAYS || '3');
-const PAYMENT_DISPUTE_DAYS = parseInt(process.env.PAYMENT_DISPUTE_DAYS || '7');
-
-function setupScheduledTasks() {
-  // Process expired bookings every 24 hours
-  setInterval(async () => {
-    try {
-      console.log("Running scheduled task: Processing expired bookings");
-      await dbStorage.processExpiredBookings();
-      console.log("Completed processing expired bookings");
-    } catch (error) {
-      console.error("Error processing expired bookings:", error);
-    }
-  }, BOOKING_EXPIRATION_CHECK_INTERVAL);
-
-  // Daily check for payment reminders and disputes
-  setInterval(async () => {
-    try {
-      const now = new Date();
-      const reminderCutoff = new Date(now.getTime() - PAYMENT_REMINDER_DAYS * 24 * 60 * 60 * 1000);
-      const disputeCutoff = new Date(now.getTime() - PAYMENT_DISPUTE_DAYS * 24 * 60 * 60 * 1000);
-
-      const awaiting = await dbStorage.getBookingsByStatus('awaiting_payment');
-
-      for (const b of awaiting) {
-        const updatedAt = (b as any).updatedAt ? new Date((b as any).updatedAt) : new Date();
-        if (updatedAt < disputeCutoff) {
-          await dbStorage.updateBooking(b.id, { status: 'disputed', disputeReason: 'Payment confirmation overdue.' });
-        } else if (updatedAt < reminderCutoff) {
-          const provider = await dbStorage.getService(b.serviceId!).then(s => s ? dbStorage.getUser(s.providerId!) : null);
-          if (provider && (provider as any).email) {
-            // Replace with your actual email content generator or define emailService accordingly
-            const mail = {
-              to: provider.name,
-              subject: 'Payment Pending',
-              text: `Booking #${b.id} is awaiting your payment confirmation.`
-            };
-            mail.to = provider.email;
-            await sendEmail(mail);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error running payment reminder task:', err);
-    }
-  }, BOOKING_EXPIRATION_CHECK_INTERVAL);
-
-  // Also run once at startup
-  dbStorage.processExpiredBookings()
-    .then(() => console.log("Initial expired bookings processing completed"))
-    .catch(error => console.error("Error in initial expired bookings processing:", error));
-}
-
-// Start the scheduled tasks
-setupScheduledTasks();
+// Initialize scheduled jobs
+startBookingExpirationJob(dbStorage);
+startPaymentReminderJob(dbStorage);
 
 (async () => {
   const server = await registerRoutes(app);
