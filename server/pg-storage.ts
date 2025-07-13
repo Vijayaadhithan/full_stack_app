@@ -398,13 +398,19 @@ export class PostgresStorage implements IStorage {
 
           // if (combinedData.verificationStatus === 'verified') completedFields++;
         } else if (currentUser.role === 'shop') {
-          totalProfileFields = 12; 
-          if (combinedData.name) completedFields++; 
+          totalProfileFields = 10;
+          if (combinedData.name) completedFields++;
           if (combinedData.phone) completedFields++;
           if (combinedData.email) completedFields++;
           
           // Address details (user root level)
-          if (combinedData.addressStreet && combinedData.addressCity && combinedData.addressState && combinedData.addressPostalCode && combinedData.addressCountry) {
+          if (
+            combinedData.addressStreet &&
+            combinedData.addressCity &&
+            combinedData.addressState &&
+            combinedData.addressPostalCode &&
+            combinedData.addressCountry
+          ) {
             completedFields++;
           }
           
@@ -413,16 +419,13 @@ export class PostgresStorage implements IStorage {
             if (combinedData.shopProfile.description) completedFields++;
             if (combinedData.shopProfile.businessType) completedFields++;
             
-            // Payment Details
-            if (combinedData.upiId) completedFields++;
-            if (combinedData.upiQrCodeUrl) completedFields++;
-            
-            // Working Hours
-            if (combinedData.shopProfile.workingHours && 
-                Array.isArray(combinedData.shopProfile.workingHours.days) && 
-                combinedData.shopProfile.workingHours.days.length > 0 && 
-                combinedData.shopProfile.workingHours.from && 
-                combinedData.shopProfile.workingHours.to) {
+            if (
+              combinedData.shopProfile.workingHours &&
+              Array.isArray(combinedData.shopProfile.workingHours.days) &&
+              combinedData.shopProfile.workingHours.days.length > 0 &&
+              combinedData.shopProfile.workingHours.from &&
+              combinedData.shopProfile.workingHours.to
+            ) {
               completedFields++;
             }
             
