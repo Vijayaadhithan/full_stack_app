@@ -2382,7 +2382,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Notify customer about approved return
-      const order = await storage.getOrder(returnRequest.orderId);
+      const order =
+        returnRequest.orderId !== null
+          ? await storage.getOrder(returnRequest.orderId)
+          : null;
       if (order) {
         await storage.createNotification({
           userId: order.customerId,

@@ -17,7 +17,7 @@ import {
   ShopProfile, // Added ShopProfile import
   // Ensure bookingHistory is exported from your shared schema if available.
   users, services, bookings, bookingHistory, products, orders, orderItems, reviews, notifications,
-  cart, wishlist, promotions, returns, productReviews,
+  cart, wishlist, waitlist, promotions, returns, productReviews,
   orderStatusUpdates,
   UserRole
 } from "@shared/schema";
@@ -1574,26 +1574,54 @@ const result = await db.insert(bookings).values({
 
   // STUB implementations to satisfy IStorage interface missing methods
   async getWaitlistPosition(customerId: number, serviceId: number): Promise<number> {
-    throw new Error('Method not implemented.');
+    const entries = await db
+      .select()
+      .from(waitlist)
+      .where(eq(waitlist.serviceId, serviceId))
+      .orderBy(waitlist.id);
+    const index = entries.findIndex(e => e.customerId === customerId);
+    return index === -1 ? -1 : index + 1;
   }
 
-  async createReturnRequest(returnRequest: any): Promise<any> {
-    throw new Error('Method not implemented.');
+  async createReturnRequest(returnRequest: InsertReturnRequest): Promise<ReturnRequest> {
+    const result = await db
+      .insert(returns)
+      .values({
+        ...returnRequest,
+        status: returnRequest.status as
+          | 'requested'
+          | 'approved'
+          | 'rejected'
+          | 'received'
+          | 'refunded'
+          | 'completed',
+        refundStatus: returnRequest.refundStatus as
+          | 'pending'
+          | 'processed'
+          | 'failed'
+          | null
+          | undefined,
+      })
+      .returning();
+    return result[0];
   }
 
-  async getReturnRequest(id: number): Promise<any> {
-    throw new Error('Method not implemented.');
+  async getReturnRequest(id: number): Promise<ReturnRequest | undefined> {
+    const res = await db.select().from(returns).where(eq(returns.id, id));
+    return res[0];
   }
 
-  async getReturnRequestsByOrder(orderId: number): Promise<any[]> {
-    throw new Error('Method not implemented.');
+  async getReturnRequestsByOrder(orderId: number): Promise<ReturnRequest[]> {
+    return await db.select().from(returns).where(eq(returns.orderId, orderId));
   }
 
-  async updateReturnRequest(id: number, update: any): Promise<any> {
-    throw new Error('Method not implemented.');
+  async updateReturnRequest(id: number, update: Partial<ReturnRequest>): Promise<ReturnRequest> {
+    const result = await db.update(returns).set(update).where(eq(returns.id, id)).returning();
+    if (!result[0]) throw new Error('Return request not found');
+    return result[0];
   }
 
   async deleteReturnRequest(id: number): Promise<void> {
-    throw new Error('Method not implemented.');
+    await db.delete(returns).where(eq(returns.id, id));
   }
 }

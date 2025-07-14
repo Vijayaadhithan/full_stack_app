@@ -34,7 +34,7 @@ export default function ShopReviews() {
 
   const replyMutation = useMutation({
     mutationFn: async ({ reviewId, reply }: { reviewId: number; reply: string }) => {
-      const res = await apiRequest("POST", `/api/reviews/product/${reviewId}/reply`, { reply });
+      const res = await apiRequest("POST", `/api/product-reviews/${reviewId}/reply`, { reply });
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to reply to review");

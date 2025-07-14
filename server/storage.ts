@@ -157,6 +157,7 @@ export interface IStorage {
   getReturnRequest(id: number): Promise<ReturnRequest | undefined>;
   getReturnRequestsByOrder(orderId: number): Promise<ReturnRequest[]>;
   updateReturnRequest(id: number, returnRequest: Partial<ReturnRequest>): Promise<ReturnRequest>;
+  deleteReturnRequest(id: number): Promise<void>;
   processRefund(returnRequestId: number): Promise<void>;
 
   // Enhanced notification operations
@@ -1297,6 +1298,10 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     const updated = { ...existing, ...returnRequest };
     this.returnRequests.set(id, updated);
     return updated;
+  }
+
+  async deleteReturnRequest(id: number): Promise<void> {
+    this.returnRequests.delete(id);
   }
 
   async processRefund(returnRequestId: number): Promise<void> {
