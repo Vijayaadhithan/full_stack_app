@@ -1,15 +1,16 @@
 import cron from 'node-cron';
 import type { IStorage } from '../storage';
+import logger from '../logger';
 
 export function startBookingExpirationJob(storage: IStorage) {
   const schedule = process.env.BOOKING_EXPIRATION_CRON || '0 0 * * *';
   const job = async () => {
     try {
-      console.log('Running booking expiration job');
+      logger.info('Running booking expiration job');
       await storage.processExpiredBookings();
-      console.log('Completed booking expiration job');
+      logger.info('Completed booking expiration job');
     } catch (err) {
-      console.error('Error in booking expiration job:', err);
+      logger.error('Error in booking expiration job:', err);
     }
   };
 

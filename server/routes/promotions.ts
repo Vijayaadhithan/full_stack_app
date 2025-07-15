@@ -3,6 +3,7 @@ import { z } from "zod";
 import { eq, and, gte, lte, isNull, or } from "drizzle-orm"; // Added 'or'
 import { db } from "../db";
 import { promotions, products } from "@shared/schema";
+import logger from "../logger";
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -55,7 +56,7 @@ export function registerPromotionRoutes(app: Express) {
         endDate.setDate(endDate.getDate() + expiryDays);
       }
 
-      console.log('Creating promotion with calculated dates:', {
+      logger.info('Creating promotion with calculated dates:', {
         startDate,
         endDate,
         expiryDays
@@ -75,7 +76,7 @@ export function registerPromotionRoutes(app: Express) {
 
       res.status(201).json(promotion[0]);
     } catch (error) {
-      console.error("Error creating promotion:", error);
+      logger.error("Error creating promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create promotion" });
     }
   });
@@ -87,7 +88,7 @@ export function registerPromotionRoutes(app: Express) {
       const allPromotions = await db.select().from(promotions).where(eq(promotions.shopId, shopId));
       res.json(allPromotions);
     } catch (error) {
-      console.error("Error fetching promotions:", error);
+      logger.error("Error fetching promotions:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch promotions" });
     }
   });
@@ -180,7 +181,7 @@ export function registerPromotionRoutes(app: Express) {
 
       res.json(updatedResult[0]);
     } catch (error) {
-      console.error("Error updating promotion:", error);
+      logger.error("Error updating promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update promotion" });
     }
   });
@@ -211,7 +212,7 @@ export function registerPromotionRoutes(app: Express) {
  
       res.json(updatedResult[0]);
     } catch (error) {
-      console.error("Error updating promotion status:", error);
+      logger.error("Error updating promotion status:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update promotion status" });
     }
   });
@@ -234,7 +235,7 @@ export function registerPromotionRoutes(app: Express) {
  
       res.status(200).json({ message: "Promotion deleted successfully" });
     } catch (error) {
-      console.error("Error deleting promotion:", error);
+      logger.error("Error deleting promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete promotion" });
     }
   });
@@ -268,7 +269,7 @@ export function registerPromotionRoutes(app: Express) {
 
       res.json(validPromotions);
     } catch (error) {
-      console.error("Error fetching active promotions:", error);
+      logger.error("Error fetching active promotions:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch active promotions" });
     }
   });
@@ -380,7 +381,7 @@ export function registerPromotionRoutes(app: Express) {
         finalTotal: subtotal - discountAmount
       });
     } catch (error) {
-      console.error("Error validating promotion:", error);
+      logger.error("Error validating promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to validate promotion" });
     }
   });
@@ -425,7 +426,7 @@ export function registerPromotionRoutes(app: Express) {
 
       res.json({ message: "Promotion applied successfully" });
     } catch (error) {
-      console.error("Error applying promotion:", error);
+      logger.error("Error applying promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to apply promotion" });
     }
   });

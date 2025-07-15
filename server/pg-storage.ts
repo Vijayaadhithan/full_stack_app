@@ -1,6 +1,7 @@
 import session from "express-session";
 import pgSession from "connect-pg-simple";
 import { db } from "./db";
+import logger from "./logger";
 import { sendEmail, getGenericNotificationEmailContent } from './emailService'; // Added for sending emails
 import {
   User, InsertUser,
@@ -368,7 +369,7 @@ export class PostgresStorage implements IStorage {
         let completedFields = 0;
         let totalProfileFields = 0;
         // Diagnostic logging to inspect calculation inputs
-        console.log("[updateUser] Combined data for user", id, combinedData);
+        logger.info("[updateUser] Combined data for user", id, combinedData);
         if (currentUser.role === 'customer') {
           totalProfileFields = 4; // For customer: name, phone, email, full address. Profile picture is optional.
           if (combinedData.name) completedFields++;
@@ -443,7 +444,7 @@ export class PostgresStorage implements IStorage {
           profileCompleteness = 0; // Default if role doesn't match or no fields defined
         }
         // Diagnostic logging for calculation results
-        console.log(
+        logger.info(
           `[updateUser] Fields complete: ${completedFields}/${totalProfileFields} -> ${profileCompleteness}%`
         );
       }
@@ -475,9 +476,9 @@ export class PostgresStorage implements IStorage {
   }
 
   async getService(id: number): Promise<Service | undefined> {
-    console.log("Getting service with ID:", id);
+    logger.info("Getting service with ID:", id);
     const result = await db.select().from(services).where(eq(services.id, id));
-    console.log("Found service:", result[0]);
+    logger.info("Found service:", result[0]);
     return result[0];
   }
 
@@ -788,7 +789,7 @@ const result = await db.insert(bookings).values({
       // Consider if an empty booking object (no status, no comments etc.) should even reach here.
       // Returning currentBooking if no actual data fields were provided for update.
       // If an update with only 'undefined' values was passed, this prevents an error.
-      console.warn(`[DB DEBUG] updateBooking called for ID ${id} with no actual data changes.`);
+      logger.warn(`[DB DEBUG] updateBooking called for ID ${id} with no actual data changes.`);
       // return currentBooking; // Or proceed to update just `updatedAt` if that's desired.
     }
     
@@ -798,7 +799,7 @@ const result = await db.insert(bookings).values({
         // it implies no actual change was intended or all provided fields were undefined.
         // To prevent an empty update or an update with only 'updatedAt' when no other changes are specified,
         // we can return the current booking. This behavior might need adjustment based on specific requirements.
-        console.log(`[DB DEBUG] updateBooking for ID ${id}: No effective changes provided. Returning current booking.`);
+        logger.info(`[DB DEBUG] updateBooking for ID ${id}: No effective changes provided. Returning current booking.`);
         return currentBooking;
     }
 
@@ -864,23 +865,23 @@ const result = await db.insert(bookings).values({
   }
 
   async removeProductFromAllCarts(productId: number): Promise<void> {
-    console.log(`Removing product ID ${productId} from all carts`);
+    logger.info(`Removing product ID ${productId} from all carts`);
     try {
       await db.delete(cart).where(eq(cart.productId, productId));
-      console.log(`Successfully removed product ID ${productId} from all carts`);
+      logger.info(`Successfully removed product ID ${productId} from all carts`);
     } catch (error) {
-      console.error(`Error removing product ${productId} from carts:`, error);
+      logger.error(`Error removing product ${productId} from carts:`, error);
       throw new Error(`Failed to remove product from carts: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   async removeProductFromAllWishlists(productId: number): Promise<void> {
-    console.log(`Removing product ID ${productId} from all wishlists`);
+    logger.info(`Removing product ID ${productId} from all wishlists`);
     try {
       await db.delete(wishlist).where(eq(wishlist.productId, productId));
-      console.log(`Successfully removed product ID ${productId} from all wishlists`);
+      logger.info(`Successfully removed product ID ${productId} from all wishlists`);
     } catch (error) {
-      console.error(`Error removing product ${productId} from wishlists:`, error);
+      logger.error(`Error removing product ${productId} from wishlists:`, error);
       throw new Error(`Failed to remove product from wishlists: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -900,18 +901,18 @@ const result = await db.insert(bookings).values({
         .returning();
 
       if (!result[0]) throw new Error("Product not found");
-      console.log(`Successfully marked product ID ${id} as deleted`);
+      logger.info(`Successfully marked product ID ${id} as deleted`);
     } catch (error) {
-      console.error(`Error deleting product ${id}:`, error);
+      logger.error(`Error deleting product ${id}:`, error);
       throw new Error(`Failed to delete product: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   // ─── CART OPERATIONS ─────────────────────────────────────────────
   async addToCart(customerId: number, productId: number, quantity: number): Promise<void> {
-    console.log(`Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
+    logger.info(`Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
     if (quantity <= 0) {
-      console.error(`Invalid quantity ${quantity} for product ID ${productId}`);
+      logger.error(`Invalid quantity ${quantity} for product ID ${productId}`);
       throw new Error("Quantity must be positive");
     }
 
@@ -919,32 +920,32 @@ const result = await db.insert(bookings).values({
       // Get the product being added to find its shopId
       const productToAddResult = await db.select({ shopId: products.shopId }).from(products).where(eq(products.id, productId));
       if (productToAddResult.length === 0) {
-        console.error(`Product ID ${productId} not found`);
+        logger.error(`Product ID ${productId} not found`);
         throw new Error("Product not found");
       }
       const shopIdToAdd = productToAddResult[0].shopId;
-      console.log(`Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
+      logger.info(`Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
 
       // Get current cart items for the customer
       const currentCartItems = await db.select({ productId: cart.productId }).from(cart).where(eq(cart.customerId, customerId));
-      console.log(`Customer ID ${customerId} has ${currentCartItems.length} item(s) in cart`);
+      logger.info(`Customer ID ${customerId} has ${currentCartItems.length} item(s) in cart`);
 
       if (currentCartItems.length > 0) {
         // If cart is not empty, check if the new item's shop matches the existing items' shop
         const firstCartProductId = currentCartItems[0].productId;
-        console.log(`First item in cart has product ID ${firstCartProductId}`);
+        logger.info(`First item in cart has product ID ${firstCartProductId}`);
         const firstProductResult = await db.select({ shopId: products.shopId }).from(products).where(eq(products.id, firstCartProductId!));
         
         if (firstProductResult.length > 0) {
           const existingShopId = firstProductResult[0].shopId;
-          console.log(`Existing items in cart belong to shop ID ${existingShopId}`);
+          logger.info(`Existing items in cart belong to shop ID ${existingShopId}`);
           if (shopIdToAdd !== existingShopId) {
-            console.error(`Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`);
+            logger.error(`Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`);
             throw new Error("Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.");
           }
         } else {
           // This case should ideally not happen if DB is consistent, but log it.
-          console.warn(`Could not find product details for the first item (ID: ${firstCartProductId}) in the cart for customer ${customerId}. Proceeding with caution.`);
+          logger.warn(`Could not find product details for the first item (ID: ${firstCartProductId}) in the cart for customer ${customerId}. Proceeding with caution.`);
         }
       }
 
@@ -952,20 +953,20 @@ const result = await db.insert(bookings).values({
       // First, get product stock to validate against
       const productDetails = await db.select({ stock: products.stock }).from(products).where(eq(products.id, productId)).limit(1);
       if (productDetails.length === 0) {
-        console.error(`Product ID ${productId} not found for stock validation.`);
+        logger.error(`Product ID ${productId} not found for stock validation.`);
         throw new Error("Product not found when trying to add to cart.");
       }
       const availableStock = productDetails[0].stock;
 
       if (quantity > availableStock) {
-        console.error(`Requested quantity ${quantity} for product ID ${productId} exceeds available stock ${availableStock}.`);
+        logger.error(`Requested quantity ${quantity} for product ID ${productId} exceeds available stock ${availableStock}.`);
         throw new Error(`Cannot add ${quantity} items. Only ${availableStock} left in stock.`);
       }
 
       if (quantity <= 0) {
-        console.log(`Quantity ${quantity} is zero or less for product ID ${productId}. Removing from cart for customer ID ${customerId}.`);
+        logger.info(`Quantity ${quantity} is zero or less for product ID ${productId}. Removing from cart for customer ID ${customerId}.`);
         await db.delete(cart).where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
-        console.log(`Successfully removed product ID ${productId} from cart for customer ID ${customerId} due to zero/negative quantity.`);
+        logger.info(`Successfully removed product ID ${productId} from cart for customer ID ${customerId} due to zero/negative quantity.`);
         return; // Exit after removing
       }
 
@@ -975,18 +976,18 @@ const result = await db.insert(bookings).values({
 
       if (existingCartItem.length > 0) {
         // Item exists, update its quantity (direct assignment)
-        console.log(`Updating existing cart item for customer ID ${customerId}, product ID ${productId}. New quantity: ${quantity}`);
+        logger.info(`Updating existing cart item for customer ID ${customerId}, product ID ${productId}. New quantity: ${quantity}`);
         await db.update(cart)
           .set({ quantity: quantity }) // Direct assignment
           .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
       } else {
         // Item does not exist, insert new cart item
-        console.log(`Creating new cart item for customer ID ${customerId}, product ID ${productId} with quantity ${quantity}`);
+        logger.info(`Creating new cart item for customer ID ${customerId}, product ID ${productId} with quantity ${quantity}`);
         await db.insert(cart).values({ customerId, productId, quantity });
       }
-      console.log(`Successfully added/updated product ID ${productId} with quantity ${quantity} in cart for customer ID ${customerId}`);
+      logger.info(`Successfully added/updated product ID ${productId} with quantity ${quantity} in cart for customer ID ${customerId}`);
     } catch (error) {
-      console.error(`Error in addToCart for customer ID ${customerId}, product ID ${productId}:`, error);
+      logger.error(`Error in addToCart for customer ID ${customerId}, product ID ${productId}:`, error);
       // Re-throw the original error or a new one with context
       if (error instanceof Error && error.message.startsWith("Cannot add items")) {
         throw error; // Re-throw the specific shop mismatch error
@@ -1000,10 +1001,10 @@ const result = await db.insert(bookings).values({
   }
 
   async getCart(customerId: number): Promise<{ product: Product; quantity: number }[]> {
-    console.log(`Getting cart for customer ID: ${customerId}`);
+    logger.info(`Getting cart for customer ID: ${customerId}`);
     try {
       const cartItems = await db.select().from(cart).where(eq(cart.customerId, customerId));
-      console.log(`Found ${cartItems.length} cart items for customer ID: ${customerId}`);
+      logger.info(`Found ${cartItems.length} cart items for customer ID: ${customerId}`);
       
       const result = [];
       for (const item of cartItems) {
@@ -1012,7 +1013,7 @@ const result = await db.insert(bookings).values({
           result.push({ product: productResult[0], quantity: item.quantity });
         } else {
           // If product doesn't exist or is deleted, remove it from cart if productId is not null
-          console.log(`Removing non-existent or deleted product ID ${item.productId} from cart`);
+          logger.info(`Removing non-existent or deleted product ID ${item.productId} from cart`);
           if (item.productId !== null) {
             await this.removeFromCart(customerId, item.productId);
           }
@@ -1020,7 +1021,7 @@ const result = await db.insert(bookings).values({
       }
       return result;
     } catch (error) {
-      console.error(`Error getting cart for customer ID ${customerId}:`, error);
+      logger.error(`Error getting cart for customer ID ${customerId}:`, error);
       return [];
     }
   }
@@ -1189,7 +1190,7 @@ const result = await db.insert(bookings).values({
           });
         }
       } catch (emailError) {
-        console.error(`Error sending critical notification email for notification ID ${newNotification.id}:`, emailError);
+        logger.error(`Error sending critical notification email for notification ID ${newNotification.id}:`, emailError);
         // Do not let email failure prevent notification creation
       }
     }
@@ -1487,7 +1488,7 @@ const result = await db.insert(bookings).values({
 
   // ─── ENHANCED NOTIFICATION & ORDER TRACKING ───────────────────────
   async sendSMSNotification(phone: string, message: string): Promise<void> {
-    console.log(`SMS to ${phone}: ${message}`);
+    logger.info(`SMS to ${phone}: ${message}`);
   }
 
   async sendEmailNotification(emailAddress: string, subject: string, message: string, userName?: string): Promise<void> {
@@ -1501,9 +1502,9 @@ const result = await db.insert(bookings).values({
         text: emailContent.text,
         html: emailContent.html,
       });
-      console.log(`Email notification sent to ${emailAddress} with subject "${subject}"`);
+      logger.info(`Email notification sent to ${emailAddress} with subject "${subject}"`);
     } catch (error) {
-      console.error(`Failed to send email notification to ${emailAddress}:`, error);
+      logger.error(`Failed to send email notification to ${emailAddress}:`, error);
       // Optionally, rethrow or handle as per application's error handling strategy
     }
   }
@@ -1561,7 +1562,7 @@ const result = await db.insert(bookings).values({
     hours: { start: string; end: string };
     breaks: { start: string; end: string }[];
   }): Promise<void> {
-    console.log(`Updated availability for provider ${providerId}`);
+    logger.info(`Updated availability for provider ${providerId}`);
   }
 
   async getProviderAvailability(providerId: number): Promise<{

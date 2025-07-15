@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import type { IStorage } from '../storage';
 import { sendEmail } from '../emailService';
+import logger from '../logger';
 
 export function startPaymentReminderJob(storage: IStorage) {
   const schedule = process.env.PAYMENT_REMINDER_CRON || '0 1 * * *';
@@ -33,7 +34,7 @@ export function startPaymentReminderJob(storage: IStorage) {
         }
       }
     } catch (err) {
-      console.error('Error running payment reminder job:', err);
+      logger.error('Error running payment reminder job:', err);
     }
   };
 

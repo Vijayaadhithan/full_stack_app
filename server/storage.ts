@@ -1,5 +1,6 @@
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import logger from "./logger";
 import {
   User, InsertUser,
   Service, InsertService,
@@ -263,7 +264,7 @@ export class MemStorage implements IStorage {
     // Check if user exists
     if (!this.users.has(userId)) {
       // Optionally, throw an error or return if user not found
-      console.warn(`[MemStorage] User with ID ${userId} not found for deletion.`);
+      logger.warn(`[MemStorage] User with ID ${userId} not found for deletion.`);
       return;
     }
 
@@ -379,7 +380,7 @@ export class MemStorage implements IStorage {
     // Finally, delete the user
     this.users.delete(userId);
 
-    console.log(`[MemStorage] User ${userId} and all associated data deleted.`);
+    logger.info(`[MemStorage] User ${userId} and all associated data deleted.`);
   }
   getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]> {
     throw new Error("Method not implemented.");
@@ -416,9 +417,9 @@ export class MemStorage implements IStorage {
 
   // User operations
   async getUser(id: number): Promise<User | undefined> {
-    console.log("[Storage] getUser - Looking for user with ID:", id);
+    logger.info("[Storage] getUser - Looking for user with ID:", id);
     const user = this.users.get(id);
-    console.log("[Storage] getUser - Found user:", user);
+    logger.info("[Storage] getUser - Found user:", user);
     return user;
   }
 
@@ -575,10 +576,10 @@ export class MemStorage implements IStorage {
   }
 
   async getService(id: number): Promise<Service | undefined> {
-    console.log("[Storage] getService - Looking for service with ID:", id);
-    console.log("[Storage] getService - Available services:", Array.from(this.services.entries()));
+    logger.info("[Storage] getService - Looking for service with ID:", id);
+    logger.info("[Storage] getService - Available services:", Array.from(this.services.entries()));
     const service = this.services.get(id);
-    console.log("[Storage] getService - Found service:", service);
+    logger.info("[Storage] getService - Found service:", service);
     return service;
   }
 
@@ -797,45 +798,45 @@ return {
 
   // Cart operations
   async addToCart(customerId: number, productId: number, quantity: number): Promise<void> {
-    console.log(`[MemStorage] Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
+    logger.info(`[MemStorage] Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
     if (quantity <= 0) {
-      console.error(`[MemStorage] Invalid quantity ${quantity} for product ID ${productId}`);
+      logger.error(`[MemStorage] Invalid quantity ${quantity} for product ID ${productId}`);
       throw new Error("Quantity must be positive");
     }
 
     // Get the product being added to find its shopId
     const productToAdd = this.products.get(productId);
     if (!productToAdd) {
-      console.error(`[MemStorage] Product ID ${productId} not found`);
+      logger.error(`[MemStorage] Product ID ${productId} not found`);
       throw new Error("Product not found");
     }
     const shopIdToAdd = productToAdd.shopId;
-    console.log(`[MemStorage] Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
+    logger.info(`[MemStorage] Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
 
     // Get current cart items
     const customerCart = this.cart.get(customerId);
 
     if (customerCart && customerCart.size > 0) {
-      console.log(`[MemStorage] Customer ID ${customerId} has ${customerCart.size} item(s) in cart`);
+      logger.info(`[MemStorage] Customer ID ${customerId} has ${customerCart.size} item(s) in cart`);
       // If cart is not empty, check if the new item's shop matches the existing items' shop
       const firstCartEntry = customerCart.entries().next().value; // Get the first [productId, quantity] pair
       const firstProductId = firstCartEntry ? firstCartEntry[0] : null;
       if (firstProductId === null) {
         throw new Error("Unexpected empty cart encountered.");
       }
-      console.log(`[MemStorage] First item in cart has product ID ${firstProductId}`);
+      logger.info(`[MemStorage] First item in cart has product ID ${firstProductId}`);
       const firstProduct = this.products.get(firstProductId);
 
       if (firstProduct) {
         const existingShopId = firstProduct.shopId;
-        console.log(`[MemStorage] Existing items in cart belong to shop ID ${existingShopId}`);
+        logger.info(`[MemStorage] Existing items in cart belong to shop ID ${existingShopId}`);
         if (shopIdToAdd !== existingShopId) {
-          console.error(`[MemStorage] Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`);
+          logger.error(`[MemStorage] Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`);
           throw new Error("Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.");
         }
       } else {
         // This case should ideally not happen if data is consistent, but log it.
-        console.warn(`[MemStorage] Could not find product details for the first item (ID: ${firstProductId}) in the cart for customer ${customerId}. Proceeding with caution.`);
+        logger.warn(`[MemStorage] Could not find product details for the first item (ID: ${firstProductId}) in the cart for customer ${customerId}. Proceeding with caution.`);
       }
     }
 
@@ -848,9 +849,9 @@ return {
     // Proceed with adding or updating the cart item
     const existingQuantity = updatedCustomerCart.get(productId) || 0;
     const newQuantity = existingQuantity + quantity;
-    console.log(`[MemStorage] Setting quantity for product ID ${productId} to ${newQuantity} for customer ID ${customerId}`);
+    logger.info(`[MemStorage] Setting quantity for product ID ${productId} to ${newQuantity} for customer ID ${customerId}`);
     updatedCustomerCart.set(productId, newQuantity);
-    console.log(`[MemStorage] Successfully added/updated product ID ${productId} in cart for customer ID ${customerId}`);
+    logger.info(`[MemStorage] Successfully added/updated product ID ${productId} in cart for customer ID ${customerId}`);
   }
 
   async removeFromCart(customerId: number, productId: number): Promise<void> {
@@ -1316,12 +1317,12 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
   // Enhanced notification operations
   async sendSMSNotification(phone: string, message: string): Promise<void> {
     // In a real implementation, this would integrate with an SMS service
-    console.log(`SMS to ${phone}: ${message}`);
+    logger.info(`SMS to ${phone}: ${message}`);
   }
 
   async sendEmailNotification(email: string, subject: string, message: string): Promise<void> {
     // In a real implementation, this would integrate with an email service
-    console.log(`Email to ${email}: ${subject} - ${message}`);
+    logger.info(`Email to ${email}: ${subject} - ${message}`);
   }
 
   // Enhanced order tracking
@@ -1563,7 +1564,7 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
       totalReviews: 0
     });
 
-    console.log("Created provider:", provider);
+    logger.info("Created provider:", provider);
 
     // Create sample services
     const services = [
@@ -1619,7 +1620,7 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     const createdServices = [];
     for (const service of services) {
       const createdService = await this.createService(service);
-      console.log("Created service:", createdService);
+      logger.info("Created service:", createdService);
       createdServices.push(createdService);
     }
 

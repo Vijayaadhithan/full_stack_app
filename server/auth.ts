@@ -3,6 +3,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Express } from "express";
 import session from "express-session";
+import logger from "./logger";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
@@ -23,7 +24,7 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-  console.warn("Google OAuth credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) are not set. Google Sign-In will not work.");
+  logger.warn("Google OAuth credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) are not set. Google Sign-In will not work.");
 }
 
 declare global {
@@ -85,27 +86,27 @@ export function setupAuth(app: Express) {
         async (req: any, accessToken: string, refreshToken: string, profile: any, done: any) => { // req added for role selection
           // Check if the profile, profile.id, or profile.emails are undefined or empty
           if (!profile || !profile.id || !profile.emails || profile.emails.length === 0 || !profile.emails[0].value) {
-            console.log('[Google OAuth] Profile data is incomplete or user backed out. Failing authentication.');
+            logger.info('[Google OAuth] Profile data is incomplete or user backed out. Failing authentication.');
             // Signal authentication failure. This should trigger the failureRedirect.
             return done(null, false, { message: 'Google profile data incomplete or authentication aborted by user.' });
           }
-          console.log('[Google OAuth] Received profile:', JSON.stringify(profile, null, 2)); // Log entire profile
+          logger.info(`[Google OAuth] Received profile for ${profile.id}`);
           try {
-            console.log(`[Google OAuth] Attempting to find user by Google ID: ${profile.id}`);
+            logger.info(`[Google OAuth] Attempting to find user by Google ID: ${profile.id}`);
             let user = await storage.getUserByGoogleId(profile.id);
-            console.log('[Google OAuth] User found by Google ID:', user ? JSON.stringify(user, null, 2) : 'null');
+            logger.info('[Google OAuth] User found by Google ID:', user ? user.id : 'null');
             if (user) {
               return done(null, user);
             }
 
             if (profile.emails && profile.emails.length > 0) {
               const email = profile.emails[0].value;
-              console.log(`[Google OAuth] Attempting to find user by email: ${email}`);
+              logger.info(`[Google OAuth] Attempting to find user by email: ${email}`);
               user = await storage.getUserByEmail(email);
-              console.log('[Google OAuth] User found by email:', user ? JSON.stringify(user, null, 2) : 'null');
+              logger.info('[Google OAuth] User found by email:', user ? user.id : 'null');
               if (user) {
                 // Link Google ID to existing user
-                console.log(`[Google OAuth] Linking Google ID ${profile.id} to existing user ${user.id} with email ${email}`);
+                logger.info(`[Google OAuth] Linking Google ID ${profile.id} to existing user ${user.id} with email ${email}`);
                 user.googleId = profile.id;
                 // Potentially mark email as verified if Google says so
                 // user.emailVerified = profile.emails[0].verified;
@@ -115,7 +116,7 @@ export function setupAuth(app: Express) {
             }
             
             // Create new user
-            console.log('[Google OAuth] No existing user found by Google ID or email. Proceeding to create a new user.');
+            logger.info('[Google OAuth] No existing user found by Google ID or email. Proceeding to create a new user.');
             const signupRoleFromSession = req.session.signupRole;
             if (req.session.signupRole) {
               delete req.session.signupRole; // Clean up session
@@ -130,22 +131,22 @@ export function setupAuth(app: Express) {
               profilePicture: profile.photos?.[0].value,
               googleId: profile.id,
             };
-            console.log('[Google OAuth] New user data before username check:', JSON.stringify(newUser, null, 2));
+            logger.info(`[Google OAuth] New user data before username check for ${newUser.username}`);
 
             // Check if username already exists, if so, append a random string or handle differently
             let existingUserWithUsername = await storage.getUserByUsername(newUser.username);
             let attempt = 0;
             while (existingUserWithUsername && attempt < 5) {
-              console.log(`[Google OAuth] Username ${newUser.username} already exists. Attempting to generate a new one.`);
+              logger.info(`[Google OAuth] Username ${newUser.username} already exists. Attempting to generate a new one.`);
               newUser.username = `${profile.displayName || profile.id}_${randomBytes(3).toString('hex')}`;
               existingUserWithUsername = await storage.getUserByUsername(newUser.username);
               attempt++;
             }
             if (existingUserWithUsername) {
-              console.error(`[Google OAuth] Failed to generate a unique username for ${profile.displayName || profile.id} after several attempts.`);
+              logger.error(`[Google OAuth] Failed to generate a unique username for ${profile.displayName || profile.id} after several attempts.`);
               return done(new Error("Failed to generate a unique username after several attempts."));
             }
-            console.log(`[Google OAuth] Final username for new user: ${newUser.username}`);
+            logger.info(`[Google OAuth] Final username for new user: ${newUser.username}`);
 
             // Since password is required by schema, generate a random one or handle differently
             // For now, we'll skip creating user if password cannot be set or is not needed for Google-only auth
@@ -160,9 +161,9 @@ export function setupAuth(app: Express) {
               averageRating: "0",
               totalReviews: 0,
             };
-            console.log('[Google OAuth] Creating user with data:', JSON.stringify(userToCreate, null, 2));
+            logger.info('[Google OAuth] Creating user');
             const createdUser = await storage.createUser(userToCreate);
-            console.log('[Google OAuth] Successfully created new user:', JSON.stringify(createdUser, null, 2));
+            logger.info('[Google OAuth] Successfully created new user:', createdUser.id);
 
             // Send welcome email (no verification link needed as Google verifies email)
             const emailContent = getWelcomeEmailContent(createdUser.name || createdUser.username);
@@ -175,7 +176,7 @@ export function setupAuth(app: Express) {
 
             return done(null, createdUser);
           } catch (err) {
-            console.error('[Google OAuth] Error during Google authentication:', err);
+            logger.error('[Google OAuth] Error during Google authentication:', err);
             return done(err);
           }
         },
@@ -260,7 +261,7 @@ app.get("/api/verify-email", async (req, res) => {
       return res.status(400).send("Invalid or expired verification link.");
     }
   } catch (error) {
-    console.error("Email verification error:", error);
+    logger.error("Email verification error:", error);
     return res.status(500).send("Error verifying email.");
   }
 });
@@ -293,7 +294,7 @@ app.get("/api/verify-email", async (req, res) => {
       } else {
         // Default to 'customer' or handle invalid/missing role as an error
         req.session.signupRole = "customer"; 
-        console.log(`[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: ${req.query.role}`);
+        logger.info(`[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: ${req.query.role}`);
       }
       passport.authenticate("google", { scope: ["profile", "email"] })(req, res, next);
     });
@@ -308,7 +309,7 @@ app.get("/api/verify-email", async (req, res) => {
       (req, res) => {
         // Successful authentication, redirect home or to a specific page.
         // req.user is available here
-        console.log('[Google OAuth] Authentication successful, redirecting user');
+        logger.info('[Google OAuth] Authentication successful, redirecting user');
         const redirectUrl = req.session.returnTo || `/${req.user?.role || 'customer'}`;
         delete req.session.returnTo;
         res.redirect(redirectUrl);
@@ -335,7 +336,7 @@ app.get("/api/verify-email", async (req, res) => {
         });
       });
     } catch (error) {
-      console.error("Error deleting user account:", error);
+      logger.error("Error deleting user account:", error);
       res.status(500).json({ message: "Failed to delete account." });
     }
   });

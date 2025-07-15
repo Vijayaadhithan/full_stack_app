@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
 import { OAuth2Client } from 'google-auth-library';
+import logger from './logger';
 
 const GMAIL_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GMAIL_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -8,7 +9,7 @@ const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
 const EMAIL_SENDER = process.env.EMAIL_SENDER;
 
 if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN || !EMAIL_SENDER) {
-  console.error('Missing Gmail API credentials or sender email in environment variables. Email functionality will be disabled.');
+  logger.error('Missing Gmail API credentials or sender email in environment variables. Email functionality will be disabled.');
   // Optionally, throw an error to prevent the application from starting without email capabilities
   // throw new Error('Missing Gmail API credentials or sender email.');
 }
@@ -25,7 +26,7 @@ if (GMAIL_REFRESH_TOKEN) {
 
 async function createTransporter() {
   if (!GMAIL_REFRESH_TOKEN) {
-    console.warn('Gmail refresh token is not set. Email sending will likely fail.');
+    logger.warn('Gmail refresh token is not set. Email sending will likely fail.');
     // Fallback or throw error if you don't want to proceed without a refresh token
     return null;
   }
@@ -50,7 +51,7 @@ async function createTransporter() {
       },
     });
   } catch (error) {
-    console.error('Error creating Nodemailer transporter:', error);
+    logger.error('Error creating Nodemailer transporter:', error);
     return null;
   }
 }
@@ -64,13 +65,13 @@ interface MailOptions {
 
 export async function sendEmail(mailOptions: MailOptions): Promise<boolean> {
   if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN || !EMAIL_SENDER) {
-    console.error('Cannot send email due to missing Gmail API credentials or sender email.');
+    logger.error('Cannot send email due to missing Gmail API credentials or sender email.');
     return false;
   }
 
   const transporter = await createTransporter();
   if (!transporter) {
-    console.error('Failed to create email transporter. Email not sent.');
+    logger.error('Failed to create email transporter. Email not sent.');
     return false;
   }
 
@@ -79,10 +80,10 @@ export async function sendEmail(mailOptions: MailOptions): Promise<boolean> {
       from: `"IndianBudgetTracker" <${EMAIL_SENDER}>`,
       ...mailOptions,
     });
-    console.log(`Email sent to ${mailOptions.to} with subject "${mailOptions.subject}"`);
+    logger.info(`Email sent to ${mailOptions.to} with subject "${mailOptions.subject}"`);
     return true;
   } catch (error) {
-    console.error('Error sending email:', error);
+    logger.error('Error sending email:', error);
     return false;
   }
 }

@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import logger from "./logger";
 import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
 import { 
   sendEmail, 
@@ -49,13 +50,13 @@ function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null
   try {
     // Validate date format (YYYY-MM-DD)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      console.error("Invalid date format. Expected YYYY-MM-DD");
+      logger.error("Invalid date format. Expected YYYY-MM-DD");
       return null;
     }
     
     // Validate time format (HH:MM)
     if (!/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(timeStr)) {
-      console.error("Invalid time format. Expected HH:MM");
+      logger.error("Invalid time format. Expected HH:MM");
       return null;
     }
     
@@ -68,13 +69,13 @@ function validateAndParseDateTime(dateStr: string, timeStr: string): Date | null
     
     // Check if date is valid
     if (isNaN(date.getTime())) {
-      console.error("Invalid date/time combination");
+      logger.error("Invalid date/time combination");
       return null;
     }
     
     return date;
   } catch (error) {
-    console.error("Error parsing date/time:", error);
+    logger.error("Error parsing date/time:", error);
     return null;
   }
 }
@@ -127,7 +128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUserByEmail(email);
       if (!user) {
         // Important: Don't reveal if the email exists or not for security reasons
-        console.log(`Password reset requested for non-existent email: ${email}`);
+        logger.info(`Password reset requested for non-existent email: ${email}`);
         return res.status(200).json({ message: "If an account with that email exists, a password reset link has been sent." });
       }
 
@@ -152,7 +153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       return res.status(200).json({ message: "If an account with that email exists, a password reset link has been sent." });
     } catch (error) {
-      console.error("Error requesting password reset:", error);
+      logger.error("Error requesting password reset:", error);
       return res.status(500).json({ message: "Error processing password reset request" });
     }
   });
@@ -183,7 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       return res.status(200).json({ message: "Password has been reset successfully" });
     } catch (error) {
-      console.error("Error resetting password:", error);
+      logger.error("Error resetting password:", error);
       return res.status(500).json({ message: "Error resetting password" });
     }
   });
@@ -230,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
 
     } catch (error) {
-      console.error("Error fetching pending bookings:", error);
+      logger.error("Error fetching pending bookings:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch pending bookings" });
     }
   });
@@ -243,17 +244,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status, comments, bookingDate, changedBy } = req.body;
       const currentUser = req.user!;
 
-      console.log(`[API] Attempting to update booking ${bookingId} with data:`, req.body);
+      logger.info(`[API] Attempting to update booking ${bookingId}`);
 
       const booking = await storage.getBooking(bookingId);
       if (!booking) {
-        console.log(`[API] Booking ${bookingId} not found.`);
+        logger.info(`[API] Booking ${bookingId} not found.`);
         return res.status(404).json({ message: "Booking not found" });
       }
 
       const service = await storage.getService(booking.serviceId!);
       if (!service) {
-        console.log(`[API] Service ${booking.serviceId} for booking ${bookingId} not found.`);
+        logger.info(`[API] Service ${booking.serviceId} for booking ${bookingId} not found.`);
         return res.status(404).json({ message: "Service not found for this booking" });
       }
 
@@ -263,7 +264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Scenario 1: Customer reschedules
       if (bookingDate && currentUser.role === "customer" && booking.customerId === currentUser.id) {
-        console.log(`[API] Customer ${currentUser.id} rescheduling booking ${bookingId} to ${bookingDate}`);
+        logger.info(`[API] Customer ${currentUser.id} rescheduling booking ${bookingId} to ${bookingDate}`);
         const originalBookingDate = booking.bookingDate; // Capture original booking date
         updatedBookingData = {
           bookingDate: new Date(bookingDate),
@@ -294,14 +295,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 bookingId: bookingId.toString(),
                 loginUrl: `${process.env.APP_BASE_URL}/login`,
                 bookingDetailsUrl: `${process.env.APP_BASE_URL}/provider/bookings`
-              }).then(() => {}).catch((err: unknown) => console.error("[API] Failed to send reschedule request email to provider:", err));
+              }).then(() => {}).catch((err: unknown) => logger.error("[API] Failed to send reschedule request email to provider:", err));
             }
           }
         }
       }
       // Scenario 2: Provider reschedules
       else if (bookingDate && currentUser.role === "provider" && service.providerId === currentUser.id) {
-        console.log(`[API] Provider ${currentUser.id} rescheduling booking ${bookingId} to ${bookingDate}`);
+        logger.info(`[API] Provider ${currentUser.id} rescheduling booking ${bookingId} to ${bookingDate}`);
         const originalBookingDate = booking.bookingDate; // Capture original booking date
         updatedBookingData = {
           bookingDate: new Date(bookingDate),
@@ -333,14 +334,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 comments: comments || undefined,
                 loginUrl: `${process.env.BASE_URL}/login`,
                 bookingDetailsUrl: `${process.env.BASE_URL}/customer/bookings` 
-              }).then(() => {}).catch((err: unknown) => console.error("[API] Failed to send reschedule by provider email to customer:", err));
+             }).then(() => {}).catch((err: unknown) => logger.error("[API] Failed to send reschedule by provider email to customer:", err));
             }
           }
         }
       }
       // Scenario 3: Provider accepts/rejects a booking (including a customer's reschedule request)
       else if (status && currentUser.role === "provider" && service.providerId === currentUser.id) {
-        console.log(`[API] Provider ${currentUser.id} updating booking ${bookingId} status to ${status}`);
+        logger.info(`[API] Provider ${currentUser.id} updating booking ${bookingId} status to ${status}`);
         updatedBookingData = {
           status,
           comments: comments || (status === "accepted" ? "Booking confirmed" : "Booking rejected"),
@@ -385,14 +386,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 subject: emailSubject,
                 loginUrl: `${process.env.BASE_URL}/login`,
                 bookingDetailsUrl: `${process.env.BASE_URL}/customer/bookings`
-              }).then(() => {}).catch((err: unknown) => console.error("[API] Failed to send booking update email to customer:", err));
+              }).then(() => {}).catch((err: unknown) => logger.error("[API] Failed to send booking update email to customer:", err));
             }
           }
         }
       } 
       // Scenario 3: Customer cancels (can be expanded)
       else if (status === "cancelled" && currentUser.role === "customer" && booking.customerId === currentUser.id) {
-        console.log(`[API] Customer ${currentUser.id} cancelling booking ${bookingId}`);
+        logger.info(`[API] Customer ${currentUser.id} cancelling booking ${bookingId}`);
         updatedBookingData = {
             status: "cancelled",
             comments: comments || "Cancelled by customer",
@@ -417,7 +418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
         }
       } else {
-        console.log(`[API] Unauthorized or invalid action for booking ${bookingId} by user ${currentUser.id} with role ${currentUser.role}. Booking owner: ${booking.customerId}, Service provider: ${service.providerId}`);
+        logger.info(`[API] Unauthorized or invalid action for booking ${bookingId} by user ${currentUser.id} with role ${currentUser.role}. Booking owner: ${booking.customerId}, Service provider: ${service.providerId}`);
         return res.status(403).json({ message: "Unauthorized or invalid action specified" });
       }
 
@@ -425,11 +426,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await Promise.all(notificationPromises);
       await emailPromise; // Wait for email to be processed
       
-      console.log(`[API] Successfully updated booking ${bookingId}:`, finalUpdatedBooking);
+      logger.info(`[API] Successfully updated booking ${bookingId}:`, finalUpdatedBooking);
       res.json(finalUpdatedBooking);
 
     } catch (error) {
-      console.error(`[API] Error updating booking ${req.params.id}:`, error);
+      logger.error(`[API] Error updating booking ${req.params.id}:`, error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update booking" });
     }
   });
@@ -481,7 +482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(bookingsWithDetails); // Send the response back
     } catch (error) {
-      console.error("Error fetching booking requests:", error);
+      logger.error("Error fetching booking requests:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking requests" });
     }
   });
@@ -534,7 +535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
 
     } catch (error) {
-      console.error("Error fetching booking history:", error);
+      logger.error("Error fetching booking history:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking history" });
     }
   });
@@ -581,7 +582,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
 
     } catch (error) {
-      console.error("Error fetching booking history:", error);
+      logger.error("Error fetching booking history:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch booking history" });
     }
   });
@@ -592,7 +593,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.processExpiredBookings();
       res.json({ message: "Expired bookings processed successfully" });
     } catch (error) {
-      console.error("Error processing expired bookings:", error);
+      logger.error("Error processing expired bookings:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to process expired bookings" });
     }
   });
@@ -611,7 +612,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await storage.updateBooking(bookingId, { status: 'disputed', disputeReason: reason });
       res.json({ booking: updated });
     } catch (error) {
-      console.error('Error reporting dispute:', error);
+      logger.error('Error reporting dispute:', error);
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to report dispute' });
     }
   });
@@ -628,7 +629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await storage.updateBooking(bookingId, { status: resolutionStatus });
       res.json({ booking: updated });
     } catch (error) {
-      console.error('Error resolving dispute:', error);
+      logger.error('Error resolving dispute:', error);
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to resolve dispute' });
     }
   });
@@ -639,7 +640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const disputes = await storage.getBookingsByStatus('disputed');
       res.json(disputes);
     } catch (error) {
-      console.error('Error fetching disputes:', error);
+      logger.error('Error fetching disputes:', error);
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to fetch disputes' });
     }
   });
@@ -708,7 +709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.user) Object.assign(req.user, updatedUser);
       res.json(updatedUser);
     } catch (error) {
-      console.error("Error updating user:", error);
+      logger.error("Error updating user:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update user" });
     }
   });
@@ -726,7 +727,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(shops);
     } catch (error) {
-      console.error("Error fetching shops:", error);
+      logger.error("Error fetching shops:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch shops" });
     }
   });
@@ -735,25 +736,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users/:id", requireAuth, async (req, res) => {
     try {
       const userId = parseInt(req.params.id);
-      console.log("[API] /api/users/:id - Received request for user ID:", userId);
-      console.log("[API] /api/users/:id - Raw ID parameter:", req.params.id);
+      logger.info("[API] /api/users/:id - Received request for user ID:", userId);
+      logger.info("[API] /api/users/:id - Raw ID parameter:", req.params.id);
       
       if (isNaN(userId)) {
-        console.log("[API] /api/users/:id - Invalid user ID format");
+        logger.info("[API] /api/users/:id - Invalid user ID format");
         return res.status(400).json({ message: "Invalid user ID format" });
       }
       
       const user = await storage.getUser(userId);
-      console.log("[API] /api/users/:id - User from storage:", user);
+      logger.info("[API] /api/users/:id - User from storage:", user);
       
       if (!user) {
-        console.log("[API] /api/users/:id - User not found");
+        logger.info("[API] /api/users/:id - User not found");
         return res.status(404).json({ message: "User not found" });
       }
       
       res.json(user);
     } catch (error) {
-      console.error("[API] Error in /api/users/:id:", error);
+      logger.error("[API] Error in /api/users/:id:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch user" });
     }
   });
@@ -769,10 +770,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shopId: req.user!.id,
       });
 
-      console.log("Created product:", product);
+      logger.info("Created product:", product);
       res.status(201).json(product);
     } catch (error) {
-      console.error("Error creating product:", error);
+      logger.error("Error creating product:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create product" });
     }
   });
@@ -780,10 +781,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/products/shop/:id", requireAuth, async (req, res) => {
     try {
       const products = await storage.getProductsByShop(parseInt(req.params.id));
-      console.log("Shop products:", products);
+      logger.info("Shop products:", products);
       res.json(products);
     } catch (error) {
-      console.error("Error fetching shop products:", error);
+      logger.error("Error fetching shop products:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch products" });
     }
   });
@@ -821,10 +822,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // The storage.updateProduct method expects Partial<Product>
       const updatedProduct = await storage.updateProduct(productId, updateData);
-      console.log("[API] /api/products/:id PATCH - Updated product:", updatedProduct);
+      logger.info("[API] /api/products/:id PATCH - Updated product:", updatedProduct);
       res.json(updatedProduct);
     } catch (error) {
-      console.error("[API] Error in /api/products/:id PATCH:", error);
+      logger.error("[API] Error in /api/products/:id PATCH:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update product" });
     }
   });
@@ -838,7 +839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const result = serviceSchemaWithLocation.safeParse(req.body);
       if (!result.success) {
-        console.error("[API] /api/services POST - Validation error:", result.error.flatten());
+        logger.error("[API] /api/services POST - Validation error:", result.error.flatten());
         return res.status(400).json(result.error.flatten());
       }
 
@@ -849,10 +850,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       const service = await storage.createService(serviceData);
 
-      console.log("Created service:", service);
+      logger.info("Created service:", service);
       res.status(201).json(service);
     } catch (error) {
-      console.error("Error creating service:", error);
+      logger.error("Error creating service:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create service" });
     }
   });
@@ -860,10 +861,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/services/provider/:id", requireAuth, async (req, res) => {
     try {
       const services = await storage.getServicesByProvider(parseInt(req.params.id));
-      console.log("Provider services:", services); // Debug log
+      logger.info("Provider services:", services); // Debug log
       res.json(services);
     } catch (error) {
-      console.error("Error fetching provider services:", error);
+      logger.error("Error fetching provider services:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch services" });
     }
   });
@@ -872,31 +873,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/services/:id", requireAuth, requireRole(["provider"]), async (req, res) => {
     try {
       const serviceId = parseInt(req.params.id);
-      console.log("[API] /api/services/:id PATCH - Received request for service ID:", serviceId);
-      console.log("[API] /api/services/:id PATCH - Request body:", req.body);
+      logger.info("[API] /api/services/:id PATCH - Received request for service ID:", serviceId);
+      logger.info("[API] /api/services/:id PATCH - Request received");
       
       if (isNaN(serviceId)) {
-        console.log("[API] /api/services/:id PATCH - Invalid service ID format");
+        logger.info("[API] /api/services/:id PATCH - Invalid service ID format");
         return res.status(400).json({ message: "Invalid service ID format" });
       }
       
       const service = await storage.getService(serviceId);
       
       if (!service) {
-        console.log("[API] /api/services/:id PATCH - Service not found");
+        logger.info("[API] /api/services/:id PATCH - Service not found");
         return res.status(404).json({ message: "Service not found" });
       }
       
       if (service.providerId !== req.user!.id) {
-        console.log("[API] /api/services/:id PATCH - Not authorized");
+        logger.info("[API] /api/services/:id PATCH - Not authorized");
         return res.status(403).json({ message: "Can only update own services" });
       }
       
       const updatedService = await storage.updateService(serviceId, req.body);
-      console.log("[API] /api/services/:id PATCH - Updated service:", updatedService);
+      logger.info("[API] /api/services/:id PATCH - Updated service:", updatedService);
       res.json(updatedService);
     } catch (error) {
-      console.error("[API] Error updating service:", error);
+      logger.error("[API] Error updating service:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update service" });
     }
   });
@@ -927,7 +928,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (availabilityDate) filters.availabilityDate = String(availabilityDate); // Will be parsed in storage layer
 
       const services = await storage.getServices(filters);
-      console.log("Filtered services:", services); // Debug log
+      logger.info("Filtered services:", services); // Debug log
 
       // Map through services to include provider info and rating
       const servicesWithDetails = await Promise.all(services.map(async (service) => {
@@ -956,7 +957,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(servicesWithDetails);
     } catch (error) {
-      console.error("Error fetching services:", error);
+      logger.error("Error fetching services:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch services" });
     }
   });
@@ -964,28 +965,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/services/:id", requireAuth, async (req, res) => {
     try {
       const serviceId = parseInt(req.params.id);
-      console.log("[API] /api/services/:id - Received request for service ID:", serviceId);
-      console.log("[API] /api/services/:id - Raw ID parameter:", req.params.id);
+      logger.info("[API] /api/services/:id - Received request for service ID:", serviceId);
+      logger.info("[API] /api/services/:id - Raw ID parameter:", req.params.id);
 
       if (isNaN(serviceId)) {
-        console.log("[API] /api/services/:id - Invalid service ID format");
+        logger.info("[API] /api/services/:id - Invalid service ID format");
         return res.status(400).json({ message: "Invalid service ID format" });
       }
 
       const service = await storage.getService(serviceId);
-      console.log("[API] /api/services/:id - Service from storage:", service);
+      logger.info("[API] /api/services/:id - Service from storage:", service);
 
       if (!service) {
-        console.log("[API] /api/services/:id - Service not found in storage");
+        logger.info("[API] /api/services/:id - Service not found in storage");
         return res.status(404).json({ message: "Service not found" });
       }
 
       // Get the provider details
       const provider = service.providerId !== null ? await storage.getUser(service.providerId) : null;
-      console.log("[API] /api/services/:id - Provider details:", provider);
+      logger.info("[API] /api/services/:id - Provider details:", provider);
 
       if (!provider) {
-        console.log("[API] /api/services/:id - Provider not found");
+        logger.info("[API] /api/services/:id - Provider not found");
         return res.status(404).json({ message: "Service provider not found" });
       }
 
@@ -1016,10 +1017,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reviews: reviews || []
       };
 
-      console.log("[API] /api/services/:id - Sending response data:", responseData);
+      logger.info("[API] /api/services/:id - Sending response data:", responseData);
       res.json(responseData);
     } catch (error) {
-      console.error("[API] Error in /api/services/:id:", error);
+      logger.error("[API] Error in /api/services/:id:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch service" });
     }
   });
@@ -1037,7 +1038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const blockedSlots = await storage.getBlockedTimeSlots(serviceId);
       res.json(blockedSlots);
     } catch (error) {
-      console.error("Error fetching blocked slots:", error);
+      logger.error("Error fetching blocked slots:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch blocked slots" });
     }
   });
@@ -1087,7 +1088,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(blockedSlot);
     } catch (error) {
-      console.error("Error blocking time slot:", error);
+      logger.error("Error blocking time slot:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to block time slot" });
     }
   });
@@ -1109,7 +1110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteBlockedTimeSlot(slotId);
       res.sendStatus(200);
     } catch (error) {
-      console.error("Error unblocking time slot:", error);
+      logger.error("Error unblocking time slot:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to unblock time slot" });
     }
   });
@@ -1118,35 +1119,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/services/:id", requireAuth, requireRole(["provider"]), async (req, res) => {
     try {
       const serviceId = parseInt(req.params.id);
-      console.log("[API] /api/services/:id DELETE - Received request for service ID:", serviceId);
+      logger.info("[API] /api/services/:id DELETE - Received request for service ID:", serviceId);
       
       if (isNaN(serviceId)) {
-        console.log("[API] /api/services/:id DELETE - Invalid service ID format");
+        logger.info("[API] /api/services/:id DELETE - Invalid service ID format");
         return res.status(400).json({ message: "Invalid service ID format" });
       }
       
       const service = await storage.getService(serviceId);
       
       if (!service) {
-        console.log("[API] /api/services/:id DELETE - Service not found");
+        logger.info("[API] /api/services/:id DELETE - Service not found");
         return res.status(404).json({ message: "Service not found" });
       }
       
       if (service.providerId !== req.user!.id) {
-        console.log("[API] /api/services/:id DELETE - Not authorized");
+        logger.info("[API] /api/services/:id DELETE - Not authorized");
         return res.status(403).json({ message: "Can only delete own services" });
       }
       
       try {
         await storage.deleteService(serviceId);
-        console.log("[API] /api/services/:id DELETE - Service marked as deleted successfully");
+        logger.info("[API] /api/services/:id DELETE - Service marked as deleted successfully");
         res.status(200).json({ message: "Service deleted successfully" });
       } catch (error) {
-        console.error("[API] Error deleting service:", error);
+        logger.error("[API] Error deleting service:", error);
         res.status(400).json({ message: "Failed to delete service due to existing bookings. Please mark the service as unavailable instead." });
       }
     } catch (error) {
-      console.error("[API] Error deleting service:", error);
+      logger.error("[API] Error deleting service:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete service" });
     }
   });
@@ -1234,11 +1235,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           }
         } catch (fetchError) {
-        console.error(`[API] Error sending booking emails (Booking ID: ${booking.id}):`, fetchError);
+        logger.error(`[API] Error sending booking emails (Booking ID: ${booking.id}):`, fetchError);
       }
       res.status(201).json({ booking, paymentRequired: false });
     } catch (error) {
-      console.error("Error creating booking:", error);
+      logger.error("Error creating booking:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create booking" });
     }
   });
@@ -1248,45 +1249,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status, rejectionReason } = req.body;
       const bookingId = parseInt(req.params.id);
 
-      console.log(`[API DEBUG] Attempting to update booking status. Booking ID: ${bookingId}, Received Status: ${status}, Received Rejection Reason: ${rejectionReason}`);
+      logger.info(`[API DEBUG] Attempting to update booking status. Booking ID: ${bookingId}, Received Status: ${status}, Received Rejection Reason: ${rejectionReason}`);
 
       const booking = await storage.getBooking(bookingId);
-      console.log(`[API DEBUG] Fetched booking for ID ${bookingId}:`, booking ? `Found (Customer ID: ${booking.customerId})` : 'Not Found');
+      logger.info(`[API DEBUG] Fetched booking for ID ${bookingId}:`, booking ? `Found (Customer ID: ${booking.customerId})` : 'Not Found');
       if (!booking) {
-        console.log(`[API DEBUG] Booking not found: ID=${bookingId}. Returning 404.`);
+        logger.info(`[API DEBUG] Booking not found: ID=${bookingId}. Returning 404.`);
         return res.status(404).json({ message: "Booking not found" });
       }
 
-      console.log(`[API DEBUG] Attempting to fetch service with ID: ${booking.serviceId} for authorization. Provider ID from token: ${req.user!.id}`);
+      logger.info(`[API DEBUG] Attempting to fetch service with ID: ${booking.serviceId} for authorization. Provider ID from token: ${req.user!.id}`);
       const service = await storage.getService(booking.serviceId!);
-      console.log(`[API DEBUG] Fetched service for ID ${booking.serviceId}:`, service ? `Found (Provider ID: ${service.providerId})` : 'Not Found');
+      logger.info(`[API DEBUG] Fetched service for ID ${booking.serviceId}:`, service ? `Found (Provider ID: ${service.providerId})` : 'Not Found');
       if (!service || service.providerId !== req.user!.id) {
-        console.log(`[API DEBUG] Authorization check failed for booking ID ${bookingId}. Service found: ${!!service}, Service Provider ID: ${service?.providerId}, Authenticated User ID: ${req.user!.id}. Returning 403.`);
+        logger.info(`[API DEBUG] Authorization check failed for booking ID ${bookingId}. Service found: ${!!service}, Service Provider ID: ${service?.providerId}, Authenticated User ID: ${req.user!.id}. Returning 403.`);
         return res.status(403).json({ message: "Not authorized to update this booking" });
       }
 
-      console.log(`[API DEBUG] Validating status for booking ID ${bookingId}. Status: ${status}`);
+      logger.info(`[API DEBUG] Validating status for booking ID ${bookingId}. Status: ${status}`);
       // Validate status
       if (!['accepted', 'rejected', 'rescheduled'].includes(status)) {
-        console.log(`[API DEBUG] Invalid status: ${status} for booking ID ${bookingId}. Returning 400.`);
+        logger.info(`[API DEBUG] Invalid status: ${status} for booking ID ${bookingId}. Returning 400.`);
         return res.status(400).json({ message: "Invalid status. Must be 'accepted', 'rejected', or 'rescheduled'" });
       }
 
-      console.log(`[API DEBUG] Checking for rejection reason for booking ID ${bookingId}. Status: ${status}, Rejection Reason: ${rejectionReason}`);
+      logger.info(`[API DEBUG] Checking for rejection reason for booking ID ${bookingId}. Status: ${status}, Rejection Reason: ${rejectionReason}`);
       // Require rejection reason if status is rejected
       if (status === 'rejected' && !rejectionReason) {
-        console.log(`[API DEBUG] Rejection reason is required but not provided for booking ID ${bookingId} (status: 'rejected'). Rejection Reason: '${rejectionReason}'. Returning 400.`);
+        logger.info(`[API DEBUG] Rejection reason is required but not provided for booking ID ${bookingId} (status: 'rejected'). Rejection Reason: '${rejectionReason}'. Returning 400.`);
         return res.status(400).json({ message: "Rejection reason is required when rejecting a booking" });
       }
 
-      console.log(`[API DEBUG] All pre-update checks passed for booking ID ${bookingId}. Proceeding to update booking status.`);
+      logger.info(`[API DEBUG] All pre-update checks passed for booking ID ${bookingId}. Proceeding to update booking status.`);
       // Update booking status
       const updatedBooking = await storage.updateBooking(bookingId, {
         status,
         rejectionReason: status === "rejected" ? rejectionReason : null,
       });
 
-      console.log(`[API PATCH /api/bookings/:id/status] Booking ID: ${bookingId}. Status updated to ${updatedBooking.status}. Customer email notifications are now handled by dedicated routes: /api/bookings/:id/notify-customer-accepted and /api/bookings/:id/notify-customer-rejected.`);
+     logger.info(`[API PATCH /api/bookings/:id/status] Booking ID: ${bookingId}. Status updated to ${updatedBooking.status}. Customer email notifications are now handled by dedicated routes: /api/bookings/:id/notify-customer-accepted and /api/bookings/:id/notify-customer-rejected.`);
       // Email sending logic for customer acceptance/rejection has been removed from this route.
       // It is now handled by dedicated endpoints: POST /api/bookings/:id/notify-customer-accepted and POST /api/bookings/:id/notify-customer-rejected.
 
@@ -1304,8 +1305,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: notificationMessage,
       });
       
-      console.log(`[API] Booking status updated successfully: ID=${bookingId}, Status=${status}`);
-      console.log(`[API] Notification sent to customer: ID=${booking.customerId}`);
+      logger.info(`[API] Booking status updated successfully: ID=${bookingId}, Status=${status}`);
+      logger.info(`[API] Notification sent to customer: ID=${booking.customerId}`);
   
       res.json({
         booking: updatedBooking,
@@ -1314,7 +1315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : "Booking rejected. Customer has been notified with the reason."
       });
     } catch (error) {
-      console.error("Error updating booking status:", error);
+      logger.error("Error updating booking status:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update booking status" });
     }
   });
@@ -1325,7 +1326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const customerReviews = await storage.getReviewsByCustomer(customerId);
       res.json(customerReviews);
     } catch (error) {
-      console.error("Error fetching customer reviews:", error);
+      logger.error("Error fetching customer reviews:", error);
       res.status(500).json({ message: "Failed to fetch reviews" });
     }
   });
@@ -1396,7 +1397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json({ booking: updatedBooking });
     } catch (error) {
-      console.error("Error completing service by provider:", error);
+      logger.error("Error completing service by provider:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to complete service" });
     }
   });
@@ -1404,38 +1405,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // New dedicated route for sending 'Booking Accepted' email to customer
   app.post("/api/bookings/:id/notify-customer-accepted", requireAuth, requireRole(["provider"]), async (req, res) => {
     const bookingId = req.params.id;
-    console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Request received.`);
+    logger.info(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Request received.`);
     try {
       const parsedBookingId = parseInt(bookingId);
       if (isNaN(parsedBookingId)) {
-        console.error(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Invalid booking ID format.`);
+        logger.error(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Invalid booking ID format.`);
         return res.status(400).json({ message: "Invalid booking ID format." });
       }
 
       const booking = await storage.getBooking(parsedBookingId);
       if (!booking) {
-        console.error(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Booking not found.`);
+        logger.error(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Booking not found.`);
         return res.status(404).json({ message: "Booking not found" });
       }
 
       if (booking.status !== "accepted") {
-        console.warn(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Booking status is '${booking.status}', not 'accepted', but proceeding with email as requested by this route.`);
+        logger.warn(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Booking status is '${booking.status}', not 'accepted', but proceeding with email as requested by this route.`);
       }
 
-      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching customer ID: ${booking.customerId}`);
+      logger.info(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching customer ID: ${booking.customerId}`);
       const customer = await storage.getUser(booking.customerId!);
-      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched customer:`, customer ? { id: customer.id, name: customer.name, email: customer.email } : 'NOT FOUND');
+      logger.info(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched customer:`, customer ? { id: customer.id, name: customer.name, email: customer.email } : 'NOT FOUND');
 
-      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching service details ID: ${booking.serviceId}`);
+      logger.info(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching service details ID: ${booking.serviceId}`);
       const serviceDetails = await storage.getService(booking.serviceId!);
-      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched serviceDetails:`, serviceDetails ? { id: serviceDetails.id, name: serviceDetails.name, providerId: serviceDetails.providerId } : 'NOT FOUND');
+      logger.info(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched serviceDetails:`, serviceDetails ? { id: serviceDetails.id, name: serviceDetails.name, providerId: serviceDetails.providerId } : 'NOT FOUND');
 
-      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching provider ID: ${serviceDetails?.providerId}`);
+      logger.info(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching provider ID: ${serviceDetails?.providerId}`);
       const provider = serviceDetails && serviceDetails.providerId !== null ? await storage.getUser(serviceDetails.providerId) : null;
-      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched provider:`, provider ? { id: provider.id, name: provider.name } : 'NOT FOUND');
+      logger.info(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched provider:`, provider ? { id: provider.id, name: provider.name } : 'NOT FOUND');
 
       if (!customer || !customer.email || !serviceDetails || !provider) {
-        console.error(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Cannot send 'accepted' email: Essential data missing. Customer: ${!!customer}, Email: ${!!customer?.email}, Service: ${!!serviceDetails}, Provider: ${!!provider}.`);
+        logger.error(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Cannot send 'accepted' email: Essential data missing. Customer: ${!!customer}, Email: ${!!customer?.email}, Service: ${!!serviceDetails}, Provider: ${!!provider}.`);
         return res.status(500).json({ message: `Cannot send 'accepted' email: Essential data missing for booking ID ${bookingId}.` });
       }
 
@@ -1451,18 +1452,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       );
 
-      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Accepted' email to ${customer.email}`);
+      logger.info(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Accepted' email to ${customer.email}`);
       await sendEmail({
         to: customer.email,
         subject: emailContent.subject,
         text: emailContent.text,
         html: emailContent.html,
       });
-      console.log(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Accepted' email SENT to ${customer.email}`);
+      logger.info(`[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Accepted' email SENT to ${customer.email}`);
 
       res.status(200).json({ message: "Customer notification for booking acceptance has been queued." });
     } catch (error) {
-      console.error(`[NEW ACCEPT EMAIL ROUTE ERROR - Booking ID: ${bookingId}]`, error);
+      logger.error(`[NEW ACCEPT EMAIL ROUTE ERROR - Booking ID: ${bookingId}]`, error);
       res.status(500).json({ message: "Failed to send acceptance email." });
     }
   });
@@ -1471,39 +1472,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/bookings/:id/notify-customer-rejected", requireAuth, requireRole(["provider"]), async (req, res) => {
     const bookingId = req.params.id;
     const { rejectionReason } = req.body;
-    console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Request received. Reason: ${rejectionReason || 'None'}`);
+    logger.info(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Request received. Reason: ${rejectionReason || 'None'}`);
     try {
       const parsedBookingId = parseInt(bookingId);
       if (isNaN(parsedBookingId)) {
-        console.error(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Invalid booking ID format.`);
+        logger.error(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Invalid booking ID format.`);
         return res.status(400).json({ message: "Invalid booking ID format." });
       }
 
       const booking = await storage.getBooking(parsedBookingId);
       if (!booking) {
-        console.error(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Booking not found.`);
+        logger.error(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Booking not found.`);
         return res.status(404).json({ message: "Booking not found" });
       }
 
       if (booking.status !== "rejected") {
-        console.warn(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Booking status is '${booking.status}', not 'rejected', but proceeding with email as requested by this route.`);
+        logger.warn(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Booking status is '${booking.status}', not 'rejected', but proceeding with email as requested by this route.`);
       }
 
-      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching customer ID: ${booking.customerId}`);
+      logger.info(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching customer ID: ${booking.customerId}`);
       const customer = await storage.getUser(booking.customerId!);
-      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched customer:`, customer ? { id: customer.id, name: customer.name, email: customer.email } : 'NOT FOUND');
+      logger.info(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched customer:`, customer ? { id: customer.id, name: customer.name, email: customer.email } : 'NOT FOUND');
 
-      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching service details ID: ${booking.serviceId}`);
+      logger.info(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching service details ID: ${booking.serviceId}`);
       const serviceDetails = await storage.getService(booking.serviceId!);
-      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched serviceDetails:`, serviceDetails ? { id: serviceDetails.id, name: serviceDetails.name, providerId: serviceDetails.providerId } : 'NOT FOUND');
+      logger.info(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched serviceDetails:`, serviceDetails ? { id: serviceDetails.id, name: serviceDetails.name, providerId: serviceDetails.providerId } : 'NOT FOUND');
 
       // Provider data is not strictly needed for rejection email content but fetching for consistency / future use
-      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching provider ID: ${serviceDetails?.providerId}`);
+      logger.info(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching provider ID: ${serviceDetails?.providerId}`);
       const provider = serviceDetails && serviceDetails.providerId !== null ? await storage.getUser(serviceDetails.providerId) : null;
-      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched provider:`, provider ? { id: provider.id, name: provider.name } : 'NOT FOUND');
+      logger.info(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched provider:`, provider ? { id: provider.id, name: provider.name } : 'NOT FOUND');
 
       if (!customer || !customer.email || !serviceDetails) { // Provider is optional for rejection email content
-        console.error(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Cannot send 'rejected' email: Essential data missing. Customer: ${!!customer}, Email: ${!!customer?.email}, Service: ${!!serviceDetails}.`);
+        logger.error(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Cannot send 'rejected' email: Essential data missing. Customer: ${!!customer}, Email: ${!!customer?.email}, Service: ${!!serviceDetails}.`);
         return res.status(500).json({ message: `Cannot send 'rejected' email: Essential data missing for booking ID ${bookingId}.` });
       }
 
@@ -1518,18 +1519,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         finalRejectionReason
       );
 
-      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Rejected' email to ${customer.email}`);
+      logger.info(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Rejected' email to ${customer.email}`);
       await sendEmail({
         to: customer.email,
         subject: emailContent.subject,
         text: emailContent.text,
         html: emailContent.html,
       });
-      console.log(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Rejected' email SENT to ${customer.email}`);
+      logger.info(`[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Rejected' email SENT to ${customer.email}`);
 
       res.status(200).json({ message: "Customer notification for booking rejection has been queued." });
     } catch (error) {
-      console.error(`[NEW REJECT EMAIL ROUTE ERROR - Booking ID: ${bookingId}]`, error);
+      logger.error(`[NEW REJECT EMAIL ROUTE ERROR - Booking ID: ${bookingId}]`, error);
       res.status(500).json({ message: "Failed to send rejection email." });
     }
   });
@@ -1577,7 +1578,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ booking: updatedBooking });
     } catch (error) {
-      console.error("Error submitting payment:", error);
+      logger.error("Error submitting payment:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to submit payment" });
     }
   });
@@ -1596,7 +1597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedBooking = await storage.updateBooking(bookingId, { paymentReference });
       res.json({ booking: updatedBooking });
     } catch (error) {
-      console.error('Error updating payment reference:', error);
+      logger.error('Error updating payment reference:', error);
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update reference' });
     }
   });
@@ -1646,7 +1647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(enrichedBookings);
     } catch (error) {
-      console.error("Error fetching customer bookings:", error);
+      logger.error("Error fetching customer bookings:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch bookings" });
     }
   });
@@ -1687,7 +1688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(enrichedBookings);
     } catch (error) {
-      console.error("Error fetching provider bookings:", error);
+      logger.error("Error fetching provider bookings:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch bookings" });
     }
   });
@@ -1801,7 +1802,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await storage.updateProviderRating(service.providerId);
     res.status(201).json(newReview);
   } catch (error) {
-    console.error('Error saving review:', error);
+    logger.error('Error saving review:', error);
     res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to save review' });
   }
 });
@@ -1826,7 +1827,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedReview = await storage.updateReview(reviewId, { rating, review });
       res.json(updatedReview);
     } catch (error) {
-      console.error("Error updating review:", error);
+      logger.error("Error updating review:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to update review" });
     }
   });
@@ -1863,7 +1864,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedReview = await storage.updateReview(reviewId, { providerReply: response } as any);
       res.json(updatedReview);
     } catch (error) {
-      console.error("Error replying to review:", error);
+      logger.error("Error replying to review:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to reply to review" });
     }
   });
@@ -1978,7 +1979,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shippingAddress: "",
         billingAddress: "",
       });
-      console.log("Created order:", newOrder);
+      logger.info(`Created order ${newOrder.id}`);
       // Create order items
       for (const item of items) {
         await storage.createOrderItem({
@@ -2055,13 +2056,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       } catch (emailError) {
-        console.error("Error sending order confirmation emails:", emailError);
+        logger.error("Error sending order confirmation emails:", emailError);
         // Don't let email failure break the order creation flow
       }
 
       res.status(201).json({ order: newOrder});
     } catch (error) {
-      console.error("Order creation error:", error);
+      logger.error("Order creation error:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create order" });
     }
   });
@@ -2331,7 +2332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating order status:", error);
+      logger.error("Error updating order status:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update order status" });
     }
   });
@@ -2407,7 +2408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updatedReturn);
     } catch (error) {
-      console.error("Error approving return:", error);
+      logger.error("Error approving return:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to approve return" });
     }
   });
@@ -2431,7 +2432,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedUser = await storage.updateUser(userId, req.body);
       res.json(updatedUser);
     } catch (error) {
-      console.error("Error updating user:", error);
+      logger.error("Error updating user:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update user" });
     }
   });
@@ -2462,7 +2463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           filters.attributes = JSON.parse(String(attributes));
         } catch (e) {
-          console.error("Failed to parse product attributes filter", e);
+          logger.error("Failed to parse product attributes filter", e);
           // Optionally return a 400 error or ignore the filter
         }
       }
@@ -2472,7 +2473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const products = await storage.getProducts(filters);
       res.json(products);
     } catch (error) {
-      console.error("Error fetching products:", error);
+      logger.error("Error fetching products:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch products" });
     }
   });
@@ -2489,7 +2490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(product);
     } catch (error) {
-      console.error("Error fetching product:", error);
+      logger.error("Error fetching product:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch product" });
     }
   });
@@ -2511,39 +2512,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Add other relevant public fields if needed
       });
     } catch (error) {
-      console.error("Error fetching shop details:", error);
+      logger.error("Error fetching shop details:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Failed to fetch shop details" });
     }
   });
 
   app.delete("/api/products/:id", requireAuth, requireRole(["shop"]), async (req, res) => {
     try {
-      console.log(`Delete product request received for ID: ${req.params.id}`);
+      logger.info(`Delete product request received for ID: ${req.params.id}`);
       const productId = parseInt(req.params.id);
       const product = await storage.getProduct(productId);
 
       if (!product) {
-        console.log(`Product with ID ${productId} not found`);
+        logger.info(`Product with ID ${productId} not found`);
         return res.status(404).json({ message: "Product not found" });
       }
 
       if (product.shopId !== req.user!.id) {
-        console.log(`Unauthorized delete attempt for product ${productId} by user ${req.user!.id}`);
+        logger.info(`Unauthorized delete attempt for product ${productId} by user ${req.user!.id}`);
         return res.status(403).json({ message: "Can only delete own products" });
       }
 
       try {
         // First, remove the product from all carts to avoid foreign key constraint violations
-        console.log(`Removing product ${productId} from all carts before deletion`);
+        logger.info(`Removing product ${productId} from all carts before deletion`);
         await storage.removeProductFromAllCarts(productId);
         
         // Then delete the product
-        console.log(`Deleting product with ID: ${productId}`);
+        logger.info(`Deleting product with ID: ${productId}`);
         await storage.deleteProduct(productId);
-        console.log(`Product ${productId} deleted successfully`);
+        logger.info(`Product ${productId} deleted successfully`);
         res.status(200).json({ message: "Product deleted successfully" });
       } catch (deleteError) {
-        console.error(`Error during product deletion process: ${deleteError}`);
+        logger.error(`Error during product deletion process: ${deleteError}`);
         res.status(400).json({ 
           message: deleteError instanceof Error ? 
             deleteError.message : 
@@ -2551,7 +2552,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } catch (error) {
-      console.error("Error deleting product:", error);
+      logger.error("Error deleting product:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to delete product" });
     }
   });
@@ -2563,7 +2564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const reviews = await storage.getProductReviewsByProduct(productId);
       res.json(reviews);
     } catch (error) {
-      console.error("Error fetching product reviews:", error);
+      logger.error("Error fetching product reviews:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch reviews" });
     }
   });
@@ -2574,7 +2575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const reviews = await storage.getProductReviewsByShop(shopId);
       res.json(reviews);
     } catch (error) {
-      console.error("Error fetching shop product reviews:", error);
+      logger.error("Error fetching shop product reviews:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch reviews" });
     }
   });
@@ -2584,7 +2585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const reviews = await storage.getProductReviewsByCustomer(req.user!.id);
       res.json(reviews);
     } catch (error) {
-      console.error("Error fetching customer product reviews:", error);
+      logger.error("Error fetching customer product reviews:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch reviews" });
     }
   });
@@ -2629,7 +2630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await storage.updateProductReview(reviewId, { rating, review });
       res.json(updated);
     } catch (error) {
-      console.error("Error updating product review:", error);
+      logger.error("Error updating product review:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update review" });
     }
   });
@@ -2651,7 +2652,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const review = await storage.updateProductReview(reviewId, { shopReply: reply });
       res.json(review);
     } catch (error) {
-      console.error("Error replying to review:", error);
+      logger.error("Error replying to review:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to reply to review" });
     }
   });
@@ -2690,7 +2691,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         endDate = calculatedEndDate;
       }
 
-      console.log('Creating promotion with calculated dates:', { 
+      logger.info('Creating promotion with calculated dates:', { 
         startDate, 
         endDate, 
         expiryDays 
@@ -2706,7 +2707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(promotion);
     } catch (error) {
-      console.error("Error creating promotion:", error);
+      logger.error("Error creating promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to create promotion" });
     }
   });
@@ -2716,7 +2717,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const promotions = await storage.getPromotionsByShop(parseInt(req.params.id));
       res.json(promotions);
     } catch (error) {
-      console.error("Error fetching promotions:", error);
+      logger.error("Error fetching promotions:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to fetch promotions" });
     }
   });
@@ -2781,7 +2782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(updatedResult[0]);
     } catch (error) {
-      console.error("Error updating promotion:", error);
+      logger.error("Error updating promotion:", error);
       res.status(400).json({ message: error instanceof Error ? error.message : "Failed to update promotion" });
     }
   });

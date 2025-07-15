@@ -95,6 +95,7 @@
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
     "zod": "^3.23.8",
+    "pino": "^8.17.0",
     "zod-validation-error": "^3.4.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^4.6.3",

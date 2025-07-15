@@ -2,12 +2,13 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../shared/schema';
 import dotenv from 'dotenv';
+import logger from './logger';
 
 dotenv.config();
 
 // Check for required environment variables
 if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL environment variable is required');
+  logger.error('DATABASE_URL environment variable is required');
   process.exit(1);
 }
 
@@ -22,9 +23,9 @@ const client = postgres(connectionString, {
       const duration = Date.now() - start;
       const msg = `${query} \u2013 ${duration}ms`;
       if (duration > slowThreshold) {
-        console.warn(`[DB SLOW] ${msg}`, parameters);
+        logger.warn(`[DB SLOW] ${msg}`, parameters);
       } else {
-        console.log(`[DB] ${msg}`);
+        logger.info(`[DB] ${msg}`);
       }
     };
   },
@@ -38,10 +39,10 @@ export async function testConnection() {
   try {
     // Try to query the database
     await client`SELECT 1`;
-    console.log('✅ Database connection successful');
+    logger.info('✅ Database connection successful');
     return true;
   } catch (error) {
-    console.error('❌ Database connection failed:', error);
+    logger.error('❌ Database connection failed:', error);
     return false;
   }
 }
