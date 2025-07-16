@@ -198,36 +198,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const providerId = req.user!.id;
       const pendingBookings = await storage.getPendingBookingRequestsForProvider(providerId);
       
-      // Fetch service details for each booking
-      const bookingsWithDetails = await Promise.all(
-        pendingBookings.map(async (booking) => {
-          const service = await storage.getService(booking.serviceId!);
-          const customer = booking.customerId !== null ? await storage.getUser(booking.customerId) : null; // Fetch customer details
-          const provider = (service && service.providerId !== null) ? await storage.getUser(service.providerId) : null; // Fetch provider details
+      const serviceIds = Array.from(new Set(pendingBookings.map(b => b.serviceId!).filter(Boolean)));
+      const services = await storage.getServicesByIds(serviceIds);
+      const serviceMap = new Map(services.map(s => [s.id, s]));
 
-          let relevantAddress = {};
-          // If the booking's serviceLocation is 'customer', include the customer's address
-          if (booking.serviceLocation === 'customer' && customer) {
-            relevantAddress = {
-              addressStreet: customer.addressStreet,
-              addressCity: customer.addressCity,
-              addressState: customer.addressState,
-              addressPostalCode: customer.addressPostalCode,
-              addressCountry: customer.addressCountry,
-            };
-          }
-          // If serviceLocation is 'provider', the provider knows their own address, so no address is needed here.
+      const userIds = new Set<number>();
+      services.forEach(s => { if (s.providerId) userIds.add(s.providerId); });
+      pendingBookings.forEach(b => { if (b.customerId) userIds.add(b.customerId); });
+      const users = await storage.getUsersByIds(Array.from(userIds));
+      const userMap = new Map(users.map(u => [u.id, u]));
 
-          return { 
-            ...booking, 
-            service, 
-            customer: customer ? { id: customer.id, name: customer.name, phone: customer.phone } : null, // Basic customer info
-            provider: provider ? { id: provider.id, name: provider.name, phone: provider.phone } : null, // Basic provider info
-            relevantAddress // Add the conditionally determined address
+      const bookingsWithDetails = pendingBookings.map(b => {
+        const service = serviceMap.get(b.serviceId!);
+        const customer = b.customerId ? userMap.get(b.customerId) : undefined;
+        const provider = service && service.providerId ? userMap.get(service.providerId) : undefined;
+
+        let relevantAddress = {} as any;
+        if (b.serviceLocation === 'customer' && customer) {
+          relevantAddress = {
+            addressStreet: customer.addressStreet,
+            addressCity: customer.addressCity,
+            addressState: customer.addressState,
+            addressPostalCode: customer.addressPostalCode,
+            addressCountry: customer.addressCountry,
           };
-        })
-      );
-      res.json(bookingsWithDetails); // Send details back
+        }
+
+        return {
+          ...b,
+          service,
+          customer: customer ? { id: customer.id, name: customer.name, phone: customer.phone } : null,
+          provider: provider ? { id: provider.id, name: provider.name, phone: provider.phone } : null,
+          relevantAddress,
+        };
+      });
+
+      res.json(bookingsWithDetails);
       
 
     } catch (error) {

@@ -14,9 +14,10 @@ if (!process.env.DATABASE_URL) {
 
 // Create postgres connection
 const connectionString = process.env.DATABASE_URL;
+const poolSize = parseInt(process.env.DB_POOL_SIZE || '10', 10);
 const slowThreshold = Number(process.env.DB_SLOW_THRESHOLD_MS || 200);
 const client = postgres(connectionString, {
-  max: 10,
+  max: poolSize,
   debug: (connection, query, parameters) => {
     const start = Date.now();
     return (error?: Error) => {

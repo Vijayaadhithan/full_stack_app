@@ -63,6 +63,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>; // Added for Google OAuth
   getUserByGoogleId(googleId: string): Promise<User | undefined>; // Added for Google OAuth
   getAllUsers(): Promise<User[]>;
+  getUsersByIds(ids: number[]): Promise<User[]>;
   getShops(filters?: { locationCity?: string; locationState?: string }): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User>; // Updated to accept all partial User fields
@@ -70,6 +71,7 @@ export interface IStorage {
   // Service operations
   createService(service: InsertService): Promise<Service>;
   getService(id: number): Promise<Service | undefined>;
+  getServicesByIds(ids: number[]): Promise<Service[]>;
   getServicesByProvider(providerId: number): Promise<Service[]>;
   getServicesByCategory(category: string): Promise<Service[]>;
   updateService(id: number, service: Partial<Service>): Promise<Service>;
@@ -452,6 +454,9 @@ export class MemStorage implements IStorage {
     return Array.from(this.users.values());
   }
 
+  async getUsersByIds(ids: number[]): Promise<User[]> {
+    return ids.map(id => this.users.get(id)).filter((u): u is User => !!u);
+  }
   async getShops(filters?: { locationCity?: string; locationState?: string }): Promise<User[]> {
     let shops = Array.from(this.users.values()).filter(u => u.role === 'shop');
     if (filters) {
@@ -581,6 +586,10 @@ export class MemStorage implements IStorage {
     const service = this.services.get(id);
     logger.info("[Storage] getService - Found service:", service);
     return service;
+  }
+
+  async getServicesByIds(ids: number[]): Promise<Service[]> {
+    return ids.map(id => this.services.get(id)).filter((s): s is Service => !!s);
   }
 
   async getServicesByProvider(providerId: number): Promise<Service[]> {

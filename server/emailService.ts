@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
 import { OAuth2Client } from 'google-auth-library';
 import logger from './logger';
+import { addJob } from './jobQueue';
 
 const GMAIL_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GMAIL_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -63,16 +64,16 @@ interface MailOptions {
   html?: string;
 }
 
-export async function sendEmail(mailOptions: MailOptions): Promise<boolean> {
+async function sendEmailNow(mailOptions: MailOptions): Promise<void> {
   if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN || !EMAIL_SENDER) {
     logger.error('Cannot send email due to missing Gmail API credentials or sender email.');
-    return false;
+    return;
   }
 
   const transporter = await createTransporter();
   if (!transporter) {
     logger.error('Failed to create email transporter. Email not sent.');
-    return false;
+    return;
   }
 
   try {
@@ -81,11 +82,15 @@ export async function sendEmail(mailOptions: MailOptions): Promise<boolean> {
       ...mailOptions,
     });
     logger.info(`Email sent to ${mailOptions.to} with subject "${mailOptions.subject}"`);
-    return true;
+    return;
   } catch (error) {
     logger.error('Error sending email:', error);
-    return false;
+    return;
   }
+}
+export async function sendEmail(mailOptions: MailOptions): Promise<boolean> {
+  addJob(() => sendEmailNow(mailOptions));
+  return true;
 }
 
 // --- Template Functions --- //

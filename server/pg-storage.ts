@@ -2,6 +2,7 @@ import session from "express-session";
 import pgSession from "connect-pg-simple";
 import { db } from "./db";
 import logger from "./logger";
+import { getCache, setCache } from './cache';
 import { sendEmail, getGenericNotificationEmailContent } from './emailService'; // Added for sending emails
 import {
   User, InsertUser,
@@ -482,24 +483,27 @@ export class PostgresStorage implements IStorage {
     logger.info("Found service:", result[0]);
     return result[0];
   }
+async getServicesByIds(ids: number[]): Promise<Service[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(services).where(sql`${services.id} IN ${ids}`);
+  }
 
+  async getUsersByIds(ids: number[]): Promise<User[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(users).where(sql`${users.id} IN ${ids}`);
+  }
   // Implementation of IStorage.getPendingBookingRequestsForProvider
   async getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]> {
     // Get all services offered by this provider first
     const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map(service => service.id);
+    const serviceIds = providerServices.map(s => s.id);
     if (serviceIds.length === 0) return [];
 
-    let pendingBookings: Booking[] = [];
-    for (const serviceId of serviceIds) {
-      const serviceBookings = await db.select().from(bookings)
-        .where(and(
-          eq(bookings.serviceId, serviceId),
-          eq(bookings.status, 'pending')
-        ));
-      pendingBookings = [...pendingBookings, ...serviceBookings];
-    }
-    return pendingBookings;
+    const rows = await db
+      .select()
+      .from(bookings)
+      .where(and(sql`${bookings.serviceId} IN ${serviceIds}`, eq(bookings.status, 'pending')));
+    return rows as Booking[];
   }
 
   // Implementation of IStorage.getBookingHistoryForProvider
@@ -647,10 +651,16 @@ export class PostgresStorage implements IStorage {
   }
 
   async getServicesByCategory(category: string): Promise<Service[]> {
-    return await db.select().from(services).where(and(
+    const key = `services_category_${category}`;
+    const cached = getCache<Service[]>(key);
+    if (cached) return cached;
+
+    const result = await db.select().from(services).where(and(
       eq(services.category, category),
       eq(services.isDeleted, false)
     ));
+    setCache(key, result);
+    return result;
   }
 
   async updateService(id: number, serviceUpdate: Partial<Service>): Promise<Service> {
@@ -850,10 +860,16 @@ const result = await db.insert(bookings).values({
   }
 
   async getProductsByCategory(category: string): Promise<Product[]> {
-    return await db.select().from(products).where(and(
+    const key = `products_category_${category}`;
+    const cached = getCache<Product[]>(key);
+    if (cached) return cached;
+
+    const result = await db.select().from(products).where(and(
       eq(products.category, category),
       eq(products.isDeleted, false)
     ));
+    setCache(key, result);
+    return result;
   }
 
   async updateProduct(id: number, product: Partial<Product>): Promise<Product> {
