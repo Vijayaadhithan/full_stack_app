@@ -1,6 +1,7 @@
 import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
+import type { SessionData } from "express-session";
 import { z } from "zod";
 
 export type UserRole = "customer" | "provider" | "shop" | "admin";
@@ -169,7 +170,7 @@ export const bookingHistory = pgTable("booking_history", {
 // Sessions table for express-session storage
 export const sessions = pgTable("sessions", {
   sid: text("sid").primaryKey(),
-  sess: jsonb("sess").$type<any>().notNull(),
+  sess: jsonb("sess").$type<SessionData>().notNull(),
   expire: timestamp("expire", { precision: 6 }).notNull(),
 });
 

@@ -89,6 +89,8 @@ The application will be available at:
 - `npm run dev`: Start development server (runs both frontend and backend)
 - `npm run build`: Build for production
 - `npm run start`: Start production server
+- `npm run lint`: Run ESLint on the project
+- `npm run format`: Format files using Prettier
 
 ### Troubleshooting
 

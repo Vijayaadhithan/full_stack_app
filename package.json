@@ -8,7 +8,9 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "lint": "eslint \"{client,server,shared}/**/*.{ts,tsx,js}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
@@ -130,7 +132,14 @@
     "typescript": "5.6.3",
     "vite": "^5.4.14",
     "@types/swagger-jsdoc": "^6.0.1",
-    "@types/swagger-ui-express": "^4.1.4"
+    "@types/swagger-ui-express": "^4.1.4",
+    "@typescript-eslint/eslint-plugin": "^7.8.0",
+    "@typescript-eslint/parser": "^7.8.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.34.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "prettier": "^3.2.4"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
