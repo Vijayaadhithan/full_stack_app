@@ -1174,6 +1174,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (serviceLocation !== 'customer' && serviceLocation !== 'provider') {
         return res.status(400).json({ message: "Invalid service location. Must be 'customer' or 'provider'." });
       }
+      const isAvailable = await storage.checkAvailability(serviceId, bookingDateTime);
+      if (!isAvailable) {
+        return res.status(409).json({ message: "Selected time slot is not available" });
+      }
 
       const booking = await storage.createBooking({
         customerId: req.user!.id,

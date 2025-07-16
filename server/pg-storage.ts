@@ -19,6 +19,7 @@ import {
   // Ensure bookingHistory is exported from your shared schema if available.
   users, services, bookings, bookingHistory, products, orders, orderItems, reviews, notifications,
   cart, wishlist, waitlist, promotions, returns, productReviews,
+  blockedTimeSlots,
   orderStatusUpdates,
   UserRole
 } from "@shared/schema";
@@ -1227,7 +1228,49 @@ const result = await db.insert(bookings).values({
 
   // ─── ADDITIONAL / ENHANCED OPERATIONS ─────────────────────────────
   async checkAvailability(serviceId: number, date: Date): Promise<boolean> {
-    // Your logic here to check service availability for the given date
+    const dateStr = date.toISOString().split('T')[0];
+
+    // Check if the slot is blocked by the provider
+    const [blocked] = await db
+      .select({ id: blockedTimeSlots.id })
+      .from(blockedTimeSlots)
+      .where(
+        and(
+          eq(blockedTimeSlots.serviceId, serviceId),
+          sql`DATE(${blockedTimeSlots.date}) = ${dateStr}`
+        )
+      );
+    if (blocked) return false;
+
+    // Check for existing booking at the exact time
+    const [conflict] = await db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.serviceId, serviceId),
+          eq(bookings.bookingDate, date),
+          sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`
+        )
+      );
+    if (conflict) return false;
+
+    // Enforce max daily bookings
+    const service = await this.getService(serviceId);
+    if (service) {
+      const [{ value: countForDay }] = await db
+        .select({ value: count() })
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.serviceId, serviceId),
+            sql`DATE(${bookings.bookingDate}) = ${dateStr}`,
+            sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`
+          )
+        );
+      const max = service.maxDailyBookings ?? 5;
+      if (Number(countForDay) >= max) return false;
+    }
     return true;
   }
 
