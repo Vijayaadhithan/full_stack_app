@@ -5,44 +5,49 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth";
 import { LanguageProvider } from "@/contexts/language-context";
 import { ProtectedRoute } from "./lib/protected-route";
-import { initializePushNotifications, getCurrentPosition, writeFileToStorage, scheduleLocalNotification } from '@/lib/permissions'; // Added imports
-import PermissionRequester from '@/components/PermissionRequester'; // Import the new component
-import React, {useEffect} from 'react';
+import {
+  initializePushNotifications,
+  getCurrentPosition,
+  writeFileToStorage,
+  scheduleLocalNotification,
+} from "@/lib/permissions"; // Added imports
+import PermissionRequester from "@/components/PermissionRequester"; // Import the new component
+import React, { useEffect, Suspense, lazy } from "react";
 
 // Import all pages...
 // import HomePage from "@/pages/home-page"; // Removed import for HomePage as it's not used and file doesn't exist
-import AuthPage from "@/pages/auth-page";
-import CustomerDashboard from "@/pages/customer/dashboard";
-import BrowseServices from "@/pages/customer/browse-services";
-import ServiceDetails from "@/pages/customer/service-details";
-import ServiceProvider from "@/pages/customer/service-provider";
-import BookService from "@/pages/customer/book-service";
-import BrowseProducts from "@/pages/customer/browse-products";
-import BrowseShops from "@/pages/customer/browse-shops";
-import ShopDetails from "@/pages/customer/shop-details";
-import ProductDetails from "./pages/customer/product-details"; // Import the new component
-import Cart from "@/pages/customer/cart";
-import Wishlist from "@/pages/customer/wishlist";
-import Bookings from "@/pages/customer/bookings";
-import OrderDetails from "@/pages/customer/order-details";
-import Orders from "@/pages/customer/orders";
-import CustomerProfile from "@/pages/customer/profile"; // Add this import
-import MyReviews from "@/pages/customer/MyReviews"; // Add import for the new page
-import ProviderDashboard from "@/pages/provider/dashboard";
-import ProviderProfile from "@/pages/provider/profile";
-import ProviderServices from "@/pages/provider/services";
-import ProviderBookings from "@/pages/provider/bookings";
-import ProviderReviews from "@/pages/provider/reviews";
-import ShopDashboard from "@/pages/shop/dashboard";
-import ShopProfile from "@/pages/shop/profile";
-import ShopProducts from "@/pages/shop/products";
-import ShopOrders from "@/pages/shop/orders";
-import ShopInventory from "@/pages/shop/inventory";
-import ShopPromotions from "@/pages/shop/ShopPromotions";
-import ShopReviews from "@/pages/shop/reviews";
+const AuthPage = lazy(() => import("@/pages/auth-page"));
+const CustomerDashboard = lazy(() => import("@/pages/customer/dashboard"));
+const BrowseServices = lazy(() => import("@/pages/customer/browse-services"));
+const ServiceDetails = lazy(() => import("@/pages/customer/service-details"));
+const ServiceProvider = lazy(() => import("@/pages/customer/service-provider"));
+const BookService = lazy(() => import("@/pages/customer/book-service"));
+const BrowseProducts = lazy(() => import("@/pages/customer/browse-products"));
+const BrowseShops = lazy(() => import("@/pages/customer/browse-shops"));
+const ShopDetails = lazy(() => import("@/pages/customer/shop-details"));
+const ProductDetails = lazy(() => import("./pages/customer/product-details")); // Import the new component
+const Cart = lazy(() => import("@/pages/customer/cart"));
+const Wishlist = lazy(() => import("@/pages/customer/wishlist"));
+const Bookings = lazy(() => import("@/pages/customer/bookings"));
+const OrderDetails = lazy(() => import("@/pages/customer/order-details"));
+const Orders = lazy(() => import("@/pages/customer/orders"));
+const CustomerProfile = lazy(() => import("@/pages/customer/profile")); // Add this import
+const MyReviews = lazy(() => import("@/pages/customer/MyReviews")); // Add import for the new page
+const ProviderDashboard = lazy(() => import("@/pages/provider/dashboard"));
+const ProviderProfile = lazy(() => import("@/pages/provider/profile"));
+const ProviderServices = lazy(() => import("@/pages/provider/services"));
+const ProviderBookings = lazy(() => import("@/pages/provider/bookings"));
+const ProviderReviews = lazy(() => import("@/pages/provider/reviews"));
+const ShopDashboard = lazy(() => import("@/pages/shop/dashboard"));
+const ShopProfile = lazy(() => import("@/pages/shop/profile"));
+const ShopProducts = lazy(() => import("@/pages/shop/products"));
+const ShopOrders = lazy(() => import("@/pages/shop/orders"));
+const ShopInventory = lazy(() => import("@/pages/shop/inventory"));
+const ShopPromotions = lazy(() => import("@/pages/shop/ShopPromotions"));
+const ShopReviews = lazy(() => import("@/pages/shop/reviews"));
 
-import NotFound from "@/pages/not-found";
-import ResetPasswordPage from "@/pages/reset-password-page"; // Import the new page
+const NotFound = lazy(() => import("@/pages/not-found"));
+const ResetPasswordPage = lazy(() => import("@/pages/reset-password-page")); // Import the new page
 
 function Router() {
   return (
@@ -115,7 +120,15 @@ function App() {
       <LanguageProvider>
         <AuthProvider>
           {/* Use the existing Router function component here */}
-          <Router /> 
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center min-h-screen">
+                Loading...
+              </div>
+            }
+          >
+            <Router />
+          </Suspense>
           <Toaster />
         </AuthProvider>
       </LanguageProvider>
