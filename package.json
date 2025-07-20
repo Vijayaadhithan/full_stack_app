@@ -11,7 +11,7 @@
     "db:push": "drizzle-kit push",
     "lint": "eslint \"{client,server,shared}/**/*.{ts,tsx,js}\"",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
-    "test": "node --test"
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
