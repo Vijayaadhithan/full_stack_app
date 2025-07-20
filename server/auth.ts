@@ -205,9 +205,9 @@ app.post("/api/register", async (req, res, next) => {
       return res.status(400).send("Username already exists");
     }
 
-    if (validatedData.role === 'shop' && !validatedData.shopProfile) {
-      return res.status(400).json({ message: "Shop profile is required for shop role" });
-    }
+    // if (validatedData.role === 'shop' && !validatedData.shopProfile) {
+    //   return res.status(400).json({ message: "Shop profile is required for shop role" });
+    // }
 
     const userToCreate = {
       ...validatedData,

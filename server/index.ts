@@ -6,7 +6,7 @@ import { config } from "dotenv";
 import logger from "./logger";
 import path from "path";
 import cors from "cors";
-import multer from "multer";
+import multer, { MulterError } from "multer";
 import { fileURLToPath } from "url";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./swagger";
@@ -16,13 +16,16 @@ import { startBookingExpirationJob } from "./jobs/bookingExpirationJob";
 import { startPaymentReminderJob } from "./jobs/paymentReminderJob";
 
 config();
-
+// Read allowed CORS origins from environment variable (comma separated)
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : undefined;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Configure multer for file uploads
@@ -36,7 +39,19 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage: storage });
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type"));
+    }
+  },
+});
 
 /**
  * @openapi
@@ -57,13 +72,23 @@ const upload = multer({ storage: storage });
  *       200:
  *         description: Upload successful
  */
-app.post("/api/upload", upload.single("file"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: "No file uploaded" });
-  }
-  res.json({
-    filename: req.file.filename,
-    path: `/uploads/${req.file.filename}`,
+app.post("/api/upload", (req, res) => {
+  upload.single("file")(req, res, (err: any) => {
+    if (err) {
+      const message =
+        err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
+          ? "File too large"
+          : err.message;
+      return res.status(400).json({ message });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    res.json({
+      filename: req.file.filename,
+      path: `/uploads/${req.file.filename}`,
+    });
   });
 });
 
@@ -86,12 +111,22 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
  *       200:
  *         description: Upload successful
  */
-app.post("/api/users/upload-qr", upload.single("qr"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: "No file uploaded" });
-  }
-  const url = `/uploads/${req.file.filename}`;
-  res.json({ url });
+app.post("/api/users/upload-qr", (req, res) => {
+  upload.single("qr")(req, res, (err: any) => {
+    if (err) {
+      const message =
+        err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
+          ? "File too large"
+          : err.message;
+      return res.status(400).json({ message });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    const url = `/uploads/${req.file.filename}`;
+    res.json({ url });
+  });
 });
 
 // Serve uploaded files
