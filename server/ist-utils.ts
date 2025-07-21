@@ -8,7 +8,9 @@ import { toIndianTime, newIndianDate } from "@shared/date-utils";
  * @param date Date to convert to IST
  * @returns Date object in IST
  */
-export function toISTForStorage(date: Date | string | null | undefined): Date | null {
+export function toISTForStorage(
+  date: Date | string | null | undefined,
+): Date | null {
   if (!date) return null;
   return toIndianTime(date);
 }
@@ -26,7 +28,9 @@ export function getCurrentISTDate(): Date {
  * @param date Date from database
  * @returns Date object in IST
  */
-export function fromDatabaseToIST(date: Date | string | null | undefined): Date | null {
+export function fromDatabaseToIST(
+  date: Date | string | null | undefined,
+): Date | null {
   if (!date) return null;
   return toIndianTime(date);
 }
@@ -48,12 +52,15 @@ export function getExpirationDate(hours: number): Date {
  * @param dateFields Array of field names that contain dates
  * @returns Array with date fields converted to IST
  */
-export function convertArrayDatesToIST<T>(items: T[], dateFields: (keyof T)[]): T[] {
-  return items.map(item => {
+export function convertArrayDatesToIST<T>(
+  items: T[],
+  dateFields: (keyof T)[],
+): T[] {
+  return items.map((item) => {
     const newItem = { ...item };
-    dateFields.forEach(field => {
+    dateFields.forEach((field) => {
       const value = item[field];
-      if (value instanceof Date || typeof value === 'string') {
+      if (value instanceof Date || typeof value === "string") {
         (newItem[field] as any) = toIndianTime(value as any);
       }
     });

@@ -2,13 +2,32 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useQuery, useMutation, UseQueryResult, UseMutationResult } from "@tanstack/react-query";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  useQuery,
+  useMutation,
+  UseQueryResult,
+  UseMutationResult,
+} from "@tanstack/react-query";
 import { Product, User } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { Search, ShoppingCart, Heart, Store, MapPin, ArrowLeft, Loader2 } from "lucide-react";
+import {
+  Search,
+  ShoppingCart,
+  Heart,
+  Store,
+  MapPin,
+  ArrowLeft,
+  Loader2,
+} from "lucide-react";
 import { useState } from "react";
 import { useParams, Link } from "wouter";
 import Meta from "@/components/meta";
@@ -22,7 +41,7 @@ const formatAddress = (user: User | undefined): string => {
     user.addressPostalCode,
     user.addressCountry,
   ].filter(Boolean); // Filter out null/undefined/empty strings
-  return parts.length > 0 ? parts.join(', ') : "Location not specified";
+  return parts.length > 0 ? parts.join(", ") : "Location not specified";
 };
 
 const container = {
@@ -30,14 +49,14 @@ const container = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.1
-    }
-  }
+      staggerChildren: 0.1,
+    },
+  },
 };
 
 const item = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
+  show: { opacity: 1, y: 0 },
 };
 
 export default function ShopDetails() {
@@ -45,14 +64,21 @@ export default function ShopDetails() {
   console.log("ShopDetails component - Shop ID from params:", id);
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined);
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(
+    undefined,
+  );
 
-  const { data: shop, isLoading: shopLoading, isError: isShopError, error: shopError } = useQuery<User, Error>({
+  const {
+    data: shop,
+    isLoading: shopLoading,
+    isError: isShopError,
+    error: shopError,
+  } = useQuery<User, Error>({
     queryKey: [`/api/users/${id}`],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/users/${id}`);
       if (!res.ok) {
-        throw new Error('Failed to fetch shop details');
+        throw new Error("Failed to fetch shop details");
       }
       const data = await res.json();
       console.log("Successfully fetched shop data:", data);
@@ -67,12 +93,17 @@ export default function ShopDetails() {
     // Optionally show a toast or specific error message here
   }
 
-  const { data: products, isLoading: productsLoading, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
+  const {
+    data: products,
+    isLoading: productsLoading,
+    isError: isProductsError,
+    error: productsError,
+  } = useQuery<Product[], Error>({
     queryKey: [`/api/products/shop/${id}`],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/products/shop/${id}`);
       if (!res.ok) {
-        throw new Error('Failed to fetch shop products');
+        throw new Error("Failed to fetch shop products");
       }
       const data = await res.json();
       console.log("Successfully fetched shop products:", data);
@@ -108,7 +139,8 @@ export default function ShopDetails() {
     onError: (error: Error) => {
       let description = error.message || "Failed to add product to cart";
       if (error.message.includes("Cannot add items from different shops")) {
-        description = "You can only add items from one shop at a time. Please clear your cart or checkout first.";
+        description =
+          "You can only add items from one shop at a time. Please clear your cart or checkout first.";
       }
       toast({
         title: "Error Adding to Cart",
@@ -118,36 +150,42 @@ export default function ShopDetails() {
     },
   });
 
-  const addToWishlistMutation: UseMutationResult<any, Error, number> = useMutation({
-    mutationFn: async (productId: number) => {
-      const res = await apiRequest("POST", "/api/wishlist", { productId });
-      if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error);
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/wishlist"] });
-      toast({
-        title: "Added to wishlist",
-        description: "Product has been added to your wishlist.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add product to wishlist",
-        variant: "destructive",
-      });
-    },
-  });
+  const addToWishlistMutation: UseMutationResult<any, Error, number> =
+    useMutation({
+      mutationFn: async (productId: number) => {
+        const res = await apiRequest("POST", "/api/wishlist", { productId });
+        if (!res.ok) {
+          const error = await res.text();
+          throw new Error(error);
+        }
+        return res.json();
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/wishlist"] });
+        toast({
+          title: "Added to wishlist",
+          description: "Product has been added to your wishlist.",
+        });
+      },
+      onError: (error: Error) => {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to add product to wishlist",
+          variant: "destructive",
+        });
+      },
+    });
 
-  const filteredProducts = products?.filter(product =>
-    (!selectedCategory || product.category === selectedCategory) &&
-    (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     (product.description && product.description.toLowerCase().includes(searchQuery.toLowerCase())))
-  ) ?? []; // Provide default empty array if products is undefined
+  const filteredProducts =
+    products?.filter(
+      (product) =>
+        (!selectedCategory || product.category === selectedCategory) &&
+        (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (product.description &&
+            product.description
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase()))),
+    ) ?? []; // Provide default empty array if products is undefined
 
   const isLoading = shopLoading || productsLoading;
 
@@ -218,12 +256,16 @@ export default function ShopDetails() {
                 )}
               </div>
               <div className="flex-1">
-                <h1 className="text-2xl font-bold">{shop.shopProfile?.shopName ?? shop.name}</h1>
+                <h1 className="text-2xl font-bold">
+                  {shop.shopProfile?.shopName ?? shop.name}
+                </h1>
                 <div className="flex items-center text-muted-foreground mt-1">
                   <MapPin className="h-4 w-4 mr-1" />
                   <span>{formatAddress(shop)}</span>
                 </div>
-                <p className="mt-4">{shop.shopProfile?.description ?? "No description available"}</p>
+                <p className="mt-4">
+                  {shop.shopProfile?.description ?? "No description available"}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -243,7 +285,12 @@ export default function ShopDetails() {
                   className="pl-10"
                 />
               </div>
-              <Select value={selectedCategory ?? ''} onValueChange={(value) => setSelectedCategory(value === '' ? undefined : value)}>
+              <Select
+                value={selectedCategory ?? ""}
+                onValueChange={(value) =>
+                  setSelectedCategory(value === "" ? undefined : value)
+                }
+              >
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
@@ -271,20 +318,30 @@ export default function ShopDetails() {
                   <Card className="h-full flex flex-col">
                     <div className="aspect-square relative overflow-hidden">
                       <img
-                        src={product.images?.[0] || "https://via.placeholder.com/400"}
+                        src={
+                          product.images?.[0] ||
+                          "https://via.placeholder.com/400"
+                        }
                         alt={product.name}
                         className="object-cover w-full h-full"
                       />
-                      {product.mrp && parseFloat(product.mrp) > parseFloat(product.price) && (
-                        <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
-                          {Math.round(((parseFloat(product.mrp) - parseFloat(product.price)) / parseFloat(product.mrp)) * 100)}% OFF
-                        </div>
-                      )}
+                      {product.mrp &&
+                        parseFloat(product.mrp) > parseFloat(product.price) && (
+                          <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                            {Math.round(
+                              ((parseFloat(product.mrp) -
+                                parseFloat(product.price)) /
+                                parseFloat(product.mrp)) *
+                                100,
+                            )}
+                            % OFF
+                          </div>
+                        )}
                     </div>
                     <CardContent className="flex-1 p-4">
                       <h3 className="font-semibold truncate">{product.name}</h3>
                       <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                        {product.description ?? 'No description'}
+                        {product.description ?? "No description"}
                       </p>
                       <div className="flex items-center justify-between">
                         <p className="font-semibold">₹{product.price}</p>
@@ -292,7 +349,9 @@ export default function ShopDetails() {
                           <Button
                             size="icon"
                             variant="outline"
-                            onClick={() => addToWishlistMutation.mutate(product.id)}
+                            onClick={() =>
+                              addToWishlistMutation.mutate(product.id)
+                            }
                             disabled={addToWishlistMutation.isPending}
                           >
                             <Heart className="h-4 w-4" />
@@ -300,7 +359,10 @@ export default function ShopDetails() {
                           <Button
                             size="icon"
                             onClick={() => addToCartMutation.mutate(product.id)}
-                            disabled={!product.isAvailable || addToCartMutation.isPending}
+                            disabled={
+                              !product.isAvailable ||
+                              addToCartMutation.isPending
+                            }
                           >
                             <ShoppingCart className="h-4 w-4" />
                           </Button>

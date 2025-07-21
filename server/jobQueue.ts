@@ -11,7 +11,7 @@ async function runQueue() {
     try {
       await job();
     } catch (err) {
-      console.error('[JobQueue] Job failed:', err);
+      console.error("[JobQueue] Job failed:", err);
     }
   }
   processing = false;

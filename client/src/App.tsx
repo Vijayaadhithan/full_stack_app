@@ -53,32 +53,53 @@ function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
-
       {/* Customer Routes */}
       <ProtectedRoute path="/customer" component={CustomerDashboard} />
-      <ProtectedRoute path="/customer/browse-services" component={BrowseServices} />
-      <ProtectedRoute path="/customer/service-details/:id" component={ServiceDetails} />
-      <ProtectedRoute path="/customer/service-provider/:id" component={ServiceProvider} />
-      <ProtectedRoute path="/customer/book-service/:id" component={BookService} />
-      <ProtectedRoute path="/customer/browse-products" component={BrowseProducts} />
+      <ProtectedRoute
+        path="/customer/browse-services"
+        component={BrowseServices}
+      />
+      <ProtectedRoute
+        path="/customer/service-details/:id"
+        component={ServiceDetails}
+      />
+      <ProtectedRoute
+        path="/customer/service-provider/:id"
+        component={ServiceProvider}
+      />
+      <ProtectedRoute
+        path="/customer/book-service/:id"
+        component={BookService}
+      />
+      <ProtectedRoute
+        path="/customer/browse-products"
+        component={BrowseProducts}
+      />
       <ProtectedRoute path="/customer/browse-shops" component={BrowseShops} />
       <ProtectedRoute path="/customer/shops/:id" component={ShopDetails} />
-      <ProtectedRoute path="/customer/shops/:shopId/products/:productId" component={ProductDetails} /> {/* Add route for product details */}
+      <ProtectedRoute
+        path="/customer/shops/:shopId/products/:productId"
+        component={ProductDetails}
+      />{" "}
+      {/* Add route for product details */}
       <ProtectedRoute path="/customer/cart" component={Cart} />
       <ProtectedRoute path="/customer/wishlist" component={Wishlist} />
       <ProtectedRoute path="/customer/bookings" component={Bookings} />
       <ProtectedRoute path="/customer/order/:id" component={OrderDetails} />
       <ProtectedRoute path="/customer/orders" component={Orders} />
-      <ProtectedRoute path="/customer/profile" component={CustomerProfile} /> {/* Add this route */}
-      <ProtectedRoute path="/customer/my-reviews" component={MyReviews} /> {/* Add route for My Reviews page */}
-
+      <ProtectedRoute
+        path="/customer/profile"
+        component={CustomerProfile}
+      />{" "}
+      {/* Add this route */}
+      <ProtectedRoute path="/customer/my-reviews" component={MyReviews} />{" "}
+      {/* Add route for My Reviews page */}
       {/* Provider Routes */}
       <ProtectedRoute path="/provider" component={ProviderDashboard} />
       <ProtectedRoute path="/provider/profile" component={ProviderProfile} />
       <ProtectedRoute path="/provider/services" component={ProviderServices} />
       <ProtectedRoute path="/provider/bookings" component={ProviderBookings} />
       <ProtectedRoute path="/provider/reviews" component={ProviderReviews} />
-
       {/* Shop Routes */}
       <ProtectedRoute path="/shop" component={ShopDashboard} />
       <ProtectedRoute path="/shop/profile" component={ShopProfile} />
@@ -87,8 +108,6 @@ function Router() {
       <ProtectedRoute path="/shop/inventory" component={ShopInventory} />
       <ProtectedRoute path="/shop/promotions" component={ShopPromotions} />
       <ProtectedRoute path="/shop/reviews" component={ShopReviews} />
-      
-
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/" component={AuthPage} />
       <Route component={NotFound} />
@@ -112,7 +131,7 @@ function App() {
     // };
 
     // Call testPermissions for demonstration if needed, or integrate into UI
-    // testPermissions(); 
+    // testPermissions();
   }, []);
 
   return (

@@ -14,7 +14,7 @@ export async function apiRequest(
 ): Promise<Response> {
   // Check if data is FormData (for file uploads)
   const isFormData = data instanceof FormData;
-  
+
   const res = await fetch(url, {
     method,
     // Don't set Content-Type for FormData (browser will set it with boundary)
@@ -39,9 +39,9 @@ export const getQueryFn: <T>(options: {
     if (queryKey.length > 1 && queryKey[1] !== undefined) {
       url = `${url}/${queryKey[1]}`;
     }
-    
+
     console.log("Making API request to:", url);
-    
+
     const res = await fetch(url, {
       credentials: "include",
     });

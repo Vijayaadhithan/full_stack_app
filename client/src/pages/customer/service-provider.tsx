@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Service, User, Review } from "@shared/schema";
 import { Loader2, MapPin, Clock, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useParams, Link } from "wouter";
-import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 
 // Helper function to format address
 const formatAddress = (user: User | undefined): string => {
@@ -19,7 +19,7 @@ const formatAddress = (user: User | undefined): string => {
     user.addressPostalCode,
     user.addressCountry,
   ].filter(Boolean); // Filter out null/undefined/empty strings
-  return parts.length > 0 ? parts.join(', ') : "Address not available";
+  return parts.length > 0 ? parts.join(", ") : "Address not available";
 };
 
 export default function ServiceProvider() {
@@ -27,14 +27,26 @@ export default function ServiceProvider() {
   console.log("ServiceProvider component - Service ID from params:", id);
 
   // Fetch service details with provider info
-  const { data: service, isLoading, isError: serviceIsError, error: serviceError, isSuccess: serviceIsSuccess } = useQuery<Service & { provider: User }, Error>({
+  const {
+    data: service,
+    isLoading,
+    isError: serviceIsError,
+    error: serviceError,
+    isSuccess: serviceIsSuccess,
+  } = useQuery<Service & { provider: User }, Error>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
     retry: false, // Optional: prevent retries on error if desired
   });
 
   // Fetch reviews separately
-  const { data: reviews, isLoading: reviewsLoading, isError: reviewsIsError, error: reviewsError, isSuccess: reviewsIsSuccess } = useQuery<Review[], Error>({
+  const {
+    data: reviews,
+    isLoading: reviewsLoading,
+    isError: reviewsIsError,
+    error: reviewsError,
+    isSuccess: reviewsIsSuccess,
+  } = useQuery<Review[], Error>({
     queryKey: [`/api/reviews/service/${id}`],
     enabled: !!id,
     retry: false, // Optional: prevent retries on error if desired
@@ -95,7 +107,8 @@ export default function ServiceProvider() {
   // Ensure reviews is an array before calculating average rating
   const validReviews = Array.isArray(reviews) ? reviews : [];
   const averageRating = validReviews.length
-    ? validReviews.reduce((acc, review) => acc + review.rating, 0) / validReviews.length
+    ? validReviews.reduce((acc, review) => acc + review.rating, 0) /
+      validReviews.length
     : 0;
 
   return (
@@ -112,14 +125,22 @@ export default function ServiceProvider() {
               <CardContent className="pt-6 space-y-4">
                 <div className="flex flex-col items-center text-center">
                   <img
-                    src={service.provider?.profilePicture || "https://via.placeholder.com/128"}
+                    src={
+                      service.provider?.profilePicture ||
+                      "https://via.placeholder.com/128"
+                    }
                     alt={service.provider?.name}
                     className="h-32 w-32 rounded-full object-cover mb-4"
                   />
-                  <h2 className="text-2xl font-bold">{service.provider?.name}</h2>
+                  <h2 className="text-2xl font-bold">
+                    {service.provider?.name}
+                  </h2>
                   <div className="flex items-center gap-1 text-yellow-500">
                     <Star className="h-4 w-4 fill-current" />
-                    <span>{averageRating.toFixed(1)} ({validReviews.length || 0} reviews)</span>
+                    <span>
+                      {averageRating.toFixed(1)} ({validReviews.length || 0}{" "}
+                      reviews)
+                    </span>
                   </div>
                   <p className="text-muted-foreground mt-2 flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
@@ -167,19 +188,33 @@ export default function ServiceProvider() {
               <CardContent>
                 <div className="space-y-4">
                   {!validReviews.length ? (
-                    <p className="text-center text-muted-foreground">No reviews yet</p>
+                    <p className="text-center text-muted-foreground">
+                      No reviews yet
+                    </p>
                   ) : (
                     validReviews.map((review) => (
-                      <div key={review.id} className="border-b pb-4 last:border-0">
+                      <div
+                        key={review.id}
+                        className="border-b pb-4 last:border-0"
+                      >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <div className="flex text-yellow-500">
-                              {Array.from({ length: review.rating }).map((_, i) => (
-                                <Star key={i} className="h-4 w-4 fill-current" />
-                              ))}
+                              {Array.from({ length: review.rating }).map(
+                                (_, i) => (
+                                  <Star
+                                    key={i}
+                                    className="h-4 w-4 fill-current"
+                                  />
+                                ),
+                              )}
                             </div>
                             <span className="text-sm text-muted-foreground">
-                              {formatIndianDisplay(review.createdAt || '', 'date')} {/* Use formatIndianDisplay */}
+                              {formatIndianDisplay(
+                                review.createdAt || "",
+                                "date",
+                              )}{" "}
+                              {/* Use formatIndianDisplay */}
                             </span>
                           </div>
                         </div>
@@ -187,7 +222,8 @@ export default function ServiceProvider() {
                         {review.providerReply && (
                           <div className="mt-2 pl-4 border-l-2">
                             <p className="text-sm text-muted-foreground">
-                              <span className="font-semibold">Response:</span> {review.providerReply}
+                              <span className="font-semibold">Response:</span>{" "}
+                              {review.providerReply}
                             </p>
                           </div>
                         )}

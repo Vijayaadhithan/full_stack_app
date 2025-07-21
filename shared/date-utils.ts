@@ -1,10 +1,10 @@
 /**
  * Utility functions for handling dates with Indian Standard Time (IST)
  */
-import { formatInTimeZone, toZonedTime, fromZonedTime } from 'date-fns-tz';
-import { format as formatBase, parseISO, isValid } from 'date-fns';
+import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
+import { format as formatBase, parseISO, isValid } from "date-fns";
 
-const timeZone = 'Asia/Kolkata';
+const timeZone = "Asia/Kolkata";
 
 /**
  * Converts a Date object or date string (assumed UTC if no timezone specified) to a Date object representing the equivalent time in IST.
@@ -14,7 +14,7 @@ const timeZone = 'Asia/Kolkata';
  * @returns Date object representing the time in IST
  */
 export function toIndianTime(date: Date | string): Date {
-  const inputDate = typeof date === 'string' ? parseISO(date) : date;
+  const inputDate = typeof date === "string" ? parseISO(date) : date;
   return toZonedTime(inputDate, timeZone);
 }
 
@@ -25,10 +25,13 @@ export function toIndianTime(date: Date | string): Date {
  * @param formatString The date-fns format string (e.g., 'yyyy-MM-dd HH:mm:ss')
  * @returns Formatted date string in IST
  */
-export function formatInIndianTime(date: Date | string, formatString: string): string {
+export function formatInIndianTime(
+  date: Date | string,
+  formatString: string,
+): string {
   // Handle different date input types
   let inputDate: Date;
-  if (typeof date === 'string') {
+  if (typeof date === "string") {
     inputDate = parseISO(date);
   } else {
     inputDate = date;
@@ -36,15 +39,15 @@ export function formatInIndianTime(date: Date | string, formatString: string): s
 
   // Validate date before formatting
   if (!isValid(inputDate)) {
-    console.error('Invalid date passed to formatInIndianTime:', date);
-    return 'Invalid Date';
+    console.error("Invalid date passed to formatInIndianTime:", date);
+    return "Invalid Date";
   }
 
   try {
     return formatInTimeZone(inputDate, timeZone, formatString);
   } catch (error) {
-    console.error('Error formatting date:', error);
-    return 'Date Format Error';
+    console.error("Error formatting date:", error);
+    return "Date Format Error";
   }
 }
 
@@ -62,7 +65,7 @@ export function newIndianDate(): Date {
  * @returns ISO string representing the time in IST (with IST offset)
  */
 export function toIndianISOString(dateStr: string | Date): string {
-  const inputDate = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr;
+  const inputDate = typeof dateStr === "string" ? parseISO(dateStr) : dateStr;
   // Format in IST timezone with the ISO format including offset
   return formatInTimeZone(inputDate, timeZone, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 }
@@ -73,37 +76,41 @@ export function toIndianISOString(dateStr: string | Date): string {
  * @param formatType Type of format to use ('date', 'time', 'datetime')
  * @returns Formatted date string
  */
-export function formatIndianDisplay(date: Date | string, formatType: 'date' | 'time' | 'datetime' = 'datetime'): string {
+export function formatIndianDisplay(
+  date: Date | string,
+  formatType: "date" | "time" | "datetime" = "datetime",
+): string {
   if (!date) {
-    console.error('Undefined date passed to formatIndianDisplay');
-    return 'N/A';
+    console.error("Undefined date passed to formatIndianDisplay");
+    return "N/A";
   }
 
   try {
-    const parsedDate = typeof date === 'string' ? parseISO(date) : new Date(date);
-    
+    const parsedDate =
+      typeof date === "string" ? parseISO(date) : new Date(date);
+
     if (!isValid(parsedDate)) {
-      console.error('Invalid date in formatIndianDisplay:', date);
-      return 'Invalid Date';
+      console.error("Invalid date in formatIndianDisplay:", date);
+      return "Invalid Date";
     }
 
-    let formatString = '';
+    let formatString = "";
     switch (formatType) {
-      case 'date':
-        formatString = 'dd MMMM yyyy';
+      case "date":
+        formatString = "dd MMMM yyyy";
         break;
-      case 'time':
-        formatString = 'hh:mm a';
+      case "time":
+        formatString = "hh:mm a";
         break;
-      case 'datetime':
+      case "datetime":
       default:
-        formatString = 'dd MMMM yyyy, hh:mm a';
+        formatString = "dd MMMM yyyy, hh:mm a";
         break;
     }
 
     return formatInIndianTime(parsedDate, formatString);
   } catch (error) {
-    console.error('Error in formatIndianDisplay:', error);
-    return 'Date Error';
+    console.error("Error in formatIndianDisplay:", error);
+    return "Date Error";
   }
 }

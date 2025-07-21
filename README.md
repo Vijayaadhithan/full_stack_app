@@ -131,7 +131,9 @@ npm test
 ```bash
 npm test -- --grep "test-name"
 ```
+
 `npm run dev` – start frontend and backend in development
+
 - `npm run build` – build for production
 - `npm run start` – run the compiled server
 - `npm run lint` – run ESLint

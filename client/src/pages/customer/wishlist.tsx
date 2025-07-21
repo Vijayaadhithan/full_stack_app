@@ -13,14 +13,14 @@ const container = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.1
-    }
-  }
+      staggerChildren: 0.1,
+    },
+  },
 };
 
 const item = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
+  show: { opacity: 1, y: 0 },
 };
 
 export default function Wishlist() {
@@ -52,7 +52,8 @@ export default function Wishlist() {
     onError: (error: Error) => {
       let description = error.message || "Failed to add product to cart";
       if (error.message.includes("Cannot add items from different shops")) {
-        description = "You can only add items from one shop at a time. Please clear your cart or checkout first.";
+        description =
+          "You can only add items from one shop at a time. Please clear your cart or checkout first.";
       }
       toast({
         title: "Error Adding to Cart",
@@ -114,7 +115,10 @@ export default function Wishlist() {
                   <CardContent className="p-6">
                     <div className="flex gap-4">
                       <img
-                        src={product.images?.[0] || "https://via.placeholder.com/100"}
+                        src={
+                          product.images?.[0] ||
+                          "https://via.placeholder.com/100"
+                        }
                         alt={product.name}
                         className="w-24 h-24 object-cover rounded"
                       />
@@ -129,7 +133,9 @@ export default function Wishlist() {
                         <Button
                           size="icon"
                           onClick={() => addToCartMutation.mutate(product.id)}
-                          disabled={!product.isAvailable || addToCartMutation.isPending}
+                          disabled={
+                            !product.isAvailable || addToCartMutation.isPending
+                          }
                         >
                           <ShoppingCart className="h-4 w-4" />
                         </Button>
@@ -137,7 +143,9 @@ export default function Wishlist() {
                           size="icon"
                           variant="outline"
                           className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => removeFromWishlistMutation.mutate(product.id)}
+                          onClick={() =>
+                            removeFromWishlistMutation.mutate(product.id)
+                          }
                           disabled={removeFromWishlistMutation.isPending}
                         >
                           <Trash2 className="h-4 w-4" />

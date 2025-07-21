@@ -28,7 +28,7 @@ export function LanguageSelector() {
         {Object.entries(languageNames).map(([code, name]) => (
           <DropdownMenuItem
             key={code}
-            onClick={() => setLanguage(code as 'en' | 'hi' | 'ta')}
+            onClick={() => setLanguage(code as "en" | "hi" | "ta")}
             className={language === code ? "bg-accent" : ""}
           >
             {name}

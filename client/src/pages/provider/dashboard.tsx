@@ -1,11 +1,16 @@
 // src/pages/provider/dashboard.tsx
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,12 +22,25 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -45,7 +63,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Booking, Review, Service } from "@shared/schema";
-import { formatIndianDisplay } from '@shared/date-utils';
+import { formatIndianDisplay } from "@shared/date-utils";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -56,70 +74,116 @@ import { useLanguage } from "@/contexts/language-context";
 // ─── PENDING BOOKING REQUESTS COMPONENT ───────────────────────────────
 function PendingBookingRequestsList() {
   const { toast } = useToast();
-  const [selectedBooking, setSelectedBooking] = useState<(Booking & { service?: Service }) | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<
+    (Booking & { service?: Service }) | null
+  >(null);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
-  const [actionType, setActionType] = useState<'accept' | 'reject' | null>(null);
-  const [actionComment, setActionComment] = useState('');
+  const [actionType, setActionType] = useState<"accept" | "reject" | null>(
+    null,
+  );
+  const [actionComment, setActionComment] = useState("");
 
-  const { data: pendingBookings, isLoading } = useQuery<(Booking & { service?: Service })[]>({
+  const { data: pendingBookings, isLoading } = useQuery<
+    (Booking & { service?: Service })[]
+  >({
     queryKey: ["/api/bookings/provider/pending"],
   });
 
   const updateBookingMutation = useMutation({
-    mutationFn: async ({ id, status, comments }: { id: number; status: string; comments: string }) => {
+    mutationFn: async ({
+      id,
+      status,
+      comments,
+    }: {
+      id: number;
+      status: string;
+      comments: string;
+    }) => {
       // 'comments' from input is the rejection reason if status is 'rejected'
       const payload: { status: string; rejectionReason?: string } = { status };
-      if (status === 'rejected') {
+      if (status === "rejected") {
         payload.rejectionReason = comments;
       }
       // Corrected endpoint to PATCH /api/bookings/:id/status
-      const res = await apiRequest("PATCH", `/api/bookings/${id}/status`, payload);
+      const res = await apiRequest(
+        "PATCH",
+        `/api/bookings/${id}/status`,
+        payload,
+      );
       const updatedBookingData = await res.json();
       // Pass along the original input 'comments' as it's needed for the rejection email
       return { responseData: updatedBookingData, inputComments: comments };
     },
-    onSuccess: async (result) => { // 'result' is { responseData: { booking: updatedBookingData, message: string }, inputComments: comments }
+    onSuccess: async (result) => {
+      // 'result' is { responseData: { booking: updatedBookingData, message: string }, inputComments: comments }
       const { responseData, inputComments } = result;
       const updatedBooking = responseData.booking; // Access the nested booking object
 
       // Existing success logic
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings/provider/pending"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings/provider/history"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings/provider/pending"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings/provider/history"],
+      });
       toast({
         title: "Success",
-        description: `Booking ${updatedBooking.status === 'accepted' ? 'accepted' : 'rejected'} successfully`,
+        description: `Booking ${updatedBooking.status === "accepted" ? "accepted" : "rejected"} successfully`,
       });
       setActionDialogOpen(false);
       setSelectedBooking(null);
-      setActionComment('');
+      setActionComment("");
 
       // New logic for email notification
       const bookingId = updatedBooking.id;
 
       if (updatedBooking.status === "accepted") {
-        console.log(`[FRONTEND] Booking ${bookingId} accepted. Triggering acceptance email.`);
+        console.log(
+          `[FRONTEND] Booking ${bookingId} accepted. Triggering acceptance email.`,
+        );
         try {
-          await apiRequest("POST", `/api/bookings/${bookingId}/notify-customer-accepted`);
-          console.log(`[FRONTEND] Acceptance email trigger for booking ${bookingId} sent.`);
+          await apiRequest(
+            "POST",
+            `/api/bookings/${bookingId}/notify-customer-accepted`,
+          );
+          console.log(
+            `[FRONTEND] Acceptance email trigger for booking ${bookingId} sent.`,
+          );
         } catch (emailError) {
-          console.error(`[FRONTEND] Failed to trigger acceptance email for ${bookingId}:`, emailError);
+          console.error(
+            `[FRONTEND] Failed to trigger acceptance email for ${bookingId}:`,
+            emailError,
+          );
           toast({
             title: "Email Notification Issue",
-            description: "Failed to send acceptance email to customer. Please check logs.",
+            description:
+              "Failed to send acceptance email to customer. Please check logs.",
             variant: "default",
           });
         }
       } else if (updatedBooking.status === "rejected") {
         const rejectionReason = inputComments;
-        console.log(`[FRONTEND] Booking ${bookingId} rejected. Triggering rejection email. Reason: ${rejectionReason}`);
+        console.log(
+          `[FRONTEND] Booking ${bookingId} rejected. Triggering rejection email. Reason: ${rejectionReason}`,
+        );
         try {
-          await apiRequest("POST", `/api/bookings/${bookingId}/notify-customer-rejected`, { rejectionReason });
-          console.log(`[FRONTEND] Rejection email trigger for booking ${bookingId} sent.`);
+          await apiRequest(
+            "POST",
+            `/api/bookings/${bookingId}/notify-customer-rejected`,
+            { rejectionReason },
+          );
+          console.log(
+            `[FRONTEND] Rejection email trigger for booking ${bookingId} sent.`,
+          );
         } catch (emailError) {
-          console.error(`[FRONTEND] Failed to trigger rejection email for ${bookingId}:`, emailError);
+          console.error(
+            `[FRONTEND] Failed to trigger rejection email for ${bookingId}:`,
+            emailError,
+          );
           toast({
             title: "Email Notification Issue",
-            description: "Failed to send rejection email to customer. Please check logs.",
+            description:
+              "Failed to send rejection email to customer. Please check logs.",
             variant: "default",
           });
         }
@@ -138,7 +202,7 @@ function PendingBookingRequestsList() {
     if (!selectedBooking || !actionType) return;
     updateBookingMutation.mutate({
       id: selectedBooking.id,
-      status: actionType === 'accept' ? 'accepted' : 'rejected',
+      status: actionType === "accept" ? "accepted" : "rejected",
       comments: actionComment,
     });
   };
@@ -152,24 +216,33 @@ function PendingBookingRequestsList() {
   }
 
   if (!pendingBookings || pendingBookings.length === 0) {
-    return <p className="text-sm text-muted-foreground">You have no pending booking requests</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        You have no pending booking requests
+      </p>
+    );
   }
 
   return (
     <div className="space-y-3">
       {pendingBookings.map((booking) => (
-        <div key={booking.id} className="flex items-center justify-between border rounded-md p-3">
+        <div
+          key={booking.id}
+          className="flex items-center justify-between border rounded-md p-3"
+        >
           <div>
             <p className="font-medium">{booking.service?.name}</p>
             <p className="text-sm text-muted-foreground">
-              {booking.bookingDate ? formatIndianDisplay(booking.bookingDate, 'date') : 'Date not set'}
+              {booking.bookingDate
+                ? formatIndianDisplay(booking.bookingDate, "date")
+                : "Date not set"}
             </p>
             <div className="flex items-center mt-1">
               <Clock className="h-3 w-3 mr-1 text-yellow-500" />
               <span className="text-xs">
                 {booking.expiresAt
                   ? `Expires in ${Math.ceil((new Date(booking.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days`
-                  : 'Expiration not set'}
+                  : "Expiration not set"}
               </span>
             </div>
           </div>
@@ -180,7 +253,7 @@ function PendingBookingRequestsList() {
               className="flex items-center gap-1"
               onClick={() => {
                 setSelectedBooking(booking);
-                setActionType('accept');
+                setActionType("accept");
                 setActionDialogOpen(true);
               }}
             >
@@ -193,7 +266,7 @@ function PendingBookingRequestsList() {
               className="flex items-center gap-1"
               onClick={() => {
                 setSelectedBooking(booking);
-                setActionType('reject');
+                setActionType("reject");
                 setActionDialogOpen(true);
               }}
             >
@@ -207,7 +280,9 @@ function PendingBookingRequestsList() {
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{actionType === 'accept' ? 'Accept' : 'Reject'} Booking Request</DialogTitle>
+            <DialogTitle>
+              {actionType === "accept" ? "Accept" : "Reject"} Booking Request
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -218,8 +293,8 @@ function PendingBookingRequestsList() {
               <p className="text-sm font-medium">Date & Time</p>
               <p className="text-sm">
                 {selectedBooking?.bookingDate
-                  ? formatIndianDisplay(selectedBooking.bookingDate, 'datetime')
-                  : 'Date not set'}
+                  ? formatIndianDisplay(selectedBooking.bookingDate, "datetime")
+                  : "Date not set"}
               </p>
             </div>
             <div className="space-y-2">
@@ -228,27 +303,37 @@ function PendingBookingRequestsList() {
                 value={actionComment}
                 onChange={(e) => setActionComment(e.target.value)}
                 placeholder={
-                  actionType === 'accept'
-                    ? 'Add any instructions for the customer'
-                    : 'Provide a reason for rejection'
+                  actionType === "accept"
+                    ? "Add any instructions for the customer"
+                    : "Provide a reason for rejection"
                 }
               />
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setActionDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setActionDialogOpen(false)}
+            >
               Cancel
             </Button>
-            <Button onClick={handleAction} disabled={updateBookingMutation.isPending}>
-              {updateBookingMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {actionType === 'accept' ? 'Accept' : 'Reject'}
+            <Button
+              onClick={handleAction}
+              disabled={updateBookingMutation.isPending}
+            >
+              {updateBookingMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {actionType === "accept" ? "Accept" : "Reject"}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
       <Button variant="outline" size="sm" asChild className="w-full">
-        <Link href="/provider/bookings?status=accepted">View All Upcoming Bookings</Link>
+        <Link href="/provider/bookings?status=accepted">
+          View All Upcoming Bookings
+        </Link>
       </Button>
     </div>
   );
@@ -256,7 +341,9 @@ function PendingBookingRequestsList() {
 
 // ─── BOOKING HISTORY COMPONENT ─────────────────────────────────────────
 function BookingHistoryList() {
-  const { data: bookingHistory, isLoading } = useQuery<(Booking & { service?: Service })[]>({
+  const { data: bookingHistory, isLoading } = useQuery<
+    (Booking & { service?: Service })[]
+  >({
     queryKey: ["/api/bookings/provider/history"],
   });
 
@@ -269,7 +356,11 @@ function BookingHistoryList() {
   }
 
   if (!bookingHistory || bookingHistory.length === 0) {
-    return <p className="text-sm text-muted-foreground">You have no booking history yet</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        You have no booking history yet
+      </p>
+    );
   }
 
   const recentHistory = bookingHistory.slice(0, 3);
@@ -277,26 +368,31 @@ function BookingHistoryList() {
   return (
     <div className="space-y-3">
       {recentHistory.map((booking) => (
-        <div key={booking.id} className="flex items-center justify-between border rounded-md p-3">
+        <div
+          key={booking.id}
+          className="flex items-center justify-between border rounded-md p-3"
+        >
           <div>
             <p className="font-medium">{booking.service?.name}</p>
             <p className="text-sm text-muted-foreground">
-              {booking.bookingDate ? formatIndianDisplay(booking.bookingDate, 'date') : 'Date not set'}
+              {booking.bookingDate
+                ? formatIndianDisplay(booking.bookingDate, "date")
+                : "Date not set"}
             </p>
             <div className="flex items-center mt-1">
-              {booking.status === 'accepted' && (
+              {booking.status === "accepted" && (
                 <>
                   <CheckCircle className="h-3 w-3 mr-1 text-green-500" />
                   <span className="text-xs">Accepted</span>
                 </>
               )}
-              {booking.status === 'rejected' && (
+              {booking.status === "rejected" && (
                 <>
                   <XCircle className="h-3 w-3 mr-1 text-red-500" />
                   <span className="text-xs">Rejected</span>
                 </>
               )}
-              {booking.status === 'expired' && (
+              {booking.status === "expired" && (
                 <>
                   <AlertCircle className="h-3 w-3 mr-1 text-orange-500" />
                   <span className="text-xs">Expired</span>
@@ -305,12 +401,16 @@ function BookingHistoryList() {
             </div>
           </div>
           <Badge
-            variant={booking.status === 'accepted' ? 'default' : 'destructive'}
+            variant={booking.status === "accepted" ? "default" : "destructive"}
             className="flex items-center gap-1"
           >
-            {booking.status === 'accepted' && <CheckCircle className="h-3 w-3" />}
-            {booking.status === 'rejected' && <XCircle className="h-3 w-3" />}
-            {booking.status === 'expired' && <AlertCircle className="h-3 w-3" />}
+            {booking.status === "accepted" && (
+              <CheckCircle className="h-3 w-3" />
+            )}
+            {booking.status === "rejected" && <XCircle className="h-3 w-3" />}
+            {booking.status === "expired" && (
+              <AlertCircle className="h-3 w-3" />
+            )}
             {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
           </Badge>
         </div>
@@ -333,15 +433,15 @@ const item = {
 };
 
 const DAYS = [
-  { key: 'sunday', label: 'S' },
-  { key: 'monday', label: 'M' },
-  { key: 'tuesday', label: 'T' },
-  { key: 'wednesday', label: 'W' },
-  { key: 'thursday', label: 'T' },
-  { key: 'friday', label: 'F' },
-  { key: 'saturday', label: 'S' },
+  { key: "sunday", label: "S" },
+  { key: "monday", label: "M" },
+  { key: "tuesday", label: "T" },
+  { key: "wednesday", label: "W" },
+  { key: "thursday", label: "T" },
+  { key: "friday", label: "F" },
+  { key: "saturday", label: "S" },
 ] as const;
-type DayKey = typeof DAYS[number]['key'];
+type DayKey = (typeof DAYS)[number]["key"];
 
 const serviceFormSchema = z.object({
   name: z.string().min(1, "Service name is required"),
@@ -351,22 +451,30 @@ const serviceFormSchema = z.object({
   duration: z.coerce.number().min(15, "Duration must be at least 15 minutes"),
   isAvailable: z.boolean().default(true),
   workingHours: z.object(
-    DAYS.reduce((acc, day) => {
-      acc[day.key] = z.object({
-        isAvailable: z.boolean().default(day.key !== 'sunday'),
+    DAYS.reduce(
+      (acc, day) => {
+        acc[day.key] = z.object({
+          isAvailable: z.boolean().default(day.key !== "sunday"),
+          start: z.string().min(1, "Start time is required"),
+          end: z.string().min(1, "End time is required"),
+        });
+        return acc;
+      },
+      {} as Record<DayKey, any>,
+    ),
+  ),
+  breakTime: z
+    .array(
+      z.object({
         start: z.string().min(1, "Start time is required"),
         end: z.string().min(1, "End time is required"),
-      });
-      return acc;
-    }, {} as Record<DayKey, any>)
-  ),
-  breakTime: z.array(
-    z.object({
-      start: z.string().min(1, "Start time is required"),
-      end: z.string().min(1, "End time is required"),
-    })
-  ).optional().default([]),
-  maxDailyBookings: z.coerce.number().min(1, "Must accept at least 1 booking per day"),
+      }),
+    )
+    .optional()
+    .default([]),
+  maxDailyBookings: z.coerce
+    .number()
+    .min(1, "Must accept at least 1 booking per day"),
   bufferTime: z.coerce.number().min(0, "Buffer time must be non-negative"),
   addressStreet: z.string().optional(),
   addressCity: z.string().optional(),
@@ -384,7 +492,9 @@ export default function ProviderDashboard() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
-  const [activeTab, setActiveTab] = useState<"basic" | "availability" | "scheduling" | "location">("basic"); // Added scheduling tab type
+  const [activeTab, setActiveTab] = useState<
+    "basic" | "availability" | "scheduling" | "location"
+  >("basic"); // Added scheduling tab type
 
   const form = useForm<ServiceFormData>({
     resolver: zodResolver(serviceFormSchema),
@@ -395,10 +505,20 @@ export default function ProviderDashboard() {
       price: "",
       duration: 15,
       isAvailable: true,
-      workingHours: DAYS.reduce((acc, day) => {
-        acc[day.key] = { isAvailable: day.key !== 'sunday', start: "09:00", end: "17:00" };
-        return acc;
-      }, {} as Record<DayKey, { isAvailable: boolean; start: string; end: string }>),
+      workingHours: DAYS.reduce(
+        (acc, day) => {
+          acc[day.key] = {
+            isAvailable: day.key !== "sunday",
+            start: "09:00",
+            end: "17:00",
+          };
+          return acc;
+        },
+        {} as Record<
+          DayKey,
+          { isAvailable: boolean; start: string; end: string }
+        >,
+      ),
       breakTime: [],
       maxDailyBookings: 1,
       bufferTime: 0,
@@ -415,7 +535,9 @@ export default function ProviderDashboard() {
     queryKey: [`/api/services/provider/${user?.id}`],
     enabled: !!user?.id,
   });
-  const { data: bookings, isLoading: bookingsLoading } = useQuery<(Booking & { service?: Service })[]>({
+  const { data: bookings, isLoading: bookingsLoading } = useQuery<
+    (Booking & { service?: Service })[]
+  >({
     queryKey: [`/api/bookings/provider/${user?.id}`],
     enabled: !!user?.id,
   });
@@ -425,8 +547,12 @@ export default function ProviderDashboard() {
   });
 
   // Metrics
-  const activeServicesCount = services ? services.filter(s => s.isAvailable).length : 0;
-  const pendingBookingsCount = bookings ? bookings.filter(b => b.status === "pending").length : 0;
+  const activeServicesCount = services
+    ? services.filter((s) => s.isAvailable).length
+    : 0;
+  const pendingBookingsCount = bookings
+    ? bookings.filter((b) => b.status === "pending").length
+    : 0;
   const averageRating =
     reviews && reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
@@ -434,12 +560,16 @@ export default function ProviderDashboard() {
   const upcomingBookings = bookings
     ? bookings
         .filter(
-          b =>
+          (b) =>
             b.status === "accepted" &&
             b.bookingDate &&
-            new Date(b.bookingDate) > new Date()
+            new Date(b.bookingDate) > new Date(),
         )
-        .sort((a, b) => new Date(a.bookingDate).getTime() - new Date(b.bookingDate).getTime())
+        .sort(
+          (a, b) =>
+            new Date(a.bookingDate).getTime() -
+            new Date(b.bookingDate).getTime(),
+        )
         .slice(0, 5)
     : [];
 
@@ -457,18 +587,30 @@ export default function ProviderDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/services/provider/${user?.id}`],
+      });
       toast({ title: "Success", description: "Service created successfully" });
       form.reset();
       setDialogOpen(false);
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
   const updateServiceMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<ServiceFormData> }) => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: Partial<ServiceFormData>;
+    }) => {
       const res = await apiRequest("PATCH", `/api/services/${id}`, data);
       if (!res.ok) {
         const err = await res.json();
@@ -477,13 +619,19 @@ export default function ProviderDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/services/provider/${user?.id}`],
+      });
       toast({ title: "Success", description: "Service updated successfully" });
       setDialogOpen(false);
       setEditingService(null);
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -497,34 +645,54 @@ export default function ProviderDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/services/provider/${user?.id}`],
+      });
       toast({ title: "Success", description: "Service deleted successfully" });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
   const onSubmit = async (data: ServiceFormData) => {
     try {
       if (editingService) {
-        await updateServiceMutation.mutateAsync({ id: editingService.id, data });
+        await updateServiceMutation.mutateAsync({
+          id: editingService.id,
+          data,
+        });
       } else {
         await createServiceMutation.mutateAsync(data);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/services"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/services/provider/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/services/provider/${user?.id}`],
+      });
       setDialogOpen(false);
       form.reset();
       setEditingService(null);
     } catch (error) {
-      toast({ title: "Error", description: (error as Error).message, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
     }
   };
 
   return (
     <DashboardLayout>
-      <motion.div variants={container} initial="hidden" animate="show" className="p-6 space-y-6">
+      <motion.div
+        variants={container}
+        initial="hidden"
+        animate="show"
+        className="p-6 space-y-6"
+      >
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Welcome, {user?.name}</h1>
@@ -535,7 +703,13 @@ export default function ProviderDashboard() {
                 Manage Profile
               </Button>
             </Link>
-            <Button onClick={() => { setEditingService(null); form.reset(); setDialogOpen(true); }}>
+            <Button
+              onClick={() => {
+                setEditingService(null);
+                form.reset();
+                setDialogOpen(true);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" /> Add Service
             </Button>
           </div>
@@ -545,8 +719,10 @@ export default function ProviderDashboard() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <motion.div variants={item}>
             <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Active Services</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Active Services
+                </CardTitle>
                 <Calendar className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -557,7 +733,9 @@ export default function ProviderDashboard() {
           <motion.div variants={item}>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pending Bookings</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Pending Bookings
+                </CardTitle>
                 <Calendar className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -568,7 +746,9 @@ export default function ProviderDashboard() {
           <motion.div variants={item}>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Average Rating</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Average Rating
+                </CardTitle>
                 <Star className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -609,7 +789,13 @@ export default function ProviderDashboard() {
           <Card>
             <CardHeader className="flex justify-between items-center">
               <CardTitle>Services Offered</CardTitle>
-              <Button onClick={() => { setEditingService(null); form.reset(); setDialogOpen(true); }}>
+              <Button
+                onClick={() => {
+                  setEditingService(null);
+                  form.reset();
+                  setDialogOpen(true);
+                }}
+              >
                 <Plus className="h-4 w-4 mr-2" /> Add Service
               </Button>
             </CardHeader>
@@ -620,8 +806,17 @@ export default function ProviderDashboard() {
                 </div>
               ) : !services || services.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground mb-4">No services added yet</p>
-                  <Button variant="outline" onClick={() => { setEditingService(null); form.reset(); setDialogOpen(true); }}>
+                  <p className="text-muted-foreground mb-4">
+                    No services added yet
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditingService(null);
+                      form.reset();
+                      setDialogOpen(true);
+                    }}
+                  >
                     <Plus className="h-4 w-4 mr-2" /> Add Your First Service
                   </Button>
                 </div>
@@ -633,7 +828,9 @@ export default function ProviderDashboard() {
                         <div className="flex justify-between items-start">
                           <div>
                             <h3 className="font-semibold">{service.name}</h3>
-                            <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {service.description}
+                            </p>
                           </div>
                           <div className="flex space-x-2">
                             <Button
@@ -642,10 +839,11 @@ export default function ProviderDashboard() {
                               onClick={() => {
                                 setEditingService(service);
                                 // Ensure breakTime is mapped correctly, handling potential null/undefined inside the array
-                                const formattedBreakTime = service.breakTime?.map(bt => ({ 
-                                  start: bt?.start || '', 
-                                  end: bt?.end || '' 
-                                })) || [];
+                                const formattedBreakTime =
+                                  service.breakTime?.map((bt) => ({
+                                    start: bt?.start || "",
+                                    end: bt?.end || "",
+                                  })) || [];
                                 form.reset({
                                   name: service.name,
                                   description: service.description ?? "",
@@ -655,12 +853,14 @@ export default function ProviderDashboard() {
                                   isAvailable: service.isAvailable ?? true,
                                   workingHours: service.workingHours ?? {},
                                   breakTime: formattedBreakTime, // Use the formatted array
-                                  maxDailyBookings: service.maxDailyBookings ?? 1,
+                                  maxDailyBookings:
+                                    service.maxDailyBookings ?? 1,
                                   bufferTime: service.bufferTime ?? 0,
                                   addressStreet: service.addressStreet ?? "",
                                   addressCity: service.addressCity ?? "",
                                   addressState: service.addressState ?? "",
-                                  addressPostalCode: service.addressPostalCode ?? "",
+                                  addressPostalCode:
+                                    service.addressPostalCode ?? "",
                                   addressCountry: service.addressCountry ?? "",
                                 });
                                 setActiveTab("basic"); // Reset to basic tab when opening for edit
@@ -677,15 +877,20 @@ export default function ProviderDashboard() {
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                  <AlertDialogTitle>
+                                    Are you sure?
+                                  </AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    This action cannot be undone. This will permanently delete your service.
+                                    This action cannot be undone. This will
+                                    permanently delete your service.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                                   <AlertDialogAction
-                                    onClick={() => deleteServiceMutation.mutate(service.id)}
+                                    onClick={() =>
+                                      deleteServiceMutation.mutate(service.id)
+                                    }
                                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                   >
                                     Delete
@@ -698,7 +903,9 @@ export default function ProviderDashboard() {
                         <div className="mt-4 space-y-2">
                           <div className="flex justify-between text-sm">
                             <span>Price</span>
-                            <span className="font-medium">₹{service.price}</span>
+                            <span className="font-medium">
+                              ₹{service.price}
+                            </span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span>Duration</span>
@@ -712,15 +919,26 @@ export default function ProviderDashboard() {
                             <span>Address</span>
                             <span className="text-right">
                               {service.addressStreet}, {service.addressCity}
-                              {service.addressState && `, ${service.addressState}`}
-                              {service.addressPostalCode && ` - ${service.addressPostalCode}`}
-                              {service.addressCountry && `, ${service.addressCountry}`}
+                              {service.addressState &&
+                                `, ${service.addressState}`}
+                              {service.addressPostalCode &&
+                                ` - ${service.addressPostalCode}`}
+                              {service.addressCountry &&
+                                `, ${service.addressCountry}`}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span>Status</span>
-                            <span className={service.isAvailable ? "text-green-600" : "text-red-600"}>
-                              {service.isAvailable ? "Available" : "Unavailable"}
+                            <span
+                              className={
+                                service.isAvailable
+                                  ? "text-green-600"
+                                  : "text-red-600"
+                              }
+                            >
+                              {service.isAvailable
+                                ? "Available"
+                                : "Unavailable"}
                             </span>
                           </div>
                         </div>
@@ -744,20 +962,31 @@ export default function ProviderDashboard() {
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="sm:max-w-[800px]">
             <DialogHeader>
-              <DialogTitle>{editingService ? 'Edit Service' : 'Add New Service'}</DialogTitle>
+              <DialogTitle>
+                {editingService ? "Edit Service" : "Add New Service"}
+              </DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="space-y-4"
+              >
                 <Tabs
                   value={activeTab}
-                  onValueChange={(value) => setActiveTab(value as "basic" | "availability" | "location")}
+                  onValueChange={(value) =>
+                    setActiveTab(value as "basic" | "availability" | "location")
+                  }
                 >
-                  <TabsList className="grid w-full grid-cols-4"> {/* Adjusted grid-cols if needed, currently 4 */}
+                  <TabsList className="grid w-full grid-cols-4">
+                    {" "}
+                    {/* Adjusted grid-cols if needed, currently 4 */}
                     <TabsTrigger value="basic">Basic Info</TabsTrigger>
                     <TabsTrigger value="availability">Availability</TabsTrigger>
-
                     <TabsTrigger value="location">Location</TabsTrigger>
-                    <TabsTrigger value="scheduling">Scheduling</TabsTrigger> {/* Added Scheduling Tab */}
+                    <TabsTrigger value="scheduling">
+                      Scheduling
+                    </TabsTrigger>{" "}
+                    {/* Added Scheduling Tab */}
                   </TabsList>
 
                   <TabsContent value="basic">
@@ -795,7 +1024,10 @@ export default function ProviderDashboard() {
                           <FormItem>
                             <FormLabel>Category</FormLabel>
                             <FormControl>
-                              <Input placeholder="e.g., Barber, Salon, Plumber" {...field} />
+                              <Input
+                                placeholder="e.g., Barber, Salon, Plumber"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -808,7 +1040,11 @@ export default function ProviderDashboard() {
                           <FormItem>
                             <FormLabel>Price (INR)</FormLabel>
                             <FormControl>
-                              <Input type="number" placeholder="e.g., 500" {...field} />
+                              <Input
+                                type="number"
+                                placeholder="e.g., 500"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -821,7 +1057,11 @@ export default function ProviderDashboard() {
                           <FormItem>
                             <FormLabel>Duration (minutes)</FormLabel>
                             <FormControl>
-                              <Input type="number" placeholder="e.g., 60" {...field} />
+                              <Input
+                                type="number"
+                                placeholder="e.g., 60"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -832,18 +1072,28 @@ export default function ProviderDashboard() {
 
                   <TabsContent value="availability">
                     <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Working Hours & Availability</h3>
+                      <h3 className="text-lg font-medium">
+                        Working Hours & Availability
+                      </h3>
                       {DAYS.map((day) => (
-                        <div key={day.key} className="grid grid-cols-4 items-center gap-4">
+                        <div
+                          key={day.key}
+                          className="grid grid-cols-4 items-center gap-4"
+                        >
                           <FormField
                             control={form.control}
                             name={`workingHours.${day.key}.isAvailable`}
                             render={({ field }) => (
                               <FormItem className="flex items-center space-x-2 col-span-1">
                                 <FormControl>
-                                  <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
                                 </FormControl>
-                                <FormLabel className="capitalize">{day.key}</FormLabel>
+                                <FormLabel className="capitalize">
+                                  {day.key}
+                                </FormLabel>
                               </FormItem>
                             )}
                           />
@@ -856,7 +1106,11 @@ export default function ProviderDashboard() {
                                   <Input
                                     type="time"
                                     {...field}
-                                    disabled={!form.watch(`workingHours.${day.key}.isAvailable`)}
+                                    disabled={
+                                      !form.watch(
+                                        `workingHours.${day.key}.isAvailable`,
+                                      )
+                                    }
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -872,7 +1126,11 @@ export default function ProviderDashboard() {
                                   <Input
                                     type="time"
                                     {...field}
-                                    disabled={!form.watch(`workingHours.${day.key}.isAvailable`)}
+                                    disabled={
+                                      !form.watch(
+                                        `workingHours.${day.key}.isAvailable`,
+                                      )
+                                    }
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -915,8 +1173,11 @@ export default function ProviderDashboard() {
                   <TabsContent value="scheduling">
                     <div className="space-y-4">
                       <h3 className="text-lg font-medium">Break Times</h3>
-                      {form.watch('breakTime')?.map((breakItem, index) => (
-                        <div key={index} className="flex items-center gap-2 p-2 border rounded">
+                      {form.watch("breakTime")?.map((breakItem, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-2 p-2 border rounded"
+                        >
                           <FormField
                             control={form.control}
                             name={`breakTime.${index}.start`}
@@ -948,8 +1209,12 @@ export default function ProviderDashboard() {
                             variant="destructive"
                             size="icon"
                             onClick={() => {
-                              const currentBreaks = form.getValues('breakTime') || [];
-                              form.setValue('breakTime', currentBreaks.filter((_, i) => i !== index));
+                              const currentBreaks =
+                                form.getValues("breakTime") || [];
+                              form.setValue(
+                                "breakTime",
+                                currentBreaks.filter((_, i) => i !== index),
+                              );
                             }}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -960,8 +1225,12 @@ export default function ProviderDashboard() {
                         type="button"
                         variant="outline"
                         onClick={() => {
-                          const currentBreaks = form.getValues('breakTime') || [];
-                          form.setValue('breakTime', [...currentBreaks, { start: '', end: '' }]);
+                          const currentBreaks =
+                            form.getValues("breakTime") || [];
+                          form.setValue("breakTime", [
+                            ...currentBreaks,
+                            { start: "", end: "" },
+                          ]);
                         }}
                       >
                         <Plus className="mr-2 h-4 w-4" /> Add Break Time
@@ -986,7 +1255,9 @@ export default function ProviderDashboard() {
                         name="bufferTime"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Buffer Time (minutes between bookings)</FormLabel>
+                            <FormLabel>
+                              Buffer Time (minutes between bookings)
+                            </FormLabel>
                             <FormControl>
                               <Input type="number" {...field} />
                             </FormControl>
@@ -1008,7 +1279,10 @@ export default function ProviderDashboard() {
                           <FormItem>
                             <FormLabel>Street Address</FormLabel>
                             <FormControl>
-                              <Input placeholder="e.g., 123 Main St" {...field} />
+                              <Input
+                                placeholder="e.g., 123 Main St"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -1034,7 +1308,10 @@ export default function ProviderDashboard() {
                           <FormItem>
                             <FormLabel>State</FormLabel>
                             <FormControl>
-                              <Input placeholder="e.g., Maharashtra" {...field} />
+                              <Input
+                                placeholder="e.g., Maharashtra"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -1071,10 +1348,15 @@ export default function ProviderDashboard() {
                 </Tabs>
 
                 <div className="flex justify-end gap-2 pt-4">
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDialogOpen(false)}
+                  >
                     Cancel
                   </Button>
-                  <Button type="submit">{editingService ? 'Update Service' : 'Create Service'}</Button>
+                  <Button type="submit">
+                    {editingService ? "Update Service" : "Create Service"}
+                  </Button>
                 </div>
               </form>
             </Form>
@@ -1088,7 +1370,9 @@ export default function ProviderDashboard() {
               <CardHeader className="flex justify-between items-center">
                 <CardTitle>Upcoming Bookings</CardTitle>
                 <Link href="/provider/bookings?status=accepted">
-                  <Button variant="ghost" size="sm">View All</Button>
+                  <Button variant="ghost" size="sm">
+                    View All
+                  </Button>
                 </Link>
               </CardHeader>
               <CardContent>
@@ -1097,28 +1381,46 @@ export default function ProviderDashboard() {
                     <Loader2 className="h-8 w-8 animate-spin" />
                   </div>
                 ) : !upcomingBookings || upcomingBookings.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No upcoming bookings</p>
+                  <p className="text-center text-muted-foreground py-8">
+                    No upcoming bookings
+                  </p>
                 ) : (
                   <div className="space-y-4">
                     {upcomingBookings.map((booking) => (
-                      <div key={booking.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div
+                        key={booking.id}
+                        className="flex items-center justify-between p-4 border rounded-lg"
+                      >
                         <div className="flex items-center gap-4">
                           <Users className="h-8 w-8 text-muted-foreground" />
                           <div>
-                            <p className="font-medium">{booking.service?.name}</p>
+                            <p className="font-medium">
+                              {booking.service?.name}
+                            </p>
                             <p className="text-sm text-muted-foreground">
                               <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
-                              {formatIndianDisplay(booking.bookingDate || '', 'date')}
+                              {formatIndianDisplay(
+                                booking.bookingDate || "",
+                                "date",
+                              )}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
-                              {formatIndianDisplay(booking.bookingDate || '', 'time')}
+                              {formatIndianDisplay(
+                                booking.bookingDate || "",
+                                "time",
+                              )}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{formatIndianDisplay(booking.bookingDate || '', 'time')}</span>
+                          <span className="text-sm">
+                            {formatIndianDisplay(
+                              booking.bookingDate || "",
+                              "time",
+                            )}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -1132,7 +1434,9 @@ export default function ProviderDashboard() {
               <CardHeader className="flex justify-between items-center">
                 <CardTitle>Recent Reviews</CardTitle>
                 <Link href="/provider/reviews">
-                  <Button variant="ghost" size="sm">View All</Button>
+                  <Button variant="ghost" size="sm">
+                    View All
+                  </Button>
                 </Link>
               </CardHeader>
               <CardContent>
@@ -1141,19 +1445,25 @@ export default function ProviderDashboard() {
                     <Loader2 className="h-8 w-8 animate-spin" />
                   </div>
                 ) : !reviews || reviews.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No reviews yet</p>
+                  <p className="text-center text-muted-foreground py-8">
+                    No reviews yet
+                  </p>
                 ) : (
                   <div className="space-y-4">
                     {reviews.slice(0, 5).map((review) => (
                       <div key={review.id} className="p-4 border rounded-lg">
                         <div className="flex items-center gap-2 mb-2">
                           {Array.from({ length: review.rating }).map((_, i) => (
-                            <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <Star
+                              key={i}
+                              className="h-4 w-4 fill-yellow-400 text-yellow-400"
+                            />
                           ))}
                         </div>
                         <p className="text-sm">{review.review}</p>
                         <p className="text-xs text-muted-foreground mt-2">
-                          Reviewed on: {formatIndianDisplay(review.createdAt || '', 'date')}
+                          Reviewed on:{" "}
+                          {formatIndianDisplay(review.createdAt || "", "date")}
                         </p>
                       </div>
                     ))}

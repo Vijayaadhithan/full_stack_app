@@ -5,10 +5,14 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Loader2, Store, MapPin, Filter } from "lucide-react";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
-import { User} from "@shared/schema";
+import { User } from "@shared/schema";
 import { motion } from "framer-motion";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -21,20 +25,20 @@ const formatAddress = (user: User): string => {
     user.addressPostalCode,
     user.addressCountry,
   ].filter(Boolean); // Filter out null/undefined/empty strings
-  return parts.length > 0 ? parts.join(', ') : "Location not specified";
+  return parts.length > 0 ? parts.join(", ") : "Location not specified";
 };
 
 const container = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: { staggerChildren: 0.1 }
-  }
+    transition: { staggerChildren: 0.1 },
+  },
 };
 
 const item = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
+  show: { opacity: 1, y: 0 },
 };
 
 export default function BrowseShops() {
@@ -45,29 +49,37 @@ export default function BrowseShops() {
   });
 
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
   const { data: shops, isLoading } = useQuery<User[]>({
     queryKey: ["/api/shops", filters.locationCity, filters.locationState],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (filters.locationCity) params.append("locationCity", filters.locationCity);
-      if (filters.locationState) params.append("locationState", filters.locationState);
+      if (filters.locationCity)
+        params.append("locationCity", filters.locationCity);
+      if (filters.locationState)
+        params.append("locationState", filters.locationState);
       const queryString = params.toString();
-      const response = await apiRequest("GET", `/api/shops${queryString ? `?${queryString}` : ""}`);
+      const response = await apiRequest(
+        "GET",
+        `/api/shops${queryString ? `?${queryString}` : ""}`,
+      );
       if (!response.ok) {
         const error = await response.text();
         throw new Error(error);
       }
       return response.json();
-    }
+    },
   });
 
-  const filteredShops = shops?.filter(shop => 
-    shop.role === "shop" &&
-    (shop.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
-     shop.shopProfile?.description?.toLowerCase().includes(filters.searchQuery.toLowerCase()))
+  const filteredShops = shops?.filter(
+    (shop) =>
+      shop.role === "shop" &&
+      (shop.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
+        shop.shopProfile?.description
+          ?.toLowerCase()
+          .includes(filters.searchQuery.toLowerCase())),
   );
 
   return (
@@ -84,7 +96,9 @@ export default function BrowseShops() {
             <Input
               placeholder="Search shops..."
               value={filters.searchQuery}
-              onChange={(e) => handleFilterChange("searchQuery", e.target.value)}
+              onChange={(e) =>
+                handleFilterChange("searchQuery", e.target.value)
+              }
             />
           </div>
           <Popover>
@@ -99,7 +113,9 @@ export default function BrowseShops() {
                 <Input
                   id="city"
                   value={filters.locationCity}
-                  onChange={(e) => handleFilterChange("locationCity", e.target.value)}
+                  onChange={(e) =>
+                    handleFilterChange("locationCity", e.target.value)
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -107,7 +123,9 @@ export default function BrowseShops() {
                 <Input
                   id="state"
                   value={filters.locationState}
-                  onChange={(e) => handleFilterChange("locationState", e.target.value)}
+                  onChange={(e) =>
+                    handleFilterChange("locationState", e.target.value)
+                  }
                 />
               </div>
             </PopoverContent>
@@ -145,7 +163,9 @@ export default function BrowseShops() {
                             )}
                           </div>
                           <div>
-                            <h3 className="font-semibold">{shop.shopProfile?.shopName || shop.name}</h3>
+                            <h3 className="font-semibold">
+                              {shop.shopProfile?.shopName || shop.name}
+                            </h3>
                             <div className="flex items-center text-sm text-muted-foreground">
                               <MapPin className="h-3 w-3 mr-1" />
                               <span>{formatAddress(shop)}</span>
@@ -153,7 +173,8 @@ export default function BrowseShops() {
                           </div>
                         </div>
                         <p className="text-sm text-muted-foreground line-clamp-2">
-                          {shop.shopProfile?.description || "No description available"}
+                          {shop.shopProfile?.description ||
+                            "No description available"}
                         </p>
                         <div className="mt-auto pt-2">
                           <Button variant="outline" className="w-full">

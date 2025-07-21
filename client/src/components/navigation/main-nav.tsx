@@ -31,7 +31,9 @@ export function MainNav() {
                 Wishlist
               </Button>
             </Link>
-            <Link href="/customer/my-reviews"> {/* Add link to My Reviews */}
+            <Link href="/customer/my-reviews">
+              {" "}
+              {/* Add link to My Reviews */}
               <Button variant="ghost" className="flex items-center gap-2">
                 <Star className="h-5 w-5" /> {/* Use Star icon */}
                 My Reviews

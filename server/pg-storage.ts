@@ -2,31 +2,61 @@ import session from "express-session";
 import pgSession from "connect-pg-simple";
 import { db } from "./db";
 import logger from "./logger";
-import { getCache, setCache } from './cache';
-import { sendEmail, getGenericNotificationEmailContent } from './emailService'; // Added for sending emails
+import { getCache, setCache } from "./cache";
+import { sendEmail, getGenericNotificationEmailContent } from "./emailService"; // Added for sending emails
 import {
-  User, InsertUser,
-  Service, InsertService,
-  Booking, InsertBooking,
-  Product, InsertProduct,
-  Order, InsertOrder,
-  OrderItem, InsertOrderItem,
-  Review, InsertReview,
-  Notification, InsertNotification,
-  ReturnRequest, InsertReturnRequest, // Type
-  Promotion, InsertPromotion,
-  ProductReview, InsertProductReview,
+  User,
+  InsertUser,
+  Service,
+  InsertService,
+  Booking,
+  InsertBooking,
+  Product,
+  InsertProduct,
+  Order,
+  InsertOrder,
+  OrderItem,
+  InsertOrderItem,
+  Review,
+  InsertReview,
+  Notification,
+  InsertNotification,
+  ReturnRequest,
+  InsertReturnRequest, // Type
+  Promotion,
+  InsertPromotion,
+  ProductReview,
+  InsertProductReview,
   ShopProfile, // Added ShopProfile import
   // Ensure bookingHistory is exported from your shared schema if available.
-  users, services, bookings, bookingHistory, products, orders, orderItems, reviews, notifications,
-  cart, wishlist, waitlist, promotions, returns, productReviews,
+  users,
+  services,
+  bookings,
+  bookingHistory,
+  products,
+  orders,
+  orderItems,
+  reviews,
+  notifications,
+  cart,
+  wishlist,
+  waitlist,
+  promotions,
+  returns,
+  productReviews,
   blockedTimeSlots,
   orderStatusUpdates,
-  UserRole
+  UserRole,
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
 import { eq, and, lt, ne, sql, desc, count } from "drizzle-orm";
-import { toISTForStorage, getCurrentISTDate, fromDatabaseToIST, getExpirationDate, convertArrayDatesToIST } from "./ist-utils";
+import {
+  toISTForStorage,
+  getCurrentISTDate,
+  fromDatabaseToIST,
+  getExpirationDate,
+  convertArrayDatesToIST,
+} from "./ist-utils";
 // Import date utilities for IST handling
 
 interface BlockedTimeSlot {
@@ -51,8 +81,8 @@ export class PostgresStorage implements IStorage {
     const PgStore = pgSession(session);
     this.sessionStore = new PgStore({
       conString: process.env.DATABASE_URL,
-      tableName: 'sessions',
-      createTableIfMissing: true
+      tableName: "sessions",
+      createTableIfMissing: true,
     });
   }
   async getUserByEmail(email: string): Promise<User | undefined> {
@@ -65,7 +95,10 @@ export class PostgresStorage implements IStorage {
     // If 'users.googleId' causes a type error, it means the Drizzle schema object for 'users' needs to be updated
     // to include 'googleId'. For this code to work, the database table must have this column.
     // @ts-ignore // Remove this ignore if users.googleId is correctly typed in your schema
-    const result = await db.select().from(users).where(eq(users.googleId, googleId));
+    const result = await db
+      .select()
+      .from(users)
+      .where(eq(users.googleId, googleId));
     return result[0];
   }
 
@@ -74,73 +107,116 @@ export class PostgresStorage implements IStorage {
       // Step 1: Collect all relevant IDs
 
       // Bookings related to the user (as customer or provider)
-      const customerBookingsQuery = tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.customerId, userId));
-      const userServicesQuery = tx.select({ id: services.id }).from(services).where(eq(services.providerId, userId));
-      
-      const [customerBookingsResult, userServicesResult] = await Promise.all([customerBookingsQuery, userServicesQuery]);
+      const customerBookingsQuery = tx
+        .select({ id: bookings.id })
+        .from(bookings)
+        .where(eq(bookings.customerId, userId));
+      const userServicesQuery = tx
+        .select({ id: services.id })
+        .from(services)
+        .where(eq(services.providerId, userId));
 
-      const customerBookingIds = customerBookingsResult.map(b => b.id);
-      const serviceIds = userServicesResult.map(s => s.id);
+      const [customerBookingsResult, userServicesResult] = await Promise.all([
+        customerBookingsQuery,
+        userServicesQuery,
+      ]);
+
+      const customerBookingIds = customerBookingsResult.map((b) => b.id);
+      const serviceIds = userServicesResult.map((s) => s.id);
 
       let providerServiceBookingIds: number[] = [];
       if (serviceIds.length > 0) {
-        const providerServiceBookings = await tx.select({ id: bookings.id }).from(bookings).where(sql`${bookings.serviceId} IN ${serviceIds}`);
-        providerServiceBookingIds = providerServiceBookings.map(b => b.id);
+        const providerServiceBookings = await tx
+          .select({ id: bookings.id })
+          .from(bookings)
+          .where(sql`${bookings.serviceId} IN ${serviceIds}`);
+        providerServiceBookingIds = providerServiceBookings.map((b) => b.id);
       }
 
-      const allBookingIds = Array.from(new Set([...customerBookingIds, ...providerServiceBookingIds]));
+      const allBookingIds = Array.from(
+        new Set([...customerBookingIds, ...providerServiceBookingIds]),
+      );
 
       // Orders related to the user either as customer or as shop owner
-      const customerOrdersQuery = tx.select({ id: orders.id }).from(orders).where(eq(orders.customerId, userId));
-      const shopOrdersQuery = tx.select({ id: orders.id }).from(orders).where(eq(orders.shopId, userId));
+      const customerOrdersQuery = tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.customerId, userId));
+      const shopOrdersQuery = tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.shopId, userId));
 
-      const [customerOrders, shopOrders] = await Promise.all([customerOrdersQuery, shopOrdersQuery]);
+      const [customerOrders, shopOrders] = await Promise.all([
+        customerOrdersQuery,
+        shopOrdersQuery,
+      ]);
 
-      const orderIds = customerOrders.map(o => o.id);
-      const shopOrderIds = shopOrders.map(o => o.id);
+      const orderIds = customerOrders.map((o) => o.id);
+      const shopOrderIds = shopOrders.map((o) => o.id);
       const allOrderIds = Array.from(new Set([...orderIds, ...shopOrderIds]));
 
       // Products related to the user (as shop owner)
-      const userProducts = await tx.select({ id: products.id }).from(products).where(eq(products.shopId, userId));
-      const productIds = userProducts.map(p => p.id);
+      const userProducts = await tx
+        .select({ id: products.id })
+        .from(products)
+        .where(eq(products.shopId, userId));
+      const productIds = userProducts.map((p) => p.id);
 
       // Step 2: Delete dependent data in the correct order
 
       // Reviews linked to bookings
       if (allBookingIds.length > 0) {
-        await tx.delete(reviews).where(sql`${reviews.bookingId} IN ${allBookingIds}`);
+        await tx
+          .delete(reviews)
+          .where(sql`${reviews.bookingId} IN ${allBookingIds}`);
       }
 
       // Reviews linked directly to services (if schema supports reviews.serviceId and they are not captured by bookingId)
       if (serviceIds.length > 0) {
-          // This handles reviews that might be directly on a service, not through a booking.
-          await tx.delete(reviews).where(sql`${reviews.serviceId} IN ${serviceIds}`);
+        // This handles reviews that might be directly on a service, not through a booking.
+        await tx
+          .delete(reviews)
+          .where(sql`${reviews.serviceId} IN ${serviceIds}`);
       }
-      
+
       // Booking history
       if (allBookingIds.length > 0) {
-        await tx.delete(bookingHistory).where(sql`${bookingHistory.bookingId} IN ${allBookingIds}`);
+        await tx
+          .delete(bookingHistory)
+          .where(sql`${bookingHistory.bookingId} IN ${allBookingIds}`);
       }
-       // Notifications linked to these bookings (for any user)
+      // Notifications linked to these bookings (for any user)
       if (allBookingIds.length > 0) {
-        await tx.delete(notifications).where(sql`${notifications.relatedBookingId} IN ${allBookingIds}`);
+        await tx
+          .delete(notifications)
+          .where(sql`${notifications.relatedBookingId} IN ${allBookingIds}`);
       }
       // Now delete bookings
       if (allBookingIds.length > 0) {
-          await tx.delete(bookings).where(sql`${bookings.id} IN ${allBookingIds}`);
+        await tx
+          .delete(bookings)
+          .where(sql`${bookings.id} IN ${allBookingIds}`);
       }
 
       // Order items (linked to orders by customer and shop owner, and products by shop owner)
       if (allOrderIds.length > 0) {
-        await tx.delete(orderItems).where(sql`${orderItems.orderId} IN ${allOrderIds}`);
+        await tx
+          .delete(orderItems)
+          .where(sql`${orderItems.orderId} IN ${allOrderIds}`);
       }
-      if (productIds.length > 0) { // OrderItems for shop owner's products
-        await tx.delete(orderItems).where(sql`${orderItems.productId} IN ${productIds}`);
+      if (productIds.length > 0) {
+        // OrderItems for shop owner's products
+        await tx
+          .delete(orderItems)
+          .where(sql`${orderItems.productId} IN ${productIds}`);
       }
 
       // Returns (linked to orders)
       if (allOrderIds.length > 0) {
-        await tx.delete(returns).where(sql`${returns.orderId} IN ${allOrderIds}`);
+        await tx
+          .delete(returns)
+          .where(sql`${returns.orderId} IN ${allOrderIds}`);
       }
 
       // Now delete orders (customer's orders and shop's orders)
@@ -149,21 +225,23 @@ export class PostgresStorage implements IStorage {
       }
 
       // Promotions (linked to shop)
-      if (productIds.length > 0 || serviceIds.length > 0) { 
+      if (productIds.length > 0 || serviceIds.length > 0) {
         await tx.delete(promotions).where(eq(promotions.shopId, userId));
       }
-      
+
       // Now delete products (shop owner's products)
       if (productIds.length > 0) {
         // First, remove these products from any wishlist they might be in
-        await tx.delete(wishlist).where(sql`${wishlist.productId} IN ${productIds}`);
+        await tx
+          .delete(wishlist)
+          .where(sql`${wishlist.productId} IN ${productIds}`);
         // Then, delete the products themselves
         await tx.delete(products).where(eq(products.shopId, userId));
       }
 
       // Other direct dependencies on user/customer ID
       await tx.delete(reviews).where(eq(reviews.customerId, userId)); // Handles reviews directly by customerId if not linked to booking/service
-      
+
       await tx.delete(notifications).where(eq(notifications.userId, userId));
       await tx.delete(cart).where(eq(cart.customerId, userId));
       await tx.delete(wishlist).where(eq(wishlist.customerId, userId));
@@ -179,12 +257,16 @@ export class PostgresStorage implements IStorage {
   }
 
   // async getReviewsByCustomer(customerId: number): Promise<Review[]> {
-    // const result = await db.select().from(reviews).where(eq(reviews.customerId, customerId));
-    // return result;
+  // const result = await db.select().from(reviews).where(eq(reviews.customerId, customerId));
+  // return result;
   //}
 
-  async updateReview(id: number, data: { rating?: number; review?: string; providerReply?: string; }): Promise<Review> {
-    const updatedReview = await db.update(reviews)
+  async updateReview(
+    id: number,
+    data: { rating?: number; review?: string; providerReply?: string },
+  ): Promise<Review> {
+    const updatedReview = await db
+      .update(reviews)
       .set(data)
       .where(eq(reviews.id, id))
       .returning();
@@ -193,9 +275,13 @@ export class PostgresStorage implements IStorage {
     }
     return updatedReview[0];
   }
-  async processRefund(returnRequestId: number): Promise<void> { // Changed parameter name for clarity
+  async processRefund(returnRequestId: number): Promise<void> {
+    // Changed parameter name for clarity
     // Retrieve the return request from the database.
-    const requestResult = await db.select().from(returns).where(eq(returns.id, returnRequestId)); // Use returns table and parameter
+    const requestResult = await db
+      .select()
+      .from(returns)
+      .where(eq(returns.id, returnRequestId)); // Use returns table and parameter
     const request = requestResult[0];
     if (!request) {
       throw new Error("Return request not found");
@@ -207,15 +293,18 @@ export class PostgresStorage implements IStorage {
     // Process the refund.
     // In a real implementation, integrate with a payment processor here.
     // For now, we simulate refund processing by updating the request status and setting a refunded timestamp.
-    const updatedResult = await db.update(returns) // Use returns table
-      .set({ 
+    const updatedResult = await db
+      .update(returns) // Use returns table
+      .set({
         status: "refunded",
-        resolvedAt: getCurrentISTDate()
+        resolvedAt: getCurrentISTDate(),
       })
       .where(eq(returns.id, returnRequestId)) // Use returns table and parameter
       .returning();
     if (!updatedResult[0]) {
-      throw new Error("Failed to update return request during refund processing");
+      throw new Error(
+        "Failed to update return request during refund processing",
+      );
     }
 
     // Notify the user that the refund has been processed.
@@ -227,10 +316,16 @@ export class PostgresStorage implements IStorage {
       isRead: false,
     });
   }
-  
+
   // ─── PROMOTION OPERATIONS ─────────────────────────────────────────
   async createPromotion(promotion: InsertPromotion): Promise<Promotion> {
-    const result = await db.insert(promotions).values({ ...promotion, type: promotion.type as "percentage" | "fixed_amount" }).returning();
+    const result = await db
+      .insert(promotions)
+      .values({
+        ...promotion,
+        type: promotion.type as "percentage" | "fixed_amount",
+      })
+      .returning();
     return result[0];
   }
 
@@ -241,7 +336,6 @@ export class PostgresStorage implements IStorage {
     let joinedUsers = false;
 
     if (filters) {
-      
       if (filters.category) {
         conditions.push(eq(products.category, filters.category));
       }
@@ -253,20 +347,26 @@ export class PostgresStorage implements IStorage {
       }
       if (filters.searchTerm) {
         const searchTermLike = `%${filters.searchTerm}%`;
-        conditions.push(sql`(${products.name} ILIKE ${searchTermLike} OR ${products.description} ILIKE ${searchTermLike})`);
+        conditions.push(
+          sql`(${products.name} ILIKE ${searchTermLike} OR ${products.description} ILIKE ${searchTermLike})`,
+        );
       }
       if (filters.shopId) {
         conditions.push(eq(products.shopId, filters.shopId));
       }
       if (filters.tags && filters.tags.length > 0) {
         // Assuming tags is an array field in the DB. If it's text, this needs adjustment.
-        conditions.push(sql`${products.tags} @> ARRAY[${filters.tags.join(',')}]`);
+        conditions.push(
+          sql`${products.tags} @> ARRAY[${filters.tags.join(",")}]`,
+        );
       }
       if (filters.attributes) {
         // Assuming attributes are stored in a JSONB column named 'specifications'
         for (const key in filters.attributes) {
           if (Object.prototype.hasOwnProperty.call(filters.attributes, key)) {
-            conditions.push(sql`${products.specifications}->>${key} = ${filters.attributes[key]}`);
+            conditions.push(
+              sql`${products.specifications}->>${key} = ${filters.attributes[key]}`,
+            );
           }
         }
       }
@@ -295,7 +395,10 @@ export class PostgresStorage implements IStorage {
   }
 
   async getPromotionsByShop(shopId: number): Promise<Promotion[]> {
-    return await db.select().from(promotions).where(eq(promotions.shopId, shopId));
+    return await db
+      .select()
+      .from(promotions)
+      .where(eq(promotions.shopId, shopId));
   }
 
   // ─── USER OPERATIONS ─────────────────────────────────────────────
@@ -305,16 +408,22 @@ export class PostgresStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.username, username));
+    const result = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username));
     return result[0];
   }
-  
+
   async getAllUsers(): Promise<User[]> {
     return await db.select().from(users);
   }
 
-  async getShops(filters?: { locationCity?: string; locationState?: string }): Promise<User[]> {
-    const conditions = [eq(users.role, 'shop')];
+  async getShops(filters?: {
+    locationCity?: string;
+    locationState?: string;
+  }): Promise<User[]> {
+    const conditions = [eq(users.role, "shop")];
     if (filters) {
       if (filters.locationCity) {
         conditions.push(eq(users.addressCity, filters.locationCity));
@@ -323,7 +432,10 @@ export class PostgresStorage implements IStorage {
         conditions.push(eq(users.addressState, filters.locationState));
       }
     }
-    return await db.select().from(users).where(and(...conditions));
+    return await db
+      .select()
+      .from(users)
+      .where(and(...conditions));
   }
 
   async createUser(user: InsertUser): Promise<User> {
@@ -342,7 +454,7 @@ export class PostgresStorage implements IStorage {
       addressCountry: user.addressCountry,
       language: user.language,
       profilePicture: user.profilePicture,
-      shopProfile: user.shopProfile ? user.shopProfile as ShopProfile : null,
+      shopProfile: user.shopProfile ? (user.shopProfile as ShopProfile) : null,
       bio: user.bio,
       qualifications: user.qualifications,
       experience: user.experience,
@@ -357,7 +469,10 @@ export class PostgresStorage implements IStorage {
       returnsEnabled: user.returnsEnabled ?? true,
     };
 
-    const result = await db.insert(users).values(insertData as any).returning(); // Used 'as any' to simplify if InsertUser and table schema have slight mismatches handled by DB defaults/nulls for unlisted fields.
+    const result = await db
+      .insert(users)
+      .values(insertData as any)
+      .returning(); // Used 'as any' to simplify if InsertUser and table schema have slight mismatches handled by DB defaults/nulls for unlisted fields.
     return result[0];
   }
 
@@ -372,12 +487,19 @@ export class PostgresStorage implements IStorage {
         let totalProfileFields = 0;
         // Diagnostic logging to inspect calculation inputs
         logger.info("[updateUser] Combined data for user", id, combinedData);
-        if (currentUser.role === 'customer') {
+        if (currentUser.role === "customer") {
           totalProfileFields = 4; // For customer: name, phone, email, full address. Profile picture is optional.
           if (combinedData.name) completedFields++;
           if (combinedData.phone) completedFields++;
           if (combinedData.email) completedFields++;
-          if (combinedData.addressStreet && combinedData.addressCity && combinedData.addressState && combinedData.addressPostalCode && combinedData.addressCountry) completedFields++;
+          if (
+            combinedData.addressStreet &&
+            combinedData.addressCity &&
+            combinedData.addressState &&
+            combinedData.addressPostalCode &&
+            combinedData.addressCountry
+          )
+            completedFields++;
           // Profile picture contributes if present, but isn't required for 100% of these base fields.
           // If we want it to contribute to a score > 100 or be part of a 'bonus', that's a different logic.
           // For now, let's say the base 4 fields make it 100% complete.
@@ -387,12 +509,19 @@ export class PostgresStorage implements IStorage {
           // This approach is a bit complex for simple percentage. Simpler: 4 fields = 100%.
           // If profile picture is present, it's a bonus but doesn't change the 100% from core fields.
           // Let's stick to the 4 core fields for 100% customer completeness.
-        } else if (currentUser.role === 'provider') {
+        } else if (currentUser.role === "provider") {
           totalProfileFields = 9; // name, phone, email, full address, bio, qualifications, experience, workingHours, languages
           if (combinedData.name) completedFields++;
           if (combinedData.phone) completedFields++;
           if (combinedData.email) completedFields++;
-          if (combinedData.addressStreet && combinedData.addressCity && combinedData.addressState && combinedData.addressPostalCode && combinedData.addressCountry) completedFields++;
+          if (
+            combinedData.addressStreet &&
+            combinedData.addressCity &&
+            combinedData.addressState &&
+            combinedData.addressPostalCode &&
+            combinedData.addressCountry
+          )
+            completedFields++;
           if (combinedData.bio) completedFields++;
           if (combinedData.qualifications) completedFields++;
           if (combinedData.experience) completedFields++;
@@ -400,12 +529,12 @@ export class PostgresStorage implements IStorage {
           if (combinedData.languages) completedFields++;
 
           // if (combinedData.verificationStatus === 'verified') completedFields++;
-        } else if (currentUser.role === 'shop') {
+        } else if (currentUser.role === "shop") {
           totalProfileFields = 10;
           if (combinedData.name) completedFields++;
           if (combinedData.phone) completedFields++;
           if (combinedData.email) completedFields++;
-          
+
           // Address details (user root level)
           if (
             combinedData.addressStreet &&
@@ -416,12 +545,12 @@ export class PostgresStorage implements IStorage {
           ) {
             completedFields++;
           }
-          
+
           if (combinedData.shopProfile) {
             if (combinedData.shopProfile.shopName) completedFields++;
             if (combinedData.shopProfile.description) completedFields++;
             if (combinedData.shopProfile.businessType) completedFields++;
-            
+
             if (
               combinedData.shopProfile.workingHours &&
               Array.isArray(combinedData.shopProfile.workingHours.days) &&
@@ -431,7 +560,7 @@ export class PostgresStorage implements IStorage {
             ) {
               completedFields++;
             }
-            
+
             if (combinedData.shopProfile.shippingPolicy) completedFields++;
             if (combinedData.shopProfile.returnPolicy) completedFields++;
           }
@@ -441,13 +570,15 @@ export class PostgresStorage implements IStorage {
         // Add a general contribution for verification status if it's 'verified', regardless of role, if desired.
         // For now, profile completeness is based on filling out role-specific fields.
         if (totalProfileFields > 0) {
-          profileCompleteness = Math.round((completedFields / totalProfileFields) * 100);
+          profileCompleteness = Math.round(
+            (completedFields / totalProfileFields) * 100,
+          );
         } else {
           profileCompleteness = 0; // Default if role doesn't match or no fields defined
         }
         // Diagnostic logging for calculation results
         logger.info(
-          `[updateUser] Fields complete: ${completedFields}/${totalProfileFields} -> ${profileCompleteness}%`
+          `[updateUser] Fields complete: ${completedFields}/${totalProfileFields} -> ${profileCompleteness}%`,
         );
       }
     }
@@ -457,12 +588,18 @@ export class PostgresStorage implements IStorage {
       dataToSet.profileCompleteness = profileCompleteness;
       // If profile is 100% complete and current status is unverified, set to verified
       const existingUser = await this.getUser(id);
-      if (profileCompleteness === 100 && existingUser && (existingUser.verificationStatus === 'unverified' || existingUser.verificationStatus === 'pending')) {
-        dataToSet.verificationStatus = 'verified';
+      if (
+        profileCompleteness === 100 &&
+        existingUser &&
+        (existingUser.verificationStatus === "unverified" ||
+          existingUser.verificationStatus === "pending")
+      ) {
+        dataToSet.verificationStatus = "verified";
       }
     }
 
-    const result = await db.update(users)
+    const result = await db
+      .update(users)
       .set(dataToSet)
       .where(eq(users.id, id))
       .returning();
@@ -473,7 +610,10 @@ export class PostgresStorage implements IStorage {
   // ─── SERVICE OPERATIONS ──────────────────────────────────────────
   async createService(service: InsertService): Promise<Service> {
     // Type assertion might be needed depending on InsertService definition
-    const result = await db.insert(services).values(service as any).returning();
+    const result = await db
+      .insert(services)
+      .values(service as any)
+      .returning();
     return result[0];
   }
 
@@ -483,34 +623,52 @@ export class PostgresStorage implements IStorage {
     logger.info("Found service:", result[0]);
     return result[0];
   }
-async getServicesByIds(ids: number[]): Promise<Service[]> {
+  async getServicesByIds(ids: number[]): Promise<Service[]> {
     if (ids.length === 0) return [];
-    return await db.select().from(services).where(sql`${services.id} IN ${ids}`);
+    return await db
+      .select()
+      .from(services)
+      .where(sql`${services.id} IN ${ids}`);
   }
 
   async getUsersByIds(ids: number[]): Promise<User[]> {
     if (ids.length === 0) return [];
-    return await db.select().from(users).where(sql`${users.id} IN ${ids}`);
+    return await db
+      .select()
+      .from(users)
+      .where(sql`${users.id} IN ${ids}`);
   }
   // Implementation of IStorage.getPendingBookingRequestsForProvider
-  async getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]> {
+  async getPendingBookingRequestsForProvider(
+    providerId: number,
+  ): Promise<Booking[]> {
     // Get all services offered by this provider first
     const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map(s => s.id);
+    const serviceIds = providerServices.map((s) => s.id);
     if (serviceIds.length === 0) return [];
 
     const rows = await db
       .select()
       .from(bookings)
-      .where(and(sql`${bookings.serviceId} IN ${serviceIds}`, eq(bookings.status, 'pending')));
+      .where(
+        and(
+          sql`${bookings.serviceId} IN ${serviceIds}`,
+          eq(bookings.status, "pending"),
+        ),
+      );
     return rows as Booking[];
   }
 
   // Implementation of IStorage.getBookingHistoryForProvider
 
   // Get booking requests with status for a customer
-  async getBookingRequestsWithStatusForCustomer(customerId: number): Promise<Booking[]> {
-    return await db.select().from(bookings).where(eq(bookings.customerId, customerId));
+  async getBookingRequestsWithStatusForCustomer(
+    customerId: number,
+  ): Promise<Booking[]> {
+    return await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.customerId, customerId));
   }
 
   // Implementation of IStorage.getBookingHistoryForCustomer
@@ -524,11 +682,11 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
         .where(
           and(
             eq(reviews.bookingId, review.bookingId),
-            eq(reviews.customerId, review.customerId)
-          )
+            eq(reviews.customerId, review.customerId),
+          ),
         );
       if (existing[0]) {
-        throw new Error('Duplicate review');
+        throw new Error("Duplicate review");
       }
     }
     const result = await db.insert(reviews).values(review).returning();
@@ -536,13 +694,19 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
   }
 
   async getReviewsByService(serviceId: number): Promise<Review[]> {
-    return await db.select().from(reviews).where(eq(reviews.serviceId, serviceId));
+    return await db
+      .select()
+      .from(reviews)
+      .where(eq(reviews.serviceId, serviceId));
   }
 
   async getReviewsByProvider(providerId: number): Promise<Review[]> {
     // This requires joining reviews with services to get the providerId
-    const providerServices = await db.select({ id: services.id }).from(services).where(eq(services.providerId, providerId));
-    const serviceIds = providerServices.map(s => s.id);
+    const providerServices = await db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.providerId, providerId));
+    const serviceIds = providerServices.map((s) => s.id);
     if (serviceIds.length === 0) return [];
     const rows = await db
       .select()
@@ -551,7 +715,9 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
     return rows as Review[];
   }
 
-  async getReviewsByCustomer(customerId: number): Promise<(Review & { serviceName: string | null })[]> {
+  async getReviewsByCustomer(
+    customerId: number,
+  ): Promise<(Review & { serviceName: string | null })[]> {
     const results = await db
       .select({
         id: reviews.id,
@@ -569,10 +735,10 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
       .where(eq(reviews.customerId, customerId));
 
     // Ensure the return type matches the promise signature
-    return results.map(r => ({
+    return results.map((r) => ({
       ...r,
       // Drizzle might return null for left join, handle it
-      serviceName: r.serviceName ?? 'Service Not Found',
+      serviceName: r.serviceName ?? "Service Not Found",
       bookingId: null,
       isVerifiedService: null,
     }));
@@ -583,11 +749,16 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
     return result[0];
   }
 
-  async updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review> {
+  async updateCustomerReview(
+    reviewId: number,
+    customerId: number,
+    data: { rating?: number; review?: string },
+  ): Promise<Review> {
     // First, verify the review belongs to the customer
-    const reviewCheck = await db.select({ id: reviews.id, customerId: reviews.customerId })
-                                .from(reviews)
-                                .where(eq(reviews.id, reviewId));
+    const reviewCheck = await db
+      .select({ id: reviews.id, customerId: reviews.customerId })
+      .from(reviews)
+      .where(eq(reviews.id, reviewId));
 
     if (!reviewCheck[0]) {
       throw new Error("Review not found");
@@ -598,7 +769,8 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
     }
 
     // Proceed with the update
-    const result = await db.update(reviews)
+    const result = await db
+      .update(reviews)
       .set(data)
       .where(eq(reviews.id, reviewId))
       .returning();
@@ -634,20 +806,26 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
   async getBookingHistoryForCustomer(customerId: number): Promise<Booking[]> {
-    return await db.select().from(bookings)
-      .where(and(
-        eq(bookings.customerId, customerId),
-        ne(bookings.status, 'pending')
-      ));
+    return await db
+      .select()
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.customerId, customerId),
+          ne(bookings.status, "pending"),
+        ),
+      );
   }
 
   // Removed duplicate processExpiredBookings implementation to avoid conflicts.
 
   async getServicesByProvider(providerId: number): Promise<Service[]> {
-    return await db.select().from(services).where(and(
-      eq(services.providerId, providerId),
-      eq(services.isDeleted, false)
-    ));
+    return await db
+      .select()
+      .from(services)
+      .where(
+        and(eq(services.providerId, providerId), eq(services.isDeleted, false)),
+      );
   }
 
   async getServicesByCategory(category: string): Promise<Service[]> {
@@ -655,16 +833,22 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
     const cached = getCache<Service[]>(key);
     if (cached) return cached;
 
-    const result = await db.select().from(services).where(and(
-      eq(services.category, category),
-      eq(services.isDeleted, false)
-    ));
+    const result = await db
+      .select()
+      .from(services)
+      .where(
+        and(eq(services.category, category), eq(services.isDeleted, false)),
+      );
     setCache(key, result);
     return result;
   }
 
-  async updateService(id: number, serviceUpdate: Partial<Service>): Promise<Service> {
-    const result = await db.update(services)
+  async updateService(
+    id: number,
+    serviceUpdate: Partial<Service>,
+  ): Promise<Service> {
+    const result = await db
+      .update(services)
       .set(serviceUpdate as any) // Pass the update data directly
       .where(eq(services.id, id))
       .returning();
@@ -674,7 +858,8 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
 
   async deleteService(id: number): Promise<void> {
     // Instead of deleting, mark as deleted (soft delete)
-    const result = await db.update(services)
+    const result = await db
+      .update(services)
       .set({ isDeleted: true })
       .where(eq(services.id, id))
       .returning();
@@ -696,7 +881,9 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
       }
       if (filters.searchTerm) {
         const searchTermLike = `%${filters.searchTerm}%`;
-        conditions.push(sql`(${services.name} ILIKE ${searchTermLike} OR ${services.description} ILIKE ${searchTermLike})`);
+        conditions.push(
+          sql`(${services.name} ILIKE ${searchTermLike} OR ${services.description} ILIKE ${searchTermLike})`,
+        );
       }
       if (filters.providerId) {
         conditions.push(eq(services.providerId, filters.providerId));
@@ -708,18 +895,23 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
         conditions.push(eq(services.addressState, filters.locationState));
       }
       if (filters.locationPostalCode) {
-        conditions.push(eq(services.addressPostalCode, filters.locationPostalCode));
+        conditions.push(
+          eq(services.addressPostalCode, filters.locationPostalCode),
+        );
       }
       // Note: availabilityDate filtering would be more complex and might require checking bookings or a serviceAvailability table.
       if (filters.availabilityDate) {
-         conditions.push(eq(services.isAvailable, true)); 
+        conditions.push(eq(services.isAvailable, true));
       }
     }
     // Exclude providers with many unresolved payments
     const exclusion = sql`SELECT s.provider_id FROM ${bookings} b JOIN ${services} s ON b.service_id = s.id WHERE b.status = 'awaiting_payment' GROUP BY s.provider_id HAVING COUNT(*) > 5`;
 
     conditions.push(sql`${services.providerId} NOT IN (${exclusion})`);
-    const query = db.select().from(services).where(and(...conditions));
+    const query = db
+      .select()
+      .from(services)
+      .where(and(...conditions));
     return await query;
   }
 
@@ -731,13 +923,27 @@ async getServicesByIds(ids: number[]): Promise<Service[]> {
       createdAt: getCurrentISTDate(),
       // Set expiresAt to 24 hours from now in IST if needed
       expiresAt: booking.expiresAt || getExpirationDate(24),
-      status: booking.status as "pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired",
-      paymentStatus: booking.paymentStatus as "pending" | "paid" | "refunded"
+      status: booking.status as
+        | "pending"
+        | "accepted"
+        | "rejected"
+        | "rescheduled"
+        | "completed"
+        | "cancelled"
+        | "expired",
+      paymentStatus: booking.paymentStatus as "pending" | "paid" | "refunded",
     };
-const result = await db.insert(bookings).values({
-  ...bookingWithDefaults,
-  paymentStatus: bookingWithDefaults.paymentStatus as "pending" | "verifying" | "paid" | "failed"
-}).returning();
+    const result = await db
+      .insert(bookings)
+      .values({
+        ...bookingWithDefaults,
+        paymentStatus: bookingWithDefaults.paymentStatus as
+          | "pending"
+          | "verifying"
+          | "paid"
+          | "failed",
+      })
+      .returning();
 
     // Add entry to booking history with IST timestamp
     await db.insert(bookingHistory).values({
@@ -745,7 +951,7 @@ const result = await db.insert(bookings).values({
       status: result[0].status,
       changedAt: getCurrentISTDate(),
       changedBy: booking.customerId,
-      comments: 'Booking created'
+      comments: "Booking created",
     });
 
     return result[0];
@@ -757,25 +963,34 @@ const result = await db.insert(bookings).values({
   }
 
   async getBookingsByCustomer(customerId: number): Promise<Booking[]> {
-    return await db.select().from(bookings).where(eq(bookings.customerId, customerId));
+    return await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.customerId, customerId));
   }
 
   async getBookingsByProvider(providerId: number): Promise<Booking[]> {
     // Get all services offered by this provider first
     const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map(service => service.id);
+    const serviceIds = providerServices.map((service) => service.id);
     if (serviceIds.length === 0) return [];
 
     let allBookings: Booking[] = [];
     for (const serviceId of serviceIds) {
-      const serviceBookings = await db.select().from(bookings).where(eq(bookings.serviceId, serviceId));
+      const serviceBookings = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.serviceId, serviceId));
       allBookings = [...allBookings, ...serviceBookings];
     }
     return allBookings;
   }
 
   async getBookingsByStatus(status: string): Promise<Booking[]> {
-    return await db.select().from(bookings).where(eq(bookings.status, status as any));
+    return await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.status, status as any));
   }
 
   async updateBooking(id: number, booking: Partial<Booking>): Promise<Booking> {
@@ -800,38 +1015,54 @@ const result = await db.insert(bookings).values({
       // Consider if an empty booking object (no status, no comments etc.) should even reach here.
       // Returning currentBooking if no actual data fields were provided for update.
       // If an update with only 'undefined' values was passed, this prevents an error.
-      logger.warn(`[DB DEBUG] updateBooking called for ID ${id} with no actual data changes.`);
+      logger.warn(
+        `[DB DEBUG] updateBooking called for ID ${id} with no actual data changes.`,
+      );
       // return currentBooking; // Or proceed to update just `updatedAt` if that's desired.
     }
-    
+
     // Ensure there's something to update beyond just `updatedAt` if we don't return early
-    if (Object.keys(updateData).length <= 1 && !booking.status && !booking.comments) {
-        // If only updatedAt is set and no other meaningful fields like status or comments are present in the original 'booking' partial,
-        // it implies no actual change was intended or all provided fields were undefined.
-        // To prevent an empty update or an update with only 'updatedAt' when no other changes are specified,
-        // we can return the current booking. This behavior might need adjustment based on specific requirements.
-        logger.info(`[DB DEBUG] updateBooking for ID ${id}: No effective changes provided. Returning current booking.`);
-        return currentBooking;
+    if (
+      Object.keys(updateData).length <= 1 &&
+      !booking.status &&
+      !booking.comments
+    ) {
+      // If only updatedAt is set and no other meaningful fields like status or comments are present in the original 'booking' partial,
+      // it implies no actual change was intended or all provided fields were undefined.
+      // To prevent an empty update or an update with only 'updatedAt' when no other changes are specified,
+      // we can return the current booking. This behavior might need adjustment based on specific requirements.
+      logger.info(
+        `[DB DEBUG] updateBooking for ID ${id}: No effective changes provided. Returning current booking.`,
+      );
+      return currentBooking;
     }
 
-    const result = await db.update(bookings)
+    const result = await db
+      .update(bookings)
       .set(updateData) // Use the filtered updateData
       .where(eq(bookings.id, id))
       .returning();
 
     // If the status changed, add an entry in the booking history table with IST timestamp
     // Ensure booking.status is checked against undefined before using it
-    if (booking.status !== undefined && booking.status !== currentBooking.status) {
+    if (
+      booking.status !== undefined &&
+      booking.status !== currentBooking.status
+    ) {
       await db.insert(bookingHistory).values({
         bookingId: id,
         status: booking.status, // Safe to use booking.status here due to the check
         changedAt: getCurrentISTDate(),
         // Use booking.comments if defined, otherwise generate a default message
-        comments: booking.comments !== undefined ? booking.comments : `Status changed from ${currentBooking.status} to ${booking.status}`
+        comments:
+          booking.comments !== undefined
+            ? booking.comments
+            : `Status changed from ${currentBooking.status} to ${booking.status}`,
       });
       // If status is no longer pending, clear the expiration date
-      if (booking.status !== 'pending') {
-        await db.update(bookings)
+      if (booking.status !== "pending") {
+        await db
+          .update(bookings)
           .set({ expiresAt: null })
           .where(eq(bookings.id, id));
       }
@@ -853,10 +1084,10 @@ const result = await db.insert(bookings).values({
   }
 
   async getProductsByShop(shopId: number): Promise<Product[]> {
-    return await db.select().from(products).where(and(
-      eq(products.shopId, shopId),
-      eq(products.isDeleted, false)
-    ));
+    return await db
+      .select()
+      .from(products)
+      .where(and(eq(products.shopId, shopId), eq(products.isDeleted, false)));
   }
 
   async getProductsByCategory(category: string): Promise<Product[]> {
@@ -864,16 +1095,19 @@ const result = await db.insert(bookings).values({
     const cached = getCache<Product[]>(key);
     if (cached) return cached;
 
-    const result = await db.select().from(products).where(and(
-      eq(products.category, category),
-      eq(products.isDeleted, false)
-    ));
+    const result = await db
+      .select()
+      .from(products)
+      .where(
+        and(eq(products.category, category), eq(products.isDeleted, false)),
+      );
     setCache(key, result);
     return result;
   }
 
   async updateProduct(id: number, product: Partial<Product>): Promise<Product> {
-    const result = await db.update(products)
+    const result = await db
+      .update(products)
       .set(product)
       .where(eq(products.id, id))
       .returning();
@@ -885,10 +1119,14 @@ const result = await db.insert(bookings).values({
     logger.info(`Removing product ID ${productId} from all carts`);
     try {
       await db.delete(cart).where(eq(cart.productId, productId));
-      logger.info(`Successfully removed product ID ${productId} from all carts`);
+      logger.info(
+        `Successfully removed product ID ${productId} from all carts`,
+      );
     } catch (error) {
       logger.error(`Error removing product ${productId} from carts:`, error);
-      throw new Error(`Failed to remove product from carts: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to remove product from carts: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -896,15 +1134,25 @@ const result = await db.insert(bookings).values({
     logger.info(`Removing product ID ${productId} from all wishlists`);
     try {
       await db.delete(wishlist).where(eq(wishlist.productId, productId));
-      logger.info(`Successfully removed product ID ${productId} from all wishlists`);
+      logger.info(
+        `Successfully removed product ID ${productId} from all wishlists`,
+      );
     } catch (error) {
-      logger.error(`Error removing product ${productId} from wishlists:`, error);
-      throw new Error(`Failed to remove product from wishlists: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(
+        `Error removing product ${productId} from wishlists:`,
+        error,
+      );
+      throw new Error(
+        `Failed to remove product from wishlists: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   async deleteProduct(id: number): Promise<void> {
-    const productExists = await db.select().from(products).where(eq(products.id, id));
+    const productExists = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, id));
     if (productExists.length === 0) throw new Error("Product not found");
 
     try {
@@ -912,7 +1160,8 @@ const result = await db.insert(bookings).values({
       await this.removeProductFromAllWishlists(id);
 
       // Use soft deletion instead of hard deletion
-      const result = await db.update(products)
+      const result = await db
+        .update(products)
         .set({ isDeleted: true })
         .where(eq(products.id, id))
         .returning();
@@ -921,13 +1170,21 @@ const result = await db.insert(bookings).values({
       logger.info(`Successfully marked product ID ${id} as deleted`);
     } catch (error) {
       logger.error(`Error deleting product ${id}:`, error);
-      throw new Error(`Failed to delete product: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to delete product: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   // ─── CART OPERATIONS ─────────────────────────────────────────────
-  async addToCart(customerId: number, productId: number, quantity: number): Promise<void> {
-    logger.info(`Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
+  async addToCart(
+    customerId: number,
+    productId: number,
+    quantity: number,
+  ): Promise<void> {
+    logger.info(
+      `Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`,
+    );
     if (quantity <= 0) {
       logger.error(`Invalid quantity ${quantity} for product ID ${productId}`);
       throw new Error("Quantity must be positive");
@@ -935,7 +1192,10 @@ const result = await db.insert(bookings).values({
 
     try {
       // Get the product being added to find its shopId
-      const productToAddResult = await db.select({ shopId: products.shopId }).from(products).where(eq(products.id, productId));
+      const productToAddResult = await db
+        .select({ shopId: products.shopId })
+        .from(products)
+        .where(eq(products.id, productId));
       if (productToAddResult.length === 0) {
         logger.error(`Product ID ${productId} not found`);
         throw new Error("Product not found");
@@ -944,31 +1204,51 @@ const result = await db.insert(bookings).values({
       logger.info(`Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
 
       // Get current cart items for the customer
-      const currentCartItems = await db.select({ productId: cart.productId }).from(cart).where(eq(cart.customerId, customerId));
-      logger.info(`Customer ID ${customerId} has ${currentCartItems.length} item(s) in cart`);
+      const currentCartItems = await db
+        .select({ productId: cart.productId })
+        .from(cart)
+        .where(eq(cart.customerId, customerId));
+      logger.info(
+        `Customer ID ${customerId} has ${currentCartItems.length} item(s) in cart`,
+      );
 
       if (currentCartItems.length > 0) {
         // If cart is not empty, check if the new item's shop matches the existing items' shop
         const firstCartProductId = currentCartItems[0].productId;
         logger.info(`First item in cart has product ID ${firstCartProductId}`);
-        const firstProductResult = await db.select({ shopId: products.shopId }).from(products).where(eq(products.id, firstCartProductId!));
-        
+        const firstProductResult = await db
+          .select({ shopId: products.shopId })
+          .from(products)
+          .where(eq(products.id, firstCartProductId!));
+
         if (firstProductResult.length > 0) {
           const existingShopId = firstProductResult[0].shopId;
-          logger.info(`Existing items in cart belong to shop ID ${existingShopId}`);
+          logger.info(
+            `Existing items in cart belong to shop ID ${existingShopId}`,
+          );
           if (shopIdToAdd !== existingShopId) {
-            logger.error(`Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`);
-            throw new Error("Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.");
+            logger.error(
+              `Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`,
+            );
+            throw new Error(
+              "Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.",
+            );
           }
         } else {
           // This case should ideally not happen if DB is consistent, but log it.
-          logger.warn(`Could not find product details for the first item (ID: ${firstCartProductId}) in the cart for customer ${customerId}. Proceeding with caution.`);
+          logger.warn(
+            `Could not find product details for the first item (ID: ${firstCartProductId}) in the cart for customer ${customerId}. Proceeding with caution.`,
+          );
         }
       }
 
       // Proceed with adding or updating the cart item
       // First, get product stock to validate against
-      const productDetails = await db.select({ stock: products.stock }).from(products).where(eq(products.id, productId)).limit(1);
+      const productDetails = await db
+        .select({ stock: products.stock })
+        .from(products)
+        .where(eq(products.id, productId))
+        .limit(1);
       if (productDetails.length === 0) {
         logger.error(`Product ID ${productId} not found for stock validation.`);
         throw new Error("Product not found when trying to add to cart.");
@@ -976,61 +1256,110 @@ const result = await db.insert(bookings).values({
       const availableStock = productDetails[0].stock;
 
       if (quantity > availableStock) {
-        logger.error(`Requested quantity ${quantity} for product ID ${productId} exceeds available stock ${availableStock}.`);
-        throw new Error(`Cannot add ${quantity} items. Only ${availableStock} left in stock.`);
+        logger.error(
+          `Requested quantity ${quantity} for product ID ${productId} exceeds available stock ${availableStock}.`,
+        );
+        throw new Error(
+          `Cannot add ${quantity} items. Only ${availableStock} left in stock.`,
+        );
       }
 
       if (quantity <= 0) {
-        logger.info(`Quantity ${quantity} is zero or less for product ID ${productId}. Removing from cart for customer ID ${customerId}.`);
-        await db.delete(cart).where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
-        logger.info(`Successfully removed product ID ${productId} from cart for customer ID ${customerId} due to zero/negative quantity.`);
+        logger.info(
+          `Quantity ${quantity} is zero or less for product ID ${productId}. Removing from cart for customer ID ${customerId}.`,
+        );
+        await db
+          .delete(cart)
+          .where(
+            and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
+          );
+        logger.info(
+          `Successfully removed product ID ${productId} from cart for customer ID ${customerId} due to zero/negative quantity.`,
+        );
         return; // Exit after removing
       }
 
-      const existingCartItem = await db.select().from(cart)
-        .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)))
+      const existingCartItem = await db
+        .select()
+        .from(cart)
+        .where(
+          and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
+        )
         .limit(1);
 
       if (existingCartItem.length > 0) {
         // Item exists, update its quantity (direct assignment)
-        logger.info(`Updating existing cart item for customer ID ${customerId}, product ID ${productId}. New quantity: ${quantity}`);
-        await db.update(cart)
+        logger.info(
+          `Updating existing cart item for customer ID ${customerId}, product ID ${productId}. New quantity: ${quantity}`,
+        );
+        await db
+          .update(cart)
           .set({ quantity: quantity }) // Direct assignment
-          .where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
+          .where(
+            and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
+          );
       } else {
         // Item does not exist, insert new cart item
-        logger.info(`Creating new cart item for customer ID ${customerId}, product ID ${productId} with quantity ${quantity}`);
+        logger.info(
+          `Creating new cart item for customer ID ${customerId}, product ID ${productId} with quantity ${quantity}`,
+        );
         await db.insert(cart).values({ customerId, productId, quantity });
       }
-      logger.info(`Successfully added/updated product ID ${productId} with quantity ${quantity} in cart for customer ID ${customerId}`);
+      logger.info(
+        `Successfully added/updated product ID ${productId} with quantity ${quantity} in cart for customer ID ${customerId}`,
+      );
     } catch (error) {
-      logger.error(`Error in addToCart for customer ID ${customerId}, product ID ${productId}:`, error);
+      logger.error(
+        `Error in addToCart for customer ID ${customerId}, product ID ${productId}:`,
+        error,
+      );
       // Re-throw the original error or a new one with context
-      if (error instanceof Error && error.message.startsWith("Cannot add items")) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith("Cannot add items")
+      ) {
         throw error; // Re-throw the specific shop mismatch error
       }
-      throw new Error(`Failed to add product to cart: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to add product to cart: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   async removeFromCart(customerId: number, productId: number): Promise<void> {
-    await db.delete(cart).where(and(eq(cart.customerId, customerId), eq(cart.productId, productId)));
+    await db
+      .delete(cart)
+      .where(
+        and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
+      );
   }
 
-  async getCart(customerId: number): Promise<{ product: Product; quantity: number }[]> {
+  async getCart(
+    customerId: number,
+  ): Promise<{ product: Product; quantity: number }[]> {
     logger.info(`Getting cart for customer ID: ${customerId}`);
     try {
-      const cartItems = await db.select().from(cart).where(eq(cart.customerId, customerId));
-      logger.info(`Found ${cartItems.length} cart items for customer ID: ${customerId}`);
-      
+      const cartItems = await db
+        .select()
+        .from(cart)
+        .where(eq(cart.customerId, customerId));
+      logger.info(
+        `Found ${cartItems.length} cart items for customer ID: ${customerId}`,
+      );
+
       const result = [];
       for (const item of cartItems) {
-        const productResult = await db.select().from(products).where(eq(products.id, item.productId!));
+        const productResult = await db
+          .select()
+          .from(products)
+          .where(eq(products.id, item.productId!));
         if (productResult.length > 0 && !productResult[0].isDeleted) {
           result.push({ product: productResult[0], quantity: item.quantity });
         } else {
           // If product doesn't exist or is deleted, remove it from cart if productId is not null
-          logger.info(`Removing non-existent or deleted product ID ${item.productId} from cart`);
+          logger.info(
+            `Removing non-existent or deleted product ID ${item.productId} from cart`,
+          );
           if (item.productId !== null) {
             await this.removeFromCart(customerId, item.productId);
           }
@@ -1049,22 +1378,45 @@ const result = await db.insert(bookings).values({
 
   // ─── WISHLIST OPERATIONS ─────────────────────────────────────────
   async addToWishlist(customerId: number, productId: number): Promise<void> {
-    const existingItem = await db.select().from(wishlist)
-      .where(and(eq(wishlist.customerId, customerId), eq(wishlist.productId, productId)));
+    const existingItem = await db
+      .select()
+      .from(wishlist)
+      .where(
+        and(
+          eq(wishlist.customerId, customerId),
+          eq(wishlist.productId, productId),
+        ),
+      );
     if (existingItem.length === 0) {
       await db.insert(wishlist).values({ customerId, productId });
     }
   }
 
-  async removeFromWishlist(customerId: number, productId: number): Promise<void> {
-    await db.delete(wishlist).where(and(eq(wishlist.customerId, customerId), eq(wishlist.productId, productId)));
+  async removeFromWishlist(
+    customerId: number,
+    productId: number,
+  ): Promise<void> {
+    await db
+      .delete(wishlist)
+      .where(
+        and(
+          eq(wishlist.customerId, customerId),
+          eq(wishlist.productId, productId),
+        ),
+      );
   }
 
   async getWishlist(customerId: number): Promise<Product[]> {
-    const wishlistItems = await db.select().from(wishlist).where(eq(wishlist.customerId, customerId));
+    const wishlistItems = await db
+      .select()
+      .from(wishlist)
+      .where(eq(wishlist.customerId, customerId));
     const result: Product[] = [];
     for (const item of wishlistItems) {
-      const productResult = await db.select().from(products).where(eq(products.id, item.productId!));
+      const productResult = await db
+        .select()
+        .from(products)
+        .where(eq(products.id, item.productId!));
       if (productResult.length > 0) result.push(productResult[0]);
     }
     return result;
@@ -1074,8 +1426,20 @@ const result = await db.insert(bookings).values({
   async createOrder(order: InsertOrder): Promise<Order> {
     const orderToInsert = {
       ...order,
-      status: order.status as "pending" | "cancelled" | "confirmed" | "processing" | "packed" | "shipped" | "delivered" | "returned",
-      paymentStatus: order.paymentStatus as "pending" | "verifying" | "paid" | "failed",
+      status: order.status as
+        | "pending"
+        | "cancelled"
+        | "confirmed"
+        | "processing"
+        | "packed"
+        | "shipped"
+        | "delivered"
+        | "returned",
+      paymentStatus: order.paymentStatus as
+        | "pending"
+        | "verifying"
+        | "paid"
+        | "failed",
     };
     const result = await db.insert(orders).values(orderToInsert).returning();
     const created = result[0];
@@ -1094,12 +1458,15 @@ const result = await db.insert(bookings).values({
   }
 
   async getOrdersByCustomer(customerId: number): Promise<Order[]> {
-    return await db.select().from(orders).where(eq(orders.customerId, customerId));
+    return await db
+      .select()
+      .from(orders)
+      .where(eq(orders.customerId, customerId));
   }
 
   async getOrdersByShop(shopId: number, status?: string): Promise<Order[]> {
     const conditions = [eq(orders.shopId, shopId)];
-    if (status && status !== 'all_orders') {
+    if (status && status !== "all_orders") {
       conditions.push(eq(orders.status, status as any));
     }
 
@@ -1125,15 +1492,15 @@ const result = await db.insert(bookings).values({
     const [pendingResult] = await db
       .select({ value: count() })
       .from(orders)
-      .where(and(eq(orders.shopId, shopId), eq(orders.status, 'pending')));
+      .where(and(eq(orders.shopId, shopId), eq(orders.status, "pending")));
     const [inProgressResult] = await db
       .select({ value: count() })
       .from(orders)
-      .where(and(eq(orders.shopId, shopId), eq(orders.status, 'packed')));
+      .where(and(eq(orders.shopId, shopId), eq(orders.status, "packed")));
     const [completedResult] = await db
       .select({ value: count() })
       .from(orders)
-      .where(and(eq(orders.shopId, shopId), eq(orders.status, 'delivered')));
+      .where(and(eq(orders.shopId, shopId), eq(orders.status, "delivered")));
     const [totalProductsResult] = await db
       .select({ value: count() })
       .from(products)
@@ -1153,7 +1520,8 @@ const result = await db.insert(bookings).values({
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {
-    const result = await db.update(orders)
+    const result = await db
+      .update(orders)
       .set(order)
       .where(eq(orders.id, id))
       .returning();
@@ -1162,43 +1530,82 @@ const result = await db.insert(bookings).values({
   }
 
   async createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
-    const result = await db.insert(orderItems).values({
-      ...orderItem,
-      status: orderItem.status as "cancelled" | "returned" | "ordered" | null | undefined,
-    }).returning();
+    const result = await db
+      .insert(orderItems)
+      .values({
+        ...orderItem,
+        status: orderItem.status as
+          | "cancelled"
+          | "returned"
+          | "ordered"
+          | null
+          | undefined,
+      })
+      .returning();
     return result[0];
   }
 
   async updateProductStock(productId: number, quantity: number): Promise<void> {
-    const productResult = await db.select().from(products).where(eq(products.id, productId));
-    if (!productResult.length) throw new Error(`Product with ID ${productId} not found`);
+    const productResult = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, productId));
+    if (!productResult.length)
+      throw new Error(`Product with ID ${productId} not found`);
     const product = productResult[0];
     const newStock = product.stock - quantity;
-    if (newStock < 0) throw new Error(`Insufficient stock for product ID ${productId}`);
-    await db.update(products).set({ stock: newStock }).where(eq(products.id, productId));
+    if (newStock < 0)
+      throw new Error(`Insufficient stock for product ID ${productId}`);
+    await db
+      .update(products)
+      .set({ stock: newStock })
+      .where(eq(products.id, productId));
   }
 
   async getOrderItemsByOrder(orderId: number): Promise<OrderItem[]> {
-    return await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+    return await db
+      .select()
+      .from(orderItems)
+      .where(eq(orderItems.orderId, orderId));
   }
 
-
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
-  async createNotification(notification: InsertNotification): Promise<Notification> {
-    const result = await db.insert(notifications).values({ ...notification, type: notification.type as any, relatedBookingId: notification.relatedBookingId ?? null }).returning();
+  async createNotification(
+    notification: InsertNotification,
+  ): Promise<Notification> {
+    const result = await db
+      .insert(notifications)
+      .values({
+        ...notification,
+        type: notification.type as any,
+        relatedBookingId: notification.relatedBookingId ?? null,
+      })
+      .returning();
     const newNotification = result[0];
 
     // Define critical notification types that should trigger an email
-    const criticalNotificationTypes: string[] = ["account_security", "payment_failed", "service_unavailable", "booking_expired"];
+    const criticalNotificationTypes: string[] = [
+      "account_security",
+      "payment_failed",
+      "service_unavailable",
+      "booking_expired",
+    ];
 
-    if (newNotification && criticalNotificationTypes.includes(newNotification.type)) {
+    if (
+      newNotification &&
+      criticalNotificationTypes.includes(newNotification.type)
+    ) {
       try {
         if (newNotification.userId === null) {
           throw new Error("Invalid userId: null");
         }
         const user = await this.getUser(newNotification.userId);
         if (user && user.email) {
-          const emailContent = getGenericNotificationEmailContent(user.name || user.username, newNotification.title, newNotification.message);
+          const emailContent = getGenericNotificationEmailContent(
+            user.name || user.username,
+            newNotification.title,
+            newNotification.message,
+          );
           await sendEmail({
             to: user.email,
             subject: emailContent.subject,
@@ -1207,7 +1614,10 @@ const result = await db.insert(bookings).values({
           });
         }
       } catch (emailError) {
-        logger.error(`Error sending critical notification email for notification ID ${newNotification.id}:`, emailError);
+        logger.error(
+          `Error sending critical notification email for notification ID ${newNotification.id}:`,
+          emailError,
+        );
         // Do not let email failure prevent notification creation
       }
     }
@@ -1215,26 +1625,36 @@ const result = await db.insert(bookings).values({
   }
 
   async getNotificationsByUser(userId: number): Promise<Notification[]> {
-    return await db.select().from(notifications).where(eq(notifications.userId, userId));
+    return await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId));
   }
 
   async markNotificationAsRead(id: number): Promise<void> {
-    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+    await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, id));
   }
 
-  async markAllNotificationsAsRead(userId: number, role?: string): Promise<void> {
+  async markAllNotificationsAsRead(
+    userId: number,
+    role?: string,
+  ): Promise<void> {
     const conditions = [eq(notifications.userId, userId)];
-    if (role === 'shop_owner') {
+    if (role === "shop_owner") {
       // Shop owners should not see service notifications
       conditions.push(sql`type != 'service'`);
-    } else if (role === 'provider') {
+    } else if (role === "provider") {
       // Service providers should not see order notifications
       conditions.push(sql`type != 'order'`);
     }
-    const query = db.update(notifications)
+    const query = db
+      .update(notifications)
       .set({ isRead: true })
       .where(and(...conditions));
-    
+
     await query;
   }
 
@@ -1244,7 +1664,7 @@ const result = await db.insert(bookings).values({
 
   // ─── ADDITIONAL / ENHANCED OPERATIONS ─────────────────────────────
   async checkAvailability(serviceId: number, date: Date): Promise<boolean> {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = date.toISOString().split("T")[0];
 
     // Check if the slot is blocked by the provider
     const [blocked] = await db
@@ -1253,8 +1673,8 @@ const result = await db.insert(bookings).values({
       .where(
         and(
           eq(blockedTimeSlots.serviceId, serviceId),
-          sql`DATE(${blockedTimeSlots.date}) = ${dateStr}`
-        )
+          sql`DATE(${blockedTimeSlots.date}) = ${dateStr}`,
+        ),
       );
     if (blocked) return false;
 
@@ -1266,8 +1686,8 @@ const result = await db.insert(bookings).values({
         and(
           eq(bookings.serviceId, serviceId),
           eq(bookings.bookingDate, date),
-          sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`
-        )
+          sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`,
+        ),
       );
     if (conflict) return false;
 
@@ -1281,8 +1701,8 @@ const result = await db.insert(bookings).values({
           and(
             eq(bookings.serviceId, serviceId),
             sql`DATE(${bookings.bookingDate}) = ${dateStr}`,
-            sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`
-          )
+            sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`,
+          ),
         );
       const max = service.maxDailyBookings ?? 5;
       if (Number(countForDay) >= max) return false;
@@ -1290,42 +1710,55 @@ const result = await db.insert(bookings).values({
     return true;
   }
 
-  async joinWaitlist(customerId: number, serviceId: number, preferredDate: Date): Promise<void> {
+  async joinWaitlist(
+    customerId: number,
+    serviceId: number,
+    preferredDate: Date,
+  ): Promise<void> {
     // Insert into a waitlist table (implementation required)
   }
 
   // For booking history sorting, we compute the last update timestamp asynchronously.
   async getBookingHistory(bookingId: number): Promise<any[]> {
-    return await db.select().from(bookingHistory).where(eq(bookingHistory.bookingId, bookingId));
+    return await db
+      .select()
+      .from(bookingHistory)
+      .where(eq(bookingHistory.bookingId, bookingId));
   }
 
   async getExpiredBookings(): Promise<Booking[]> {
-    return await db.select().from(bookings).where(and(
-      eq(bookings.status, 'pending'),
-      lt(bookings.expiresAt, new Date())
-    ));
+    return await db
+      .select()
+      .from(bookings)
+      .where(
+        and(eq(bookings.status, "pending"), lt(bookings.expiresAt, new Date())),
+      );
   }
 
   async processExpiredBookings(): Promise<void> {
     const expiredBookings = await this.getExpiredBookings();
     for (const booking of expiredBookings) {
       await this.updateBooking(booking.id, {
-        status: 'expired',
-        comments: 'Automatically expired after 7 days'
+        status: "expired",
+        comments: "Automatically expired after 7 days",
       });
       await this.createNotification({
         userId: booking.customerId,
-        type: 'booking_expired',
-        title: 'Booking Request Expired',
-        message: 'Your booking request has expired as the service provider did not respond within 7 days.',
+        type: "booking_expired",
+        title: "Booking Request Expired",
+        message:
+          "Your booking request has expired as the service provider did not respond within 7 days.",
         isRead: false,
       });
-      const service = typeof booking.serviceId === "number" ? await this.getService(booking.serviceId) : undefined;
+      const service =
+        typeof booking.serviceId === "number"
+          ? await this.getService(booking.serviceId)
+          : undefined;
       if (service) {
         await this.createNotification({
           userId: service.providerId,
-          type: 'booking_expired',
-          title: 'Booking Request Expired',
+          type: "booking_expired",
+          title: "Booking Request Expired",
           message: `A booking request for ${service.name} has expired as you did not respond within 7 days.`,
           isRead: false,
         });
@@ -1333,31 +1766,40 @@ const result = await db.insert(bookings).values({
     }
   }
 
-
   // Asynchronously compute last-update timestamp for sorting.
   // Removed duplicate implementation of getBookingHistoryForCustomer to resolve the duplicate function error.
 
   async getBookingHistoryForProvider(providerId: number): Promise<Booking[]> {
     const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map(service => service.id);
+    const serviceIds = providerServices.map((service) => service.id);
     if (serviceIds.length === 0) return [];
 
     let bookingHistoryArr: Booking[] = [];
     for (const serviceId of serviceIds) {
-      const serviceBookings = await db.select().from(bookings).where(and(
-        eq(bookings.serviceId, serviceId),
-        ne(bookings.status, 'pending')
-      ));
+      const serviceBookings = await db
+        .select()
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.serviceId, serviceId),
+            ne(bookings.status, "pending"),
+          ),
+        );
       bookingHistoryArr = [...bookingHistoryArr, ...serviceBookings];
     }
 
-    const bookingsWithLastUpdate = await Promise.all(bookingHistoryArr.map(async (booking) => {
-      const history = await this.getBookingHistory(booking.id);
-      const lastUpdate = history.length > 0
-        ? new Date(history[history.length - 1].changedAt).getTime()
-        : (booking.createdAt ? new Date(booking.createdAt).getTime() : new Date().getTime());
-      return { ...booking, lastUpdate };
-    }));
+    const bookingsWithLastUpdate = await Promise.all(
+      bookingHistoryArr.map(async (booking) => {
+        const history = await this.getBookingHistory(booking.id);
+        const lastUpdate =
+          history.length > 0
+            ? new Date(history[history.length - 1].changedAt).getTime()
+            : booking.createdAt
+              ? new Date(booking.createdAt).getTime()
+              : new Date().getTime();
+        return { ...booking, lastUpdate };
+      }),
+    );
 
     bookingsWithLastUpdate.sort((a, b) => b.lastUpdate - a.lastUpdate);
     return bookingsWithLastUpdate;
@@ -1366,7 +1808,7 @@ const result = await db.insert(bookings).values({
   async updateBookingStatus(
     id: number,
     status: "pending" | "completed" | "cancelled" | "confirmed",
-    comment?: string
+    comment?: string,
   ): Promise<Booking> {
     const booking = await this.getBooking(id);
     if (!booking) throw new Error("Booking not found");
@@ -1375,20 +1817,24 @@ const result = await db.insert(bookings).values({
     // Ensure that createdAt is always a valid Date object before using new Date()
     let createdAt: Date;
     if (booking && booking.createdAt) {
-      createdAt = booking.createdAt instanceof Date
-      ? booking.createdAt
-      : new Date(booking.createdAt as string | number);
+      createdAt =
+        booking.createdAt instanceof Date
+          ? booking.createdAt
+          : new Date(booking.createdAt as string | number);
     } else {
       createdAt = new Date();
     }
 
-    return await this.updateBooking(id, { 
-      status: internalStatus, 
-      comments: comment || null 
+    return await this.updateBooking(id, {
+      status: internalStatus,
+      comments: comment || null,
     });
   }
 
-  async getBookingsByService(serviceId: number, date: Date): Promise<Booking[]> {
+  async getBookingsByService(
+    serviceId: number,
+    date: Date,
+  ): Promise<Booking[]> {
     // Convert date to start and end of day in IST
     const istDate = toISTForStorage(date);
     const startDate = new Date(istDate ?? new Date());
@@ -1399,10 +1845,13 @@ const result = await db.insert(bookings).values({
     return [];
   }
 
-  async getProviderSchedule(providerId: number, date: Date): Promise<Booking[]> {
+  async getProviderSchedule(
+    providerId: number,
+    date: Date,
+  ): Promise<Booking[]> {
     // Convert date to start and end of day in IST
     const istDate = toISTForStorage(date);
-    const startDate =new Date(istDate ?? new Date());
+    const startDate = new Date(istDate ?? new Date());
     startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(istDate ?? new Date());
     endDate.setHours(23, 59, 59, 999);
@@ -1411,21 +1860,29 @@ const result = await db.insert(bookings).values({
   }
 
   async completeService(bookingId: number): Promise<Booking> {
-    return await this.updateBookingStatus(bookingId, "completed", "Service completed successfully");
+    return await this.updateBookingStatus(
+      bookingId,
+      "completed",
+      "Service completed successfully",
+    );
   }
 
-  async addBookingReview(bookingId: number, review: InsertReview): Promise<Review> {
+  async addBookingReview(
+    bookingId: number,
+    review: InsertReview,
+  ): Promise<Review> {
     const booking = await this.getBooking(bookingId);
     if (!booking) throw new Error("Booking not found");
     return await this.createReview({
       ...review,
       bookingId,
-      serviceId: booking.serviceId
+      serviceId: booking.serviceId,
     });
   }
 
   async respondToReview(reviewId: number, response: string): Promise<Review> {
-    const result = await db.update(reviews)
+    const result = await db
+      .update(reviews)
       .set({ providerReply: response })
       .where(eq(reviews.id, reviewId))
       .returning();
@@ -1433,21 +1890,34 @@ const result = await db.insert(bookings).values({
     return result[0];
   }
 
- async createProductReview(review: InsertProductReview): Promise<ProductReview> {
+  async createProductReview(
+    review: InsertProductReview,
+  ): Promise<ProductReview> {
     if (review.orderId && review.customerId && review.productId) {
       const existing = await db
         .select()
         .from(productReviews)
-        .where(and(eq(productReviews.orderId, review.orderId), eq(productReviews.customerId, review.customerId), eq(productReviews.productId, review.productId)))
+        .where(
+          and(
+            eq(productReviews.orderId, review.orderId),
+            eq(productReviews.customerId, review.customerId),
+            eq(productReviews.productId, review.productId),
+          ),
+        )
         .limit(1);
-      if (existing[0]) throw new Error('Duplicate review');
+      if (existing[0]) throw new Error("Duplicate review");
     }
     const result = await db.insert(productReviews).values(review).returning();
     return result[0];
   }
 
-  async getProductReviewsByProduct(productId: number): Promise<ProductReview[]> {
-    return await db.select().from(productReviews).where(eq(productReviews.productId, productId));
+  async getProductReviewsByProduct(
+    productId: number,
+  ): Promise<ProductReview[]> {
+    return await db
+      .select()
+      .from(productReviews)
+      .where(eq(productReviews.productId, productId));
   }
 
   async getProductReviewsByShop(shopId: number): Promise<ProductReview[]> {
@@ -1455,12 +1925,17 @@ const result = await db.insert(bookings).values({
       .select({ id: products.id })
       .from(products)
       .where(eq(products.shopId, shopId));
-    const ids = productIds.map(p => p.id);
+    const ids = productIds.map((p) => p.id);
     if (ids.length === 0) return [];
-    return await db.select().from(productReviews).where(sql`${productReviews.productId} in ${ids}`);
+    return await db
+      .select()
+      .from(productReviews)
+      .where(sql`${productReviews.productId} in ${ids}`);
   }
 
-  async getProductReviewsByCustomer(customerId: number): Promise<(ProductReview & { productName: string | null })[]> {
+  async getProductReviewsByCustomer(
+    customerId: number,
+  ): Promise<(ProductReview & { productName: string | null })[]> {
     const results = await db
       .select({
         id: productReviews.id,
@@ -1480,20 +1955,23 @@ const result = await db.insert(bookings).values({
       .leftJoin(products, eq(productReviews.productId, products.id))
       .where(eq(productReviews.customerId, customerId));
 
-    return results.map(r => ({
+    return results.map((r) => ({
       ...r,
       productName: r.productName ?? null,
     }));
   }
 
   async getProductReviewById(id: number): Promise<ProductReview | undefined> {
-    const result = await db.select().from(productReviews).where(eq(productReviews.id, id));
+    const result = await db
+      .select()
+      .from(productReviews)
+      .where(eq(productReviews.id, id));
     return result[0];
   }
 
   async updateProductReview(
     id: number,
-    data: { rating?: number; review?: string; shopReply?: string }
+    data: { rating?: number; review?: string; shopReply?: string },
   ): Promise<ProductReview> {
     const updateData: Partial<ProductReview> = {};
     if (data.rating !== undefined) updateData.rating = data.rating;
@@ -1502,7 +1980,8 @@ const result = await db.insert(bookings).values({
       updateData.shopReply = data.shopReply;
       updateData.repliedAt = new Date();
     }
-    const result = await db.update(productReviews)
+    const result = await db
+      .update(productReviews)
       .set(updateData)
       .where(eq(productReviews.id, id))
       .returning();
@@ -1515,13 +1994,15 @@ const result = await db.insert(bookings).values({
     return [];
   }
 
-  async createBlockedTimeSlot(data: InsertBlockedTimeSlot): Promise<BlockedTimeSlot> {
+  async createBlockedTimeSlot(
+    data: InsertBlockedTimeSlot,
+  ): Promise<BlockedTimeSlot> {
     // Implementation would depend on your database structure
     // Convert date to IST
     const blockedSlot = {
       id: Math.floor(Math.random() * 10000), // In a real DB this would be auto-generated
       ...data,
-      date: toISTForStorage(data.date)
+      date: toISTForStorage(data.date),
     };
     // Insert blocked time slot into the table (implementation required)
     if (!blockedSlot.date) {
@@ -1539,7 +2020,7 @@ const result = await db.insert(bookings).values({
     serviceId: number,
     date: Date,
     startTime: string,
-    endTime: string
+    endTime: string,
   ): Promise<Booking[]> {
     // Query for overlapping bookings (implementation required)
     return [];
@@ -1550,32 +2031,51 @@ const result = await db.insert(bookings).values({
     logger.info(`SMS to ${phone}: ${message}`);
   }
 
-  async sendEmailNotification(emailAddress: string, subject: string, message: string, userName?: string): Promise<void> {
+  async sendEmailNotification(
+    emailAddress: string,
+    subject: string,
+    message: string,
+    userName?: string,
+  ): Promise<void> {
     try {
       const user = await this.getUserByEmail(emailAddress);
-      const recipientName = userName || (user ? (user.name || user.username) : 'User');
-      const emailContent = getGenericNotificationEmailContent(recipientName, subject, message);
+      const recipientName =
+        userName || (user ? user.name || user.username : "User");
+      const emailContent = getGenericNotificationEmailContent(
+        recipientName,
+        subject,
+        message,
+      );
       await sendEmail({
         to: emailAddress,
         subject: emailContent.subject,
         text: emailContent.text,
         html: emailContent.html,
       });
-      logger.info(`Email notification sent to ${emailAddress} with subject "${subject}"`);
+      logger.info(
+        `Email notification sent to ${emailAddress} with subject "${subject}"`,
+      );
     } catch (error) {
-      logger.error(`Failed to send email notification to ${emailAddress}:`, error);
+      logger.error(
+        `Failed to send email notification to ${emailAddress}:`,
+        error,
+      );
       // Optionally, rethrow or handle as per application's error handling strategy
     }
   }
 
-  async updateOrderStatus(orderId: number, status: OrderStatus, trackingInfo?: string): Promise<Order> {
+  async updateOrderStatus(
+    orderId: number,
+    status: OrderStatus,
+    trackingInfo?: string,
+  ): Promise<Order> {
     const order = await this.getOrder(orderId);
     if (!order) throw new Error("Order not found");
 
     // Update the order status with IST timestamp
     // Only include updatedAt if it exists in the Order type
-    const updateData: any = { 
-      status, 
+    const updateData: any = {
+      status,
       trackingInfo: trackingInfo || order.trackingInfo,
     };
     if ("updatedAt" in order) {
@@ -1592,12 +2092,12 @@ const result = await db.insert(bookings).values({
   }
 
   async getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]> {
-   const updates = await db
+    const updates = await db
       .select()
       .from(orderStatusUpdates)
       .where(eq(orderStatusUpdates.orderId, orderId))
       .orderBy(orderStatusUpdates.timestamp);
-    return updates.map(u => ({
+    return updates.map((u) => ({
       orderId: u.orderId!,
       status: u.status as OrderStatus,
       trackingInfo: u.trackingInfo ?? undefined,
@@ -1605,22 +2105,45 @@ const result = await db.insert(bookings).values({
     }));
   }
 
-  async updateProviderProfile(id: number, profile: Partial<User>): Promise<User> {
+  async updateProviderProfile(
+    id: number,
+    profile: Partial<User>,
+  ): Promise<User> {
     // Remove any null address fields to satisfy the type requirements
     const cleanedProfile = { ...profile };
-    if ('addressStreet' in cleanedProfile && cleanedProfile.addressStreet === null) delete cleanedProfile.addressStreet;
-    if ('addressCity' in cleanedProfile && cleanedProfile.addressCity === null) delete cleanedProfile.addressCity;
-    if ('addressState' in cleanedProfile && cleanedProfile.addressState === null) delete cleanedProfile.addressState;
-    if ('addressPostalCode' in cleanedProfile && cleanedProfile.addressPostalCode === null) delete cleanedProfile.addressPostalCode;
-    if ('addressCountry' in cleanedProfile && cleanedProfile.addressCountry === null) delete cleanedProfile.addressCountry;
+    if (
+      "addressStreet" in cleanedProfile &&
+      cleanedProfile.addressStreet === null
+    )
+      delete cleanedProfile.addressStreet;
+    if ("addressCity" in cleanedProfile && cleanedProfile.addressCity === null)
+      delete cleanedProfile.addressCity;
+    if (
+      "addressState" in cleanedProfile &&
+      cleanedProfile.addressState === null
+    )
+      delete cleanedProfile.addressState;
+    if (
+      "addressPostalCode" in cleanedProfile &&
+      cleanedProfile.addressPostalCode === null
+    )
+      delete cleanedProfile.addressPostalCode;
+    if (
+      "addressCountry" in cleanedProfile &&
+      cleanedProfile.addressCountry === null
+    )
+      delete cleanedProfile.addressCountry;
     return await this.updateUser(id, cleanedProfile);
   }
 
-  async updateProviderAvailability(providerId: number, availability: {
-    days: string[];
-    hours: { start: string; end: string };
-    breaks: { start: string; end: string }[];
-  }): Promise<void> {
+  async updateProviderAvailability(
+    providerId: number,
+    availability: {
+      days: string[];
+      hours: { start: string; end: string };
+      breaks: { start: string; end: string }[];
+    },
+  ): Promise<void> {
     logger.info(`Updated availability for provider ${providerId}`);
   }
 
@@ -1633,32 +2156,37 @@ const result = await db.insert(bookings).values({
   }
 
   // STUB implementations to satisfy IStorage interface missing methods
-  async getWaitlistPosition(customerId: number, serviceId: number): Promise<number> {
+  async getWaitlistPosition(
+    customerId: number,
+    serviceId: number,
+  ): Promise<number> {
     const entries = await db
       .select()
       .from(waitlist)
       .where(eq(waitlist.serviceId, serviceId))
       .orderBy(waitlist.id);
-    const index = entries.findIndex(e => e.customerId === customerId);
+    const index = entries.findIndex((e) => e.customerId === customerId);
     return index === -1 ? -1 : index + 1;
   }
 
-  async createReturnRequest(returnRequest: InsertReturnRequest): Promise<ReturnRequest> {
+  async createReturnRequest(
+    returnRequest: InsertReturnRequest,
+  ): Promise<ReturnRequest> {
     const result = await db
       .insert(returns)
       .values({
         ...returnRequest,
         status: returnRequest.status as
-          | 'requested'
-          | 'approved'
-          | 'rejected'
-          | 'received'
-          | 'refunded'
-          | 'completed',
+          | "requested"
+          | "approved"
+          | "rejected"
+          | "received"
+          | "refunded"
+          | "completed",
         refundStatus: returnRequest.refundStatus as
-          | 'pending'
-          | 'processed'
-          | 'failed'
+          | "pending"
+          | "processed"
+          | "failed"
           | null
           | undefined,
       })
@@ -1675,9 +2203,16 @@ const result = await db.insert(bookings).values({
     return await db.select().from(returns).where(eq(returns.orderId, orderId));
   }
 
-  async updateReturnRequest(id: number, update: Partial<ReturnRequest>): Promise<ReturnRequest> {
-    const result = await db.update(returns).set(update).where(eq(returns.id, id)).returning();
-    if (!result[0]) throw new Error('Return request not found');
+  async updateReturnRequest(
+    id: number,
+    update: Partial<ReturnRequest>,
+  ): Promise<ReturnRequest> {
+    const result = await db
+      .update(returns)
+      .set(update)
+      .where(eq(returns.id, id))
+      .returning();
+    if (!result[0]) throw new Error("Return request not found");
     return result[0];
   }
 

@@ -1,5 +1,11 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Product, User } from "@shared/schema";
@@ -47,7 +53,8 @@ export default function ProductDetails() {
     onError: (error: Error) => {
       let description = error.message || "Failed to add product to cart";
       if (error.message.includes("Cannot add items from different shops")) {
-        description = "You can only add items from one shop at a time. Please clear your cart or checkout first.";
+        description =
+          "You can only add items from one shop at a time. Please clear your cart or checkout first.";
       }
       toast({
         title: "Error Adding to Cart",
@@ -138,9 +145,17 @@ export default function ProductDetails() {
           <CardHeader>
             <div className="flex justify-between items-start">
               <div>
-                <CardTitle className="text-2xl md:text-3xl">{product.name}</CardTitle>
+                <CardTitle className="text-2xl md:text-3xl">
+                  {product.name}
+                </CardTitle>
                 <CardDescription className="mt-1">
-                  Sold by: <Link href={`/customer/shops/${shop.id}`} className="text-primary hover:underline">{shop.shopProfile?.shopName || shop.name}</Link>
+                  Sold by:{" "}
+                  <Link
+                    href={`/customer/shops/${shop.id}`}
+                    className="text-primary hover:underline"
+                  >
+                    {shop.shopProfile?.shopName || shop.name}
+                  </Link>
                 </CardDescription>
               </div>
               <Link href={`/customer/shops/${shop.id}`}>
@@ -164,21 +179,33 @@ export default function ProductDetails() {
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold">₹{product.price}</span>
                 {product.mrp && product.price < product.mrp && (
-                  <span className="text-sm text-muted-foreground line-through">₹{product.mrp}</span>
+                  <span className="text-sm text-muted-foreground line-through">
+                    ₹{product.mrp}
+                  </span>
                 )}
               </div>
-              <p className={`text-sm font-medium ${product.isAvailable && product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {product.isAvailable && product.stock > 0 ? `In Stock (${product.stock} available)` : 'Out of Stock'}
+              <p
+                className={`text-sm font-medium ${product.isAvailable && product.stock > 0 ? "text-green-600" : "text-red-600"}`}
+              >
+                {product.isAvailable && product.stock > 0
+                  ? `In Stock (${product.stock} available)`
+                  : "Out of Stock"}
               </p>
               {product.category && (
-                <p className="text-sm text-muted-foreground">Category: {product.category}</p>
+                <p className="text-sm text-muted-foreground">
+                  Category: {product.category}
+                </p>
               )}
               {/* Add more product details here if needed, e.g., specifications */}
               <div className="flex gap-3 pt-4">
                 <Button
                   size="lg"
                   onClick={() => addToCartMutation.mutate(product.id)}
-                  disabled={!product.isAvailable || product.stock <= 0 || addToCartMutation.isPending}
+                  disabled={
+                    !product.isAvailable ||
+                    product.stock <= 0 ||
+                    addToCartMutation.isPending
+                  }
                   className="flex-1"
                 >
                   <ShoppingCart className="mr-2 h-5 w-5" /> Add to Cart

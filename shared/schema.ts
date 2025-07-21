@@ -1,4 +1,14 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, unique } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  serial,
+  integer,
+  boolean,
+  timestamp,
+  decimal,
+  jsonb,
+  unique,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 import type { SessionData } from "express-session";
@@ -15,7 +25,7 @@ export type ShopProfile = {
   shopName: string;
   description: string;
   businessType: string;
-  gstin?: string| null;
+  gstin?: string | null;
   workingHours: {
     from: string;
     to: string;
@@ -27,13 +37,13 @@ export type ShopProfile = {
 
 // Add working hours type
 export type WorkingHours = {
-  monday: { isAvailable: boolean; start: string; end: string; };
-  tuesday: { isAvailable: boolean; start: string; end: string; };
-  wednesday: { isAvailable: boolean; start: string; end: string; };
-  thursday: { isAvailable: boolean; start: string; end: string; };
-  friday: { isAvailable: boolean; start: string; end: string; };
-  saturday: { isAvailable: boolean; start: string; end: string; };
-  sunday: { isAvailable: boolean; start: string; end: string; };
+  monday: { isAvailable: boolean; start: string; end: string };
+  tuesday: { isAvailable: boolean; start: string; end: string };
+  wednesday: { isAvailable: boolean; start: string; end: string };
+  thursday: { isAvailable: boolean; start: string; end: string };
+  friday: { isAvailable: boolean; start: string; end: string };
+  saturday: { isAvailable: boolean; start: string; end: string };
+  sunday: { isAvailable: boolean; start: string; end: string };
 };
 
 export type BreakTime = {
@@ -78,7 +88,9 @@ export const users = pgTable("users", {
   workingHours: text("working_hours"),
   languages: text("languages"),
   // Enhanced profile fields for providers and shops
-  verificationStatus: text("verification_status").$type<"unverified" | "pending" | "verified">().default("unverified"),
+  verificationStatus: text("verification_status")
+    .$type<"unverified" | "pending" | "verified">()
+    .default("unverified"),
   verificationDocuments: jsonb("verification_documents").$type<string[]>(), // Array of document URLs or identifiers
   profileCompleteness: integer("profile_completeness").default(0), // Percentage
   specializations: text("specializations").array(), // For providers
@@ -119,7 +131,10 @@ export const services = pgTable("services", {
   workingHours: jsonb("working_hours").$type<WorkingHours>(),
   breakTime: jsonb("break_time").$type<BreakTime[]>(),
   maxDailyBookings: integer("max_daily_bookings").default(10),
-  serviceLocationType: text("service_location_type").$type<"customer_location" | "provider_location">().notNull().default("provider_location"), // New field: where the service takes place
+  serviceLocationType: text("service_location_type")
+    .$type<"customer_location" | "provider_location">()
+    .notNull()
+    .default("provider_location"), // New field: where the service takes place
 });
 
 export const serviceAvailability = pgTable("service_availability", {
@@ -138,8 +153,23 @@ export const bookings = pgTable("bookings", {
   customerId: integer("customer_id").references(() => users.id),
   serviceId: integer("service_id").references(() => services.id),
   bookingDate: timestamp("booking_date").notNull(),
-  status: text("status").$type<"pending" | "accepted" | "rejected" | "rescheduled" | "completed" | "cancelled" | "expired" | "rescheduled_pending_provider_approval" | "awaiting_payment" | "disputed">().notNull(),
-  paymentStatus: text("payment_status", { enum: ["pending", "verifying", "paid", "failed"] })
+  status: text("status")
+    .$type<
+      | "pending"
+      | "accepted"
+      | "rejected"
+      | "rescheduled"
+      | "completed"
+      | "cancelled"
+      | "expired"
+      | "rescheduled_pending_provider_approval"
+      | "awaiting_payment"
+      | "disputed"
+    >()
+    .notNull(),
+  paymentStatus: text("payment_status", {
+    enum: ["pending", "verifying", "paid", "failed"],
+  })
     .$type<"pending" | "verifying" | "paid" | "failed">()
     .default("pending"),
   deliveryMethod: text("delivery_method", { enum: ["delivery", "pickup"] }),
@@ -153,7 +183,7 @@ export const bookings = pgTable("bookings", {
   disputeReason: text("dispute_reason"),
   createdAt: timestamp("created_at").defaultNow(),
   expiresAt: timestamp("expires_at"),
-  serviceLocation: text("service_location").$type<'customer' | 'provider'>(), // Added service location type
+  serviceLocation: text("service_location").$type<"customer" | "provider">(), // Added service location type
   providerAddress: text("provider_address"), // Added provider address (nullable)
 });
 
@@ -176,26 +206,35 @@ export const sessions = pgTable("sessions", {
 
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
 });
 // Update the reviews table to link with e-receipt
-export const reviews = pgTable("reviews", {
-  id: serial("id").primaryKey(),
-  customerId: integer("customer_id").references(() => users.id),
-  serviceId: integer("service_id").references(() => services.id),
-  bookingId: integer("booking_id").references(() => bookings.id),
-  rating: integer("rating").notNull(),
-  review: text("review"),
-  createdAt: timestamp("created_at").defaultNow(),
-  providerReply: text("provider_reply"),
-  isVerifiedService: boolean("is_verified_service").default(false),
-}, (table) => {
-  return {
-    customerBookingUnique: unique("customer_booking_unique").on(table.customerId, table.bookingId),
-  };
-});
+export const reviews = pgTable(
+  "reviews",
+  {
+    id: serial("id").primaryKey(),
+    customerId: integer("customer_id").references(() => users.id),
+    serviceId: integer("service_id").references(() => services.id),
+    bookingId: integer("booking_id").references(() => bookings.id),
+    rating: integer("rating").notNull(),
+    review: text("review"),
+    createdAt: timestamp("created_at").defaultNow(),
+    providerReply: text("provider_reply"),
+    isVerifiedService: boolean("is_verified_service").default(false),
+  },
+  (table) => {
+    return {
+      customerBookingUnique: unique("customer_booking_unique").on(
+        table.customerId,
+        table.bookingId,
+      ),
+    };
+  },
+);
 
 export const waitlist = pgTable("waitlist", {
   id: serial("id").primaryKey(),
@@ -221,7 +260,11 @@ export const products = pgTable("products", {
   sku: text("sku"),
   barcode: text("barcode"),
   weight: decimal("weight"),
-  dimensions: jsonb("dimensions").$type<{ length: number; width: number; height: number }>(),
+  dimensions: jsonb("dimensions").$type<{
+    length: number;
+    width: number;
+    height: number;
+  }>(),
   specifications: jsonb("specifications").$type<Record<string, string>>(),
   tags: text("tags").array(),
   minOrderQuantity: integer("min_order_quantity").default(1),
@@ -248,8 +291,21 @@ export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => users.id),
   shopId: integer("shop_id").references(() => users.id),
-  status: text("status").$type<"pending" | "cancelled" | "confirmed" | "processing" | "packed" | "shipped" | "delivered" | "returned">().notNull(),
-  paymentStatus: text("payment_status", { enum: ["pending", "verifying", "paid", "failed"] })
+  status: text("status")
+    .$type<
+      | "pending"
+      | "cancelled"
+      | "confirmed"
+      | "processing"
+      | "packed"
+      | "shipped"
+      | "delivered"
+      | "returned"
+    >()
+    .notNull(),
+  paymentStatus: text("payment_status", {
+    enum: ["pending", "verifying", "paid", "failed"],
+  })
     .$type<"pending" | "verifying" | "paid" | "failed">()
     .default("pending"),
   deliveryMethod: text("delivery_method", { enum: ["delivery", "pickup"] }),
@@ -275,7 +331,9 @@ export const orderItems = pgTable("order_items", {
   price: decimal("price").notNull(),
   total: decimal("total").notNull(),
   discount: decimal("discount"),
-  status: text("status").$type<"ordered" | "cancelled" | "returned">().default("ordered"),
+  status: text("status")
+    .$type<"ordered" | "cancelled" | "returned">()
+    .default("ordered"),
 });
 
 export const returns = pgTable("returns", {
@@ -285,9 +343,20 @@ export const returns = pgTable("returns", {
   customerId: integer("customer_id").references(() => users.id),
   reason: text("reason").notNull(),
   description: text("description"),
-  status: text("status").$type<"requested" | "approved" | "rejected" | "received" | "refunded" | "completed">().notNull(),
+  status: text("status")
+    .$type<
+      | "requested"
+      | "approved"
+      | "rejected"
+      | "received"
+      | "refunded"
+      | "completed"
+    >()
+    .notNull(),
   refundAmount: decimal("refund_amount"),
-  refundStatus: text("refund_status").$type<"pending" | "processed" | "failed">(),
+  refundStatus: text("refund_status").$type<
+    "pending" | "processed" | "failed"
+  >(),
   refundId: text("refund_id"),
   images: text("images").array(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -331,26 +400,28 @@ export const promotions = pgTable("promotions", {
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
-  type: text("type").$type<
-    "booking" | 
-    "order" | 
-    "promotion" | 
-    "system" | 
-    "return" | 
-    "service_request" | 
-    "service" | 
-    "booking_request" | 
-    "shop" | 
-    "booking_rescheduled_request" | // Customer requests reschedule, notify provider
-    "booking_confirmed" |           // Provider confirms booking/reschedule, notify customer
-    "booking_rejected" |            // Provider rejects booking/reschedule, notify customer
-    "booking_cancelled_by_customer" // Customer cancels, notify provider
-  >().notNull(),
+  type: text("type")
+    .$type<
+      | "booking"
+      | "order"
+      | "promotion"
+      | "system"
+      | "return"
+      | "service_request"
+      | "service"
+      | "booking_request"
+      | "shop"
+      | "booking_rescheduled_request" // Customer requests reschedule, notify provider
+      | "booking_confirmed" // Provider confirms booking/reschedule, notify customer
+      | "booking_rejected" // Provider rejects booking/reschedule, notify customer
+      | "booking_cancelled_by_customer" // Customer cancels, notify provider
+    >()
+    .notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
-  relatedBookingId: integer("related_booking_id").references(() => bookings.id) // Optional: to link notification to a specific booking
+  relatedBookingId: integer("related_booking_id").references(() => bookings.id), // Optional: to link notification to a specific booking
 });
 
 export const blockedTimeSlots = pgTable("blocked_time_slots", {
@@ -381,7 +452,9 @@ export const shopProfileSchema = z.object({
   workingHours: z.object({
     from: z.string().min(1, "'From' time is required"),
     to: z.string().min(1, "'To' time is required"),
-    days: z.array(z.string().min(1)).min(1, "At least one working day is required"),
+    days: z
+      .array(z.string().min(1))
+      .min(1, "At least one working day is required"),
   }),
   shippingPolicy: z.string().optional().nullable(),
   returnPolicy: z.string().optional().nullable(),
@@ -409,36 +482,39 @@ export const insertUserSchema = createInsertSchema(users, {
   role: z.enum(["customer", "provider", "shop", "admin"]),
   username: z.string().optional(),
   password: z.string().optional(),
-})
-  .extend({
-    paymentMethods: z.array(
-      z.object({
-        type: z.enum(['card', 'upi']),
-        details: z.record(z.string())
-      })
-    ).optional(),
-    averageRating: z.string().optional().default('0'),
-    totalReviews: z.number().int().optional().default(0)
-  });
-
-export const insertCustomerSchema = insertUserSchema.pick({
-  username: true,
-  password: true,
-  role: true, // Default to 'customer' or ensure it's set
-  name: true,
-  phone: true,
-  email: true,
-  addressStreet: true,
-  addressCity: true,
-  addressState: true,
-  addressPostalCode: true,
-  addressCountry: true,
-  language: true,
-  profilePicture: true,
-  emailVerified: true, // Can be part of initial creation
 }).extend({
-  role: z.literal("customer"), // Ensure role is customer for this schema
+  paymentMethods: z
+    .array(
+      z.object({
+        type: z.enum(["card", "upi"]),
+        details: z.record(z.string()),
+      }),
+    )
+    .optional(),
+  averageRating: z.string().optional().default("0"),
+  totalReviews: z.number().int().optional().default(0),
 });
+
+export const insertCustomerSchema = insertUserSchema
+  .pick({
+    username: true,
+    password: true,
+    role: true, // Default to 'customer' or ensure it's set
+    name: true,
+    phone: true,
+    email: true,
+    addressStreet: true,
+    addressCity: true,
+    addressState: true,
+    addressPostalCode: true,
+    addressCountry: true,
+    language: true,
+    profilePicture: true,
+    emailVerified: true, // Can be part of initial creation
+  })
+  .extend({
+    role: z.literal("customer"), // Ensure role is customer for this schema
+  });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -448,9 +524,16 @@ export type CustomerProfile = z.infer<typeof customerProfileSchema>;
 // Update service schema validation
 export const insertServiceSchema = createInsertSchema(services, {
   // Add specific validation if needed, e.g., for price
-  price: z.string().refine(val => !isNaN(parseFloat(val)), { message: "Price must be a valid number" }),
+  price: z
+    .string()
+    .refine((val) => !isNaN(parseFloat(val)), {
+      message: "Price must be a valid number",
+    }),
   // Ensure serviceLocationType is included and validated
-  serviceLocationType: z.enum(["customer_location", "provider_location"]).optional().default("provider_location"),
+  serviceLocationType: z
+    .enum(["customer_location", "provider_location"])
+    .optional()
+    .default("provider_location"),
 }).extend({
   workingHours: z.object({
     monday: z.object({
@@ -489,10 +572,12 @@ export const insertServiceSchema = createInsertSchema(services, {
       end: z.string(),
     }),
   }),
-  breakTime: z.array(z.object({
-    start: z.string(),
-    end: z.string(),
-  })),
+  breakTime: z.array(
+    z.object({
+      start: z.string(),
+      end: z.string(),
+    }),
+  ),
   maxDailyBookings: z.number().min(1, "Must accept at least 1 booking per day"),
 });
 
@@ -501,7 +586,7 @@ export type InsertService = z.infer<typeof insertServiceSchema>;
 
 export const insertBookingSchema = createInsertSchema(bookings, {
   // Add specific validation if needed
-  serviceLocation: z.enum(['customer', 'provider']).optional(),
+  serviceLocation: z.enum(["customer", "provider"]).optional(),
   providerAddress: z.string().optional().nullable(), // Allow null
 });
 export type Booking = typeof bookings.$inferSelect;
@@ -543,12 +628,18 @@ export const insertBlockedTimeSlotSchema = createInsertSchema(blockedTimeSlots);
 export type InsertBlockedTimeSlot = z.infer<typeof insertBlockedTimeSlotSchema>;
 export type BlockedTimeSlotSelect = typeof blockedTimeSlots.$inferSelect;
 
-export const insertOrderStatusUpdateSchema = createInsertSchema(orderStatusUpdates);
+export const insertOrderStatusUpdateSchema =
+  createInsertSchema(orderStatusUpdates);
 export type OrderStatusUpdateRecord = typeof orderStatusUpdates.$inferSelect;
-export type InsertOrderStatusUpdate = z.infer<typeof insertOrderStatusUpdateSchema>;
-export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens);
+export type InsertOrderStatusUpdate = z.infer<
+  typeof insertOrderStatusUpdateSchema
+>;
+export const insertPasswordResetTokenSchema =
+  createInsertSchema(passwordResetTokens);
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
-export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+export type InsertPasswordResetToken = z.infer<
+  typeof insertPasswordResetTokenSchema
+>;
 
 export const Booking = z.object({
   id: z.number(),
@@ -556,7 +647,16 @@ export const Booking = z.object({
   providerId: z.number(),
   serviceId: z.number(),
   bookingDate: z.string(), // ISO string format
-  status: z.enum(["pending", "accepted", "rejected", "rescheduled", "completed", "cancelled", "awaiting_payment", "disputed"]), // Removed 'expired' as it's handled internally
+  status: z.enum([
+    "pending",
+    "accepted",
+    "rejected",
+    "rescheduled",
+    "completed",
+    "cancelled",
+    "awaiting_payment",
+    "disputed",
+  ]), // Removed 'expired' as it's handled internally
   comments: z.string().optional(),
   rejectionReason: z.string().optional(),
   rescheduleDate: z.string().optional(), // ISO string format

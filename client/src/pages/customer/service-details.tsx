@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Service } from "@shared/schema";
 import { motion } from "framer-motion";
-import { Loader2, MapPin, Star, Clock } from 'lucide-react';
+import { Loader2, MapPin, Star, Clock } from "lucide-react";
 import Meta from "@/components/meta";
 
 type ServiceDetails = Service & {
@@ -29,7 +29,13 @@ export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
   console.log("Service ID from params:", id);
 
-  const { data: service, isLoading, isError, error, isSuccess } = useQuery<ServiceDetails, Error>({
+  const {
+    data: service,
+    isLoading,
+    isError,
+    error,
+    isSuccess,
+  } = useQuery<ServiceDetails, Error>({
     queryKey: [`/api/services/${id}`],
     enabled: !!id,
     retry: false,
@@ -116,14 +122,19 @@ export default function ServiceDetails() {
                       className="h-full w-full rounded-full object-cover"
                     />
                   ) : (
-                    <span className="text-2xl">{service.provider?.name[0]}</span>
+                    <span className="text-2xl">
+                      {service.provider?.name[0]}
+                    </span>
                   )}
                 </div>
                 <div>
                   <p className="font-medium">{service.provider?.name}</p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
-                    <span>{service.rating?.toFixed(1) || "N/A"} ({service.reviews?.length || 0} reviews)</span>
+                    <span>
+                      {service.rating?.toFixed(1) || "N/A"} (
+                      {service.reviews?.length || 0} reviews)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -138,7 +149,12 @@ export default function ServiceDetails() {
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  <span>Location: {service.addressStreet ? `${service.addressStreet}, ${service.addressCity}, ${service.addressState} ${service.addressPostalCode}, ${service.addressCountry}` : 'Not specified'}</span>
+                  <span>
+                    Location:{" "}
+                    {service.addressStreet
+                      ? `${service.addressStreet}, ${service.addressCity}, ${service.addressState} ${service.addressPostalCode}, ${service.addressCountry}`
+                      : "Not specified"}
+                  </span>
                 </div>
               </div>
               <div>

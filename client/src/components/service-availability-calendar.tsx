@@ -1,10 +1,29 @@
-import * as React from 'react';
+import * as React from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -32,7 +51,11 @@ interface ServiceAvailabilityCalendarProps {
   breakTime: Array<{ start: string; end: string }>;
 }
 
-export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime }: ServiceAvailabilityCalendarProps) {
+export function ServiceAvailabilityCalendar({
+  serviceId,
+  workingHours,
+  breakTime,
+}: ServiceAvailabilityCalendarProps) {
   const { t } = useLanguage();
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
@@ -51,7 +74,10 @@ export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime
   const { data: blockedSlots } = useQuery({
     queryKey: ["/api/services", serviceId, "blocked-slots"],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/services/${serviceId}/blocked-slots`);
+      const res = await apiRequest(
+        "GET",
+        `/api/services/${serviceId}/blocked-slots`,
+      );
       if (!res.ok) throw new Error("Failed to fetch blocked slots");
       return res.json();
     },
@@ -60,15 +86,21 @@ export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime
   // Block time slot mutation
   const blockTimeMutation = useMutation({
     mutationFn: async (data: BlockTimeFormData) => {
-      const res = await apiRequest("POST", `/api/services/${serviceId}/block-time`, {
-        ...data,
-        date: selectedDate.toISOString(),
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/services/${serviceId}/block-time`,
+        {
+          ...data,
+          date: selectedDate.toISOString(),
+        },
+      );
       if (!res.ok) throw new Error("Failed to block time slot");
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/services", serviceId, "blocked-slots"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/services", serviceId, "blocked-slots"],
+      });
       toast({
         title: t("success"),
         description: t("time_slot_blocked"),
@@ -88,12 +120,17 @@ export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime
   // Unblock time slot mutation
   const unblockTimeMutation = useMutation({
     mutationFn: async (slotId: number) => {
-      const res = await apiRequest("DELETE", `/api/services/${serviceId}/blocked-slots/${slotId}`);
+      const res = await apiRequest(
+        "DELETE",
+        `/api/services/${serviceId}/blocked-slots/${slotId}`,
+      );
       if (!res.ok) throw new Error("Failed to unblock time slot");
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/services", serviceId, "blocked-slots"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/services", serviceId, "blocked-slots"],
+      });
       toast({
         title: t("success"),
         description: t("time_slot_unblocked"),
@@ -101,7 +138,8 @@ export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime
     },
   });
 
-  const dayWorkingHours = workingHours[format(selectedDate, 'EEEE').toLowerCase()];
+  const dayWorkingHours =
+    workingHours[format(selectedDate, "EEEE").toLowerCase()];
 
   return (
     <div className="space-y-4">
@@ -116,7 +154,12 @@ export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime
               <DialogTitle>{t("block_time_slot")}</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit((data) => blockTimeMutation.mutate(data))} className="space-y-4">
+              <form
+                onSubmit={form.handleSubmit((data) =>
+                  blockTimeMutation.mutate(data),
+                )}
+                className="space-y-4"
+              >
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -153,7 +196,10 @@ export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime
                     <FormItem>
                       <FormLabel>{t("reason")}</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder={t("block_reason_placeholder")} />
+                        <Input
+                          {...field}
+                          placeholder={t("block_reason_placeholder")}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -177,11 +223,12 @@ export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime
         />
 
         <div className="space-y-4">
-          <h4 className="font-medium">{format(selectedDate, 'PPP')}</h4>
+          <h4 className="font-medium">{format(selectedDate, "PPP")}</h4>
           {dayWorkingHours?.isAvailable ? (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                {t("working_hours")}: {dayWorkingHours.start} - {dayWorkingHours.end}
+                {t("working_hours")}: {dayWorkingHours.start} -{" "}
+                {dayWorkingHours.end}
               </p>
               {breakTime.map((break_, index) => (
                 <p key={index} className="text-sm text-muted-foreground">
@@ -190,32 +237,57 @@ export function ServiceAvailabilityCalendar({ serviceId, workingHours, breakTime
               ))}
               <div className="space-y-2 mt-4">
                 <h5 className="font-medium">{t("blocked_slots")}</h5>
-                {blockedSlots?.filter((slot: { date: string }) =>
-                  format(new Date(slot.date), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
-                ).map((slot: { id: number; startTime: string; endTime: string; reason?: string }) => (
-                  <div key={slot.id} className="flex items-center justify-between p-2 border rounded">
-                    <div>
-                      <p className="font-medium">
-                        {format(parse(slot.startTime, 'HH:mm', new Date()), 'p')} - 
-                        {format(parse(slot.endTime, 'HH:mm', new Date()), 'p')}
-                      </p>
-                      {slot.reason && (
-                        <p className="text-sm text-muted-foreground">{slot.reason}</p>
-                      )}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => unblockTimeMutation.mutate(slot.id)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                {blockedSlots
+                  ?.filter(
+                    (slot: { date: string }) =>
+                      format(new Date(slot.date), "yyyy-MM-dd") ===
+                      format(selectedDate, "yyyy-MM-dd"),
+                  )
+                  .map(
+                    (slot: {
+                      id: number;
+                      startTime: string;
+                      endTime: string;
+                      reason?: string;
+                    }) => (
+                      <div
+                        key={slot.id}
+                        className="flex items-center justify-between p-2 border rounded"
+                      >
+                        <div>
+                          <p className="font-medium">
+                            {format(
+                              parse(slot.startTime, "HH:mm", new Date()),
+                              "p",
+                            )}{" "}
+                            -
+                            {format(
+                              parse(slot.endTime, "HH:mm", new Date()),
+                              "p",
+                            )}
+                          </p>
+                          {slot.reason && (
+                            <p className="text-sm text-muted-foreground">
+                              {slot.reason}
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => unblockTimeMutation.mutate(slot.id)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ),
+                  )}
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">{t("not_working_day")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("not_working_day")}
+            </p>
           )}
         </div>
       </div>

@@ -2,16 +2,16 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { NotificationsCenter } from "@/components/notifications-center";
-import { 
-  Package, 
-  ShoppingCart, 
-  Settings, 
-  BarChart3, 
-  Gift, 
+import {
+  Package,
+  ShoppingCart,
+  Settings,
+  BarChart3,
+  Gift,
   Star,
   Box,
   TrendingUp,
-  LogOut
+  LogOut,
 } from "lucide-react";
 
 export function ShopLayout({ children }: { children: React.ReactNode }) {
@@ -78,7 +78,9 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
       {/* Navigation */}
       <div className="fixed top-0 left-0 bottom-0 w-64 bg-card border-r">
         <div className="p-6">
-          <h2 className="text-lg font-semibold">{user?.shopProfile?.shopName || "My Shop"}</h2>
+          <h2 className="text-lg font-semibold">
+            {user?.shopProfile?.shopName || "My Shop"}
+          </h2>
         </div>
         <nav className="space-y-1 px-3">
           {navigation.map((item) => {
@@ -101,9 +103,7 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <div className="pl-64 pt-16">
-        <main className="p-8">
-          {children}
-        </main>
+        <main className="p-8">{children}</main>
       </div>
     </div>
   );

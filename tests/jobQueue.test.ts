@@ -1,9 +1,9 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import { addJob } from '../server/jobQueue';
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { addJob } from "../server/jobQueue";
 
-describe('jobQueue', () => {
-  it('runs queued jobs', async () => {
+describe("jobQueue", () => {
+  it("runs queued jobs", async () => {
     let ran = false;
     await new Promise<void>((resolve) => {
       addJob(async () => {
@@ -11,6 +11,6 @@ describe('jobQueue', () => {
         resolve();
       });
     });
-     assert.ok(ran);
+    assert.ok(ran);
   });
 });

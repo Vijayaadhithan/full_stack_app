@@ -46,7 +46,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { useState } from "react";
-import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 
 // Define the Promotion type based on the server schema
 type Promotion = {
@@ -69,14 +69,19 @@ const promotionFormSchema = z.object({
   name: z.string().min(1, "Promotion name is required"),
   description: z.string().optional(),
   type: z.enum(["percentage", "fixed_amount"]),
-  value: z.coerce.number({
-    required_error: "Discount value is required",
-  }).min(0, "Discount cannot be negative"),
+  value: z.coerce
+    .number({
+      required_error: "Discount value is required",
+    })
+    .min(0, "Discount cannot be negative"),
   code: z.string().optional(),
   usageLimit: z.coerce.number().min(0).default(0),
   isActive: z.boolean().default(true),
   shopId: z.coerce.number().positive("Invalid Shop ID"),
-  expiryDays: z.coerce.number().min(0, "Expiry days must be 0 or greater").default(0),
+  expiryDays: z.coerce
+    .number()
+    .min(0, "Expiry days must be 0 or greater")
+    .default(0),
 });
 
 // Infer the TypeScript type for the form
@@ -86,9 +91,13 @@ export default function ShopPromotions() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null);
+  const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(
+    null,
+  );
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
-  const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(null);
+  const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(
+    null,
+  );
 
   // Fetch promotions for the current shop
   const { data: promotions, isLoading } = useQuery<Promotion[]>({
@@ -147,7 +156,9 @@ export default function ShopPromotions() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/promotions/shop/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/promotions/shop/${user?.id}`],
+      });
       toast({
         title: "Success",
         description: "Promotion created successfully",
@@ -166,7 +177,13 @@ export default function ShopPromotions() {
 
   // Update mutation
   const updatePromotionMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: PromotionFormData }) => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: PromotionFormData;
+    }) => {
       const res = await apiRequest("PATCH", `/api/promotions/${id}`, data);
       if (!res.ok) {
         const error = await res.json();
@@ -175,7 +192,9 @@ export default function ShopPromotions() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/promotions/shop/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/promotions/shop/${user?.id}`],
+      });
       toast({
         title: "Success",
         description: "Promotion updated successfully",
@@ -195,7 +214,9 @@ export default function ShopPromotions() {
   // Update Status mutation
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
-      const res = await apiRequest("PATCH", `/api/promotions/${id}/status`, { isActive });
+      const res = await apiRequest("PATCH", `/api/promotions/${id}/status`, {
+        isActive,
+      });
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to update promotion status");
@@ -203,7 +224,9 @@ export default function ShopPromotions() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/promotions/shop/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/promotions/shop/${user?.id}`],
+      });
       toast({
         title: "Success",
         description: "Promotion status updated successfully",
@@ -229,7 +252,9 @@ export default function ShopPromotions() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/promotions/shop/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/promotions/shop/${user?.id}`],
+      });
       toast({
         title: "Success",
         description: "Promotion deleted successfully",
@@ -298,7 +323,10 @@ export default function ShopPromotions() {
 
               {/* Promotion form */}
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-4"
+                >
                   <FormField
                     control={form.control}
                     name="name"
@@ -335,15 +363,22 @@ export default function ShopPromotions() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Discount Type</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                          >
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select type" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="percentage">Percentage</SelectItem>
-                              <SelectItem value="fixed_amount">Fixed Amount</SelectItem>
+                              <SelectItem value="percentage">
+                                Percentage
+                              </SelectItem>
+                              <SelectItem value="fixed_amount">
+                                Fixed Amount
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -359,7 +394,12 @@ export default function ShopPromotions() {
                         <FormItem>
                           <FormLabel>Discount Value</FormLabel>
                           <FormControl>
-                            <Input type="number" min="0" step="any" {...field} />
+                            <Input
+                              type="number"
+                              min="0"
+                              step="any"
+                              {...field}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -411,8 +451,8 @@ export default function ShopPromotions() {
                         </FormControl>
                         <FormMessage />
                         <p className="text-xs text-muted-foreground mt-1">
-                          0 means "no expiry." Otherwise, the promotion will expire after 
-                          that many days from creation.
+                          0 means "no expiry." Otherwise, the promotion will
+                          expire after that many days from creation.
                         </p>
                       </FormItem>
                     )}
@@ -449,7 +489,9 @@ export default function ShopPromotions() {
                         updatePromotionMutation.isPending) && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      {editingPromotion ? "Update Promotion" : "Create Promotion"}
+                      {editingPromotion
+                        ? "Update Promotion"
+                        : "Create Promotion"}
                     </Button>
                   </div>
                 </form>
@@ -493,12 +535,18 @@ export default function ShopPromotions() {
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
-                      <AlertDialog open={deleteConfirmationOpen && promotionToDelete?.id === promotion.id} onOpenChange={(open) => {
-                        if (!open) {
-                          setDeleteConfirmationOpen(false);
-                          setPromotionToDelete(null);
+                      <AlertDialog
+                        open={
+                          deleteConfirmationOpen &&
+                          promotionToDelete?.id === promotion.id
                         }
-                      }}>
+                        onOpenChange={(open) => {
+                          if (!open) {
+                            setDeleteConfirmationOpen(false);
+                            setPromotionToDelete(null);
+                          }
+                        }}
+                      >
                         <AlertDialogTrigger asChild>
                           <Button
                             variant="ghost"
@@ -516,24 +564,34 @@ export default function ShopPromotions() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              This action cannot be undone. This will permanently delete the promotion "{promotionToDelete?.name}".
+                              This action cannot be undone. This will
+                              permanently delete the promotion "
+                              {promotionToDelete?.name}".
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => {
-                              setDeleteConfirmationOpen(false);
-                              setPromotionToDelete(null);
-                            }}>Cancel</AlertDialogCancel>
+                            <AlertDialogCancel
+                              onClick={() => {
+                                setDeleteConfirmationOpen(false);
+                                setPromotionToDelete(null);
+                              }}
+                            >
+                              Cancel
+                            </AlertDialogCancel>
                             <AlertDialogAction
                               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                               onClick={() => {
                                 if (promotionToDelete) {
-                                  deletePromotionMutation.mutate(promotionToDelete.id);
+                                  deletePromotionMutation.mutate(
+                                    promotionToDelete.id,
+                                  );
                                 }
                               }}
                               disabled={deletePromotionMutation.isPending}
                             >
-                              {deletePromotionMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              {deletePromotionMutation.isPending && (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              )}
                               Delete
                             </AlertDialogAction>
                           </AlertDialogFooter>
@@ -553,14 +611,17 @@ export default function ShopPromotions() {
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span>Code</span>
-                      <span className="font-semibold">{promotion.code || "—"}</span>
+                      <span className="font-semibold">
+                        {promotion.code || "—"}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span>Period</span>
                       <span className="font-semibold">
-                        {formatIndianDisplay(promotion.startDate, 'date')} {/* Use formatIndianDisplay */}
+                        {formatIndianDisplay(promotion.startDate, "date")}{" "}
+                        {/* Use formatIndianDisplay */}
                         {promotion.endDate
-                          ? ` - ${formatIndianDisplay(promotion.endDate, 'date')}` /* Use formatIndianDisplay */
+                          ? ` - ${formatIndianDisplay(promotion.endDate, "date")}` /* Use formatIndianDisplay */
                           : " (No expiry)"}
                       </span>
                     </div>

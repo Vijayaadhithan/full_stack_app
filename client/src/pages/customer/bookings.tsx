@@ -2,12 +2,7 @@ import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -62,7 +57,8 @@ export default function Bookings() {
   const [selectedBooking, setSelectedBooking] = useState<BookingWithService>();
   // const [rescheduleDate, setRescheduleDate] = useState<Date>();
   // const [rescheduleTime, setRescheduleTime] = useState<string>("");
-  const [newRescheduleDateTime, setNewRescheduleDateTime] = useState<string>(""); // New state for datetime-local
+  const [newRescheduleDateTime, setNewRescheduleDateTime] =
+    useState<string>(""); // New state for datetime-local
   const [rescheduleComments, setRescheduleComments] = useState<string>(""); // Added for comments
   // const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [rating, setRating] = useState(5);
@@ -71,7 +67,7 @@ export default function Bookings() {
   const [disputeReason, setDisputeReason] = useState("");
 
   // Fetch bookings
-  const { data: bookings, isLoading } = useQuery<BookingWithService[]> ({
+  const { data: bookings, isLoading } = useQuery<BookingWithService[]>({
     queryKey: ["/api/bookings"],
   });
 
@@ -106,7 +102,7 @@ export default function Bookings() {
   // REMOVED: useEffect for providerAvailability error handling
   // useEffect(() => {
   //   if (providerAvailability === undefined) return;
-    
+
   //   const queryState = queryClient.getQueryState([
   //     "/api/services",
   //     selectedBooking?.serviceId,
@@ -114,7 +110,7 @@ export default function Bookings() {
   //     rescheduleDate ? rescheduleDate.toISOString().split('T')[0] : undefined,
   //   ]);
   //   const error = queryState?.error;
-    
+
   //   if (error) {
   //     toast({
   //       title: "Error fetching availability",
@@ -126,7 +122,7 @@ export default function Bookings() {
   //   }
   // }, [providerAvailability, queryClient, rescheduleDate, selectedBooking?.serviceId]);
 
-// Fetch all reviews left by the logged-in customer
+  // Fetch all reviews left by the logged-in customer
   const { data: customerReviews } = useQuery<Review[]>({
     queryKey: ["/api/reviews/customer"],
   });
@@ -141,7 +137,7 @@ export default function Bookings() {
   const userReview = existingReviews?.find(
     (r) =>
       r.serviceId === selectedBooking?.serviceId &&
-      r.bookingId === selectedBooking?.id
+      r.bookingId === selectedBooking?.id,
   );
 
   // When editing, populate rating & text
@@ -195,7 +191,8 @@ export default function Bookings() {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
         title: "Reschedule Requested",
-        description: "Your reschedule request has been sent to the provider for confirmation.",
+        description:
+          "Your reschedule request has been sent to the provider for confirmation.",
       });
       setSelectedBooking(undefined); // Close dialog
       setNewRescheduleDateTime("");
@@ -237,9 +234,7 @@ export default function Bookings() {
       queryClient.invalidateQueries({ queryKey: ["/api/reviews/customer"] });
       if (selectedBooking?.provider?.id) {
         queryClient.invalidateQueries({
-          queryKey: [
-            `/api/reviews/provider/${selectedBooking.provider.id}`,
-          ],
+          queryKey: [`/api/reviews/provider/${selectedBooking.provider.id}`],
         });
       }
       toast({
@@ -254,7 +249,9 @@ export default function Bookings() {
       // Log the full error object for detailed debugging
       console.error("Review submission error:", error);
       // Display error message to the user
-      const errorMessage = error.response?.data?.message || "Failed to submit review. Please try again.";
+      const errorMessage =
+        error.response?.data?.message ||
+        "Failed to submit review. Please try again.";
       toast({
         title: "Submission Failed",
         description: errorMessage,
@@ -266,59 +263,95 @@ export default function Bookings() {
 
   // Submit payment reference mutation
   const paymentMutation = useMutation({
-    mutationFn: async ({ bookingId, paymentReference }: { bookingId: number; paymentReference: string }) => {
-      const res = await apiRequest('PATCH', `/api/bookings/${bookingId}/customer-complete`, { paymentReference });
+    mutationFn: async ({
+      bookingId,
+      paymentReference,
+    }: {
+      bookingId: number;
+      paymentReference: string;
+    }) => {
+      const res = await apiRequest(
+        "PATCH",
+        `/api/bookings/${bookingId}/customer-complete`,
+        { paymentReference },
+      );
       if (!res.ok) {
         const body = await res.json();
-        throw new Error(body.message || 'Failed to submit payment');
+        throw new Error(body.message || "Failed to submit payment");
       }
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: 'Payment submitted, awaiting provider confirmation' });
+      toast({ title: "Payment submitted, awaiting provider confirmation" });
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
   const updateReferenceMutation = useMutation({
-    mutationFn: async ({ bookingId, paymentReference }: { bookingId: number; paymentReference: string }) => {
-      const res = await apiRequest('PATCH', `/api/bookings/${bookingId}/update-reference`, { paymentReference });
+    mutationFn: async ({
+      bookingId,
+      paymentReference,
+    }: {
+      bookingId: number;
+      paymentReference: string;
+    }) => {
+      const res = await apiRequest(
+        "PATCH",
+        `/api/bookings/${bookingId}/update-reference`,
+        { paymentReference },
+      );
       if (!res.ok) {
         const body = await res.json();
-        throw new Error(body.message || 'Failed to update reference');
+        throw new Error(body.message || "Failed to update reference");
       }
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: 'Payment reference updated' });
+      toast({ title: "Payment reference updated" });
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
     },
-    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const disputeMutation = useMutation({
-    mutationFn: async ({ bookingId, reason }: { bookingId: number; reason: string }) => {
-      const res = await apiRequest('POST', `/api/bookings/${bookingId}/report-dispute`, { reason });
+    mutationFn: async ({
+      bookingId,
+      reason,
+    }: {
+      bookingId: number;
+      reason: string;
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/bookings/${bookingId}/report-dispute`,
+        { reason },
+      );
       if (!res.ok) {
         const body = await res.json();
-        throw new Error(body.message || 'Failed to report issue');
+        throw new Error(body.message || "Failed to report issue");
       }
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: 'Issue reported' });
+      toast({ title: "Issue reported" });
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
     },
-    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const handleCancel = (booking: BookingWithService) => {
     if (
       window.confirm(
-        "Are you sure you want to cancel this booking? This action cannot be undone."
+        "Are you sure you want to cancel this booking? This action cannot be undone.",
       )
     ) {
       cancelMutation.mutate(booking.id);
@@ -331,12 +364,12 @@ export default function Bookings() {
     // Basic validation for datetime-local input (e.g., not empty)
     // More sophisticated validation (e.g., ensuring it's in the future) can be added here or on the backend
     if (new Date(newRescheduleDateTime) <= new Date()) {
-        toast({
-            title: "Invalid Date/Time",
-            description: "Please select a future date and time for rescheduling.",
-            variant: "destructive",
-        });
-        return;
+      toast({
+        title: "Invalid Date/Time",
+        description: "Please select a future date and time for rescheduling.",
+        variant: "destructive",
+      });
+      return;
     }
 
     const newDate = new Date(newRescheduleDateTime);
@@ -375,12 +408,11 @@ export default function Bookings() {
     (b) =>
       b.status !== "cancelled" &&
       b.status !== "completed" &&
-      isAfter(new Date(b.bookingDate), new Date())
+      isAfter(new Date(b.bookingDate), new Date()),
   );
   const pastBookings = bookings?.filter(
     (b) =>
-      b.status === "completed" ||
-      isBefore(new Date(b.bookingDate), new Date())
+      b.status === "completed" || isBefore(new Date(b.bookingDate), new Date()),
   );
 
   return (
@@ -405,12 +437,20 @@ export default function Bookings() {
           <TabsContent value="upcoming">
             <div className="grid gap-4">
               {upcomingBookings?.map((booking) => (
-                <motion.div key={booking.id} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}>
+                <motion.div
+                  key={booking.id}
+                  variants={{
+                    hidden: { opacity: 0, y: 20 },
+                    show: { opacity: 1, y: 0 },
+                  }}
+                >
                   <Card>
                     <CardContent className="pt-6">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h3 className="font-semibold">{booking.service.name}</h3>
+                          <h3 className="font-semibold">
+                            {booking.service.name}
+                          </h3>
                           <p className="text-sm text-muted-foreground">
                             <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
                             {formatIndianDisplay(booking.bookingDate, "date")}
@@ -425,14 +465,15 @@ export default function Bookings() {
                               {booking.serviceLocation === "customer"
                                 ? "Service at Your Location"
                                 : booking.provider?.addressStreet
-                                ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
-                                : "Service at Provider's Location"}
+                                  ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
+                                  : "Service at Provider's Location"}
                             </span>
                           </div>
                           {booking.provider && (
                             <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
                               <p>
-                                <strong>Provider:</strong> {booking.provider.name}
+                                <strong>Provider:</strong>{" "}
+                                {booking.provider.name}
                               </p>
                               <p>
                                 <strong>Phone:</strong> {booking.provider.phone}
@@ -444,7 +485,9 @@ export default function Bookings() {
                           {booking.status === "accepted" && (
                             <Dialog>
                               <DialogTrigger asChild>
-                                <Button onClick={() => setSelectedBooking(booking)}>
+                                <Button
+                                  onClick={() => setSelectedBooking(booking)}
+                                >
                                   Mark Service as Complete & Pay
                                 </Button>
                               </DialogTrigger>
@@ -468,7 +511,8 @@ export default function Bookings() {
                                           );
                                           toast({
                                             title: "Copied",
-                                            description: "UPI ID copied to clipboard",
+                                            description:
+                                              "UPI ID copied to clipboard",
                                           });
                                         }
                                       }}
@@ -486,10 +530,22 @@ export default function Bookings() {
                                   <Input
                                     placeholder="Transaction reference"
                                     value={paymentReference}
-                                    onChange={(e) => setPaymentReference(e.target.value)}
+                                    onChange={(e) =>
+                                      setPaymentReference(e.target.value)
+                                    }
                                   />
-                                  <Button onClick={() => paymentMutation.mutate({ bookingId: booking.id, paymentReference })} className="w-full">
-                                    {paymentMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                  <Button
+                                    onClick={() =>
+                                      paymentMutation.mutate({
+                                        bookingId: booking.id,
+                                        paymentReference,
+                                      })
+                                    }
+                                    className="w-full"
+                                  >
+                                    {paymentMutation.isPending && (
+                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    )}
                                     Submit and Confirm Payment
                                   </Button>
                                 </div>
@@ -498,21 +554,49 @@ export default function Bookings() {
                           )}
                           {booking.status === "awaiting_payment" && (
                             <>
-                              <p className="text-sm">Reference: {booking.paymentReference}</p>
+                              <p className="text-sm">
+                                Reference: {booking.paymentReference}
+                              </p>
                               <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button variant="outline" onClick={() => { setSelectedBooking(booking); setPaymentReference(booking.paymentReference || ""); }}>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedBooking(booking);
+                                      setPaymentReference(
+                                        booking.paymentReference || "",
+                                      );
+                                    }}
+                                  >
                                     Edit Reference
                                   </Button>
                                 </DialogTrigger>
                                 <DialogContent>
                                   <DialogHeader>
-                                    <DialogTitle>Update Payment Reference</DialogTitle>
+                                    <DialogTitle>
+                                      Update Payment Reference
+                                    </DialogTitle>
                                   </DialogHeader>
                                   <div className="space-y-4 pt-4">
-                                    <Input value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Transaction reference" />
-                                    <Button onClick={() => updateReferenceMutation.mutate({ bookingId: booking.id, paymentReference })} className="w-full">
-                                      {updateReferenceMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                    <Input
+                                      value={paymentReference}
+                                      onChange={(e) =>
+                                        setPaymentReference(e.target.value)
+                                      }
+                                      placeholder="Transaction reference"
+                                    />
+                                    <Button
+                                      onClick={() =>
+                                        updateReferenceMutation.mutate({
+                                          bookingId: booking.id,
+                                          paymentReference,
+                                        })
+                                      }
+                                      className="w-full"
+                                    >
+                                      {updateReferenceMutation.isPending && (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      )}
                                       Save
                                     </Button>
                                   </div>
@@ -520,7 +604,12 @@ export default function Bookings() {
                               </Dialog>
                               <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button variant="destructive" onClick={() => { setSelectedBooking(booking); }}>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={() => {
+                                      setSelectedBooking(booking);
+                                    }}
+                                  >
                                     Report Issue
                                   </Button>
                                 </DialogTrigger>
@@ -529,9 +618,25 @@ export default function Bookings() {
                                     <DialogTitle>Report Issue</DialogTitle>
                                   </DialogHeader>
                                   <div className="space-y-4 pt-4">
-                                    <Textarea value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Describe the issue" />
-                                    <Button onClick={() => disputeMutation.mutate({ bookingId: booking.id, reason: disputeReason })} className="w-full">
-                                      {disputeMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                    <Textarea
+                                      value={disputeReason}
+                                      onChange={(e) =>
+                                        setDisputeReason(e.target.value)
+                                      }
+                                      placeholder="Describe the issue"
+                                    />
+                                    <Button
+                                      onClick={() =>
+                                        disputeMutation.mutate({
+                                          bookingId: booking.id,
+                                          reason: disputeReason,
+                                        })
+                                      }
+                                      className="w-full"
+                                    >
+                                      {disputeMutation.isPending && (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      )}
                                       Submit
                                     </Button>
                                   </div>
@@ -543,13 +648,17 @@ export default function Bookings() {
                             <>
                               <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button onClick={() => setSelectedBooking(booking)}>
+                                  <Button
+                                    onClick={() => setSelectedBooking(booking)}
+                                  >
                                     Reschedule
                                   </Button>
                                 </DialogTrigger>
                                 <DialogContent>
                                   <DialogHeader>
-                                    <DialogTitle>Reschedule Booking</DialogTitle>
+                                    <DialogTitle>
+                                      Reschedule Booking
+                                    </DialogTitle>
                                   </DialogHeader>
                                   <div className="space-y-4 pt-4">
                                     {/* REMOVED: Calendar and Time Select */}
@@ -588,21 +697,31 @@ export default function Bookings() {
                                       </div>
                                     )} */}
                                     <div>
-                                      <Label htmlFor="newRescheduleDateTime">New Date and Time</Label>
-                                      <Input 
+                                      <Label htmlFor="newRescheduleDateTime">
+                                        New Date and Time
+                                      </Label>
+                                      <Input
                                         type="datetime-local"
                                         id="newRescheduleDateTime"
                                         value={newRescheduleDateTime}
-                                        onChange={(e) => setNewRescheduleDateTime(e.target.value)}
+                                        onChange={(e) =>
+                                          setNewRescheduleDateTime(
+                                            e.target.value,
+                                          )
+                                        }
                                         className="mt-1"
                                       />
                                     </div>
                                     <div className="mt-4">
-                                      <Label htmlFor="rescheduleComments">Reason for Rescheduling (Optional)</Label>
+                                      <Label htmlFor="rescheduleComments">
+                                        Reason for Rescheduling (Optional)
+                                      </Label>
                                       <Textarea
                                         id="rescheduleComments"
                                         value={rescheduleComments}
-                                        onChange={(e) => setRescheduleComments(e.target.value)}
+                                        onChange={(e) =>
+                                          setRescheduleComments(e.target.value)
+                                        }
                                         placeholder="Enter any comments for the provider..."
                                         className="mt-1"
                                       />
@@ -610,9 +729,14 @@ export default function Bookings() {
                                     <Button
                                       className="w-full mt-4"
                                       onClick={handleReschedule}
-                                      disabled={!newRescheduleDateTime || rescheduleMutation.isPending}
+                                      disabled={
+                                        !newRescheduleDateTime ||
+                                        rescheduleMutation.isPending
+                                      }
                                     >
-                                      {rescheduleMutation.isPending ? "Confirming..." : "Confirm Reschedule"}
+                                      {rescheduleMutation.isPending
+                                        ? "Confirming..."
+                                        : "Confirm Reschedule"}
                                     </Button>
                                   </div>
                                 </DialogContent>
@@ -638,12 +762,20 @@ export default function Bookings() {
           <TabsContent value="past">
             <div className="grid gap-4">
               {pastBookings?.map((booking) => (
-                <motion.div key={booking.id} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}>
+                <motion.div
+                  key={booking.id}
+                  variants={{
+                    hidden: { opacity: 0, y: 20 },
+                    show: { opacity: 1, y: 0 },
+                  }}
+                >
                   <Card>
                     <CardContent className="pt-6">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h3 className="font-semibold">{booking.service.name}</h3>
+                          <h3 className="font-semibold">
+                            {booking.service.name}
+                          </h3>
                           <p className="text-sm text-muted-foreground">
                             <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
                             {formatIndianDisplay(booking.bookingDate, "date")}
@@ -658,14 +790,15 @@ export default function Bookings() {
                               {booking.serviceLocation === "customer"
                                 ? "Service at Your Location"
                                 : booking.provider?.addressStreet
-                                ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
-                                : "Service at Provider's Location"}
+                                  ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
+                                  : "Service at Provider's Location"}
                             </span>
                           </div>
                           {booking.provider && (
                             <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
                               <p>
-                                <strong>Provider:</strong> {booking.provider.name}
+                                <strong>Provider:</strong>{" "}
+                                {booking.provider.name}
                               </p>
                               <p>
                                 <strong>Phone:</strong> {booking.provider.phone}
@@ -674,23 +807,51 @@ export default function Bookings() {
                           )}
                         </div>
                         <div className="space-x-2">
-                          {booking.status === 'awaiting_payment' && (
+                          {booking.status === "awaiting_payment" && (
                             <>
-                              <p className="text-sm">Reference: {booking.paymentReference}</p>
+                              <p className="text-sm">
+                                Reference: {booking.paymentReference}
+                              </p>
                               <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button variant="outline" onClick={() => { setSelectedBooking(booking); setPaymentReference(booking.paymentReference || ""); }}>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedBooking(booking);
+                                      setPaymentReference(
+                                        booking.paymentReference || "",
+                                      );
+                                    }}
+                                  >
                                     Edit Reference
                                   </Button>
                                 </DialogTrigger>
                                 <DialogContent>
                                   <DialogHeader>
-                                    <DialogTitle>Update Payment Reference</DialogTitle>
+                                    <DialogTitle>
+                                      Update Payment Reference
+                                    </DialogTitle>
                                   </DialogHeader>
                                   <div className="space-y-4 pt-4">
-                                    <Input value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Transaction reference" />
-                                    <Button onClick={() => updateReferenceMutation.mutate({ bookingId: booking.id, paymentReference })} className="w-full">
-                                      {updateReferenceMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                    <Input
+                                      value={paymentReference}
+                                      onChange={(e) =>
+                                        setPaymentReference(e.target.value)
+                                      }
+                                      placeholder="Transaction reference"
+                                    />
+                                    <Button
+                                      onClick={() =>
+                                        updateReferenceMutation.mutate({
+                                          bookingId: booking.id,
+                                          paymentReference,
+                                        })
+                                      }
+                                      className="w-full"
+                                    >
+                                      {updateReferenceMutation.isPending && (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      )}
                                       Save
                                     </Button>
                                   </div>
@@ -698,7 +859,12 @@ export default function Bookings() {
                               </Dialog>
                               <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button variant="destructive" onClick={() => { setSelectedBooking(booking); }}>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={() => {
+                                      setSelectedBooking(booking);
+                                    }}
+                                  >
                                     Report Issue
                                   </Button>
                                 </DialogTrigger>
@@ -707,9 +873,25 @@ export default function Bookings() {
                                     <DialogTitle>Report Issue</DialogTitle>
                                   </DialogHeader>
                                   <div className="space-y-4 pt-4">
-                                    <Textarea value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} placeholder="Describe the issue" />
-                                    <Button onClick={() => disputeMutation.mutate({ bookingId: booking.id, reason: disputeReason })} className="w-full">
-                                      {disputeMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                    <Textarea
+                                      value={disputeReason}
+                                      onChange={(e) =>
+                                        setDisputeReason(e.target.value)
+                                      }
+                                      placeholder="Describe the issue"
+                                    />
+                                    <Button
+                                      onClick={() =>
+                                        disputeMutation.mutate({
+                                          bookingId: booking.id,
+                                          reason: disputeReason,
+                                        })
+                                      }
+                                      className="w-full"
+                                    >
+                                      {disputeMutation.isPending && (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      )}
                                       Submit
                                     </Button>
                                   </div>
@@ -718,11 +900,16 @@ export default function Bookings() {
                             </>
                           )}
                           {/* Review Button for Completed Bookings */}
-                          {booking.status === 'completed' && (
+                          {booking.status === "completed" && (
                             <Dialog>
                               <DialogTrigger asChild>
-                                <Button variant="outline" onClick={() => setSelectedBooking(booking)}>
-                                  {customerReviews?.some((r) => r.bookingId === booking.id)
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setSelectedBooking(booking)}
+                                >
+                                  {customerReviews?.some(
+                                    (r) => r.bookingId === booking.id,
+                                  )
                                     ? "Edit Review"
                                     : "Leave Review"}
                                 </Button>
@@ -741,10 +928,15 @@ export default function Bookings() {
         </Tabs>
 
         {/* Review Dialog - Linked to the trigger in Past Bookings */}
-        <Dialog open={!!selectedBooking && selectedBooking.status === 'completed'} onOpenChange={(open) => !open && setSelectedBooking(undefined)}>
+        <Dialog
+          open={!!selectedBooking && selectedBooking.status === "completed"}
+          onOpenChange={(open) => !open && setSelectedBooking(undefined)}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Leave a Review for {selectedBooking?.service.name}</DialogTitle>
+              <DialogTitle>
+                Leave a Review for {selectedBooking?.service.name}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-4">
               <div>
@@ -779,14 +971,13 @@ export default function Bookings() {
                 {reviewMutation.isPending
                   ? "Submitting..."
                   : userReview
-                  ? "Update Review"
-                  : "Submit Review"}
+                    ? "Update Review"
+                    : "Submit Review"}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </motion.div>
-
     </DashboardLayout>
   );
 }

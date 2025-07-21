@@ -10,21 +10,21 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 
 const container = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.1
-    }
-  }
+      staggerChildren: 0.1,
+    },
+  },
 };
 
 const item = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
+  show: { opacity: 1, y: 0 },
 };
 
 export default function ProviderReviews() {
@@ -35,20 +35,32 @@ export default function ProviderReviews() {
   const { data: reviews, isLoading } = useQuery<Review[]>({
     queryKey: [`/api/reviews/provider/${user?.id}`],
     queryFn: () =>
-      apiRequest("GET", `/api/reviews/provider/${user?.id}`).then((r) => r.json()),
+      apiRequest("GET", `/api/reviews/provider/${user?.id}`).then((r) =>
+        r.json(),
+      ),
     enabled: !!user?.id,
     staleTime: 0,
     refetchOnMount: true,
   });
 
   const replyMutation = useMutation({
-    mutationFn: async ({ reviewId, response }: { reviewId: number; response: string }) => {
-      const res = await apiRequest("POST", `/api/reviews/${reviewId}/reply`, { response });
+    mutationFn: async ({
+      reviewId,
+      response,
+    }: {
+      reviewId: number;
+      response: string;
+    }) => {
+      const res = await apiRequest("POST", `/api/reviews/${reviewId}/reply`, {
+        response,
+      });
       if (!res.ok) throw new Error("Failed to reply to review");
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/reviews/provider/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/reviews/provider/${user?.id}`],
+      });
       toast({
         title: "Reply sent",
         description: "Your reply has been posted successfully.",
@@ -102,20 +114,25 @@ export default function ProviderReviews() {
                   <CardContent className="p-6 space-y-4">
                     <div className="flex items-center gap-2">
                       {Array.from({ length: review.rating }).map((_, i) => (
-                        <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                        <Star
+                          key={i}
+                          className="h-4 w-4 fill-yellow-400 text-yellow-400"
+                        />
                       ))}
                     </div>
                     <p>{review.review}</p>
                     <p className="text-sm text-muted-foreground">
-                      Review Date: {
-                      formatIndianDisplay(review.createdAt || '', 'date') // Use formatIndianDisplay
+                      Review Date:{" "}
+                      {
+                        formatIndianDisplay(review.createdAt || "", "date") // Use formatIndianDisplay
                       }
                     </p>
 
                     {review.providerReply ? (
                       <div className="mt-4 pl-4 border-l-2">
                         <p className="text-sm">
-                          <span className="font-semibold">Your reply:</span> {review.providerReply}
+                          <span className="font-semibold">Your reply:</span>{" "}
+                          {review.providerReply}
                         </p>
                         {/* Assuming no respondedAt field based on schema, removing the date display */}
                         {/* <p className="text-xs text-muted-foreground mt-1">
@@ -126,15 +143,20 @@ export default function ProviderReviews() {
                       <div className="mt-4 space-y-2">
                         <Input
                           placeholder="Write your reply..."
-                          value={replyText[review.id] || ''}
-                          onChange={(e) => setReplyText({
-                            ...replyText,
-                            [review.id]: e.target.value
-                          })}
+                          value={replyText[review.id] || ""}
+                          onChange={(e) =>
+                            setReplyText({
+                              ...replyText,
+                              [review.id]: e.target.value,
+                            })
+                          }
                         />
                         <Button
                           onClick={() => handleReply(review.id)}
-                          disabled={!replyText[review.id]?.trim() || replyMutation.isPending}
+                          disabled={
+                            !replyText[review.id]?.trim() ||
+                            replyMutation.isPending
+                          }
                         >
                           {replyMutation.isPending && (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

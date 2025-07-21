@@ -18,7 +18,11 @@ import { Search, ShoppingCart, Heart, Filter } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const container = {
   hidden: { opacity: 0 },
@@ -48,29 +52,45 @@ export default function BrowseProducts() {
     size: "",
   });
 
-  const handleFilterChange = (key: keyof typeof filters, value: string | undefined) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+  const handleFilterChange = (
+    key: keyof typeof filters,
+    value: string | undefined,
+  ) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  const { data: products, isLoading, error } = useQuery<Product[]>({
+  const {
+    data: products,
+    isLoading,
+    error,
+  } = useQuery<Product[]>({
     queryKey: ["/api/products", filters],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.searchTerm) params.append("searchTerm", filters.searchTerm);
-      if (filters.category && filters.category !== "all") params.append("category", filters.category);
+      if (filters.category && filters.category !== "all")
+        params.append("category", filters.category);
       if (filters.minPrice) params.append("minPrice", filters.minPrice);
       if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
-      if (filters.locationCity) params.append("locationCity", filters.locationCity);
-      if (filters.locationState) params.append("locationState", filters.locationState);
-      const attr: Record<string,string> = {};
+      if (filters.locationCity)
+        params.append("locationCity", filters.locationCity);
+      if (filters.locationState)
+        params.append("locationState", filters.locationState);
+      const attr: Record<string, string> = {};
       if (filters.color) attr.color = filters.color;
       if (filters.size) attr.size = filters.size;
-      if (Object.keys(attr).length > 0) params.append("attributes", JSON.stringify(attr));
+      if (Object.keys(attr).length > 0)
+        params.append("attributes", JSON.stringify(attr));
 
       const queryString = params.toString();
-      const response = await apiRequest("GET", `/api/products${queryString ? `?${queryString}` : ""}`);
+      const response = await apiRequest(
+        "GET",
+        `/api/products${queryString ? `?${queryString}` : ""}`,
+      );
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Failed to fetch products" }));
+        const errorData = await response
+          .json()
+          .catch(() => ({ message: "Failed to fetch products" }));
         throw new Error(errorData.message || "Failed to fetch products");
       }
       return response.json();
@@ -159,13 +179,20 @@ export default function BrowseProducts() {
               <Input
                 placeholder="Search products..."
                 value={filters.searchTerm}
-                onChange={(e) => handleFilterChange("searchTerm", e.target.value)}
+                onChange={(e) =>
+                  handleFilterChange("searchTerm", e.target.value)
+                }
                 className="pl-10"
               />
             </div>
             <Select
               value={filters.category}
-              onValueChange={(value) => handleFilterChange("category", value === "all" ? undefined : value)}
+              onValueChange={(value) =>
+                handleFilterChange(
+                  "category",
+                  value === "all" ? undefined : value,
+                )
+              }
             >
               <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Category" />
@@ -188,22 +215,26 @@ export default function BrowseProducts() {
               <PopoverContent className="w-80 p-4 space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="minPrice">Min Price (₹)</Label>
-                  <Input 
-                    id="minPrice" 
-                    type="number" 
+                  <Input
+                    id="minPrice"
+                    type="number"
                     placeholder="e.g., 100"
                     value={filters.minPrice}
-                    onChange={(e) => handleFilterChange("minPrice", e.target.value)}
-                   />
+                    onChange={(e) =>
+                      handleFilterChange("minPrice", e.target.value)
+                    }
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="maxPrice">Max Price (₹)</Label>
-                  <Input 
-                    id="maxPrice" 
-                    type="number" 
+                  <Input
+                    id="maxPrice"
+                    type="number"
                     placeholder="e.g., 1000"
                     value={filters.maxPrice}
-                    onChange={(e) => handleFilterChange("maxPrice", e.target.value)}
+                    onChange={(e) =>
+                      handleFilterChange("maxPrice", e.target.value)
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -211,7 +242,9 @@ export default function BrowseProducts() {
                   <Input
                     id="city"
                     value={filters.locationCity}
-                    onChange={(e) => handleFilterChange("locationCity", e.target.value)}
+                    onChange={(e) =>
+                      handleFilterChange("locationCity", e.target.value)
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -219,7 +252,9 @@ export default function BrowseProducts() {
                   <Input
                     id="state"
                     value={filters.locationState}
-                    onChange={(e) => handleFilterChange("locationState", e.target.value)}
+                    onChange={(e) =>
+                      handleFilterChange("locationState", e.target.value)
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -227,7 +262,9 @@ export default function BrowseProducts() {
                   <Input
                     id="color"
                     value={filters.color}
-                    onChange={(e) => handleFilterChange("color", e.target.value)}
+                    onChange={(e) =>
+                      handleFilterChange("color", e.target.value)
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -251,11 +288,16 @@ export default function BrowseProducts() {
           <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredProducts?.map((product) => (
               <motion.div key={product.id} variants={item}>
-                <Link href={`/customer/shops/${product.shopId}/products/${product.id}`}>
+                <Link
+                  href={`/customer/shops/${product.shopId}/products/${product.id}`}
+                >
                   <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
                     <div className="aspect-square relative overflow-hidden">
                       <img
-                        src={product.images?.[0] || "https://via.placeholder.com/400"}
+                        src={
+                          product.images?.[0] ||
+                          "https://via.placeholder.com/400"
+                        }
                         alt={product.name}
                         className="object-cover w-full h-full"
                       />
@@ -272,15 +314,27 @@ export default function BrowseProducts() {
                           <Button
                             size="icon"
                             variant="outline"
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); addToWishlistMutation.mutate(product.id); }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              addToWishlistMutation.mutate(product.id);
+                            }}
                             disabled={addToWishlistMutation.isPending}
                           >
                             <Heart className="h-4 w-4" />
                           </Button>
                           <Button
                             size="icon"
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); addToCartMutation.mutate(product.id); }}
-                            disabled={!product.isAvailable || product.stock <= 0 || addToCartMutation.isPending}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              addToCartMutation.mutate(product.id);
+                            }}
+                            disabled={
+                              !product.isAvailable ||
+                              product.stock <= 0 ||
+                              addToCartMutation.isPending
+                            }
                           >
                             <ShoppingCart className="h-4 w-4" />
                           </Button>

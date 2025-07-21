@@ -10,7 +10,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useParams } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -32,10 +37,10 @@ import {
   Star,
 } from "lucide-react";
 import { z } from "zod";
-import { formatIndianDisplay } from '@shared/date-utils'; 
+import { formatIndianDisplay } from "@shared/date-utils";
 // Define the type for timeline updates
 interface TimelineUpdate {
-  status: 'pending' | 'confirmed' | 'packed' | 'shipped' | 'delivered';
+  status: "pending" | "confirmed" | "packed" | "shipped" | "delivered";
   trackingInfo?: string;
   timestamp: string | Date;
 }
@@ -58,10 +63,12 @@ interface DetailedOrder extends Order {
 }
 const returnRequestSchema = z.object({
   reason: z.string().min(10, "Please provide a detailed reason"),
-  items: z.array(z.object({
-    productId: z.number(),
-    quantity: z.number().min(1),
-  })),
+  items: z.array(
+    z.object({
+      productId: z.number(),
+      quantity: z.number().min(1),
+    }),
+  ),
 });
 
 type ReturnRequestForm = z.infer<typeof returnRequestSchema>;
@@ -91,7 +98,11 @@ export default function OrderDetails() {
 
   const submitPaymentMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/orders/${id}/submit-payment-reference`, { paymentReference: reference });
+      const res = await apiRequest(
+        "POST",
+        `/api/orders/${id}/submit-payment-reference`,
+        { paymentReference: reference },
+      );
       if (!res.ok) throw new Error("Failed to submit reference");
       return res.json();
     },
@@ -102,7 +113,7 @@ export default function OrderDetails() {
     },
     onError: (e: Error) => {
       toast({ title: "Error", description: e.message, variant: "destructive" });
-    }
+    },
   });
 
   const returnMutation = useMutation({
@@ -119,7 +130,10 @@ export default function OrderDetails() {
     },
   });
 
-  const [selectedProduct, setSelectedProduct] = useState<{ id: number; name: string } | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
   const [rating, setRating] = useState(5);
   const [reviewText, setReviewText] = useState("");
 
@@ -159,7 +173,7 @@ export default function OrderDetails() {
     );
   }
 
-  const statusIcon: Record<TimelineUpdate['status'], React.ReactElement> = {
+  const statusIcon: Record<TimelineUpdate["status"], React.ReactElement> = {
     pending: <AlertCircle className="h-5 w-5 text-yellow-500" />,
     confirmed: <CheckCircle className="h-5 w-5 text-green-500" />,
     packed: <Package className="h-5 w-5 text-blue-500" />,
@@ -167,12 +181,12 @@ export default function OrderDetails() {
     delivered: <Package className="h-5 w-5 text-green-500" />,
   };
 
-  const getStatusLabel = (status: TimelineUpdate['status']) => {
-    if (order?.deliveryMethod === 'pickup') {
-      if (status === 'shipped') return 'Ready to Collect';
-      if (status === 'delivered') return 'Collected';
+  const getStatusLabel = (status: TimelineUpdate["status"]) => {
+    if (order?.deliveryMethod === "pickup") {
+      if (status === "shipped") return "Ready to Collect";
+      if (status === "delivered") return "Collected";
     } else {
-      if (status === 'shipped') return 'Dispatched';
+      if (status === "shipped") return "Dispatched";
     }
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
@@ -199,15 +213,33 @@ export default function OrderDetails() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <p className="font-medium">Step 1: Pay ₹{order?.total} to {order?.shop?.upiId}</p>
-                <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(order.shop!.upiId!)}>
+                <p className="font-medium">
+                  Step 1: Pay ₹{order?.total} to {order?.shop?.upiId}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    navigator.clipboard.writeText(order.shop!.upiId!)
+                  }
+                >
                   Copy UPI ID
                 </Button>
               </div>
               <div className="space-y-2">
-                <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Transaction ID" />
-                <Button size="sm" onClick={() => submitPaymentMutation.mutate()} disabled={submitPaymentMutation.isPending || !reference}>
-                  {submitPaymentMutation.isPending && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
+                <Input
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  placeholder="Transaction ID"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => submitPaymentMutation.mutate()}
+                  disabled={submitPaymentMutation.isPending || !reference}
+                >
+                  {submitPaymentMutation.isPending && (
+                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  )}
                   Submit Confirmation
                 </Button>
               </div>
@@ -218,7 +250,10 @@ export default function OrderDetails() {
         {order?.paymentStatus === "verifying" && (
           <Card>
             <CardContent>
-              <p className="text-sm">Payment verification in progress. The shop owner has been notified and will confirm your payment shortly.</p>
+              <p className="text-sm">
+                Payment verification in progress. The shop owner has been
+                notified and will confirm your payment shortly.
+              </p>
             </CardContent>
           </Card>
         )}
@@ -227,16 +262,33 @@ export default function OrderDetails() {
             <CardTitle>Items</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {order?.items?.map((item: NonNullable<DetailedOrder['items']>[number]) => (
-              <div key={item.id} className="flex justify-between items-center">
-                <p>{item.name} × {item.quantity}</p>
-                {order?.status === 'delivered' && (
-                  <Button size="sm" variant="outline" onClick={() => item.productId && setSelectedProduct({ id: item.productId, name: item.name })}>
-                    Leave Review
-                  </Button>
-                )}
-              </div>
-            ))}
+            {order?.items?.map(
+              (item: NonNullable<DetailedOrder["items"]>[number]) => (
+                <div
+                  key={item.id}
+                  className="flex justify-between items-center"
+                >
+                  <p>
+                    {item.name} × {item.quantity}
+                  </p>
+                  {order?.status === "delivered" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        item.productId &&
+                        setSelectedProduct({
+                          id: item.productId,
+                          name: item.name,
+                        })
+                      }
+                    >
+                      Leave Review
+                    </Button>
+                  )}
+                </div>
+              ),
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -252,14 +304,16 @@ export default function OrderDetails() {
                 >
                   {statusIcon[update.status]}
                   <div>
-                    <p className="font-medium">{getStatusLabel(update.status)}</p>
+                    <p className="font-medium">
+                      {getStatusLabel(update.status)}
+                    </p>
                     {update.trackingInfo && (
                       <p className="text-sm text-muted-foreground">
                         {update.trackingInfo}
                       </p>
                     )}
                     <p className="text-sm text-muted-foreground">
-                      {formatIndianDisplay(update.timestamp, 'datetime')}
+                      {formatIndianDisplay(update.timestamp, "datetime")}
                     </p>
                   </div>
                 </div>
@@ -268,67 +322,87 @@ export default function OrderDetails() {
           </CardContent>
         </Card>
 
-        {order?.shop?.returnsEnabled && order?.status === "delivered" && !order.returnRequested && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Return Request</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Form {...form}>
-                <form
-                  onSubmit={form.handleSubmit((data) => returnMutation.mutate(data))}
-                  className="space-y-4"
-                >
-                  <FormField
-                    control={form.control}
-                    name="reason"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reason for Return</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Please explain why you want to return this order..."
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+        {order?.shop?.returnsEnabled &&
+          order?.status === "delivered" &&
+          !order.returnRequested && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Return Request</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Form {...form}>
+                  <form
+                    onSubmit={form.handleSubmit((data) =>
+                      returnMutation.mutate(data),
                     )}
-                  />
-
-                  <Button
-                    type="submit"
-                    disabled={returnMutation.isPending}
-                    className="w-full"
+                    className="space-y-4"
                   >
-                    {returnMutation.isPending ? (
-                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                    ) : null}
-                    Submit Return Request
-                  </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-        )}
+                    <FormField
+                      control={form.control}
+                      name="reason"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Reason for Return</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Please explain why you want to return this order..."
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <Button
+                      type="submit"
+                      disabled={returnMutation.isPending}
+                      className="w-full"
+                    >
+                      {returnMutation.isPending ? (
+                        <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                      ) : null}
+                      Submit Return Request
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          )}
         {order && order.shop && (
           <Card>
             <CardContent>
-              <p className="text-sm">For questions about your order, you can contact the shop owner at: {order.shop?.phone}</p>
+              <p className="text-sm">
+                For questions about your order, you can contact the shop owner
+                at: {order.shop?.phone}
+              </p>
             </CardContent>
           </Card>
         )}
-        <Dialog open={!!selectedProduct} onOpenChange={(o) => { if (!o) setSelectedProduct(null); }}>
+        <Dialog
+          open={!!selectedProduct}
+          onOpenChange={(o) => {
+            if (!o) setSelectedProduct(null);
+          }}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Leave a Review for {selectedProduct?.name}</DialogTitle>
+              <DialogTitle>
+                Leave a Review for {selectedProduct?.name}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-4">
               <div>
                 <Label>Rating</Label>
                 <div className="flex items-center gap-1">
-                  {[1,2,3,4,5].map(v => (
-                    <Button key={v} variant="ghost" size="sm" className={`p-0 ${v <= rating ? 'text-yellow-500' : 'text-gray-300'}`} onClick={() => setRating(v)}>
+                  {[1, 2, 3, 4, 5].map((v) => (
+                    <Button
+                      key={v}
+                      variant="ghost"
+                      size="sm"
+                      className={`p-0 ${v <= rating ? "text-yellow-500" : "text-gray-300"}`}
+                      onClick={() => setRating(v)}
+                    >
                       <Star className="h-6 w-6 fill-current" />
                     </Button>
                   ))}
@@ -336,10 +410,20 @@ export default function OrderDetails() {
               </div>
               <div>
                 <Label>Review</Label>
-                <Textarea value={reviewText} onChange={(e) => setReviewText(e.target.value)} placeholder="Share your experience..." />
+                <Textarea
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  placeholder="Share your experience..."
+                />
               </div>
-              <Button className="w-full" onClick={() => reviewMutation.mutate()} disabled={reviewMutation.isPending || !reviewText}>
-                {reviewMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+              <Button
+                className="w-full"
+                onClick={() => reviewMutation.mutate()}
+                disabled={reviewMutation.isPending || !reviewText}
+              >
+                {reviewMutation.isPending ? (
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
                 Submit Review
               </Button>
             </div>

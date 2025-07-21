@@ -18,7 +18,7 @@ import { startPaymentReminderJob } from "./jobs/paymentReminderJob";
 config();
 // Read allowed CORS origins from environment variable (comma separated)
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
   : undefined;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -148,7 +148,7 @@ startPaymentReminderJob(dbStorage);
   });
 
   const PORT = process.env.PORT || 5000;
-  
+
   if (process.env.NODE_ENV === "production") {
     // In production, serve the static files from the dist directory
     app.use(express.static(path.join(__dirname, "public")));
@@ -164,13 +164,16 @@ startPaymentReminderJob(dbStorage);
   } else {
     // In development, use Vite's dev server
     await setupVite(app, server);
-    
-    server.listen({
-      port: PORT,
-      host: "0.0.0.0", // Changed from 127.0.0.1
-      reusePort: true,
-    }, () => {
-      log(`Server running on port ${PORT}`);
-    });
+
+    server.listen(
+      {
+        port: PORT,
+        host: "0.0.0.0", // Changed from 127.0.0.1
+        reusePort: true,
+      },
+      () => {
+        log(`Server running on port ${PORT}`);
+      },
+    );
   }
 })();

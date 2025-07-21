@@ -1,7 +1,14 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +21,17 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Edit, Save, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { useState, useEffect } from "react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Added for delete confirmation
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"; // Added for delete confirmation
 
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -63,7 +80,7 @@ export default function ProviderProfile() {
       upiQrCodeUrl: user?.upiQrCodeUrl || "",
     },
   });
-  
+
   // Update form when user data changes
   useEffect(() => {
     if (user) {
@@ -121,14 +138,14 @@ export default function ProviderProfile() {
     onSuccess: (updatedUser) => {
       // Directly update the cache with the new user data
       queryClient.setQueryData(["/api/user"], updatedUser);
-      
+
       // Also invalidate the query to ensure fresh data on next fetch
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      
+
       // Update local state
       setProfileData(form.getValues());
       setEditMode(false);
-      
+
       toast({
         title: "Profile updated",
         description: "Your profile has been updated successfully.",
@@ -160,7 +177,7 @@ export default function ProviderProfile() {
       workingHours: data.workingHours,
       languages: data.languages,
       upiId: data.upiId,
-      upiQrCodeUrl: data.upiQrCodeUrl
+      upiQrCodeUrl: data.upiQrCodeUrl,
     });
   };
 
@@ -176,7 +193,8 @@ export default function ProviderProfile() {
     onSuccess: () => {
       toast({
         title: "Account Deleted",
-        description: "Your account and all associated data have been successfully deleted.",
+        description:
+          "Your account and all associated data have been successfully deleted.",
       });
       window.location.href = "/auth"; // Simple redirect
     },
@@ -192,7 +210,7 @@ export default function ProviderProfile() {
   const handleDeleteAccount = () => {
     deleteAccountMutation.mutate();
   };
-  
+
   const toggleEditMode = () => {
     if (editMode) {
       // If we're exiting edit mode without saving, reset form to current profile data
@@ -207,10 +225,7 @@ export default function ProviderProfile() {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Provider Profile</h1>
           {!editMode && (
-            <Button
-              type="button"
-              onClick={toggleEditMode}
-            >
+            <Button type="button" onClick={toggleEditMode}>
               <Edit className="mr-2 h-4 w-4" />
               Edit Profile
             </Button>
@@ -224,21 +239,32 @@ export default function ProviderProfile() {
             {user && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 border rounded-lg bg-secondary/30">
                 <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Verification Status</Label>
-                  <p className={`text-lg font-semibold ${user.verificationStatus === 'verified' ? 'text-green-600' : user.verificationStatus === 'pending' ? 'text-yellow-600' : 'text-red-600'}`}>
-                    {user.verificationStatus ? user.verificationStatus.charAt(0).toUpperCase() + user.verificationStatus.slice(1) : 'Not Available'}
+                  <Label className="text-sm font-medium text-muted-foreground">
+                    Verification Status
+                  </Label>
+                  <p
+                    className={`text-lg font-semibold ${user.verificationStatus === "verified" ? "text-green-600" : user.verificationStatus === "pending" ? "text-yellow-600" : "text-red-600"}`}
+                  >
+                    {user.verificationStatus
+                      ? user.verificationStatus.charAt(0).toUpperCase() +
+                        user.verificationStatus.slice(1)
+                      : "Not Available"}
                   </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Profile Completeness</Label>
+                  <Label className="text-sm font-medium text-muted-foreground">
+                    Profile Completeness
+                  </Label>
                   <div className="flex items-center gap-2 mt-1">
                     <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                      <div 
+                      <div
                         className="bg-primary h-2.5 rounded-full transition-all duration-500 ease-out"
                         style={{ width: `${user.profileCompleteness || 0}%` }}
                       ></div>
                     </div>
-                    <span className="text-sm font-medium">{user.profileCompleteness || 0}%</span>
+                    <span className="text-sm font-medium">
+                      {user.profileCompleteness || 0}%
+                    </span>
                   </div>
                 </div>
               </div>
@@ -252,7 +278,10 @@ export default function ProviderProfile() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="space-y-4"
+              >
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
@@ -303,7 +332,11 @@ export default function ProviderProfile() {
                       <FormItem>
                         <FormLabel>Languages</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="e.g., English, Hindi, Tamil" disabled={!editMode} />
+                          <Input
+                            {...field}
+                            placeholder="e.g., English, Hindi, Tamil"
+                            disabled={!editMode}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -388,7 +421,11 @@ export default function ProviderProfile() {
                     <FormItem>
                       <FormLabel>Bio</FormLabel>
                       <FormControl>
-                        <Textarea {...field} placeholder="Tell us about yourself and your services" disabled={!editMode} />
+                        <Textarea
+                          {...field}
+                          placeholder="Tell us about yourself and your services"
+                          disabled={!editMode}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -402,7 +439,11 @@ export default function ProviderProfile() {
                     <FormItem>
                       <FormLabel>Qualifications</FormLabel>
                       <FormControl>
-                        <Textarea {...field} placeholder="List your relevant qualifications and certifications" disabled={!editMode} />
+                        <Textarea
+                          {...field}
+                          placeholder="List your relevant qualifications and certifications"
+                          disabled={!editMode}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -416,7 +457,11 @@ export default function ProviderProfile() {
                     <FormItem>
                       <FormLabel>Experience</FormLabel>
                       <FormControl>
-                        <Textarea {...field} placeholder="Describe your work experience" disabled={!editMode} />
+                        <Textarea
+                          {...field}
+                          placeholder="Describe your work experience"
+                          disabled={!editMode}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -430,7 +475,11 @@ export default function ProviderProfile() {
                     <FormItem>
                       <FormLabel>Working Hours</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="e.g., Mon-Fri: 9 AM - 6 PM" disabled={!editMode} />
+                        <Input
+                          {...field}
+                          placeholder="e.g., Mon-Fri: 9 AM - 6 PM"
+                          disabled={!editMode}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -453,20 +502,32 @@ export default function ProviderProfile() {
                   />
                   <div className="mt-2">
                     <Label>UPI QR Code</Label>
-                    <Input type="file" disabled={!editMode} onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const formData = new FormData();
-                      formData.append('qr', file);
-                      const res = await apiRequest('POST', '/api/users/upload-qr', formData);
-                      if (res.ok) {
-                        const data = await res.json();
-                        form.setValue('upiQrCodeUrl', data.url);
-                        setQrPreview(data.url);
-                      }
-                    }} />
-                    {qrPreview || form.watch('upiQrCodeUrl') ? (
-                      <img src={qrPreview || form.watch('upiQrCodeUrl')!} alt="QR" className="mt-2 h-32" />
+                    <Input
+                      type="file"
+                      disabled={!editMode}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const formData = new FormData();
+                        formData.append("qr", file);
+                        const res = await apiRequest(
+                          "POST",
+                          "/api/users/upload-qr",
+                          formData,
+                        );
+                        if (res.ok) {
+                          const data = await res.json();
+                          form.setValue("upiQrCodeUrl", data.url);
+                          setQrPreview(data.url);
+                        }
+                      }}
+                    />
+                    {qrPreview || form.watch("upiQrCodeUrl") ? (
+                      <img
+                        src={qrPreview || form.watch("upiQrCodeUrl")!}
+                        alt="QR"
+                        className="mt-2 h-32"
+                      />
                     ) : null}
                   </div>
                 </div>
@@ -515,12 +576,16 @@ export default function ProviderProfile() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete your account and remove all your data from our servers.
+                    This action cannot be undone. This will permanently delete
+                    your account and remove all your data from our servers.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteAccount} disabled={deleteAccountMutation.isPending}>
+                  <AlertDialogAction
+                    onClick={handleDeleteAccount}
+                    disabled={deleteAccountMutation.isPending}
+                  >
                     {deleteAccountMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     ) : null}
@@ -530,11 +595,11 @@ export default function ProviderProfile() {
               </AlertDialogContent>
             </AlertDialog>
             <p className="text-sm text-muted-foreground mt-2">
-              Permanently delete your account and all associated data. This action is irreversible.
+              Permanently delete your account and all associated data. This
+              action is irreversible.
             </p>
           </CardContent>
         </Card>
-
       </div>
     </DashboardLayout>
   );

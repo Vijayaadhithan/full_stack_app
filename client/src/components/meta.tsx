@@ -14,21 +14,22 @@ export default function Meta({ title, description, schema }: MetaProps) {
 
     if (description) {
       let tag = document.querySelector<HTMLMetaElement>(
-        'meta[name="description"]'
+        'meta[name="description"]',
       );
       if (!tag) {
-        tag = document.createElement('meta');
-        tag.setAttribute('name', 'description');
+        tag = document.createElement("meta");
+        tag.setAttribute("name", "description");
         document.head.appendChild(tag);
       }
-      tag.setAttribute('content', description);
+      tag.setAttribute("content", description);
     }
 
     let script: HTMLScriptElement | null = null;
     if (schema) {
-      script = document.createElement('script');
-      script.type = 'application/ld+json';
-      script.text = typeof schema === 'string' ? schema : JSON.stringify(schema);
+      script = document.createElement("script");
+      script.type = "application/ld+json";
+      script.text =
+        typeof schema === "string" ? schema : JSON.stringify(schema);
       document.head.appendChild(script);
     }
 

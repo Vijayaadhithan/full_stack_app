@@ -21,8 +21,16 @@ export default function ShopInventory() {
   });
 
   const updateStockMutation = useMutation({
-    mutationFn: async ({ productId, stock }: { productId: number; stock: number }) => {
-      const res = await apiRequest("PATCH", `/api/products/${productId}`, { stock });
+    mutationFn: async ({
+      productId,
+      stock,
+    }: {
+      productId: number;
+      stock: number;
+    }) => {
+      const res = await apiRequest("PATCH", `/api/products/${productId}`, {
+        stock,
+      });
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to update stock");
@@ -30,7 +38,9 @@ export default function ShopInventory() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/products/shop/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/products/shop/${user?.id}`],
+      });
       toast({
         title: "Success",
         description: "Stock updated successfully",
@@ -47,7 +57,7 @@ export default function ShopInventory() {
   });
 
   const handleStockUpdate = (productId: number, stock: number) => {
-    setStockUpdates(prev => ({ ...prev, [productId]: stock }));
+    setStockUpdates((prev) => ({ ...prev, [productId]: stock }));
   };
 
   const handleSave = (productId: number) => {
@@ -75,29 +85,41 @@ export default function ShopInventory() {
         ) : (
           <div className="space-y-4">
             {products.map((product) => (
-              <Card key={product.id} className={
-                product.stock <= (product.lowStockThreshold || 5)
-                  ? "border-yellow-500"
-                  : ""
-              }>
+              <Card
+                key={product.id}
+                className={
+                  product.stock <= (product.lowStockThreshold || 5)
+                    ? "border-yellow-500"
+                    : ""
+                }
+              >
                 <CardContent className="p-6">
                   <div className="flex justify-between items-center">
                     <div>
                       <h3 className="font-semibold">{product.name}</h3>
-                      <p className="text-sm text-muted-foreground">SKU: {product.sku || 'N/A'}</p>
+                      <p className="text-sm text-muted-foreground">
+                        SKU: {product.sku || "N/A"}
+                      </p>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">Current Stock:</span>
+                        <span className="text-sm font-medium">
+                          Current Stock:
+                        </span>
                         <Input
                           type="number"
                           value={stockUpdates[product.id] ?? product.stock}
-                          onChange={(e) => handleStockUpdate(product.id, parseInt(e.target.value))}
+                          onChange={(e) =>
+                            handleStockUpdate(
+                              product.id,
+                              parseInt(e.target.value),
+                            )
+                          }
                           className="w-24"
                         />
                       </div>
                       {stockUpdates[product.id] !== undefined && (
-                        <Button 
+                        <Button
                           onClick={() => handleSave(product.id)}
                           disabled={updateStockMutation.isPending}
                         >
@@ -113,7 +135,9 @@ export default function ShopInventory() {
                   {product.stock <= (product.lowStockThreshold || 5) && (
                     <div className="mt-4 flex items-center gap-2 text-yellow-600 bg-yellow-50 p-2 rounded">
                       <AlertTriangle className="h-4 w-4" />
-                      <span className="text-sm">Low stock alert! Current stock is below threshold.</span>
+                      <span className="text-sm">
+                        Low stock alert! Current stock is below threshold.
+                      </span>
                     </div>
                   )}
                 </CardContent>

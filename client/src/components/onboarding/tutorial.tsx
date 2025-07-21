@@ -16,7 +16,8 @@ const translations = {
       },
       {
         title: "Browse Services",
-        description: "Find and book services from trusted providers in your area.",
+        description:
+          "Find and book services from trusted providers in your area.",
       },
       {
         title: "Shop Products",
@@ -39,7 +40,8 @@ const translations = {
       },
       {
         title: "सेवाएं ब्राउज़ करें",
-        description: "अपने क्षेत्र में विश्वसनीय प्रदाताओं से सेवाएं खोजें और बुक करें।",
+        description:
+          "अपने क्षेत्र में विश्वसनीय प्रदाताओं से सेवाएं खोजें और बुक करें।",
       },
       {
         title: "उत्पाद खरीदें",
@@ -62,7 +64,8 @@ const translations = {
       },
       {
         title: "சேவைகளை உலாவுங்கள்",
-        description: "உங்கள் பகுதியில் உள்ள நம்பகமான வழங்குநர்களிடமிருந்து சேவைகளைக் கண்டறிந்து முன்பதிவு செய்யுங்கள்.",
+        description:
+          "உங்கள் பகுதியில் உள்ள நம்பகமான வழங்குநர்களிடமிருந்து சேவைகளைக் கண்டறிந்து முன்பதிவு செய்யுங்கள்.",
       },
       {
         title: "பொருட்களை வாங்குங்கள்",
@@ -70,7 +73,8 @@ const translations = {
       },
       {
         title: "ஆர்டர்களை கண்காணிக்கவும்",
-        description: "உங்கள் முன்பதிவுகள் மற்றும் ஆர்டர்களை ஒரே இடத்தில் கண்காணிக்கவும்.",
+        description:
+          "உங்கள் முன்பதிவுகள் மற்றும் ஆர்டர்களை ஒரே இடத்தில் கண்காணிக்கவும்.",
       },
     ],
   },
@@ -126,13 +130,11 @@ export function Tutorial({ language = "en", onComplete }: TutorialProps) {
             </Button>
             <div className="space-x-2">
               {!isLastStep ? (
-                <Button onClick={() => setCurrentStep(s => s + 1)}>
+                <Button onClick={() => setCurrentStep((s) => s + 1)}>
                   {t.next}
                 </Button>
               ) : (
-                <Button onClick={onComplete}>
-                  {t.done}
-                </Button>
+                <Button onClick={onComplete}>{t.done}</Button>
               )}
             </div>
           </div>
@@ -145,7 +147,10 @@ export function Tutorial({ language = "en", onComplete }: TutorialProps) {
                   i === currentStep ? "bg-primary" : "bg-border"
                 }`}
                 animate={{
-                  backgroundColor: i === currentStep ? "hsl(var(--primary))" : "hsl(var(--border))"
+                  backgroundColor:
+                    i === currentStep
+                      ? "hsl(var(--primary))"
+                      : "hsl(var(--border))",
                 }}
               />
             ))}

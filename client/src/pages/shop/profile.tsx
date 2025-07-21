@@ -1,6 +1,13 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormField, FormItem, FormLabel, FormMessage, FormControl } from "@/components/ui/form";
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormControl,
+} from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,11 +20,27 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Edit, Save, Trash2 } from "lucide-react";
 import { z } from "zod";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 // import { TimePicker } from "@/components/ui/time-picker"; // Removed unused import
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState, useEffect } from "react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Added for delete confirmation
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"; // Added for delete confirmation
 import { Switch } from "@/components/ui/switch";
 
 const daysOfWeek = [
@@ -63,7 +86,9 @@ export default function ShopProfile() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
-  const [profileData, setProfileData] = useState<ShopProfileFormData | null>(null);
+  const [profileData, setProfileData] = useState<ShopProfileFormData | null>(
+    null,
+  );
 
   const form = useForm<ShopProfileFormData>({
     resolver: zodResolver(shopProfileSchema),
@@ -94,7 +119,7 @@ export default function ShopProfile() {
       addressCountry: user?.addressCountry || "",
     },
   });
-  
+
   // Update form and profile data when user data changes
   useEffect(() => {
     if (user?.shopProfile) {
@@ -109,8 +134,8 @@ export default function ShopProfile() {
         upiId: user.upiId || "",
         upiQrCodeUrl: user.upiQrCodeUrl || "",
         pickupAvailable: user.pickupAvailable ?? true,
-       deliveryAvailable: user.deliveryAvailable ?? false,
-       returnsEnabled: user.returnsEnabled ?? true,
+        deliveryAvailable: user.deliveryAvailable ?? false,
+        returnsEnabled: user.returnsEnabled ?? true,
         workingHours: user.shopProfile.workingHours || {
           from: "09:00",
           to: "18:00",
@@ -170,14 +195,18 @@ export default function ShopProfile() {
       };
 
       console.log("Updating user profile with data:", updatePayload);
-      const res = await apiRequest("PATCH", `/api/users/${user.id}`, updatePayload);
+      const res = await apiRequest(
+        "PATCH",
+        `/api/users/${user.id}`,
+        updatePayload,
+      );
       console.log("Shop profile update response:", res);
-      
+
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to update profile");
       }
-      
+
       return res.json();
     },
     onSuccess: () => {
@@ -216,7 +245,8 @@ export default function ShopProfile() {
     onSuccess: () => {
       toast({
         title: "Account Deleted",
-        description: "Your account and all associated data have been successfully deleted.",
+        description:
+          "Your account and all associated data have been successfully deleted.",
       });
       window.location.href = "/auth"; // Simple redirect
     },
@@ -232,7 +262,7 @@ export default function ShopProfile() {
   const handleDeleteAccount = () => {
     deleteAccountMutation.mutate();
   };
-  
+
   const toggleEditMode = () => {
     if (editMode) {
       // If we're exiting edit mode without saving, reset form to current profile data
@@ -247,10 +277,7 @@ export default function ShopProfile() {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Manage Shop Profile</h1>
           {!editMode && (
-            <Button
-              type="button"
-              onClick={toggleEditMode}
-            >
+            <Button type="button" onClick={toggleEditMode}>
               <Edit className="mr-2 h-4 w-4" />
               Edit Profile
             </Button>
@@ -265,21 +292,32 @@ export default function ShopProfile() {
             {user && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 border rounded-lg bg-secondary/30">
                 <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Verification Status</Label>
-                  <p className={`text-lg font-semibold ${user.verificationStatus === 'verified' ? 'text-green-600' : user.verificationStatus === 'pending' ? 'text-yellow-600' : 'text-red-600'}`}>
-                    {user.verificationStatus ? user.verificationStatus.charAt(0).toUpperCase() + user.verificationStatus.slice(1) : 'Not Available'}
+                  <Label className="text-sm font-medium text-muted-foreground">
+                    Verification Status
+                  </Label>
+                  <p
+                    className={`text-lg font-semibold ${user.verificationStatus === "verified" ? "text-green-600" : user.verificationStatus === "pending" ? "text-yellow-600" : "text-red-600"}`}
+                  >
+                    {user.verificationStatus
+                      ? user.verificationStatus.charAt(0).toUpperCase() +
+                        user.verificationStatus.slice(1)
+                      : "Not Available"}
                   </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Profile Completeness</Label>
+                  <Label className="text-sm font-medium text-muted-foreground">
+                    Profile Completeness
+                  </Label>
                   <div className="flex items-center gap-2 mt-1">
                     <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                      <div 
+                      <div
                         className="bg-primary h-2.5 rounded-full transition-all duration-500 ease-out"
                         style={{ width: `${user.profileCompleteness || 0}%` }}
                       ></div>
                     </div>
-                    <span className="text-sm font-medium">{user.profileCompleteness || 0}%</span>
+                    <span className="text-sm font-medium">
+                      {user.profileCompleteness || 0}%
+                    </span>
                   </div>
                 </div>
               </div>
@@ -293,7 +331,10 @@ export default function ShopProfile() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="space-y-6"
+              >
                 <div className="grid gap-6 md:grid-cols-2">
                   <FormField
                     control={form.control}
@@ -341,15 +382,19 @@ export default function ShopProfile() {
                           <SelectContent>
                             <SelectItem value="retail">Retail</SelectItem>
                             <SelectItem value="wholesale">Wholesale</SelectItem>
-                            <SelectItem value="manufacturer">Manufacturer</SelectItem>
-                            <SelectItem value="distributor">Distributor</SelectItem>
+                            <SelectItem value="manufacturer">
+                              Manufacturer
+                            </SelectItem>
+                            <SelectItem value="distributor">
+                              Distributor
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                   <FormField
+                  <FormField
                     control={form.control}
                     name="phone"
                     render={({ field }) => (
@@ -495,7 +540,7 @@ export default function ShopProfile() {
                         </FormItem>
                       )}
                     />
-                  <FormField
+                    <FormField
                       control={form.control}
                       name="pickupAvailable"
                       render={({ field }) => (
@@ -504,7 +549,11 @@ export default function ShopProfile() {
                             <FormLabel>Enable In-Store Pickup</FormLabel>
                           </div>
                           <FormControl>
-                            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!editMode} />
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              disabled={!editMode}
+                            />
                           </FormControl>
                         </FormItem>
                       )}
@@ -519,7 +568,11 @@ export default function ShopProfile() {
                             <FormLabel>Enable Local Delivery</FormLabel>
                           </div>
                           <FormControl>
-                            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!editMode} />
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              disabled={!editMode}
+                            />
                           </FormControl>
                         </FormItem>
                       )}
@@ -533,37 +586,59 @@ export default function ShopProfile() {
                             <FormLabel>Allow Returns</FormLabel>
                           </div>
                           <FormControl>
-                            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!editMode} />
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              disabled={!editMode}
+                            />
                           </FormControl>
                         </FormItem>
                       )}
                     />
-                  <div className="space-y-2">
+                    <div className="space-y-2">
                       <Label>UPI QR Code</Label>
                       <Input
                         type="file"
                         disabled={!editMode}
                         onChange={async (e) => {
-                          if (!e.target.files || e.target.files.length === 0) return;
+                          if (!e.target.files || e.target.files.length === 0)
+                            return;
                           const file = e.target.files[0];
                           const formData = new FormData();
                           formData.append("qr", file);
                           try {
-                            const res = await apiRequest("POST", "/api/users/upload-qr", formData);
+                            const res = await apiRequest(
+                              "POST",
+                              "/api/users/upload-qr",
+                              formData,
+                            );
                             if (res.ok) {
                               const data = await res.json();
                               form.setValue("upiQrCodeUrl", data.url);
                             } else {
                               const err = await res.json();
-                              toast({ title: "Upload Failed", description: err.message || "Failed to upload QR code", variant: "destructive" });
+                              toast({
+                                title: "Upload Failed",
+                                description:
+                                  err.message || "Failed to upload QR code",
+                                variant: "destructive",
+                              });
                             }
                           } catch (err) {
-                            toast({ title: "Upload Failed", description: (err as Error).message, variant: "destructive" });
+                            toast({
+                              title: "Upload Failed",
+                              description: (err as Error).message,
+                              variant: "destructive",
+                            });
                           }
                         }}
                       />
                       {form.watch("upiQrCodeUrl") && (
-                        <img src={form.watch("upiQrCodeUrl")!} alt="QR Code" className="h-32 w-32 object-contain border mt-2" />
+                        <img
+                          src={form.watch("upiQrCodeUrl")!}
+                          alt="QR Code"
+                          className="h-32 w-32 object-contain border mt-2"
+                        />
                       )}
                     </div>
                   </div>
@@ -617,18 +692,26 @@ export default function ShopProfile() {
                         <FormLabel>Working Days</FormLabel>
                         <div className="grid grid-cols-4 gap-2">
                           {daysOfWeek.map((day) => (
-                            <div key={day} className="flex items-center space-x-2">
+                            <div
+                              key={day}
+                              className="flex items-center space-x-2"
+                            >
                               <Checkbox
-                                checked={form.watch("workingHours.days").includes(day)}
+                                checked={form
+                                  .watch("workingHours.days")
+                                  .includes(day)}
                                 onCheckedChange={(checked) => {
                                   if (!editMode) return;
                                   const days = form.watch("workingHours.days");
                                   if (checked) {
-                                    form.setValue("workingHours.days", [...days, day]);
+                                    form.setValue("workingHours.days", [
+                                      ...days,
+                                      day,
+                                    ]);
                                   } else {
                                     form.setValue(
                                       "workingHours.days",
-                                      days.filter((d) => d !== day)
+                                      days.filter((d) => d !== day),
                                     );
                                   }
                                 }}
@@ -723,12 +806,16 @@ export default function ShopProfile() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete your account and remove all your data from our servers.
+                    This action cannot be undone. This will permanently delete
+                    your account and remove all your data from our servers.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteAccount} disabled={deleteAccountMutation.isPending}>
+                  <AlertDialogAction
+                    onClick={handleDeleteAccount}
+                    disabled={deleteAccountMutation.isPending}
+                  >
                     {deleteAccountMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     ) : null}
@@ -738,11 +825,11 @@ export default function ShopProfile() {
               </AlertDialogContent>
             </AlertDialog>
             <p className="text-sm text-muted-foreground mt-2">
-              Permanently delete your account and all associated data. This action is irreversible.
+              Permanently delete your account and all associated data. This
+              action is irreversible.
             </p>
           </CardContent>
         </Card>
-
       </div>
     </DashboardLayout>
   );

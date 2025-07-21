@@ -36,10 +36,14 @@ type CartItem = {
 export default function Cart() {
   const { toast } = useToast();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null);
+  const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(
+    null,
+  );
   const [discountAmount, setDiscountAmount] = useState(0);
   const [shopId, setShopId] = useState<number | null>(null);
-  const [deliveryMethod, setDeliveryMethod] = useState<"delivery" | "pickup">("pickup");
+  const [deliveryMethod, setDeliveryMethod] = useState<"delivery" | "pickup">(
+    "pickup",
+  );
 
   const { data: shopInfo } = useQuery<any>({
     queryKey: ["shop-info", shopId],
@@ -51,7 +55,8 @@ export default function Cart() {
     },
   });
 
-  const { data: cartItems, isLoading } = useQuery<CartItem[]>({ // Ensure correct type
+  const { data: cartItems, isLoading } = useQuery<CartItem[]>({
+    // Ensure correct type
     queryKey: ["/api/cart"],
     // onSuccess removed
   });
@@ -78,8 +83,17 @@ export default function Cart() {
   console.log("Cart items:", cartItems); // Debug log
 
   const updateCartMutation = useMutation({
-    mutationFn: async ({ productId, quantity }: { productId: number; quantity: number }) => {
-      const res = await apiRequest("POST", "/api/cart", { productId, quantity });
+    mutationFn: async ({
+      productId,
+      quantity,
+    }: {
+      productId: number;
+      quantity: number;
+    }) => {
+      const res = await apiRequest("POST", "/api/cart", {
+        productId,
+        quantity,
+      });
       if (!res.ok) {
         throw new Error("Failed to update cart");
       }
@@ -121,22 +135,24 @@ export default function Cart() {
   });
 
   // Fetch available promotions for the shop
-  const { data: availablePromotions, isLoading: isLoadingPromotions } = useQuery<Promotion[]>({
-    queryKey: ["/api/promotions/active", shopId],
-    enabled: !!shopId,
-    queryFn: async () => {
-      if (!shopId) return [];
-      const res = await apiRequest("GET", `/api/promotions/active/${shopId}`);
-      if (!res.ok) throw new Error("Failed to fetch promotions");
-      return res.json();
-    },
-  });
+  const { data: availablePromotions, isLoading: isLoadingPromotions } =
+    useQuery<Promotion[]>({
+      queryKey: ["/api/promotions/active", shopId],
+      enabled: !!shopId,
+      queryFn: async () => {
+        if (!shopId) return [];
+        const res = await apiRequest("GET", `/api/promotions/active/${shopId}`);
+        if (!res.ok) throw new Error("Failed to fetch promotions");
+        return res.json();
+      },
+    });
 
   // Calculate the subtotal from cart items
   const subtotal =
     cartItems?.reduce(
-      (total: number, item: CartItem) => total + parseFloat(item.product.price) * item.quantity,
-      0
+      (total: number, item: CartItem) =>
+        total + parseFloat(item.product.price) * item.quantity,
+      0,
     ) ?? 0; // Use nullish coalescing for default value
 
   // Platform fee is fixed at 3rs
@@ -159,7 +175,10 @@ export default function Cart() {
       if (promotion.type === "percentage") {
         discount = (parseFloat(promotion.value.toString()) / 100) * subtotal;
         // Apply max discount cap if specified
-        if (promotion.maxDiscount && discount > parseFloat(promotion.maxDiscount.toString())) {
+        if (
+          promotion.maxDiscount &&
+          discount > parseFloat(promotion.maxDiscount.toString())
+        ) {
           discount = parseFloat(promotion.maxDiscount.toString());
         }
       } else {
@@ -177,7 +196,8 @@ export default function Cart() {
       console.error("Error applying promotion:", error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to apply promotion",
+        description:
+          error instanceof Error ? error.message : "Failed to apply promotion",
         variant: "destructive",
       });
     }
@@ -191,12 +211,14 @@ export default function Cart() {
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
-      if (!cartItems || cartItems.length === 0) { // Explicit check
+      if (!cartItems || cartItems.length === 0) {
+        // Explicit check
         throw new Error("Cart is empty");
       }
 
       const orderData = {
-        items: cartItems.map((item: CartItem) => ({ // Explicit type
+        items: cartItems.map((item: CartItem) => ({
+          // Explicit type
           productId: item.product.id,
           quantity: item.quantity,
           price: item.product.price,
@@ -221,14 +243,21 @@ export default function Cart() {
 
       if (selectedPromotion) {
         try {
-          await apiRequest("POST", `/api/promotions/${selectedPromotion.id}/apply`, {
-            orderId: data.order.id,
-          });
+          await apiRequest(
+            "POST",
+            `/api/promotions/${selectedPromotion.id}/apply`,
+            {
+              orderId: data.order.id,
+            },
+          );
         } catch (error) {
           console.error("Error updating promotion usage:", error);
         }
       }
-      toast({ title: "Order placed", description: "Your order has been created." });
+      toast({
+        title: "Order placed",
+        description: "Your order has been created.",
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
       setIsCheckingOut(false);
     },
@@ -275,69 +304,89 @@ export default function Cart() {
           <div className="grid gap-6">
             <Card>
               <CardContent className="divide-y">
-                {cartItems?.map((item: CartItem) => ( // Explicit type
-                  <motion.div
-                    key={item.product.id}
-                    className="py-4 first:pt-6 last:pb-6"
-                  >
-                    <div className="flex gap-4">
-                      <img
-                        src={item.product.images?.[0] || "https://via.placeholder.com/100"}
-                        alt={item.product.name}
-                        className="w-24 h-24 object-cover rounded"
-                      />
-                      <div className="flex-1">
-                        <h3 className="font-semibold">{item.product.name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          ₹{item.product.price} × {item.quantity}
-                        </p>
-                        <div className="flex items-center gap-2 mt-2">
+                {cartItems?.map(
+                  (
+                    item: CartItem, // Explicit type
+                  ) => (
+                    <motion.div
+                      key={item.product.id}
+                      className="py-4 first:pt-6 last:pb-6"
+                    >
+                      <div className="flex gap-4">
+                        <img
+                          src={
+                            item.product.images?.[0] ||
+                            "https://via.placeholder.com/100"
+                          }
+                          alt={item.product.name}
+                          className="w-24 h-24 object-cover rounded"
+                        />
+                        <div className="flex-1">
+                          <h3 className="font-semibold">{item.product.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            ₹{item.product.price} × {item.quantity}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={() =>
+                                updateCartMutation.mutate({
+                                  productId: item.product.id,
+                                  quantity: item.quantity - 1,
+                                })
+                              }
+                              disabled={
+                                item.quantity <= 1 ||
+                                updateCartMutation.isPending
+                              }
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <span className="w-8 text-center">
+                              {item.quantity}
+                            </span>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={() =>
+                                updateCartMutation.mutate({
+                                  productId: item.product.id,
+                                  quantity: item.quantity + 1,
+                                })
+                              }
+                              disabled={
+                                updateCartMutation.isPending ||
+                                item.quantity >= item.product.stock
+                              }
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">
+                            ₹
+                            {(
+                              parseFloat(item.product.price) * item.quantity
+                            ).toFixed(2)}
+                          </p>
                           <Button
                             size="icon"
-                            variant="outline"
+                            variant="ghost"
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
                             onClick={() =>
-                              updateCartMutation.mutate({
-                                productId: item.product.id,
-                                quantity: item.quantity - 1,
-                              })
+                              removeFromCartMutation.mutate(item.product.id)
                             }
-                            disabled={item.quantity <= 1 || updateCartMutation.isPending}
+                            disabled={removeFromCartMutation.isPending}
                           >
-                            <Minus className="h-4 w-4" />
-                          </Button>
-                          <span className="w-8 text-center">{item.quantity}</span>
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            onClick={() =>
-                              updateCartMutation.mutate({
-                                productId: item.product.id,
-                                quantity: item.quantity + 1,
-                              })
-                            }
-                            disabled={updateCartMutation.isPending || item.quantity >= item.product.stock}
-                          >
-                            <Plus className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">
-                          ₹{(parseFloat(item.product.price) * item.quantity).toFixed(2)}
-                        </p>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => removeFromCartMutation.mutate(item.product.id)}
-                          disabled={removeFromCartMutation.isPending}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  ),
+                )}
               </CardContent>
             </Card>
 
@@ -361,13 +410,15 @@ export default function Cart() {
                     </p>
                   ) : (
                     <RadioGroup
-                      value={selectedPromotion ? String(selectedPromotion.id) : ""}
+                      value={
+                        selectedPromotion ? String(selectedPromotion.id) : ""
+                      }
                       onValueChange={(value) => {
                         if (value === "") {
                           handlePromotionSelect(null);
                         } else {
                           const promotion = availablePromotions.find(
-                            (p) => p.id === parseInt(value)
+                            (p) => p.id === parseInt(value),
                           );
                           if (promotion) handlePromotionSelect(promotion);
                         }
@@ -408,7 +459,9 @@ export default function Cart() {
                             )}
                             {promotion.usageLimit && (
                               <p className="text-xs text-muted-foreground mt-1">
-                                {promotion.usageLimit - (promotion.usedCount || 0)} uses remaining
+                                {promotion.usageLimit -
+                                  (promotion.usedCount || 0)}{" "}
+                                uses remaining
                               </p>
                             )}
                           </div>
@@ -426,9 +479,11 @@ export default function Cart() {
                   <CardTitle className="text-lg">Delivery Method</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <RadioGroup 
-                    value={deliveryMethod} 
-                    onValueChange={(value: "delivery" | "pickup") => setDeliveryMethod(value)}
+                  <RadioGroup
+                    value={deliveryMethod}
+                    onValueChange={(value: "delivery" | "pickup") =>
+                      setDeliveryMethod(value)
+                    }
                   >
                     {shopInfo.pickupAvailable && (
                       <div className="flex items-center space-x-2">
@@ -494,10 +549,11 @@ export default function Cart() {
                   disabled={
                     isCheckingOut ||
                     createOrderMutation.isPending ||
-                    !cartItems || cartItems.length === 0 
+                    !cartItems ||
+                    cartItems.length === 0
                   }
                 >
-                Place Order
+                  Place Order
                 </Button>
               </CardContent>
             </Card>

@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Star, MessageSquare } from "lucide-react";
 import { ProductReview } from "@shared/schema";
 import { useState } from "react";
-import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 
 type ReplyFormData = {
   reply: string;
@@ -33,8 +33,18 @@ export default function ShopReviews() {
   });
 
   const replyMutation = useMutation({
-    mutationFn: async ({ reviewId, reply }: { reviewId: number; reply: string }) => {
-      const res = await apiRequest("POST", `/api/product-reviews/${reviewId}/reply`, { reply });
+    mutationFn: async ({
+      reviewId,
+      reply,
+    }: {
+      reviewId: number;
+      reply: string;
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/product-reviews/${reviewId}/reply`,
+        { reply },
+      );
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to reply to review");
@@ -42,7 +52,9 @@ export default function ShopReviews() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/reviews/shop/${user?.id}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/reviews/shop/${user?.id}`],
+      });
       toast({
         title: "Success",
         description: "Reply posted successfully",
@@ -96,7 +108,10 @@ export default function ShopReviews() {
                           ))}
                         </div>
                         <span className="text-sm text-muted-foreground">
-                          {review.createdAt ? formatIndianDisplay(review.createdAt, 'date') : 'N/A'} {/* Use formatIndianDisplay */}
+                          {review.createdAt
+                            ? formatIndianDisplay(review.createdAt, "date")
+                            : "N/A"}{" "}
+                          {/* Use formatIndianDisplay */}
                         </span>
                       </div>
                       <p>{review.review}</p>
@@ -115,14 +130,20 @@ export default function ShopReviews() {
                       {review.shopReply && (
                         <div className="mt-4 pl-4 border-l-2">
                           <p className="text-sm text-muted-foreground">
-                            <span className="font-semibold">Your response:</span> {review.shopReply}
+                            <span className="font-semibold">
+                              Your response:
+                            </span>{" "}
+                            {review.shopReply}
                           </p>
                         </div>
                       )}
                       {!review.shopReply && (
                         <div className="mt-4">
                           {replyingTo === review.id ? (
-                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                            <form
+                              onSubmit={form.handleSubmit(onSubmit)}
+                              className="space-y-4"
+                            >
                               <Textarea
                                 {...form.register("reply")}
                                 placeholder="Write your reply..."

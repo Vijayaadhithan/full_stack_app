@@ -1,4 +1,4 @@
-declare module 'swagger-jsdoc' {
+declare module "swagger-jsdoc" {
   interface Options {
     definition: any;
     apis: string[];

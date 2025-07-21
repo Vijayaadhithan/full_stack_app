@@ -2,18 +2,30 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import logger from "./logger";
 import {
-  User, InsertUser,
-  Service, InsertService,
-  Booking, InsertBooking,
-  Product, InsertProduct,
-  Order, InsertOrder,
-  OrderItem, InsertOrderItem,
-  Review, InsertReview,
-  Notification, InsertNotification,
-  ProductReview, InsertProductReview,
-  ReturnRequest, InsertReturnRequest,
-  Promotion, InsertPromotion,orderStatusUpdates,
-  UserRole
+  User,
+  InsertUser,
+  Service,
+  InsertService,
+  Booking,
+  InsertBooking,
+  Product,
+  InsertProduct,
+  Order,
+  InsertOrder,
+  OrderItem,
+  InsertOrderItem,
+  Review,
+  InsertReview,
+  Notification,
+  InsertNotification,
+  ProductReview,
+  InsertProductReview,
+  ReturnRequest,
+  InsertReturnRequest,
+  Promotion,
+  InsertPromotion,
+  orderStatusUpdates,
+  UserRole,
 } from "@shared/schema";
 import { newIndianDate, formatIndianDisplay } from "../shared/date-utils";
 
@@ -64,7 +76,10 @@ export interface IStorage {
   getUserByGoogleId(googleId: string): Promise<User | undefined>; // Added for Google OAuth
   getAllUsers(): Promise<User[]>;
   getUsersByIds(ids: number[]): Promise<User[]>;
-  getShops(filters?: { locationCity?: string; locationState?: string }): Promise<User[]>;
+  getShops(filters?: {
+    locationCity?: string;
+    locationState?: string;
+  }): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User>; // Updated to accept all partial User fields
 
@@ -101,9 +116,15 @@ export interface IStorage {
   removeProductFromAllCarts(productId: number): Promise<void>;
 
   // Cart operations
-  addToCart(customerId: number, productId: number, quantity: number): Promise<void>;
+  addToCart(
+    customerId: number,
+    productId: number,
+    quantity: number,
+  ): Promise<void>;
   removeFromCart(customerId: number, productId: number): Promise<void>;
-  getCart(customerId: number): Promise<{ product: Product; quantity: number }[]>;
+  getCart(
+    customerId: number,
+  ): Promise<{ product: Product; quantity: number }[]>;
   clearCart(customerId: number): Promise<void>;
 
   // Wishlist operations
@@ -128,17 +149,27 @@ export interface IStorage {
   createReview(review: InsertReview): Promise<Review>;
   getReviewsByService(serviceId: number): Promise<Review[]>;
   getReviewsByProvider(providerId: number): Promise<Review[]>;
-  getReviewsByCustomer(customerId: number): Promise<Review[]>; 
+  getReviewsByCustomer(customerId: number): Promise<Review[]>;
   getReviewById(id: number): Promise<Review | undefined>;
-  updateReview(id: number, data: { rating?: number; review?: string }): Promise<Review>;
-  updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review>;
+  updateReview(
+    id: number,
+    data: { rating?: number; review?: string },
+  ): Promise<Review>;
+  updateCustomerReview(
+    reviewId: number,
+    customerId: number,
+    data: { rating?: number; review?: string },
+  ): Promise<Review>;
   updateProviderRating(providerId: number): Promise<void>;
   createProductReview(review: InsertProductReview): Promise<ProductReview>;
   getProductReviewsByProduct(productId: number): Promise<ProductReview[]>;
   getProductReviewsByShop(shopId: number): Promise<ProductReview[]>;
   getProductReviewsByCustomer(customerId: number): Promise<ProductReview[]>;
   getProductReviewById(id: number): Promise<ProductReview | undefined>;
-  updateProductReview(id: number, data: { rating?: number; review?: string; shopReply?: string }): Promise<ProductReview>;
+  updateProductReview(
+    id: number,
+    data: { rating?: number; review?: string; shopReply?: string },
+  ): Promise<ProductReview>;
   // Notification operations
   createNotification(notification: InsertNotification): Promise<Notification>;
   getNotificationsByUser(userId: number): Promise<Notification[]>;
@@ -151,24 +182,40 @@ export interface IStorage {
 
   // Additional booking operations
   checkAvailability(serviceId: number, date: Date): Promise<boolean>;
-  joinWaitlist(customerId: number, serviceId: number, preferredDate: Date): Promise<void>;
+  joinWaitlist(
+    customerId: number,
+    serviceId: number,
+    preferredDate: Date,
+  ): Promise<void>;
   getWaitlistPosition(customerId: number, serviceId: number): Promise<number>;
 
-
   // Return and refund operations
-  createReturnRequest(returnRequest: InsertReturnRequest): Promise<ReturnRequest>;
+  createReturnRequest(
+    returnRequest: InsertReturnRequest,
+  ): Promise<ReturnRequest>;
   getReturnRequest(id: number): Promise<ReturnRequest | undefined>;
   getReturnRequestsByOrder(orderId: number): Promise<ReturnRequest[]>;
-  updateReturnRequest(id: number, returnRequest: Partial<ReturnRequest>): Promise<ReturnRequest>;
+  updateReturnRequest(
+    id: number,
+    returnRequest: Partial<ReturnRequest>,
+  ): Promise<ReturnRequest>;
   deleteReturnRequest(id: number): Promise<void>;
   processRefund(returnRequestId: number): Promise<void>;
 
   // Enhanced notification operations
   sendSMSNotification(phone: string, message: string): Promise<void>;
-  sendEmailNotification(email: string, subject: string, message: string): Promise<void>;
+  sendEmailNotification(
+    email: string,
+    subject: string,
+    message: string,
+  ): Promise<void>;
 
   // Enhanced order tracking
-  updateOrderStatus(orderId: number, status: OrderStatus, trackingInfo?: string): Promise<Order>;
+  updateOrderStatus(
+    orderId: number,
+    status: OrderStatus,
+    trackingInfo?: string,
+  ): Promise<Order>;
   getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]>;
 
   //Session store
@@ -176,11 +223,14 @@ export interface IStorage {
 
   // Enhanced provider profile operations
   updateProviderProfile(id: number, profile: Partial<User>): Promise<User>;
-  updateProviderAvailability(providerId: number, availability: {
-    days: string[];
-    hours: { start: string; end: string };
-    breaks: { start: string; end: string }[];
-  }): Promise<void>;
+  updateProviderAvailability(
+    providerId: number,
+    availability: {
+      days: string[];
+      hours: { start: string; end: string };
+      breaks: { start: string; end: string }[];
+    },
+  ): Promise<void>;
   getProviderAvailability(providerId: number): Promise<{
     days: string[];
     hours: { start: string; end: string };
@@ -191,7 +241,7 @@ export interface IStorage {
   updateBookingStatus(
     id: number,
     status: "pending" | "confirmed" | "completed" | "cancelled",
-    comment?: string
+    comment?: string,
   ): Promise<Booking>;
   getBookingsByService(serviceId: number, date: Date): Promise<Booking[]>;
   getProviderSchedule(providerId: number, date: Date): Promise<Booking[]>;
@@ -209,7 +259,7 @@ export interface IStorage {
     serviceId: number,
     date: Date,
     startTime: string,
-    endTime: string
+    endTime: string,
   ): Promise<Booking[]>;
 
   // User deletion and data erasure
@@ -234,11 +284,14 @@ export class MemStorage implements IStorage {
   private blockedTimeSlots: Map<number, BlockedTimeSlot[]>; // Add new map for blocked slots
   sessionStore: session.Store;
   private currentId: number;
-  private providerAvailability: Map<number, {
-    days: string[];
-    hours: { start: string; end: string };
-    breaks: { start: string; end: string }[];
-  }>;
+  private providerAvailability: Map<
+    number,
+    {
+      days: string[];
+      hours: { start: string; end: string };
+      breaks: { start: string; end: string }[];
+    }
+  >;
 
   constructor() {
     this.users = new Map();
@@ -266,7 +319,9 @@ export class MemStorage implements IStorage {
     // Check if user exists
     if (!this.users.has(userId)) {
       // Optionally, throw an error or return if user not found
-      logger.warn(`[MemStorage] User with ID ${userId} not found for deletion.`);
+      logger.warn(
+        `[MemStorage] User with ID ${userId} not found for deletion.`,
+      );
       return;
     }
 
@@ -300,7 +355,7 @@ export class MemStorage implements IStorage {
         this.orderStatusUpdates.delete(orderId);
       }
     });
-    orderIdsToDelete.forEach(id => this.orders.delete(id));
+    orderIdsToDelete.forEach((id) => this.orders.delete(id));
 
     // Reviews written by the user
     this.reviews.forEach((review, reviewId) => {
@@ -354,25 +409,25 @@ export class MemStorage implements IStorage {
         // Delete blocked time slots for these services
         const serviceBlockedSlots = this.blockedTimeSlots.get(serviceId);
         if (serviceBlockedSlots) {
-            this.blockedTimeSlots.delete(serviceId);
+          this.blockedTimeSlots.delete(serviceId);
         }
       }
     });
-    serviceIdsToDelete.forEach(id => this.services.delete(id));
+    serviceIdsToDelete.forEach((id) => this.services.delete(id));
     this.providerAvailability.delete(userId);
-
 
     // Products sold by the user (as shop owner - assuming shopId might be userId)
     const productIdsToDelete: number[] = [];
     this.products.forEach((product, productId) => {
-      if (product.shopId === userId) { // Assuming shopId is the userId of the shop owner
+      if (product.shopId === userId) {
+        // Assuming shopId is the userId of the shop owner
         productIdsToDelete.push(productId);
         // Remove this product from all carts and wishlists (if not already handled by customer-specific deletion)
-        this.cart.forEach(userCart => userCart.delete(productId));
-        this.wishlist.forEach(userWishlist => userWishlist.delete(productId));
+        this.cart.forEach((userCart) => userCart.delete(productId));
+        this.wishlist.forEach((userWishlist) => userWishlist.delete(productId));
       }
     });
-    productIdsToDelete.forEach(id => this.products.delete(id));
+    productIdsToDelete.forEach((id) => this.products.delete(id));
 
     // Promotions by the user's shop
     // MemStorage doesn't have a promotions map directly, this would be part of a more complex setup
@@ -404,14 +459,19 @@ export class MemStorage implements IStorage {
   }
 
   // Add implementation for getProducts
-  async getProducts(filters?: { category?: string; isAvailable?: boolean }): Promise<Product[]> {
-    let results = Array.from(this.products.values()).filter(p => !p.isDeleted);
+  async getProducts(filters?: {
+    category?: string;
+    isAvailable?: boolean;
+  }): Promise<Product[]> {
+    let results = Array.from(this.products.values()).filter(
+      (p) => !p.isDeleted,
+    );
     if (filters) {
       if (filters.category) {
-        results = results.filter(p => p.category === filters.category);
+        results = results.filter((p) => p.category === filters.category);
       }
-      if (typeof filters.isAvailable === 'boolean') {
-        results = results.filter(p => p.isAvailable === filters.isAvailable);
+      if (typeof filters.isAvailable === "boolean") {
+        results = results.filter((p) => p.isAvailable === filters.isAvailable);
       }
     }
     return results;
@@ -455,16 +515,21 @@ export class MemStorage implements IStorage {
   }
 
   async getUsersByIds(ids: number[]): Promise<User[]> {
-    return ids.map(id => this.users.get(id)).filter((u): u is User => !!u);
+    return ids.map((id) => this.users.get(id)).filter((u): u is User => !!u);
   }
-  async getShops(filters?: { locationCity?: string; locationState?: string }): Promise<User[]> {
-    let shops = Array.from(this.users.values()).filter(u => u.role === 'shop');
+  async getShops(filters?: {
+    locationCity?: string;
+    locationState?: string;
+  }): Promise<User[]> {
+    let shops = Array.from(this.users.values()).filter(
+      (u) => u.role === "shop",
+    );
     if (filters) {
       if (filters.locationCity) {
-        shops = shops.filter(s => s.addressCity === filters.locationCity);
+        shops = shops.filter((s) => s.addressCity === filters.locationCity);
       }
       if (filters.locationState) {
-        shops = shops.filter(s => s.addressState === filters.locationState);
+        shops = shops.filter((s) => s.addressState === filters.locationState);
       }
     }
     return shops;
@@ -480,18 +545,32 @@ export class MemStorage implements IStorage {
       name: insertUser.name,
       phone: insertUser.phone,
       email: insertUser.email,
-      addressStreet: insertUser.addressStreet === undefined ? null : insertUser.addressStreet,
-      addressCity: insertUser.addressCity === undefined ? null : insertUser.addressCity,
-      addressState: insertUser.addressState === undefined ? null : insertUser.addressState,
-      addressPostalCode: insertUser.addressPostalCode === undefined ? null : insertUser.addressPostalCode,
-      addressCountry: insertUser.addressCountry === undefined ? null : insertUser.addressCountry,
+      addressStreet:
+        insertUser.addressStreet === undefined
+          ? null
+          : insertUser.addressStreet,
+      addressCity:
+        insertUser.addressCity === undefined ? null : insertUser.addressCity,
+      addressState:
+        insertUser.addressState === undefined ? null : insertUser.addressState,
+      addressPostalCode:
+        insertUser.addressPostalCode === undefined
+          ? null
+          : insertUser.addressPostalCode,
+      addressCountry:
+        insertUser.addressCountry === undefined
+          ? null
+          : insertUser.addressCountry,
       language: insertUser.language === undefined ? null : insertUser.language,
-      profilePicture: insertUser.profilePicture === undefined ? null : insertUser.profilePicture,
+      profilePicture:
+        insertUser.profilePicture === undefined
+          ? null
+          : insertUser.profilePicture,
       paymentMethods: Array.isArray(insertUser.paymentMethods)
-        ? insertUser.paymentMethods.map(pm => ({
-          type: (pm as any).type || "default",
-          details: (pm as any).details || {}
-        }))
+        ? insertUser.paymentMethods.map((pm) => ({
+            type: (pm as any).type || "default",
+            details: (pm as any).details || {},
+          }))
         : null,
       shopProfile: null,
       bio: null,
@@ -516,13 +595,14 @@ export class MemStorage implements IStorage {
       totalReviews: null,
       deliveryAvailable: null,
       returnsEnabled: true,
-      pickupAvailable: null
+      pickupAvailable: null,
     };
     this.users.set(id, user);
     return user;
   }
 
-  async updateUser(id: number, updateData: Partial<User>): Promise<User> { // Modified to accept Partial<User> to include googleId
+  async updateUser(id: number, updateData: Partial<User>): Promise<User> {
+    // Modified to accept Partial<User> to include googleId
     const existing = this.users.get(id);
     if (!existing) throw new Error("User not found");
 
@@ -535,7 +615,7 @@ export class MemStorage implements IStorage {
       // For MemStorage, we'll just update it directly. In a real DB scenario, hashing would occur before this point.
       updatedUserData.password = password;
     }
-    
+
     // Explicitly handle googleId if present in updateData
     if (updateData.googleId !== undefined) {
       updatedUserData.googleId = updateData.googleId;
@@ -551,30 +631,45 @@ export class MemStorage implements IStorage {
     const newService = {
       ...service,
       id,
-      addressStreet: service.addressStreet === undefined ? null : service.addressStreet,
-      addressCity: service.addressCity === undefined ? null : service.addressCity,
-      addressState: service.addressState === undefined ? null : service.addressState,
-      addressPostalCode: service.addressPostalCode === undefined ? null : service.addressPostalCode,
-      addressCountry: service.addressCountry === undefined ? null : service.addressCountry,
+      addressStreet:
+        service.addressStreet === undefined ? null : service.addressStreet,
+      addressCity:
+        service.addressCity === undefined ? null : service.addressCity,
+      addressState:
+        service.addressState === undefined ? null : service.addressState,
+      addressPostalCode:
+        service.addressPostalCode === undefined
+          ? null
+          : service.addressPostalCode,
+      addressCountry:
+        service.addressCountry === undefined ? null : service.addressCountry,
       providerId: service.providerId === undefined ? null : service.providerId,
-      isAvailable: service.isAvailable === undefined ? null : service.isAvailable,
-      serviceLocationType: (service.serviceLocationType === undefined ? "provider_location" : 
-        (service.serviceLocationType === "customer_location" || service.serviceLocationType === "provider_location" ? 
-          service.serviceLocationType : "provider_location")) as "customer_location" | "provider_location",
+      isAvailable:
+        service.isAvailable === undefined ? null : service.isAvailable,
+      serviceLocationType: (service.serviceLocationType === undefined
+        ? "provider_location"
+        : service.serviceLocationType === "customer_location" ||
+            service.serviceLocationType === "provider_location"
+          ? service.serviceLocationType
+          : "provider_location") as "customer_location" | "provider_location",
       images: service.images === undefined ? null : service.images,
       bufferTime: service.bufferTime === undefined ? null : service.bufferTime,
-      workingHours: service.workingHours === undefined ? {
-         monday: { isAvailable: false, start: "", end: "" },
-         tuesday: { isAvailable: false, start: "", end: "" },
-         wednesday: { isAvailable: false, start: "", end: "" },
-         thursday: { isAvailable: false, start: "", end: "" },
-         friday: { isAvailable: false, start: "", end: "" },
-         saturday: { isAvailable: false, start: "", end: "" },
-         sunday: { isAvailable: false, start: "", end: "" },
-      } : service.workingHours,
+      workingHours:
+        service.workingHours === undefined
+          ? {
+              monday: { isAvailable: false, start: "", end: "" },
+              tuesday: { isAvailable: false, start: "", end: "" },
+              wednesday: { isAvailable: false, start: "", end: "" },
+              thursday: { isAvailable: false, start: "", end: "" },
+              friday: { isAvailable: false, start: "", end: "" },
+              saturday: { isAvailable: false, start: "", end: "" },
+              sunday: { isAvailable: false, start: "", end: "" },
+            }
+          : service.workingHours,
       breakTime: service.breakTime == null ? [] : service.breakTime,
-      maxDailyBookings: service.maxDailyBookings === undefined ? 5 : service.maxDailyBookings,
-      isDeleted: false
+      maxDailyBookings:
+        service.maxDailyBookings === undefined ? 5 : service.maxDailyBookings,
+      isDeleted: false,
     };
     this.services.set(id, newService);
     return newService;
@@ -582,14 +677,19 @@ export class MemStorage implements IStorage {
 
   async getService(id: number): Promise<Service | undefined> {
     logger.info("[Storage] getService - Looking for service with ID:", id);
-    logger.info("[Storage] getService - Available services:", Array.from(this.services.entries()));
+    logger.info(
+      "[Storage] getService - Available services:",
+      Array.from(this.services.entries()),
+    );
     const service = this.services.get(id);
     logger.info("[Storage] getService - Found service:", service);
     return service;
   }
 
   async getServicesByIds(ids: number[]): Promise<Service[]> {
-    return ids.map(id => this.services.get(id)).filter((s): s is Service => !!s);
+    return ids
+      .map((id) => this.services.get(id))
+      .filter((s): s is Service => !!s);
   }
 
   async getServicesByProvider(providerId: number): Promise<Service[]> {
@@ -621,15 +721,19 @@ export class MemStorage implements IStorage {
   async getServices(): Promise<Service[]> {
     const counts: Record<number, number> = {};
     for (const b of Array.from(this.bookings.values())) {
-      if (b.status === 'awaiting_payment' && b.serviceId) {
+      if (b.status === "awaiting_payment" && b.serviceId) {
         const s = this.services.get(b.serviceId);
         if (s?.providerId) {
           counts[s.providerId] = (counts[s.providerId] || 0) + 1;
         }
       }
     }
-    const blocked = Object.entries(counts).filter(([_, c]) => c > 5).map(([id]) => Number(id));
-    return Array.from(this.services.values()).filter(s => !blocked.includes(s.providerId!));
+    const blocked = Object.entries(counts)
+      .filter(([_, c]) => c > 5)
+      .map(([id]) => Number(id));
+    return Array.from(this.services.values()).filter(
+      (s) => !blocked.includes(s.providerId!),
+    );
   }
 
   // Booking operations
@@ -638,8 +742,8 @@ export class MemStorage implements IStorage {
     const newBooking: Booking = {
       id,
       createdAt: new Date(),
-      ...booking, 
-// Remove duplicate id property since it's already included in the spread operator
+      ...booking,
+      // Remove duplicate id property since it's already included in the spread operator
       serviceLocation: booking.serviceLocation ?? null, // Ensure serviceLocation defaults to null
       status: "pending",
       customerId: booking.customerId ?? null,
@@ -648,15 +752,24 @@ export class MemStorage implements IStorage {
       providerAddress: booking.providerAddress ?? null,
       deliveryMethod: booking.deliveryMethod ?? null,
       bookingDate: booking.bookingDate,
-      rescheduleDate: booking.rescheduleDate === undefined ? null : booking.rescheduleDate,
+      rescheduleDate:
+        booking.rescheduleDate === undefined ? null : booking.rescheduleDate,
       comments: booking.comments === undefined ? null : booking.comments,
-      paymentStatus: (booking.paymentStatus ?? "pending") as "pending" | "verifying" | "paid" | "failed",
-      paymentReference: booking.paymentReference === undefined ? null : booking.paymentReference,
+      paymentStatus: (booking.paymentStatus ?? "pending") as
+        | "pending"
+        | "verifying"
+        | "paid"
+        | "failed",
+      paymentReference:
+        booking.paymentReference === undefined
+          ? null
+          : booking.paymentReference,
       eReceiptId: null,
       eReceiptUrl: null,
       eReceiptGeneratedAt: null,
       expiresAt: null,
-      disputeReason: booking.disputeReason === undefined ? null : booking.disputeReason,
+      disputeReason:
+        booking.disputeReason === undefined ? null : booking.disputeReason,
     };
     this.bookings.set(id, newBooking);
     return newBooking;
@@ -681,7 +794,9 @@ export class MemStorage implements IStorage {
   }
 
   async getBookingsByStatus(status: string): Promise<Booking[]> {
-    return Array.from(this.bookings.values()).filter(b => b.status === status);
+    return Array.from(this.bookings.values()).filter(
+      (b) => b.status === status,
+    );
   }
 
   async updateBooking(id: number, booking: Partial<Booking>): Promise<Booking> {
@@ -695,11 +810,12 @@ export class MemStorage implements IStorage {
   // Product operations
   async createProduct(product: InsertProduct): Promise<Product> {
     const id = this.currentId++;
-    const newProduct = { 
-      ...product, 
+    const newProduct = {
+      ...product,
       id,
       shopId: product.shopId === undefined ? null : product.shopId,
-      isAvailable: product.isAvailable === undefined ? null : product.isAvailable,
+      isAvailable:
+        product.isAvailable === undefined ? null : product.isAvailable,
       isDeleted: product.isDeleted === undefined ? null : product.isDeleted,
       createdAt: product.createdAt === undefined ? null : product.createdAt,
       updatedAt: product.updatedAt === undefined ? null : product.updatedAt,
@@ -708,12 +824,22 @@ export class MemStorage implements IStorage {
       barcode: product.barcode === undefined ? null : product.barcode,
       weight: product.weight === undefined ? null : product.weight,
       dimensions: product.dimensions === undefined ? null : product.dimensions,
-      specifications: product.specifications === undefined ? null : product.specifications,
+      specifications:
+        product.specifications === undefined ? null : product.specifications,
       tags: product.tags === undefined ? null : product.tags,
-      minOrderQuantity: product.minOrderQuantity === undefined ? null : product.minOrderQuantity,
-      maxOrderQuantity: product.maxOrderQuantity === undefined ? null : product.maxOrderQuantity,
-      lowStockThreshold: product.lowStockThreshold === undefined ? null : product.lowStockThreshold,
-      mrp: product.mrp === undefined ? product.price : product.mrp
+      minOrderQuantity:
+        product.minOrderQuantity === undefined
+          ? null
+          : product.minOrderQuantity,
+      maxOrderQuantity:
+        product.maxOrderQuantity === undefined
+          ? null
+          : product.maxOrderQuantity,
+      lowStockThreshold:
+        product.lowStockThreshold === undefined
+          ? null
+          : product.lowStockThreshold,
+      mrp: product.mrp === undefined ? product.price : product.mrp,
     };
     this.products.set(id, {
       id: newProduct.id,
@@ -737,32 +863,32 @@ export class MemStorage implements IStorage {
       tags: newProduct.tags,
       minOrderQuantity: newProduct.minOrderQuantity,
       maxOrderQuantity: newProduct.maxOrderQuantity,
-      lowStockThreshold: newProduct.lowStockThreshold ?? null
+      lowStockThreshold: newProduct.lowStockThreshold ?? null,
     });
-return {
-  id: newProduct.id,
-  name: newProduct.name,
-  shopId: newProduct.shopId,
-  description: newProduct.description,
-  price: newProduct.price,
-  mrp: newProduct.mrp,
-  stock: newProduct.stock,
-  category: newProduct.category,
-  images: newProduct.images,
-  isAvailable: newProduct.isAvailable,
-  isDeleted: newProduct.isDeleted,
-  createdAt: newProduct.createdAt,
-  updatedAt: newProduct.updatedAt,
-  sku: newProduct.sku,
-  barcode: newProduct.barcode,
-  weight: newProduct.weight,
-  dimensions: newProduct.dimensions,
-  specifications: newProduct.specifications,
-  tags: newProduct.tags,
-  minOrderQuantity: newProduct.minOrderQuantity,
-  maxOrderQuantity: newProduct.maxOrderQuantity,
-  lowStockThreshold: newProduct.lowStockThreshold ?? null
-};
+    return {
+      id: newProduct.id,
+      name: newProduct.name,
+      shopId: newProduct.shopId,
+      description: newProduct.description,
+      price: newProduct.price,
+      mrp: newProduct.mrp,
+      stock: newProduct.stock,
+      category: newProduct.category,
+      images: newProduct.images,
+      isAvailable: newProduct.isAvailable,
+      isDeleted: newProduct.isDeleted,
+      createdAt: newProduct.createdAt,
+      updatedAt: newProduct.updatedAt,
+      sku: newProduct.sku,
+      barcode: newProduct.barcode,
+      weight: newProduct.weight,
+      dimensions: newProduct.dimensions,
+      specifications: newProduct.specifications,
+      tags: newProduct.tags,
+      minOrderQuantity: newProduct.minOrderQuantity,
+      maxOrderQuantity: newProduct.maxOrderQuantity,
+      lowStockThreshold: newProduct.lowStockThreshold ?? null,
+    };
   }
 
   async getProduct(id: number): Promise<Product | undefined> {
@@ -806,10 +932,18 @@ return {
   }
 
   // Cart operations
-  async addToCart(customerId: number, productId: number, quantity: number): Promise<void> {
-    logger.info(`[MemStorage] Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`);
+  async addToCart(
+    customerId: number,
+    productId: number,
+    quantity: number,
+  ): Promise<void> {
+    logger.info(
+      `[MemStorage] Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`,
+    );
     if (quantity <= 0) {
-      logger.error(`[MemStorage] Invalid quantity ${quantity} for product ID ${productId}`);
+      logger.error(
+        `[MemStorage] Invalid quantity ${quantity} for product ID ${productId}`,
+      );
       throw new Error("Quantity must be positive");
     }
 
@@ -820,32 +954,46 @@ return {
       throw new Error("Product not found");
     }
     const shopIdToAdd = productToAdd.shopId;
-    logger.info(`[MemStorage] Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
+    logger.info(
+      `[MemStorage] Product ID ${productId} belongs to shop ID ${shopIdToAdd}`,
+    );
 
     // Get current cart items
     const customerCart = this.cart.get(customerId);
 
     if (customerCart && customerCart.size > 0) {
-      logger.info(`[MemStorage] Customer ID ${customerId} has ${customerCart.size} item(s) in cart`);
+      logger.info(
+        `[MemStorage] Customer ID ${customerId} has ${customerCart.size} item(s) in cart`,
+      );
       // If cart is not empty, check if the new item's shop matches the existing items' shop
       const firstCartEntry = customerCart.entries().next().value; // Get the first [productId, quantity] pair
       const firstProductId = firstCartEntry ? firstCartEntry[0] : null;
       if (firstProductId === null) {
         throw new Error("Unexpected empty cart encountered.");
       }
-      logger.info(`[MemStorage] First item in cart has product ID ${firstProductId}`);
+      logger.info(
+        `[MemStorage] First item in cart has product ID ${firstProductId}`,
+      );
       const firstProduct = this.products.get(firstProductId);
 
       if (firstProduct) {
         const existingShopId = firstProduct.shopId;
-        logger.info(`[MemStorage] Existing items in cart belong to shop ID ${existingShopId}`);
+        logger.info(
+          `[MemStorage] Existing items in cart belong to shop ID ${existingShopId}`,
+        );
         if (shopIdToAdd !== existingShopId) {
-          logger.error(`[MemStorage] Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`);
-          throw new Error("Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.");
+          logger.error(
+            `[MemStorage] Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`,
+          );
+          throw new Error(
+            "Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.",
+          );
         }
       } else {
         // This case should ideally not happen if data is consistent, but log it.
-        logger.warn(`[MemStorage] Could not find product details for the first item (ID: ${firstProductId}) in the cart for customer ${customerId}. Proceeding with caution.`);
+        logger.warn(
+          `[MemStorage] Could not find product details for the first item (ID: ${firstProductId}) in the cart for customer ${customerId}. Proceeding with caution.`,
+        );
       }
     }
 
@@ -858,9 +1006,13 @@ return {
     // Proceed with adding or updating the cart item
     const existingQuantity = updatedCustomerCart.get(productId) || 0;
     const newQuantity = existingQuantity + quantity;
-    logger.info(`[MemStorage] Setting quantity for product ID ${productId} to ${newQuantity} for customer ID ${customerId}`);
+    logger.info(
+      `[MemStorage] Setting quantity for product ID ${productId} to ${newQuantity} for customer ID ${customerId}`,
+    );
     updatedCustomerCart.set(productId, newQuantity);
-    logger.info(`[MemStorage] Successfully added/updated product ID ${productId} in cart for customer ID ${customerId}`);
+    logger.info(
+      `[MemStorage] Successfully added/updated product ID ${productId} in cart for customer ID ${customerId}`,
+    );
   }
 
   async removeFromCart(customerId: number, productId: number): Promise<void> {
@@ -869,7 +1021,9 @@ return {
     }
   }
 
-  async getCart(customerId: number): Promise<{ product: Product; quantity: number }[]> {
+  async getCart(
+    customerId: number,
+  ): Promise<{ product: Product; quantity: number }[]> {
     if (!this.cart.has(customerId)) return [];
     const cartItems = this.cart.get(customerId)!;
     return Array.from(cartItems.entries()).map(([productId, quantity]) => ({
@@ -890,7 +1044,10 @@ return {
     this.wishlist.get(customerId)!.add(productId);
   }
 
-  async removeFromWishlist(customerId: number, productId: number): Promise<void> {
+  async removeFromWishlist(
+    customerId: number,
+    productId: number,
+  ): Promise<void> {
     if (this.wishlist.has(customerId)) {
       this.wishlist.get(customerId)!.delete(productId);
     }
@@ -899,39 +1056,63 @@ return {
   async getWishlist(customerId: number): Promise<Product[]> {
     if (!this.wishlist.has(customerId)) return [];
     const wishlistIds = this.wishlist.get(customerId)!;
-    return Array.from(wishlistIds).map(id => this.products.get(id)!);
+    return Array.from(wishlistIds).map((id) => this.products.get(id)!);
   }
 
   // Order operations
   async createOrder(order: InsertOrder): Promise<Order> {
     const id = this.currentId++;
     // Exclude properties that can cause type conflicts
-    const { status, paymentStatus, returnRequested, eReceiptId, eReceiptUrl, eReceiptGeneratedAt, ...rest } = order;
-    const newOrder = { 
+    const {
+      status,
+      paymentStatus,
+      returnRequested,
+      eReceiptId,
+      eReceiptUrl,
+      eReceiptGeneratedAt,
+      ...rest
+    } = order;
+    const newOrder = {
       ...rest,
       id,
       customerId: order.customerId === undefined ? null : order.customerId,
       shopId: order.shopId === undefined ? null : order.shopId,
       status: "pending" as "pending",
-      paymentStatus: (order.paymentStatus ?? "pending") as "pending" | "verifying" | "paid" | "failed",
-      returnRequested: order.returnRequested === undefined ? null : order.returnRequested,
-      billingAddress: order.billingAddress === undefined ? null : order.billingAddress,
-      shippingAddress: order.shippingAddress === undefined || order.shippingAddress === null ? "" : order.shippingAddress,
+      paymentStatus: (order.paymentStatus ?? "pending") as
+        | "pending"
+        | "verifying"
+        | "paid"
+        | "failed",
+      returnRequested:
+        order.returnRequested === undefined ? null : order.returnRequested,
+      billingAddress:
+        order.billingAddress === undefined ? null : order.billingAddress,
+      shippingAddress:
+        order.shippingAddress === undefined || order.shippingAddress === null
+          ? ""
+          : order.shippingAddress,
       total: order.total === undefined ? "0" : order.total,
       orderDate: order.orderDate === undefined ? new Date() : order.orderDate,
       notes: order.notes === undefined ? null : order.notes,
       // Removed shippingMethod property as it does not exist on type InsertOrder.
-      paymentMethod: order.paymentMethod === undefined ? null : order.paymentMethod,
-      paymentReference: order.paymentReference === undefined ? null : order.paymentReference,
+      paymentMethod:
+        order.paymentMethod === undefined ? null : order.paymentMethod,
+      paymentReference:
+        order.paymentReference === undefined ? null : order.paymentReference,
       trackingInfo: null,
       deliveryMethod: order.deliveryMethod ?? null,
       eReceiptId: null,
       eReceiptUrl: null,
-      eReceiptGeneratedAt: null
+      eReceiptGeneratedAt: null,
     };
     this.orders.set(id, newOrder);
     this.orderStatusUpdates.set(id, [
-      { orderId: id, status: "pending", trackingInfo: null, timestamp: newOrder.orderDate ?? new Date() }
+      {
+        orderId: id,
+        status: "pending",
+        trackingInfo: null,
+        timestamp: newOrder.orderDate ?? new Date(),
+      },
     ]);
     return newOrder;
   }
@@ -948,13 +1129,16 @@ return {
 
   async getOrdersByShop(shopId: number, status?: string): Promise<Order[]> {
     return Array.from(this.orders.values())
-      .filter(order => order.shopId === shopId)
-      .filter(order => !status || status === 'all_orders' || order.status === status);
+      .filter((order) => order.shopId === shopId)
+      .filter(
+        (order) =>
+          !status || status === "all_orders" || order.status === status,
+      );
   }
 
   async getRecentOrdersByShop(shopId: number): Promise<Order[]> {
     return Array.from(this.orders.values())
-      .filter(order => order.shopId === shopId)
+      .filter((order) => order.shopId === shopId)
       .sort((a, b) => {
         const aDate = a.orderDate ? new Date(a.orderDate).getTime() : 0;
         const bDate = b.orderDate ? new Date(b.orderDate).getTime() : 0;
@@ -964,15 +1148,31 @@ return {
   }
 
   async getShopDashboardStats(shopId: number) {
-    const ordersByShop = Array.from(this.orders.values()).filter(o => o.shopId === shopId);
-    const pendingOrders = ordersByShop.filter(o => o.status === 'pending').length;
-    const ordersInProgress = ordersByShop.filter(o => o.status === 'packed').length;
-    const completedOrders = ordersByShop.filter(o => o.status === 'delivered').length;
-    const productsByShop = Array.from(this.products.values()).filter(p => p.shopId === shopId);
+    const ordersByShop = Array.from(this.orders.values()).filter(
+      (o) => o.shopId === shopId,
+    );
+    const pendingOrders = ordersByShop.filter(
+      (o) => o.status === "pending",
+    ).length;
+    const ordersInProgress = ordersByShop.filter(
+      (o) => o.status === "packed",
+    ).length;
+    const completedOrders = ordersByShop.filter(
+      (o) => o.status === "delivered",
+    ).length;
+    const productsByShop = Array.from(this.products.values()).filter(
+      (p) => p.shopId === shopId,
+    );
     const totalProducts = productsByShop.length;
-    const lowStockItems = productsByShop.filter(p => p.stock < 10).length;
+    const lowStockItems = productsByShop.filter((p) => p.stock < 10).length;
 
-    return { pendingOrders, ordersInProgress, completedOrders, totalProducts, lowStockItems };
+    return {
+      pendingOrders,
+      ordersInProgress,
+      completedOrders,
+      totalProducts,
+      lowStockItems,
+    };
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {
@@ -992,20 +1192,28 @@ return {
       price: newOrderItem.price,
       total: newOrderItem.total,
       quantity: newOrderItem.quantity,
-      status: newOrderItem.status as "cancelled" | "returned" | "ordered" | null,
+      status: newOrderItem.status as
+        | "cancelled"
+        | "returned"
+        | "ordered"
+        | null,
       orderId: newOrderItem.orderId ?? null,
       productId: newOrderItem.productId ?? null,
-      discount: newOrderItem.discount ?? null
+      discount: newOrderItem.discount ?? null,
     });
     return {
       id: newOrderItem.id,
-      status: newOrderItem.status as "cancelled" | "returned" | "ordered" | null,
+      status: newOrderItem.status as
+        | "cancelled"
+        | "returned"
+        | "ordered"
+        | null,
       total: newOrderItem.total,
       orderId: newOrderItem.orderId ?? null,
       price: newOrderItem.price,
       productId: newOrderItem.productId ?? null,
       quantity: newOrderItem.quantity,
-      discount: newOrderItem.discount ?? null
+      discount: newOrderItem.discount ?? null,
     };
   }
 
@@ -1018,11 +1226,13 @@ return {
   // Review operations
   async createReview(review: InsertReview): Promise<Review> {
     if (review.bookingId && review.customerId) {
-      const existing = Array.from(this.reviews.values()).find(r =>
-        r.bookingId === review.bookingId && r.customerId === review.customerId
+      const existing = Array.from(this.reviews.values()).find(
+        (r) =>
+          r.bookingId === review.bookingId &&
+          r.customerId === review.customerId,
       );
       if (existing) {
-        throw new Error('Duplicate review');
+        throw new Error("Duplicate review");
       }
     }
     const id = this.currentId++;
@@ -1036,7 +1246,7 @@ return {
       rating: newReview.rating,
       review: newReview.review || null,
       providerReply: newReview.providerReply || null,
-      isVerifiedService: newReview.isVerifiedService || null
+      isVerifiedService: newReview.isVerifiedService || null,
     });
     return {
       id: newReview.id,
@@ -1047,7 +1257,7 @@ return {
       rating: newReview.rating,
       review: newReview.review ?? null,
       providerReply: newReview.providerReply ?? null,
-      isVerifiedService: newReview.isVerifiedService ?? null
+      isVerifiedService: newReview.isVerifiedService ?? null,
     };
   }
 
@@ -1059,19 +1269,23 @@ return {
 
   async getReviewsByProvider(providerId: number): Promise<Review[]> {
     const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map(service => service.id);
+    const serviceIds = providerServices.map((service) => service.id);
     return Array.from(this.reviews.values()).filter(
-      (review) => review.serviceId !== null && serviceIds.includes(review.serviceId),
+      (review) =>
+        review.serviceId !== null && serviceIds.includes(review.serviceId),
     );
   }
 
-  async getReviewsByCustomer(customerId: number): Promise<Review[]> { // Added
+  async getReviewsByCustomer(customerId: number): Promise<Review[]> {
+    // Added
     const results = Array.from(this.reviews.values()).filter(
-      r => r.customerId === customerId,
+      (r) => r.customerId === customerId,
     );
 
-    return results.map(r => {
-      const serviceName = r.serviceId ? this.services.get(r.serviceId)?.name ?? 'Service Not Found' : null;
+    return results.map((r) => {
+      const serviceName = r.serviceId
+        ? (this.services.get(r.serviceId)?.name ?? "Service Not Found")
+        : null;
       return { ...r, serviceName } as Review & { serviceName: string | null };
     });
   }
@@ -1080,7 +1294,10 @@ return {
     return this.reviews.get(id);
   }
 
-  async updateReview(id: number, data: { rating?: number; review?: string }): Promise<Review> {
+  async updateReview(
+    id: number,
+    data: { rating?: number; review?: string },
+  ): Promise<Review> {
     const review = this.reviews.get(id);
     if (!review) throw new Error("Review not found");
     if (data.rating !== undefined) review.rating = data.rating;
@@ -1088,7 +1305,12 @@ return {
     return review;
   }
 
-  async updateCustomerReview(reviewId: number, customerId: number, data: { rating?: number; review?: string }): Promise<Review> { // Added
+  async updateCustomerReview(
+    reviewId: number,
+    customerId: number,
+    data: { rating?: number; review?: string },
+  ): Promise<Review> {
+    // Added
     const review = this.reviews.get(reviewId);
     if (!review) throw new Error("Review not found");
     if (review.customerId !== customerId) {
@@ -1118,11 +1340,17 @@ return {
       (user as any).totalReviews = providerReviews.length;
     }
   }
-async createProductReview(review: InsertProductReview): Promise<ProductReview> {
+  async createProductReview(
+    review: InsertProductReview,
+  ): Promise<ProductReview> {
     if (review.orderId && review.customerId && review.productId) {
       for (const r of Array.from(this.productReviews.values())) {
-        if (r.orderId === review.orderId && r.customerId === review.customerId && r.productId === review.productId) {
-          throw new Error('Duplicate review');
+        if (
+          r.orderId === review.orderId &&
+          r.customerId === review.customerId &&
+          r.productId === review.productId
+        ) {
+          throw new Error("Duplicate review");
         }
       }
     }
@@ -1132,23 +1360,33 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     return newReview as ProductReview;
   }
 
-  async getProductReviewsByProduct(productId: number): Promise<ProductReview[]> {
-    return Array.from(this.productReviews.values()).filter(r => r.productId === productId);
+  async getProductReviewsByProduct(
+    productId: number,
+  ): Promise<ProductReview[]> {
+    return Array.from(this.productReviews.values()).filter(
+      (r) => r.productId === productId,
+    );
   }
 
   async getProductReviewsByShop(shopId: number): Promise<ProductReview[]> {
     const productIds = Array.from(this.products.values())
-      .filter(p => p.shopId === shopId)
-      .map(p => p.id);
-    return Array.from(this.productReviews.values()).filter(r => r.productId !== null && productIds.includes(r.productId));
+      .filter((p) => p.shopId === shopId)
+      .map((p) => p.id);
+    return Array.from(this.productReviews.values()).filter(
+      (r) => r.productId !== null && productIds.includes(r.productId),
+    );
   }
 
-  async getProductReviewsByCustomer(customerId: number): Promise<(ProductReview & { productName: string | null })[]> {
+  async getProductReviewsByCustomer(
+    customerId: number,
+  ): Promise<(ProductReview & { productName: string | null })[]> {
     return Array.from(this.productReviews.values())
-      .filter(r => r.customerId === customerId)
-      .map(r => ({
+      .filter((r) => r.customerId === customerId)
+      .map((r) => ({
         ...r,
-        productName: r.productId ? this.products.get(r.productId)?.name ?? null : null,
+        productName: r.productId
+          ? (this.products.get(r.productId)?.name ?? null)
+          : null,
       }));
   }
 
@@ -1156,14 +1394,16 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     return this.productReviews.get(id);
   }
 
- async updateProductReview(
+  async updateProductReview(
     id: number,
-    data: { rating?: number; review?: string; shopReply?: string }
+    data: { rating?: number; review?: string; shopReply?: string },
   ): Promise<ProductReview> {
     const review = this.productReviews.get(id);
     if (!review) throw new Error("Review not found");
-    if (data.rating !== undefined) (review as ProductReview).rating = data.rating;
-    if (data.review !== undefined) (review as ProductReview).review = data.review;
+    if (data.rating !== undefined)
+      (review as ProductReview).rating = data.rating;
+    if (data.review !== undefined)
+      (review as ProductReview).review = data.review;
     if (data.shopReply !== undefined) {
       (review as ProductReview).shopReply = data.shopReply;
       (review as ProductReview).repliedAt = new Date();
@@ -1173,28 +1413,48 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
   }
 
   // Notification operations
-  async createNotification(notification: InsertNotification): Promise<Notification> {
+  async createNotification(
+    notification: InsertNotification,
+  ): Promise<Notification> {
     const id = this.currentId++;
     const newNotification = { ...notification, id };
     this.notifications.set(id, {
-          id,
-          createdAt: newNotification.createdAt || newIndianDate(), // Use newIndianDate() to create dates in IST
-          message: newNotification.message,
-          type: newNotification.type as "shop" | "booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request",
-          userId: newNotification.userId || null,
-          title: newNotification.title,
-          isRead: newNotification.isRead || false,
-          relatedBookingId: null
-        });
+      id,
+      createdAt: newNotification.createdAt || newIndianDate(), // Use newIndianDate() to create dates in IST
+      message: newNotification.message,
+      type: newNotification.type as
+        | "shop"
+        | "booking"
+        | "order"
+        | "promotion"
+        | "system"
+        | "return"
+        | "service_request"
+        | "service"
+        | "booking_request",
+      userId: newNotification.userId || null,
+      title: newNotification.title,
+      isRead: newNotification.isRead || false,
+      relatedBookingId: null,
+    });
     const finalNotification: Notification = {
       id: newNotification.id,
       userId: newNotification.userId ?? null,
-      type: newNotification.type as "shop" | "booking" | "order" | "promotion" | "system" | "return" | "service_request" | "service" | "booking_request",
+      type: newNotification.type as
+        | "shop"
+        | "booking"
+        | "order"
+        | "promotion"
+        | "system"
+        | "return"
+        | "service_request"
+        | "service"
+        | "booking_request",
       title: newNotification.title,
       message: newNotification.message,
       isRead: newNotification.isRead ?? false,
       createdAt: newNotification.createdAt ?? newIndianDate(), // Use newIndianDate() to create dates in IST
-      relatedBookingId: null
+      relatedBookingId: null,
     };
     return finalNotification;
   }
@@ -1213,22 +1473,27 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     }
   }
 
-  async markAllNotificationsAsRead(userId: number, role?: string): Promise<void> {
+  async markAllNotificationsAsRead(
+    userId: number,
+    role?: string,
+  ): Promise<void> {
     // Get all notifications for this user
     let userNotifications = await this.getNotificationsByUser(userId);
-    
+
     // Apply role-based filtering if role is provided
     if (role) {
-      if (role === 'shop_owner') {
+      if (role === "shop_owner") {
         // Shop owners should not see service notifications
-        userNotifications = userNotifications.filter(n => n.type !== 'service');
-      } else if (role === 'provider') {
+        userNotifications = userNotifications.filter(
+          (n) => n.type !== "service",
+        );
+      } else if (role === "provider") {
         // Service providers should not see order notifications
-        userNotifications = userNotifications.filter(n => n.type !== 'order');
+        userNotifications = userNotifications.filter((n) => n.type !== "order");
       }
       // For customers, we don't need additional filtering
     }
-    
+
     // Mark filtered notifications as read
     for (const notification of userNotifications) {
       notification.isRead = true;
@@ -1245,7 +1510,7 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     const bookings = Array.from(this.bookings.values()).filter(
       (booking) =>
         booking.serviceId === serviceId &&
-        booking.bookingDate.toDateString() === date.toDateString()
+        booking.bookingDate.toDateString() === date.toDateString(),
     );
 
     const service = await this.getService(serviceId);
@@ -1255,14 +1520,21 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     return bookings.length < 5; // Assuming max 5 bookings per day
   }
 
-  async joinWaitlist(customerId: number, serviceId: number, preferredDate: Date): Promise<void> {
+  async joinWaitlist(
+    customerId: number,
+    serviceId: number,
+    preferredDate: Date,
+  ): Promise<void> {
     if (!this.waitlist.has(serviceId)) {
       this.waitlist.set(serviceId, new Map());
     }
     this.waitlist.get(serviceId)!.set(customerId, preferredDate);
   }
 
-  async getWaitlistPosition(customerId: number, serviceId: number): Promise<number> {
+  async getWaitlistPosition(
+    customerId: number,
+    serviceId: number,
+  ): Promise<number> {
     if (!this.waitlist.has(serviceId)) return -1;
     const waitlist = Array.from(this.waitlist.get(serviceId)!.entries());
     const position = waitlist.findIndex(([id]) => id === customerId);
@@ -1270,13 +1542,21 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
   }
 
   // Return and refund operations
-  async createReturnRequest(returnRequest: InsertReturnRequest): Promise<ReturnRequest> {
+  async createReturnRequest(
+    returnRequest: InsertReturnRequest,
+  ): Promise<ReturnRequest> {
     const id = this.currentId++;
     const newReturnRequest: ReturnRequest = {
       id,
       customerId: returnRequest.customerId ?? null,
       createdAt: new Date(), // Use current date
-      status: (returnRequest.status ?? "requested") as "refunded" | "requested" | "approved" | "rejected" | "received" | "completed", // Default status
+      status: (returnRequest.status ?? "requested") as
+        | "refunded"
+        | "requested"
+        | "approved"
+        | "rejected"
+        | "received"
+        | "completed", // Default status
       orderId: returnRequest.orderId ?? null,
       orderItemId: returnRequest.orderItemId ?? null, // Fix: Default to null if undefined
       description: returnRequest.description ?? null,
@@ -1298,11 +1578,14 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
 
   async getReturnRequestsByOrder(orderId: number): Promise<ReturnRequest[]> {
     return Array.from(this.returnRequests.values()).filter(
-      (request) => request.orderId === orderId
+      (request) => request.orderId === orderId,
     );
   }
 
-  async updateReturnRequest(id: number, returnRequest: Partial<ReturnRequest>): Promise<ReturnRequest> {
+  async updateReturnRequest(
+    id: number,
+    returnRequest: Partial<ReturnRequest>,
+  ): Promise<ReturnRequest> {
     const existing = this.returnRequests.get(id);
     if (!existing) throw new Error("Return request not found");
     const updated = { ...existing, ...returnRequest };
@@ -1329,13 +1612,21 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     logger.info(`SMS to ${phone}: ${message}`);
   }
 
-  async sendEmailNotification(email: string, subject: string, message: string): Promise<void> {
+  async sendEmailNotification(
+    email: string,
+    subject: string,
+    message: string,
+  ): Promise<void> {
     // In a real implementation, this would integrate with an email service
     logger.info(`Email to ${email}: ${subject} - ${message}`);
   }
 
   // Enhanced order tracking
-  async updateOrderStatus(orderId: number, status: OrderStatus, trackingInfo?: string): Promise<Order> {
+  async updateOrderStatus(
+    orderId: number,
+    status: OrderStatus,
+    trackingInfo?: string,
+  ): Promise<Order> {
     const order = await this.getOrder(orderId);
     if (!order) throw new Error("Order not found");
 
@@ -1360,7 +1651,10 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     return this.orderStatusUpdates.get(orderId) || [];
   }
 
-  async updateProviderProfile(id: number, profile: Partial<User>): Promise<User> {
+  async updateProviderProfile(
+    id: number,
+    profile: Partial<User>,
+  ): Promise<User> {
     const existing = this.users.get(id);
     if (!existing) throw new Error("Provider not found");
     const updated = { ...existing, ...profile };
@@ -1374,7 +1668,7 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
       days: string[];
       hours: { start: string; end: string };
       breaks: { start: string; end: string }[];
-    }
+    },
   ): Promise<void> {
     this.providerAvailability.set(providerId, availability);
   }
@@ -1390,33 +1684,54 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
   async updateBookingStatus(
     id: number,
     status: "pending" | "completed" | "cancelled" | "confirmed",
-    comment?: string
+    comment?: string,
   ): Promise<Booking> {
     const booking = await this.getBooking(id);
     if (!booking) throw new Error("Booking not found");
 
     // Create notification for status update
-    const customer = booking.customerId !== null ? await this.getUser(booking.customerId) : undefined;
+    const customer =
+      booking.customerId !== null
+        ? await this.getUser(booking.customerId)
+        : undefined;
     if (customer) {
       await this.createNotification({
         userId: customer.id,
         type: "booking",
         title: `Booking ${status === "confirmed" ? "accepted" : status}`,
-        message: comment || `Your booking has been ${status === "confirmed" ? "accepted" : status}.`,
+        message:
+          comment ||
+          `Your booking has been ${status === "confirmed" ? "accepted" : status}.`,
       });
 
       // Send SMS for important status updates
       if (["confirmed", "cancelled"].includes(status)) {
         await this.sendSMSNotification(
           customer.phone,
-          `Your booking has been ${status === "confirmed" ? "accepted" : status}. ${comment || ''}`
+          `Your booking has been ${status === "confirmed" ? "accepted" : status}. ${comment || ""}`,
         );
       }
     }
 
     // Map "confirmed" to "accepted" to match the expected type
-    let mappedStatus: "pending" | "completed" | "cancelled" | "accepted" | "rejected" | "rescheduled" | "expired" =
-      status === "confirmed" ? "accepted" : status as "pending" | "completed" | "cancelled" | "accepted" | "rejected" | "rescheduled" | "expired";
+    let mappedStatus:
+      | "pending"
+      | "completed"
+      | "cancelled"
+      | "accepted"
+      | "rejected"
+      | "rescheduled"
+      | "expired" =
+      status === "confirmed"
+        ? "accepted"
+        : (status as
+            | "pending"
+            | "completed"
+            | "cancelled"
+            | "accepted"
+            | "rejected"
+            | "rescheduled"
+            | "expired");
     const finalUpdated = {
       ...booking,
       status: mappedStatus,
@@ -1426,28 +1741,44 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     return finalUpdated;
   }
 
-  async getBookingsByService(serviceId: number, date: Date): Promise<Booking[]> {
-    return Array.from(this.bookings.values()).filter(booking =>
-      booking.serviceId === serviceId &&
-      booking.bookingDate.toDateString() === date.toDateString()
+  async getBookingsByService(
+    serviceId: number,
+    date: Date,
+  ): Promise<Booking[]> {
+    return Array.from(this.bookings.values()).filter(
+      (booking) =>
+        booking.serviceId === serviceId &&
+        booking.bookingDate.toDateString() === date.toDateString(),
     );
   }
 
-  async getProviderSchedule(providerId: number, date: Date): Promise<Booking[]> {
+  async getProviderSchedule(
+    providerId: number,
+    date: Date,
+  ): Promise<Booking[]> {
     const services = await this.getServicesByProvider(providerId);
-    const serviceIds = services.map(s => s.id);
+    const serviceIds = services.map((s) => s.id);
 
-    return Array.from(this.bookings.values()).filter(booking =>
-      booking.serviceId !== null && serviceIds.includes(booking.serviceId) &&
-      booking.bookingDate.toDateString() === date.toDateString()
+    return Array.from(this.bookings.values()).filter(
+      (booking) =>
+        booking.serviceId !== null &&
+        serviceIds.includes(booking.serviceId) &&
+        booking.bookingDate.toDateString() === date.toDateString(),
     );
   }
 
   async completeService(bookingId: number): Promise<Booking> {
-    return this.updateBookingStatus(bookingId, "completed", "Service completed successfully");
+    return this.updateBookingStatus(
+      bookingId,
+      "completed",
+      "Service completed successfully",
+    );
   }
 
-  async addBookingReview(bookingId: number, review: InsertReview): Promise<Review> {
+  async addBookingReview(
+    bookingId: number,
+    review: InsertReview,
+  ): Promise<Review> {
     const booking = await this.getBooking(bookingId);
     if (!booking) throw new Error("Booking not found");
 
@@ -1490,7 +1821,9 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     return this.blockedTimeSlots.get(serviceId) || [];
   }
 
-  async createBlockedTimeSlot(data: InsertBlockedTimeSlot): Promise<BlockedTimeSlot> {
+  async createBlockedTimeSlot(
+    data: InsertBlockedTimeSlot,
+  ): Promise<BlockedTimeSlot> {
     const id = this.currentId++;
     const newSlot = { ...data, id };
 
@@ -1506,16 +1839,16 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     // Convert entries to an array to allow iteration without --downlevelIteration
     const entries = Array.from(this.blockedTimeSlots.entries());
     for (const [serviceId, slots] of entries) {
-      const index = slots.findIndex(slot => slot.id === slotId);
+      const index = slots.findIndex((slot) => slot.id === slotId);
       if (index !== -1) {
-      slots.splice(index, 1);
-      // If no slots left for this service, remove the key
-      if (slots.length === 0) {
-        this.blockedTimeSlots.delete(serviceId);
-      } else {
-        this.blockedTimeSlots.set(serviceId, slots);
-      }
-      return;
+        slots.splice(index, 1);
+        // If no slots left for this service, remove the key
+        if (slots.length === 0) {
+          this.blockedTimeSlots.delete(serviceId);
+        } else {
+          this.blockedTimeSlots.set(serviceId, slots);
+        }
+        return;
       }
     }
   }
@@ -1524,24 +1857,26 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
     serviceId: number,
     date: Date,
     startTime: string,
-    endTime: string
+    endTime: string,
   ): Promise<Booking[]> {
     const bookings = Array.from(this.bookings.values()).filter(
-      booking =>
+      (booking) =>
         booking.serviceId === serviceId &&
-        booking.bookingDate.toDateString() === date.toDateString()
+        booking.bookingDate.toDateString() === date.toDateString(),
     );
 
     const bookingStart = new Date(`${date.toDateString()} ${startTime}`);
     const bookingEnd = new Date(`${date.toDateString()} ${endTime}`);
 
-    return bookings.filter(booking => {
+    return bookings.filter((booking) => {
       if (booking.serviceId === null) return false;
       const existingStart = new Date(booking.bookingDate);
       const service = this.services.get(booking.serviceId);
       if (!service) return false;
 
-      const existingEnd = new Date(existingStart.getTime() + service.duration * 60000);
+      const existingEnd = new Date(
+        existingStart.getTime() + service.duration * 60000,
+      );
 
       return (
         (bookingStart >= existingStart && bookingStart < existingEnd) ||
@@ -1570,7 +1905,7 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
       paymentMethods: undefined,
       emailVerified: false,
       averageRating: "",
-      totalReviews: 0
+      totalReviews: 0,
     });
 
     logger.info("Created provider:", provider);
@@ -1594,11 +1929,11 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
           thursday: { isAvailable: false, start: "", end: "" },
           friday: { isAvailable: false, start: "", end: "" },
           saturday: { isAvailable: false, start: "", end: "" },
-          sunday: { isAvailable: false, start: "", end: "" }
+          sunday: { isAvailable: false, start: "", end: "" },
         },
         breakTime: [],
         maxDailyBookings: 5,
-        serviceLocationType: "provider_location" as "provider_location"
+        serviceLocationType: "provider_location" as "provider_location",
       },
       {
         name: "Hair Styling",
@@ -1610,7 +1945,7 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
         isAvailable: true,
         bufferTime: 10,
         images: ["https://example.com/hairstyle.jpg"],
-        location: { lat: 19.0760, lng: 72.8777 },
+        location: { lat: 19.076, lng: 72.8777 },
         workingHours: {
           monday: { isAvailable: false, start: "", end: "" },
           tuesday: { isAvailable: false, start: "", end: "" },
@@ -1618,12 +1953,12 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
           thursday: { isAvailable: false, start: "", end: "" },
           friday: { isAvailable: false, start: "", end: "" },
           saturday: { isAvailable: false, start: "", end: "" },
-          sunday: { isAvailable: false, start: "", end: "" }
+          sunday: { isAvailable: false, start: "", end: "" },
         },
         breakTime: [],
         maxDailyBookings: 5,
-        serviceLocationType: "provider_location"
-      }
+        serviceLocationType: "provider_location",
+      },
     ] as InsertService[]; // Explicitly type the array
 
     const createdServices = [];
@@ -1651,7 +1986,7 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
       paymentMethods: undefined,
       emailVerified: false,
       averageRating: "",
-      totalReviews: 0
+      totalReviews: 0,
     });
 
     // Create sample products
@@ -1687,7 +2022,7 @@ async createProductReview(review: InsertProductReview): Promise<ProductReview> {
 }
 
 // Import the PostgreSQL storage implementation
-import { PostgresStorage } from './pg-storage';
+import { PostgresStorage } from "./pg-storage";
 
 // Use PostgreSQL storage for persistence instead of in-memory storage
 export const storage = new PostgresStorage();

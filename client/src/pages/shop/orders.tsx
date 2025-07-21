@@ -1,11 +1,30 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
@@ -14,7 +33,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Package, Truck, CheckCircle2 } from "lucide-react";
 import { Order, ReturnRequest } from "@shared/schema";
@@ -38,7 +57,13 @@ type OrderWithDetails = Order & {
 };
 
 const orderStatusSchema = z.object({
-  status: z.enum(["confirmed", "packed", "dispatched", "delivered", "cancelled"]),
+  status: z.enum([
+    "confirmed",
+    "packed",
+    "dispatched",
+    "delivered",
+    "cancelled",
+  ]),
   comments: z.string().optional(),
   trackingInfo: z.string().optional(),
 });
@@ -50,14 +75,20 @@ export default function ShopOrders() {
   const { t } = useLanguage();
   const { toast } = useToast();
   const [selectedStatus, setSelectedStatus] = useState<string>("all_orders");
-  const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
-  const [actionType, setActionType] = useState<"update" | "return" | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(
+    null,
+  );
+  const [actionType, setActionType] = useState<"update" | "return" | null>(
+    null,
+  );
 
   const { data: orders, isLoading } = useQuery<OrderWithDetails[]>({
     queryKey: ["orders", "shop", selectedStatus],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await fetch(`/api/orders/shop?status=${selectedStatus}`, { credentials: "include" });
+      const res = await fetch(`/api/orders/shop?status=${selectedStatus}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Network response was not ok");
       return res.json();
     },
@@ -78,8 +109,18 @@ export default function ShopOrders() {
   });
 
   const updateOrderStatusMutation = useMutation({
-    mutationFn: async ({ orderId, data }: { orderId: number; data: OrderStatusData }) => {
-      const res = await apiRequest("PATCH", `/api/orders/${orderId}/status`, data);
+    mutationFn: async ({
+      orderId,
+      data,
+    }: {
+      orderId: number;
+      data: OrderStatusData;
+    }) => {
+      const res = await apiRequest(
+        "PATCH",
+        `/api/orders/${orderId}/status`,
+        data,
+      );
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to update order status");
@@ -89,7 +130,9 @@ export default function ShopOrders() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["orders", "shop"] });
       if (variables.orderId) {
-        queryClient.invalidateQueries({ queryKey: [`/api/orders/${variables.orderId}`] });
+        queryClient.invalidateQueries({
+          queryKey: [`/api/orders/${variables.orderId}`],
+        });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/orders/customer"] });
       toast({
@@ -111,7 +154,10 @@ export default function ShopOrders() {
 
   const confirmPaymentMutation = useMutation({
     mutationFn: async (orderId: number) => {
-      const res = await apiRequest("POST", `/api/orders/${orderId}/confirm-payment`);
+      const res = await apiRequest(
+        "POST",
+        `/api/orders/${orderId}/confirm-payment`,
+      );
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.message || "Failed to confirm payment");
@@ -123,13 +169,29 @@ export default function ShopOrders() {
       toast({ title: t("success"), description: "Payment confirmed" });
     },
     onError: (error: Error) => {
-      toast({ title: t("error"), description: error.message, variant: "destructive" });
+      toast({
+        title: t("error"),
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
   const handleReturnRequest = useMutation({
-    mutationFn: async ({ returnId, action, comments }: { returnId: number; action: 'approve' | 'reject'; comments?: string }) => {
-      const res = await apiRequest("POST", `/api/returns/${returnId}/${action}`, { comments });
+    mutationFn: async ({
+      returnId,
+      action,
+      comments,
+    }: {
+      returnId: number;
+      action: "approve" | "reject";
+      comments?: string;
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/returns/${returnId}/${action}`,
+        { comments },
+      );
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to process return request");
@@ -137,7 +199,9 @@ export default function ShopOrders() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/returns/shop", user?.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/returns/shop", user?.id],
+      });
       toast({
         title: t("success"),
         description: t("return_request_processed"),
@@ -215,7 +279,10 @@ export default function ShopOrders() {
                             {t("order")} #{order.id}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {order.orderDate ? formatIndianDisplay(order.orderDate, 'date') : 'N/A'} {/* Use formatIndianDisplay */}
+                            {order.orderDate
+                              ? formatIndianDisplay(order.orderDate, "date")
+                              : "N/A"}{" "}
+                            {/* Use formatIndianDisplay */}
                           </p>
                         </div>
                         <div className="text-right">
@@ -224,7 +291,9 @@ export default function ShopOrders() {
                             {getStatusIcon(order.status)}
                             <span className="text-sm">{t(order.status)}</span>
                             {order.paymentStatus === "verifying" && (
-                              <Badge className="bg-yellow-200 text-yellow-900">Verification Needed</Badge>
+                              <Badge className="bg-yellow-200 text-yellow-900">
+                                Verification Needed
+                              </Badge>
                             )}
                           </div>
                         </div>
@@ -232,17 +301,30 @@ export default function ShopOrders() {
 
                       <div className="space-y-4">
                         <div>
-                          <h4 className="font-medium mb-2">{t("customer_details")}</h4>
-                          <p className="text-sm">{order.customer?.name ?? "N/A"}</p>
-                          <p className="text-sm text-muted-foreground">{order.customer?.phone ?? "N/A"}</p>
-                          <p className="text-sm text-muted-foreground">{order.customer?.email ?? "N/A"}</p>
+                          <h4 className="font-medium mb-2">
+                            {t("customer_details")}
+                          </h4>
+                          <p className="text-sm">
+                            {order.customer?.name ?? "N/A"}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {order.customer?.phone ?? "N/A"}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {order.customer?.email ?? "N/A"}
+                          </p>
                         </div>
 
                         <div>
-                          <h4 className="font-medium mb-2">{t("order_items")}</h4>
+                          <h4 className="font-medium mb-2">
+                            {t("order_items")}
+                          </h4>
                           <div className="space-y-2">
                             {order.items?.map((item) => (
-                              <div key={item.id} className="flex justify-between items-center">
+                              <div
+                                key={item.id}
+                                className="flex justify-between items-center"
+                              >
                                 <div>
                                   <p className="font-medium">{item.name}</p>
                                   <p className="text-sm text-muted-foreground">
@@ -254,19 +336,29 @@ export default function ShopOrders() {
                             ))}
                           </div>
                         </div>
-                          
-                          {order.paymentStatus === "verifying" && (
+
+                        {order.paymentStatus === "verifying" && (
                           <div className="p-4 rounded-md bg-yellow-100 border text-sm space-y-2">
-                            <p className="font-medium">Payment Reference: {order.paymentReference}</p>
-                            <Button size="sm" onClick={() => confirmPaymentMutation.mutate(order.id)}>
+                            <p className="font-medium">
+                              Payment Reference: {order.paymentReference}
+                            </p>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                confirmPaymentMutation.mutate(order.id)
+                              }
+                            >
                               Confirm Payment
                             </Button>
                           </div>
                         )}
-                        
+
                         <div className="flex justify-end gap-2">
                           <Dialog
-                            open={actionType === "update" && selectedOrder?.id === order.id}
+                            open={
+                              actionType === "update" &&
+                              selectedOrder?.id === order.id
+                            }
                             onOpenChange={(open) => {
                               if (!open) {
                                 setActionType(null);
@@ -287,17 +379,22 @@ export default function ShopOrders() {
                             </DialogTrigger>
                             <DialogContent>
                               <DialogHeader>
-                                <DialogTitle>{t("update_order_status")}</DialogTitle>
+                                <DialogTitle>
+                                  {t("update_order_status")}
+                                </DialogTitle>
                               </DialogHeader>
                               <Form {...form}>
-                                <form onSubmit={form.handleSubmit((data) => {
-                                  if (selectedOrder) {
-                                    updateOrderStatusMutation.mutate({
-                                      orderId: selectedOrder.id,
-                                      data,
-                                    });
-                                  }
-                                })} className="space-y-4">
+                                <form
+                                  onSubmit={form.handleSubmit((data) => {
+                                    if (selectedOrder) {
+                                      updateOrderStatusMutation.mutate({
+                                        orderId: selectedOrder.id,
+                                        data,
+                                      });
+                                    }
+                                  })}
+                                  className="space-y-4"
+                                >
                                   <FormField
                                     control={form.control}
                                     name="status"
@@ -344,7 +441,9 @@ export default function ShopOrders() {
                                       name="comments"
                                       render={({ field }) => (
                                         <FormItem>
-                                          <FormLabel>{t("cancellation_reason")}</FormLabel>
+                                          <FormLabel>
+                                            {t("cancellation_reason")}
+                                          </FormLabel>
                                           <FormControl>
                                             <Textarea {...field} />
                                           </FormControl>
@@ -360,7 +459,9 @@ export default function ShopOrders() {
                                       name="trackingInfo"
                                       render={({ field }) => (
                                         <FormItem>
-                                          <FormLabel>{t("tracking_info")}</FormLabel>
+                                          <FormLabel>
+                                            {t("tracking_info")}
+                                          </FormLabel>
                                           <FormControl>
                                             <Input {...field} />
                                           </FormControl>
@@ -393,7 +494,9 @@ export default function ShopOrders() {
             {!returns?.length ? (
               <Card>
                 <CardContent className="p-6 text-center">
-                  <p className="text-muted-foreground">{t("no_return_requests")}</p>
+                  <p className="text-muted-foreground">
+                    {t("no_return_requests")}
+                  </p>
                 </CardContent>
               </Card>
             ) : (
@@ -407,7 +510,13 @@ export default function ShopOrders() {
                             {t("return_request")} #{returnRequest.id}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {returnRequest.createdAt ? formatIndianDisplay(returnRequest.createdAt, 'date') : 'N/A'} {/* Use formatIndianDisplay */}
+                            {returnRequest.createdAt
+                              ? formatIndianDisplay(
+                                  returnRequest.createdAt,
+                                  "date",
+                                )
+                              : "N/A"}{" "}
+                            {/* Use formatIndianDisplay */}
                           </p>
                         </div>
                         <div className="flex gap-2">
@@ -445,7 +554,9 @@ export default function ShopOrders() {
                           {returnRequest.reason}
                         </p>
                         <p>
-                          <span className="font-medium">{t("description")}:</span>{" "}
+                          <span className="font-medium">
+                            {t("description")}:
+                          </span>{" "}
                           {returnRequest.description}
                         </p>
                         <p>

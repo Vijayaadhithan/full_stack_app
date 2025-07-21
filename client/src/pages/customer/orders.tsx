@@ -67,8 +67,8 @@ export default function Orders() {
                           <h3 className="font-semibold">Order #{order.id}</h3>
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Order ID: {order.id}{" "}
-                          <span className="mx-1">•</span> Placed{" "}
+                          Order ID: {order.id} <span className="mx-1">•</span>{" "}
+                          Placed{" "}
                           {order.orderDate
                             ? formatIndianDisplay(order.orderDate, "datetime")
                             : "recently"}
@@ -76,7 +76,9 @@ export default function Orders() {
                       </div>
                       <div className="flex flex-col items-end justify-between">
                         <p className="font-semibold">₹{order.total}</p>
-                        <p className="text-sm text-muted-foreground capitalize">{order.status}</p>
+                        <p className="text-sm text-muted-foreground capitalize">
+                          {order.status}
+                        </p>
                         <Link href={`/customer/order/${order.id}`}>
                           <Button size="sm" variant="outline" className="mt-2">
                             View Details{" "}

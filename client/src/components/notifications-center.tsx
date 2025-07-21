@@ -17,7 +17,7 @@ import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
-import { formatIndianDisplay } from '@shared/date-utils'; // Import IST utility
+import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 
 export function NotificationsCenter() {
   const [open, setOpen] = useState(false);
@@ -42,98 +42,119 @@ export function NotificationsCenter() {
     },
     onSuccess: (_, id) => {
       // Optimistically update the UI immediately
-      queryClient.setQueryData(["/api/notifications"], (oldData: Notification[] | undefined) => {
-        if (!oldData) return [];
-        return oldData.map(notification => {
-          if (notification.id === id) {
-            return { ...notification, isRead: true };
-          }
-          return notification;
-        });
-      });
-      
+      queryClient.setQueryData(
+        ["/api/notifications"],
+        (oldData: Notification[] | undefined) => {
+          if (!oldData) return [];
+          return oldData.map((notification) => {
+            if (notification.id === id) {
+              return { ...notification, isRead: true };
+            }
+            return notification;
+          });
+        },
+      );
+
       // Also invalidate the query to ensure data consistency with the server
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
   });
-  
+
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
       // Include user role in the request to mark only relevant notifications
-      const res = await apiRequest("PATCH", "/api/notifications/mark-all-read", { role: user?.role });
+      const res = await apiRequest(
+        "PATCH",
+        "/api/notifications/mark-all-read",
+        { role: user?.role },
+      );
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || "Failed to mark all notifications as read");
+        throw new Error(
+          error.message || "Failed to mark all notifications as read",
+        );
       }
       return res.json();
     },
     onSuccess: () => {
       // Optimistically update the local cache to show zero unread count
-      queryClient.setQueryData(["/api/notifications"], (oldData: Notification[] | undefined) => {
-        if (!oldData) return [];
-        // Only mark notifications relevant to the user's role as read
-        return oldData.map(notification => {
-          // Check if this notification is relevant to the user's role
-          let isRelevantToUser = false;
-          
-          // Shop owners should only mark shop/order/return notifications as read
-          if (user?.role === 'shop') {
-            isRelevantToUser = ['order', 'shop', 'return'].includes(notification.type);
-          }
-          
-          // Service providers should only mark service/booking notifications as read
-          else if (user?.role === 'provider') {
-            isRelevantToUser = ['service', 'booking'].includes(notification.type);
-          }
-          
-          // Customers should mark all their notifications as read
-          else if (user?.role === 'customer') {
-            isRelevantToUser = true;
-          }
-          
-          // Only mark as read if it's relevant to the user
-          return {
-            ...notification,
-            isRead: isRelevantToUser ? true : notification.isRead
-          };
-        });
-      });
-      
+      queryClient.setQueryData(
+        ["/api/notifications"],
+        (oldData: Notification[] | undefined) => {
+          if (!oldData) return [];
+          // Only mark notifications relevant to the user's role as read
+          return oldData.map((notification) => {
+            // Check if this notification is relevant to the user's role
+            let isRelevantToUser = false;
+
+            // Shop owners should only mark shop/order/return notifications as read
+            if (user?.role === "shop") {
+              isRelevantToUser = ["order", "shop", "return"].includes(
+                notification.type,
+              );
+            }
+
+            // Service providers should only mark service/booking notifications as read
+            else if (user?.role === "provider") {
+              isRelevantToUser = ["service", "booking"].includes(
+                notification.type,
+              );
+            }
+
+            // Customers should mark all their notifications as read
+            else if (user?.role === "customer") {
+              isRelevantToUser = true;
+            }
+
+            // Only mark as read if it's relevant to the user
+            return {
+              ...notification,
+              isRead: isRelevantToUser ? true : notification.isRead,
+            };
+          });
+        },
+      );
+
       // Invalidate the query to ensure data is refetched from the server in the background
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-      
+
       toast({
-        title: t('notifications_cleared'),
-        description: t('all_notifications_marked_as_read'),
+        title: t("notifications_cleared"),
+        description: t("all_notifications_marked_as_read"),
       });
       // REMOVED: refetch(); // The optimistic update and invalidation should be sufficient.
     },
   });
 
   // Filter notifications based on user role
-  const filteredNotifications = notifications?.filter(notification => {
-    if (!user) return false;
-    
-    // Shop owners should only see shop/order/return notifications
-    if (user.role === 'shop') {
-      return ['order', 'shop', 'return'].includes(notification.type);
-    }
-    // Service providers should see service/booking notifications
-    // and specifically service request notifications
-    if (user.role === 'provider') {
-      // Include notifications about new service requests
-      if (notification.type === 'service_request' &&
-          (notification.title.includes('New Service Request') || 
-           notification.title.includes('Service Request') || 
-           notification.message.includes('new service request'))) {
-        return true;
+  const filteredNotifications =
+    notifications?.filter((notification) => {
+      if (!user) return false;
+
+      // Shop owners should only see shop/order/return notifications
+      if (user.role === "shop") {
+        return ["order", "shop", "return"].includes(notification.type);
       }
-      return ['service', 'booking', 'booking_request'].includes(notification.type);
-    }
-    // Customers should see all relevant notifications
-    return true;
-  }) || [];
-  
+      // Service providers should see service/booking notifications
+      // and specifically service request notifications
+      if (user.role === "provider") {
+        // Include notifications about new service requests
+        if (
+          notification.type === "service_request" &&
+          (notification.title.includes("New Service Request") ||
+            notification.title.includes("Service Request") ||
+            notification.message.includes("new service request"))
+        ) {
+          return true;
+        }
+        return ["service", "booking", "booking_request"].includes(
+          notification.type,
+        );
+      }
+      // Customers should see all relevant notifications
+      return true;
+    }) || [];
+
   // Sort notifications with unread first, then by date
   const sortedNotifications = [...filteredNotifications].sort((a, b) => {
     // First sort by read status (unread first)
@@ -141,10 +162,14 @@ export function NotificationsCenter() {
       return a.isRead ? 1 : -1;
     }
     // Then sort by date (newest first) - ensure we're comparing dates properly
-    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    return (
+      new Date(b.createdAt || 0).getTime() -
+      new Date(a.createdAt || 0).getTime()
+    );
   });
 
-  const unreadCount = filteredNotifications.filter((n) => !n.isRead).length || 0;
+  const unreadCount =
+    filteredNotifications.filter((n) => !n.isRead).length || 0;
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -160,47 +185,47 @@ export function NotificationsCenter() {
         return "📬";
     }
   };
-  
+
   // Function to navigate to the relevant page based on notification type and content
   const navigateToRelevantPage = (notification: Notification) => {
     // Close the notification panel
     setOpen(false);
-    
+
     // Extract any IDs from the notification message if present
     const idMatch = notification.message?.match(/ID: (\d+)/) || [];
     const id = idMatch[1];
-    
+
     // Navigate based on notification type and user role
     switch (notification.type) {
       case "booking":
-        if (user?.role === 'customer') {
-          navigate(`/customer/bookings/${id || ''}`);
-        } else if (user?.role === 'provider') {
-          navigate(`/provider/bookings${id ? `/${id}` : '?status=pending'}`);
+        if (user?.role === "customer") {
+          navigate(`/customer/bookings/${id || ""}`);
+        } else if (user?.role === "provider") {
+          navigate(`/provider/bookings${id ? `/${id}` : "?status=pending"}`);
         }
         break;
       case "order":
-        if (user?.role === 'customer') {
-          navigate(`/customer/order/${id || ''}`);
-        } else if (user?.role === 'shop') {
-          navigate(`/shop/orders${id ? `/${id}` : ''}`);
+        if (user?.role === "customer") {
+          navigate(`/customer/order/${id || ""}`);
+        } else if (user?.role === "shop") {
+          navigate(`/shop/orders${id ? `/${id}` : ""}`);
         }
         break;
       case "return":
-        if (user?.role === 'customer') {
-          navigate(`/customer/returns/${id || ''}`);
-        } else if (user?.role === 'shop') {
-          navigate(`/shop/returns${id ? `/${id}` : ''}`);
+        if (user?.role === "customer") {
+          navigate(`/customer/returns/${id || ""}`);
+        } else if (user?.role === "shop") {
+          navigate(`/shop/returns${id ? `/${id}` : ""}`);
         }
         break;
       case "service_request":
-        if (user?.role === 'provider') {
-          navigate(`/provider/services${id ? `/${id}` : ''}`);
+        if (user?.role === "provider") {
+          navigate(`/provider/services${id ? `/${id}` : ""}`);
         }
         break;
       default:
         // For general notifications, navigate to the dashboard
-        navigate(`/${user?.role || ''}`);
+        navigate(`/${user?.role || ""}`);
     }
   };
 
@@ -219,20 +244,20 @@ export function NotificationsCenter() {
       <SheetContent>
         <SheetHeader>
           <div className="flex justify-between items-center">
-            <SheetTitle>{t('notifications')}</SheetTitle>
+            <SheetTitle>{t("notifications")}</SheetTitle>
             {unreadCount > 0 && (
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => markAllAsReadMutation.mutate()}
                 disabled={markAllAsReadMutation.isPending}
               >
                 {markAllAsReadMutation.isPending ? (
-                  <span className="animate-pulse">{t('marking')}...</span>
+                  <span className="animate-pulse">{t("marking")}...</span>
                 ) : (
                   <>
                     <Check className="h-4 w-4 mr-1" />
-                    {t('mark_all_read')}
+                    {t("mark_all_read")}
                   </>
                 )}
               </Button>
@@ -242,7 +267,9 @@ export function NotificationsCenter() {
         <ScrollArea className="h-[calc(100vh-5rem)] mt-4">
           <div className="space-y-4 pr-4">
             {!sortedNotifications.length ? (
-              <p className="text-center text-muted-foreground">{t('no_notifications')}</p>
+              <p className="text-center text-muted-foreground">
+                {t("no_notifications")}
+              </p>
             ) : (
               sortedNotifications.map((notification) => (
                 <div
@@ -255,7 +282,7 @@ export function NotificationsCenter() {
                     if (!notification.isRead) {
                       markAsReadMutation.mutate(notification.id);
                     }
-                    
+
                     // Navigate to the relevant page based on notification type
                     navigateToRelevantPage(notification);
                   }}
@@ -271,8 +298,11 @@ export function NotificationsCenter() {
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {notification.createdAt
-                          ? formatIndianDisplay(notification.createdAt, 'datetime') // Use formatIndianDisplay with IST timezone
-                          : ''}
+                          ? formatIndianDisplay(
+                              notification.createdAt,
+                              "datetime",
+                            ) // Use formatIndianDisplay with IST timezone
+                          : ""}
                       </p>
                     </div>
                   </div>
