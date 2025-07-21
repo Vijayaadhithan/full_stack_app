@@ -74,7 +74,9 @@ This section guides you through setting up the project environment.
 5.  **Start the Application:**
     - **Development Mode (Client + Server with Hot Reloading):**
       ```bash
-      npm run dev
+      npm run dev:server
+      # in another terminal
+      npm run dev:client
       ```
     - **Production Build (Separate Steps):**
       ```bash

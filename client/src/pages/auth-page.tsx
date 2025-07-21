@@ -17,7 +17,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { queryClient } from "@/lib/queryClient"; // Added import
+import { queryClient, apiRequest } from "@/lib/queryClient"; // Added import
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const translations = {
   en: {
@@ -174,12 +176,11 @@ export default function AuthPage() {
     setResetMessage(null); // Added
     try {
       // Added
-      const response = await fetch("/api/request-password-reset", {
-        // Added
-        method: "POST", // Added
-        headers: { "Content-Type": "application/json" }, // Added
-        body: JSON.stringify(data), // Added
-      }); // Added
+      const response = await apiRequest(
+        "POST",
+        "/api/request-password-reset",
+        data,
+      );
       const result = await response.json(); // Added
       if (response.ok) {
         // Added
@@ -393,7 +394,9 @@ export default function AuthPage() {
                   type="button"
                   variant="outline"
                   className="w-full"
-                  onClick={() => (window.location.href = "/auth/google")}
+                  onClick={() =>
+                    (window.location.href = `${API_URL}/auth/google`)
+                  }
                 >
                   <svg
                     className="mr-2 h-4 w-4"
@@ -529,7 +532,7 @@ export default function AuthPage() {
                   onClick={() => {
                     const selectedRole =
                       registerForm.getValues("role") || "customer";
-                    window.location.href = `/auth/google?role=${selectedRole}`;
+                    window.location.href = `${API_URL}/auth/google?role=${selectedRole}`;
                   }}
                 >
                   Sign in with Google
@@ -541,7 +544,7 @@ export default function AuthPage() {
                   onClick={() => {
                     const selectedRole =
                       registerForm.getValues("role") || "customer";
-                    window.location.href = `/auth/google?role=${selectedRole}`;
+                    window.location.href = `${API_URL}/auth/google?role=${selectedRole}`;
                   }}
                 >
                   Sign up with Google

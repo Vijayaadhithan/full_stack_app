@@ -78,13 +78,39 @@ npx drizzle-kit push:pg
 1. Start the development server:
 
 ```bash
-npm run dev
+npm run dev:server
+```
+
+2. Start the frontend development server in a separate terminal:
+
+```bash
+npm run dev:client
 ```
 
 The application will be available at:
 
-- Frontend: http://localhost:5000
+- Frontend: http://localhost:5173
 - API: http://localhost:5000/api
+### Google OAuth Login Flow
+
+1. The React app links users to `http://localhost:5000/auth/google`
+   (replace the domain with your API) when they click **Login with Google**.
+2. The Express backend route `/auth/google` redirects the user to Google.
+3. After approval, Google sends the user back to
+   `/auth/google/callback` on the backend.
+4. The backend creates a session cookie and then redirects the user to
+   your frontend domain (e.g., `http://localhost:5173/customer`) based on their
+   role.
+
+In the Google Cloud Console, configure your OAuth client with:
+
+- **Authorized JavaScript origins**
+  - `https://your-production-frontend.com`
+  - `http://localhost:5173`
+- **Authorized redirect URIs**
+  - `https://your-production-api.com/auth/google/callback`
+  - `http://localhost:5000/auth/google/callback`
+
 
 ### Development Guidelines
 
@@ -95,11 +121,12 @@ The application will be available at:
 
 ### Available Scripts
 
-- `npm run dev`: Start development server (runs both frontend and backend)
-- `npm run build`: Build for production
-- `npm run start`: Start production server
-- `npm run lint`: Run ESLint on the project
-- `npm run format`: Format files using Prettier
+- `npm run dev:server` – start the backend API
+- `npm run dev:client` – start the frontend development server
+- `npm run build` – build for production
+- `npm run start` – run the compiled server
+- `npm run lint` – run ESLint on the project
+- `npm run format` – format files using Prettier
 
 ### Troubleshooting
 
@@ -132,7 +159,10 @@ npm test
 npm test -- --grep "test-name"
 ```
 
-`npm run dev` – start frontend and backend in development
+Start development:
+
+- `npm run dev:server` – run the backend API
+- `npm run dev:client` – run the React frontend
 
 - `npm run build` – build for production
 - `npm run start` – run the compiled server

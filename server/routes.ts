@@ -151,7 +151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
-      const resetLink = `${process.env.APP_BASE_URL || "http://localhost:5000"}/reset-password?token=${token}`;
+      const resetLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${token}`;
       const emailContent = getPasswordResetEmailContent(
         user.name || user.username,
         resetLink,

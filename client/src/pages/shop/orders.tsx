@@ -39,7 +39,7 @@ import { Loader2, Package, Truck, CheckCircle2 } from "lucide-react";
 import { Order, ReturnRequest } from "@shared/schema";
 import { z } from "zod";
 import { useState, useEffect } from "react";
-
+//const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 type OrderWithDetails = Order & {
   customer: {
     name: string;
@@ -86,9 +86,10 @@ export default function ShopOrders() {
     queryKey: ["orders", "shop", selectedStatus],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await fetch(`/api/orders/shop?status=${selectedStatus}`, {
-        credentials: "include",
-      });
+      const res = await apiRequest(
+        "GET",
+        `/api/orders/shop?status=${selectedStatus}`,
+      );
       if (!res.ok) throw new Error("Network response was not ok");
       return res.json();
     },
@@ -98,7 +99,7 @@ export default function ShopOrders() {
     queryKey: ["/api/returns/shop", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await fetch("/api/returns/shop", { credentials: "include" });
+      const res = await apiRequest("GET", "/api/returns/shop");
       if (!res.ok) throw new Error("Network response was not ok");
       return res.json();
     },

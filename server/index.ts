@@ -1,6 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes"; // Changed from ./routes/index
-import { setupVite, serveStatic, log } from "./vite";
+//import { setupVite, serveStatic, log } from "./vite";
 import { storage as dbStorage } from "./storage";
 import { config } from "dotenv";
 import logger from "./logger";
@@ -17,9 +17,12 @@ import { startPaymentReminderJob } from "./jobs/paymentReminderJob";
 
 config();
 // Read allowed CORS origins from environment variable (comma separated)
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : undefined;
+// Allow requests from production frontend and local development
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:5173",
+].filter(Boolean) as string[];
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -149,31 +152,7 @@ startPaymentReminderJob(dbStorage);
 
   const PORT = process.env.PORT || 5000;
 
-  if (process.env.NODE_ENV === "production") {
-    // In production, serve the static files from the dist directory
-    app.use(express.static(path.join(__dirname, "public")));
-
-    // For any other request, send the index.html file
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "public", "index.html"));
-    });
-
-    server.listen(PORT, () => {
-      logger.info(`Server is running on port ${PORT}`);
-    });
-  } else {
-    // In development, use Vite's dev server
-    await setupVite(app, server);
-
-    server.listen(
-      {
-        port: PORT,
-        host: "0.0.0.0", // Changed from 127.0.0.1
-        reusePort: true,
-      },
-      () => {
-        log(`Server running on port ${PORT}`);
-      },
-    );
-  }
+  server.listen(PORT, () => {
+    logger.info(`Server is running on port ${PORT}`);
+  });
 })();

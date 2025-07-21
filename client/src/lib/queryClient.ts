@@ -1,5 +1,8 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+const API_BASE =
+  import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -15,7 +18,7 @@ export async function apiRequest(
   // Check if data is FormData (for file uploads)
   const isFormData = data instanceof FormData;
 
-  const res = await fetch(url, {
+  const res = await fetch(`${API_BASE}${url}`, {
     method,
     // Don't set Content-Type for FormData (browser will set it with boundary)
     headers: data && !isFormData ? { "Content-Type": "application/json" } : {},
@@ -40,9 +43,9 @@ export const getQueryFn: <T>(options: {
       url = `${url}/${queryKey[1]}`;
     }
 
-    console.log("Making API request to:", url);
+    console.log("Making API request to:", `${API_BASE}${url}`);
 
-    const res = await fetch(url, {
+    const res = await fetch(`${API_BASE}${url}`, {
       credentials: "include",
     });
 

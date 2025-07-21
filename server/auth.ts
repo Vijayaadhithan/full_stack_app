@@ -22,7 +22,7 @@ declare module "express-session" {
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
   logger.warn(
     "Google OAuth credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) are not set. Google Sign-In will not work.",
@@ -82,7 +82,7 @@ export function setupAuth(app: Express) {
           passReqToCallback: true, // Added to access req in callback for role selection
           clientID: GOOGLE_CLIENT_ID,
           clientSecret: GOOGLE_CLIENT_SECRET,
-          callbackURL: `${process.env.APP_BASE_URL}/auth/google/callback`,
+          callbackURL: `${process.env.APP_BASE_URL || "http://localhost:5000"}/auth/google/callback`,
           scope: ["profile", "email"],
           proxy: true,
         },
@@ -292,7 +292,7 @@ export function setupAuth(app: Express) {
     const verificationToken = randomBytes(32).toString("hex");
     // Store this token with user ID and expiry in DB for verification
     // For now, just a placeholder link structure
-    const verificationLink = `${process.env.APP_BASE_URL || "http://localhost:5000"}/verify-email?token=${verificationToken}&userId=${user.id}`;
+    const verificationLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify-email?token=${verificationToken}&userId=${user.id}`;
 
     const emailContent = getWelcomeEmailContent(
       user.name || user.username,
@@ -382,7 +382,7 @@ export function setupAuth(app: Express) {
       "/auth/google/callback",
       passport.authenticate("google", {
         // successRedirect: "/", // Redirect to a success page or dashboard
-        failureRedirect: "/auth", // Redirect back to login page on failure
+        failureRedirect: `${FRONTEND_URL}/auth`,
         failureMessage: true,
       }),
       (req, res) => {
@@ -391,8 +391,8 @@ export function setupAuth(app: Express) {
         logger.info(
           "[Google OAuth] Authentication successful, redirecting user",
         );
-        const redirectUrl =
-          req.session.returnTo || `/${req.user?.role || "customer"}`;
+        const rolePath = `/${req.user?.role || "customer"}`;
+        const redirectUrl = new URL(rolePath, FRONTEND_URL).toString();
         delete req.session.returnTo;
         res.redirect(redirectUrl);
       },

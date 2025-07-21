@@ -15,6 +15,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+
+//const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 import { useTranslation } from "react-i18next";
 
 const resetPasswordSchema = z
@@ -71,13 +74,11 @@ export default function ResetPasswordPage() {
     setIsLoading(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/reset-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ token, newPassword: data.newPassword }),
-      });
+      const response = await apiRequest(
+        "POST",
+        "/api/reset-password",
+        { token, newPassword: data.newPassword },
+      );
       const result = await response.json();
       if (response.ok) {
         toast({
