@@ -48,7 +48,7 @@ const ShopReviews = lazy(() => import("@/pages/shop/reviews"));
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password-page")); // Import the new page
-
+const VerifyEmailPage = lazy(() => import("@/pages/verify-email-page"));
 function Router() {
   return (
     <Switch>
@@ -109,6 +109,7 @@ function Router() {
       <ProtectedRoute path="/shop/promotions" component={ShopPromotions} />
       <ProtectedRoute path="/shop/reviews" component={ShopReviews} />
       <Route path="/reset-password" component={ResetPasswordPage} />
+      <Route path="/verify-email" component={VerifyEmailPage} />
       <Route path="/" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>

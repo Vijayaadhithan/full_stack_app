@@ -212,6 +212,14 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
 });
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
 // Update the reviews table to link with e-receipt
 export const reviews = pgTable(
   "reviews",
@@ -639,6 +647,12 @@ export const insertPasswordResetTokenSchema =
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = z.infer<
   typeof insertPasswordResetTokenSchema
+>;
+export const insertEmailVerificationTokenSchema =
+  createInsertSchema(emailVerificationTokens);
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+export type InsertEmailVerificationToken = z.infer<
+  typeof insertEmailVerificationTokenSchema
 >;
 
 export const Booking = z.object({

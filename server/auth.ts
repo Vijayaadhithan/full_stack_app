@@ -1,15 +1,20 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { Express } from "express";
+import { Express, type Request, type Response } from "express";
 import session from "express-session";
 import logger from "./logger";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { sendEmail, getWelcomeEmailContent } from "./emailService"; // Added for sending emails
-import { User as SelectUser } from "@shared/schema";
+import {
+  User as SelectUser,
+  emailVerificationTokens as emailVerificationTokensTable,
+} from "@shared/schema";
 import { insertUserSchema } from "@shared/schema";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -292,6 +297,13 @@ export function setupAuth(app: Express) {
     const verificationToken = randomBytes(32).toString("hex");
     // Store this token with user ID and expiry in DB for verification
     // For now, just a placeholder link structure
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    await db.insert(emailVerificationTokensTable).values({
+      userId: user.id,
+      token: verificationToken,
+      expiresAt,
+    });
+    //const verificationToken = createVerificationToken(user.id);
     const verificationLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify-email?token=${verificationToken}&userId=${user.id}`;
 
     const emailContent = getWelcomeEmailContent(
@@ -312,33 +324,7 @@ export function setupAuth(app: Express) {
   });
 
   // TODO: Add a new route for email verification
-  app.get("/api/verify-email", async (req, res) => {
-    const { token, userId } = req.query;
-    if (!token || !userId) {
-      return res.status(400).send("Missing verification token or user ID.");
-    }
-    // TODO: Implement token verification logic against stored token in DB
-    // 1. Find user by userId
-    // 2. Check if token matches and is not expired
-    // 3. If valid, mark user's email as verified (e.g., user.emailVerified = true)
-    // 4. Delete or invalidate the token
-    // For now, simulate success:
-    try {
-      const id = parseInt(userId as string);
-      const user = await storage.getUser(id);
-      if (user /* && verifyTokenInDB(token, id) */) {
-        // Placeholder for actual token verification
-        await storage.updateUser(id, { emailVerified: true });
-        // Redirect to a success page or login page
-        return res.send("Email verified successfully! You can now log in.");
-      } else {
-        return res.status(400).send("Invalid or expired verification link.");
-      }
-    } catch (error) {
-      logger.error("Email verification error:", error);
-      return res.status(500).send("Error verifying email.");
-    }
-  });
+  app.get("/api/verify-email", verifyEmailHandler);
 
   app.post("/api/login", passport.authenticate("local"), (req, res) => {
     res.status(200).json(req.user);
@@ -430,4 +416,35 @@ export function setupAuth(app: Express) {
       res.status(500).json({ message: "Failed to delete account." });
     }
   });
+}
+export async function verifyEmailHandler(req: Request, res: Response) {
+  const { token, userId } = req.query;
+  if (!token || !userId) {
+    return res.status(400).send("Missing verification token or user ID.");
+  }
+  try {
+    const id = parseInt(userId as string, 10);
+    const tokenRecords = await db
+      .select()
+      .from(emailVerificationTokensTable)
+      .where(
+        and(
+          eq(emailVerificationTokensTable.token, token as string),
+          eq(emailVerificationTokensTable.userId, id),
+        ),
+      )
+      .limit(1);
+    const tokenEntry = tokenRecords[0];
+    if (!tokenEntry || tokenEntry.expiresAt < new Date()) {
+      return res.status(400).send("Invalid or expired verification link.");
+    }
+    await storage.updateUser(id, { emailVerified: true });
+    await db
+      .delete(emailVerificationTokensTable)
+      .where(eq(emailVerificationTokensTable.token, token as string));
+    return res.send("Email verified successfully! You can now log in.");
+  } catch (error) {
+    logger.error("Email verification error:", error);
+    return res.status(500).send("Error verifying email.");
+  }
 }
