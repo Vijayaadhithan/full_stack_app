@@ -5,6 +5,7 @@
 ### Prerequisites
 
 1. Node.js (v20.x or later)
+
 ```bash
 # On Windows/Mac, download from https://nodejs.org
 # On Ubuntu/Debian
@@ -13,6 +14,7 @@ sudo apt-get install -y nodejs
 ```
 
 2. PostgreSQL database
+
 ```bash
 # On Windows, download from https://www.postgresql.org/download/windows/
 # On Mac
@@ -24,17 +26,20 @@ sudo apt-get install postgresql postgresql-contrib
 ### Environment Setup
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd <project-directory>
 ```
 
 2. Create and configure your `.env` file:
+
 ```bash
 cp .env.example .env
 ```
 
 3. Update the `.env` file with your configuration:
+
 ```env
 # Database Configuration
 DATABASE_URL=postgresql://user:password@localhost:5432/dbname
@@ -57,11 +62,13 @@ RAZORPAY_KEY_SECRET=your-razorpay-secret
 ### Installation
 
 1. Install project dependencies:
+
 ```bash
 npm install
 ```
 
 2. Initialize the database:
+
 ```bash
 npx drizzle-kit push:pg
 ```
@@ -69,11 +76,13 @@ npx drizzle-kit push:pg
 ### Running the Application
 
 1. Start the development server:
+
 ```bash
 npm run dev
 ```
 
 The application will be available at:
+
 - Frontend: http://localhost:5000
 - API: http://localhost:5000/api
 
@@ -112,18 +121,27 @@ The application will be available at:
 ### Testing
 
 1. To run tests:
+
 ```bash
 npm test
 ```
 
 2. To run specific test suites:
+
 ```bash
 npm test -- --grep "test-name"
 ```
+`npm run dev` – start frontend and backend in development
+- `npm run build` – build for production
+- `npm run start` – run the compiled server
+- `npm run lint` – run ESLint
+- `npm run format` – run Prettier
+- `npm test` – execute unit tests
 
 ## Features
 
 ### Customer Features
+
 - Browse and book services
 - Shop for products from various vendors
 - Track orders and bookings
@@ -132,6 +150,7 @@ npm test -- --grep "test-name"
 - Integrated payment system (Razorpay)
 
 ### Service Provider Features
+
 - Service listing and management
 - Booking management
 - Real-time availability updates
@@ -139,6 +158,7 @@ npm test -- --grep "test-name"
 - Analytics dashboard
 
 ### Shop Owner Features
+
 1. Product Management
    - Add, edit, delete products
    - Inventory management
