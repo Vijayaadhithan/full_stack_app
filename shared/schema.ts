@@ -182,6 +182,7 @@ export const bookings = pgTable("bookings", {
   paymentReference: text("payment_reference"),
   disputeReason: text("dispute_reason"),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
   expiresAt: timestamp("expires_at"),
   serviceLocation: text("service_location").$type<"customer" | "provider">(), // Added service location type
   providerAddress: text("provider_address"), // Added provider address (nullable)

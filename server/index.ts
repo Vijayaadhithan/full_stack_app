@@ -26,10 +26,27 @@ const allowedOrigins = [
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
+export const app = express();
 app.use(express.json());
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+/**
+ * @openapi
+ * /api/health:
+ *   get:
+ *     summary: Health check
+ *     responses:
+ *       200:
+ *         description: Basic service info
+ */
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: Date.now(),
+  });
+});
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -136,10 +153,11 @@ app.post("/api/users/upload-qr", (req, res) => {
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Initialize scheduled jobs
-startBookingExpirationJob(dbStorage);
-startPaymentReminderJob(dbStorage);
+export async function startServer(port?: number) {
+  // Initialize scheduled jobs
+  startBookingExpirationJob(dbStorage);
+  startPaymentReminderJob(dbStorage);
 
-(async () => {
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -150,9 +168,17 @@ startPaymentReminderJob(dbStorage);
     throw err;
   });
 
-  const PORT = process.env.PORT || 5000;
+  const PORT = port ?? parseInt(process.env.PORT || "5000", 10);
 
-  server.listen(PORT, () => {
-    logger.info(`Server is running on port ${PORT}`);
+  await new Promise<void>((resolve) => {
+    server.listen(PORT, () => {
+      logger.info(`Server is running on port ${PORT}`);
+      resolve();
+    });
   });
-})();
+return server;
+}
+
+if (process.env.NODE_ENV !== "test") {
+  startServer();
+}

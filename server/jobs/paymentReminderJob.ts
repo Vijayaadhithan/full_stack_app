@@ -4,7 +4,7 @@ import { sendEmail } from "../emailService";
 import logger from "../logger";
 
 export function startPaymentReminderJob(storage: IStorage) {
-  const schedule = process.env.PAYMENT_REMINDER_CRON || "0 1 * * *";
+  const schedule = process.env.PAYMENT_REMINDER_CRON || "30 * * * *"; // hourly at :30
   const reminderDays = parseInt(process.env.PAYMENT_REMINDER_DAYS || "3");
   const disputeDays = parseInt(process.env.PAYMENT_DISPUTE_DAYS || "7");
 
@@ -49,6 +49,7 @@ export function startPaymentReminderJob(storage: IStorage) {
     }
   };
 
-  cron.schedule(schedule, job);
+  const timezone = process.env.CRON_TZ || "Asia/Kolkata";
+  cron.schedule(schedule, job, { scheduled: true, timezone });
   job();
 }

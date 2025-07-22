@@ -440,16 +440,82 @@ export class MemStorage implements IStorage {
     logger.info(`[MemStorage] User ${userId} and all associated data deleted.`);
   }
   getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]> {
-    throw new Error("Method not implemented.");
+    const services = Array.from(this.services.values()).filter(
+      (s) => s.providerId === providerId,
+    );
+    const serviceIds = services.map((s) => s.id);
+    return Promise.resolve(
+      Array.from(this.bookings.values()).filter(
+        (b) =>
+          b.status === "pending" &&
+          b.serviceId !== null &&
+          serviceIds.includes(b.serviceId),
+      ),
+    );
   }
   getBookingHistoryForProvider(providerId: number): Promise<Booking[]> {
-    throw new Error("Method not implemented.");
+    const services = Array.from(this.services.values()).filter(
+      (s) => s.providerId === providerId,
+    );
+    const serviceIds = services.map((s) => s.id);
+    const history = Array.from(this.bookings.values()).filter(
+      (b) =>
+        b.serviceId !== null &&
+        serviceIds.includes(b.serviceId) &&
+        b.status !== "pending",
+    );
+    history.sort((a, b) => {
+      const aTime = (a.updatedAt ?? a.createdAt ?? new Date()) as Date;
+      const bTime = (b.updatedAt ?? b.createdAt ?? new Date()) as Date;
+      return bTime.getTime() - aTime.getTime();
+    });
+    return Promise.resolve(history);
   }
   getBookingHistoryForCustomer(customerId: number): Promise<Booking[]> {
-    throw new Error("Method not implemented.");
+    const history = Array.from(this.bookings.values()).filter(
+      (b) => b.customerId === customerId && b.status !== "pending",
+    );
+    history.sort((a, b) => {
+      const aTime = (a.updatedAt ?? a.createdAt ?? new Date()) as Date;
+      const bTime = (b.updatedAt ?? b.createdAt ?? new Date()) as Date;
+      return bTime.getTime() - aTime.getTime();
+    });
+    return Promise.resolve(history);
   }
   processExpiredBookings(): Promise<void> {
-    throw new Error("Method not implemented.");
+    const now = new Date();
+    const expired = Array.from(this.bookings.values()).filter(
+      (b) => b.status === "pending" && b.expiresAt && b.expiresAt < now,
+    );
+    for (const booking of expired) {
+      const updated: Booking = { ...booking, status: "expired", comments: "Automatically expired after 7 days" };
+      this.bookings.set(booking.id, updated);
+
+      if (booking.customerId) {
+        this.createNotification({
+          userId: booking.customerId,
+          type: "booking_expired",
+          title: "Booking Request Expired",
+          message:
+            "Your booking request has expired as the service provider did not respond within 7 days.",
+          isRead: false,
+        });
+      }
+
+      if (booking.serviceId) {
+        const service = this.services.get(booking.serviceId);
+        if (service) {
+          this.createNotification({
+            userId: service.providerId,
+            type: "booking_expired",
+            title: "Booking Request Expired",
+            message: `A booking request for ${service.name} has expired as you did not respond within 7 days.`,
+            isRead: false,
+          });
+        }
+      }
+    }
+    return Promise.resolve();
   }
   createPromotion(promotion: InsertPromotion): Promise<Promotion> {
     throw new Error("Method not implemented.");
@@ -742,6 +808,7 @@ export class MemStorage implements IStorage {
     const newBooking: Booking = {
       id,
       createdAt: new Date(),
+      updatedAt: new Date(),
       ...booking,
       // Remove duplicate id property since it's already included in the spread operator
       serviceLocation: booking.serviceLocation ?? null, // Ensure serviceLocation defaults to null

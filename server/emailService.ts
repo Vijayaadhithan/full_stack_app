@@ -133,21 +133,26 @@ export function getWelcomeEmailContent(
   verificationLink?: string,
 ): MailOptions {
   const subject = "Welcome to IndianBudgetTracker!";
+  
+  let verificationText = "";
+  let verificationHtml = "";
+
+  if (verificationLink) {
+    verificationText = `Please verify your email address by clicking this link: ${verificationLink}
+
+`;
+    verificationHtml = `<p>Please verify your email address by clicking this link: <a href="${verificationLink}">${verificationLink}</a></p>`;
+  }
+
   const text = `Hi ${name},
 
 Welcome to IndianBudgetTracker! We're excited to have you on board.
 
-${
-  verificationLink
-    ? `Please verify your email address by clicking this link: ${verificationLink}
-
-`
-    : ""
-}Thanks,
+${verificationText}Thanks,
 The IndianBudgetTracker Team`;
   const html = `<p>Hi ${name},</p>
 <p>Welcome to IndianBudgetTracker! We're excited to have you on board.</p>
-${verificationLink ? `<p>Please verify your email address by clicking this link: <a href="${verificationLink}">${verificationLink}</a></p>` : ""}
+${verificationHtml}
 <p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
   return { subject, text, html, to: "" }; // 'to' will be set by the caller
 }

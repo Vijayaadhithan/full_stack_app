@@ -3,7 +3,7 @@ import type { IStorage } from "../storage";
 import logger from "../logger";
 
 export function startBookingExpirationJob(storage: IStorage) {
-  const schedule = process.env.BOOKING_EXPIRATION_CRON || "0 0 * * *";
+  const schedule = process.env.BOOKING_EXPIRATION_CRON || "0 * * * *"; // hourly by default
   const job = async () => {
     try {
       logger.info("Running booking expiration job");
@@ -14,6 +14,7 @@ export function startBookingExpirationJob(storage: IStorage) {
     }
   };
 
-  cron.schedule(schedule, job);
+  const timezone = process.env.CRON_TZ || "Asia/Kolkata";
+  cron.schedule(schedule, job, { scheduled: true, timezone });
   job();
 }

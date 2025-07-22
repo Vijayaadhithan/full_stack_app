@@ -4,5 +4,14 @@ declare module "node-cron" {
     stop: () => void;
   }
 
-  export function schedule(expression: string, task: () => void): ScheduledTask;
+  interface ScheduleOptions {
+    scheduled?: boolean;
+    timezone?: string;
+  }
+
+  export function schedule(
+    expression: string,
+    task: () => void,
+    options?: ScheduleOptions,
+  ): ScheduledTask;
 }

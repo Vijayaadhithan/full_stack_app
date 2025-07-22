@@ -13,7 +13,8 @@
     "db:push": "drizzle-kit push",
     "lint": "eslint \"{client,server,shared}/**/*.{ts,tsx,js}\"",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts",
+    "monitor": "node scripts/liveMonitor.js"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
