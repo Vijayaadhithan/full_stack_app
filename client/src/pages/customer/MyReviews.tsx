@@ -223,7 +223,7 @@ const MyReviews: React.FC = () => {
       <div className="p-6 space-y-6">
         <h1 className="text-3xl font-bold">My Reviews</h1>
         {reviews.length === 0 ? (
-          <p>You haven't submitted any reviews yet.</p>
+          <p>You haven&apos;t submitted any reviews yet.</p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {reviews.map((review) => (
@@ -258,7 +258,7 @@ const MyReviews: React.FC = () => {
         )}
         <h2 className="text-2xl font-semibold mt-8">Product Reviews</h2>
         {productReviews.length === 0 ? (
-          <p>You haven't submitted any product reviews yet.</p>
+          <p>You haven&apos;t submitted any product reviews yet.</p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {productReviews.map((review) => (

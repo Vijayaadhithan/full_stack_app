@@ -1,3 +1,4 @@
+import React from 'react';
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,6 @@ import {
   Gift,
   Star,
   Box,
-  TrendingUp,
   LogOut,
 } from "lucide-react";
 

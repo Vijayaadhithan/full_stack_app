@@ -1,3 +1,4 @@
+import React from 'react';
 import { ShopLayout } from "@/components/layout/shop-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

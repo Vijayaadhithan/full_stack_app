@@ -1,3 +1,4 @@
+import React from 'react';
 import { createContext, ReactNode, useContext } from "react";
 import {
   useQuery,
@@ -5,7 +6,6 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import {
-  insertUserSchema,
   User as SelectUser,
   InsertUser,
 } from "@shared/schema";

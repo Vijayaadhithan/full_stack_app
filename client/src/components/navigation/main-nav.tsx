@@ -1,3 +1,4 @@
+import React from 'react';
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Home, LogOut, User, ShoppingCart, Heart, Star } from "lucide-react"; // Add Star icon
