@@ -155,8 +155,10 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 // Initialize scheduled jobs
 export async function startServer(port?: number) {
   // Initialize scheduled jobs
-  startBookingExpirationJob(dbStorage);
-  startPaymentReminderJob(dbStorage);
+  if (process.env.NODE_ENV !== "test") {
+    startBookingExpirationJob(dbStorage);
+    startPaymentReminderJob(dbStorage);
+  }
 
   const server = await registerRoutes(app);
 
