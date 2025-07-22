@@ -7,7 +7,11 @@ import logger from "./logger";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { sendEmail, getWelcomeEmailContent } from "./emailService"; // Added for sending emails
+import {
+  sendEmail,
+  getWelcomeEmailContent,
+  getVerificationEmailContent,
+} from "./emailService";
 import {
   User as SelectUser,
   emailVerificationTokens as emailVerificationTokensTable,
@@ -306,15 +310,23 @@ export function setupAuth(app: Express) {
     //const verificationToken = createVerificationToken(user.id);
     const verificationLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify-email?token=${verificationToken}&userId=${user.id}`;
 
-    const emailContent = getWelcomeEmailContent(
+    const welcomeContent = getWelcomeEmailContent(user.name || user.username);
+    await sendEmail({
+      to: user.email,
+      subject: welcomeContent.subject,
+      text: welcomeContent.text,
+      html: welcomeContent.html,
+    });
+
+    const verifyContent = getVerificationEmailContent(
       user.name || user.username,
       verificationLink,
     );
     await sendEmail({
       to: user.email,
-      subject: emailContent.subject,
-      text: emailContent.text,
-      html: emailContent.html,
+      subject: verifyContent.subject,
+      text: verifyContent.text,
+      html: verifyContent.html,
     });
 
     req.login(user, (err) => {

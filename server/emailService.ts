@@ -112,7 +112,22 @@ export async function sendEmail(mailOptions: MailOptions): Promise<boolean> {
 }
 
 // --- Template Functions --- //
+export function getVerificationEmailContent(
+  name: string,
+  verificationLink: string,
+): MailOptions {
+  const subject = "Verify your IndianBudgetTracker account";
+  const text = `Hi ${name},
 
+Please verify your email address by clicking this link: ${verificationLink}
+
+Thanks,
+The IndianBudgetTracker Team`;
+  const html = `<p>Hi ${name},</p>
+<p>Please verify your email address by clicking this link: <a href="${verificationLink}">${verificationLink}</a></p>
+<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+  return { subject, text, html, to: "" };
+}
 export function getWelcomeEmailContent(
   name: string,
   verificationLink?: string,
