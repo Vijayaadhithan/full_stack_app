@@ -159,6 +159,13 @@ npm test
 npm test -- --grep "test-name"
 ```
 
+3. To generate a coverage report and save logs:
+
+```bash
+npm run test:report
+```
+The results will be written to `reports/test.log` and coverage HTML will be available in the `coverage` directory.
+
 Start development:
 
 - `npm run dev:server` – run the backend API
@@ -166,10 +173,19 @@ Start development:
 
 - `npm run build` – build for production
 - `npm run start` – run the compiled server
+- `pm2 start ecosystem.config.js` – run the server in cluster mode using PM2
 - `npm run lint` – run ESLint
 - `npm run format` – run Prettier
 - `npm test` – execute unit tests
 
+### Running with PM2
+
+Build the project and start the server in cluster mode:
+
+```bash
+npm run build
+pm2 start ecosystem.config.js
+```
 ## Features
 
 ### Customer Features
