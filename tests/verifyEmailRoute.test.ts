@@ -1,8 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { verifyEmailHandler } from "../server/auth";
-import { db } from "../server/db";
-import { storage } from "../server/storage";
+import { createHash } from "crypto";
+
+process.env.DATABASE_URL = "postgres://localhost/test";
+const { verifyEmailHandler } = await import("../server/auth");
+const { db } = await import("../server/db");
+const { storage } = await import("../server/storage");
 
 function mockRes() {
   return {
@@ -22,13 +25,14 @@ describe("/api/verify-email", () => {
     const req = { query: { token: "t", userId: "1" } } as any;
     const res = mockRes();
     const now = new Date(Date.now() + 10000);
+    const hashed = createHash("sha256").update("t").digest("hex");
     const selectOrig = db.select;
     const deleteOrig = db.delete;
     const updateOrig = storage.updateUser;
     db.select = () => ({
       from: () => ({
         where: () => ({
-          limit: () => Promise.resolve([{ token: "t", userId: 1, expiresAt: now }]),
+          limit: () => Promise.resolve([{ token: hashed, userId: 1, expiresAt: now }]),
         }),
       }),
     }) as any;
@@ -69,11 +73,12 @@ describe("/api/verify-email", () => {
     const req = { query: { token: "expired", userId: "1" } } as any;
     const res = mockRes();
     const past = new Date(Date.now() - 1000);
+    const hashed = createHash("sha256").update("expired").digest("hex");
     const selectOrig = db.select;
     db.select = () => ({
       from: () => ({
         where: () => ({
-          limit: () => Promise.resolve([{ token: "expired", userId: 1, expiresAt: past }]),
+          limit: () => Promise.resolve([{ token: hashed, userId: 1, expiresAt: past }]),
         }),
       }),
     }) as any;

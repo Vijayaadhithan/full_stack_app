@@ -16,6 +16,7 @@ describe("email templates", () => {
     const mail = getWelcomeEmailContent("John", "link");
     assert.ok(mail.subject.includes("Welcome"));
     assert.ok(mail.text.includes("John"));
+    assert.ok(mail.text.includes("link"));
   });
 
   it("creates verification email content", () => {

@@ -4,13 +4,13 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Express, type Request, type Response } from "express";
 import session from "express-session";
 import logger from "./logger";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { scrypt, randomBytes, timingSafeEqual , createHash} from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import {
   sendEmail,
   getWelcomeEmailContent,
-  getVerificationEmailContent,
+  //getVerificationEmailContent,
 } from "./emailService";
 import {
   User as SelectUser,
@@ -58,6 +58,18 @@ async function comparePasswords(supplied: string, stored: string) {
   const hashedBuf = Buffer.from(hashed, "hex");
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
   return timingSafeEqual(hashedBuf, suppliedBuf);
+}
+
+async function generateEmailVerificationToken(userId: number) {
+  const token = randomBytes(32).toString("hex");
+  const hashedToken = createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.insert(emailVerificationTokensTable).values({
+    userId,
+    token: hashedToken,
+    expiresAt,
+  });
+  return token;
 }
 
 export function setupAuth(app: Express) {
@@ -237,6 +249,7 @@ export function setupAuth(app: Express) {
             // Send welcome email (no verification link needed as Google verifies email)
             const emailContent = getWelcomeEmailContent(
               createdUser.name || createdUser.username,
+              FRONTEND_URL,
             );
             await sendEmail({
               to: createdUser.email,
@@ -297,17 +310,7 @@ export function setupAuth(app: Express) {
     const user = await storage.createUser(userToCreate);
 
     // Send welcome email with verification link
-    // TODO: Generate a proper verification token and link
-    const verificationToken = randomBytes(32).toString("hex");
-    // Store this token with user ID and expiry in DB for verification
-    // For now, just a placeholder link structure
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-    await db.insert(emailVerificationTokensTable).values({
-      userId: user.id,
-      token: verificationToken,
-      expiresAt,
-    });
-    //const verificationToken = createVerificationToken(user.id);
+    const verificationToken = await generateEmailVerificationToken(user.id);
     const verificationLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify-email?token=${verificationToken}&userId=${user.id}`;
 
     const welcomeContent = getWelcomeEmailContent(
@@ -428,12 +431,13 @@ export async function verifyEmailHandler(req: Request, res: Response) {
   }
   try {
     const id = parseInt(userId as string, 10);
+    const hashedToken = createHash("sha256").update(token as string).digest("hex");
     const tokenRecords = await db
       .select()
       .from(emailVerificationTokensTable)
       .where(
         and(
-          eq(emailVerificationTokensTable.token, token as string),
+          eq(emailVerificationTokensTable.token, hashedToken),
           eq(emailVerificationTokensTable.userId, id),
         ),
       )
@@ -445,7 +449,7 @@ export async function verifyEmailHandler(req: Request, res: Response) {
     await storage.updateUser(id, { emailVerified: true });
     await db
       .delete(emailVerificationTokensTable)
-      .where(eq(emailVerificationTokensTable.token, token as string));
+      .where(eq(emailVerificationTokensTable.token, hashedToken));
     return res.send("Email verified successfully! You can now log in.");
   } catch (error) {
     logger.error("Email verification error:", error);
