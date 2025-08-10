@@ -453,6 +453,13 @@ export class MemStorage implements IStorage {
       ),
     );
   }
+  getBookingRequestsWithStatusForCustomer(customerId: number): Promise<Booking[]> {
+    return Promise.resolve(
+      Array.from(this.bookings.values()).filter(
+        (b) => b.customerId === customerId,
+      ),
+    );
+  }
   getBookingHistoryForProvider(providerId: number): Promise<Booking[]> {
     const services = Array.from(this.services.values()).filter(
       (s) => s.providerId === providerId,
@@ -978,6 +985,15 @@ export class MemStorage implements IStorage {
     const existing = this.products.get(id);
     if (!existing) throw new Error("Product not found");
     this.products.delete(id);
+  }
+  async updateProductStock(
+    productId: number,
+    quantity: number,
+  ): Promise<void> {
+    const product = this.products.get(productId);
+    if (!product) throw new Error("Product not found");
+    product.stock -= quantity;
+    this.products.set(productId, product);
   }
 
   async removeProductFromAllCarts(productId: number): Promise<void> {
@@ -2091,5 +2107,8 @@ export class MemStorage implements IStorage {
 // Import the PostgreSQL storage implementation
 import { PostgresStorage } from "./pg-storage";
 
-// Use PostgreSQL storage for persistence instead of in-memory storage
-export const storage = new PostgresStorage();
+// Use in-memory storage for tests when USE_IN_MEMORY_DB or NODE_ENV=test is set
+export const storage =
+  process.env.USE_IN_MEMORY_DB === "true" || process.env.NODE_ENV === "test"
+    ? new MemStorage()
+    : new PostgresStorage();

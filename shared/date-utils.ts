@@ -1,9 +1,8 @@
 /**
  * Utility functions for handling dates with Indian Standard Time (IST)
  */
-import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
-import { format as formatBase, parseISO, isValid } from "date-fns";
-
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
+import { parseISO, isValid } from "date-fns";
 const timeZone = "Asia/Kolkata";
 
 /**

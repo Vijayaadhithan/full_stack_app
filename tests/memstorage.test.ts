@@ -12,7 +12,7 @@ describe("MemStorage basic operations", () => {
       role: "customer",
       name: "John",
       phone: "123",
-      email: "john@example.com",
+      email: "vijaythriller11@gmail.com",
     });
     const fetched = await store.getUser(user.id);
     assert.strictEqual(fetched?.username, "john");
@@ -25,7 +25,7 @@ describe("MemStorage basic operations", () => {
       role: "shop",
       name: "Shop",
       phone: "000",
-      email: "shop@example.com",
+      email: "vijaythrillera@gmail.com",
     });
     const prod1 = await store.createProduct({
       name: "p1",
@@ -65,10 +65,10 @@ describe("MemStorage basic operations", () => {
 
   it("processes expired bookings", async () => {
     const provider = await store.createUser({
-      username: "prov2", password: "p", role: "provider", name: "Prov2", phone: "112", email: "prov2@example.com"
+      username: "prov2", password: "p", role: "provider", name: "Prov2", phone: "112", email: "vjaadhi2799@gmail.com"
     });
     const customer = await store.createUser({
-      username: "cust2", password: "c", role: "customer", name: "Cust2", phone: "223", email: "cust2@example.com"
+      username: "cust2", password: "c", role: "customer", name: "Cust2", phone: "223", email: "vijaythriller11@gmail.com"
     });
     const service = await store.createService({
       name: "svc2", description: "", price: "5", duration: 30, category: "cat", providerId: provider.id, isAvailable: true, bufferTime: 0, images: [], serviceLocationType: "provider_location"

@@ -37,6 +37,7 @@ import {
   reviews,
   passwordResetTokens as passwordResetTokensTable,
   User,
+  Booking,
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { db } from "./db";
@@ -593,7 +594,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Fetch details for each booking
         const bookingsWithDetails = await Promise.all(
-          bookingRequests.map(async (booking) => {
+          bookingRequests.map(async (booking: Booking) => {
             const service = await storage.getService(booking.serviceId!);
             const customer =
               booking.customerId !== null
