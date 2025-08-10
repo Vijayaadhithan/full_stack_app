@@ -22,7 +22,56 @@ function requireRole(roles: string[]) {
 }
 
 export function registerPromotionRoutes(app: Express) {
-  // Create a new promotion
+  /**
+   * @openapi
+   * /api/promotions:
+   *   post:
+   *     summary: Create a new promotion
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [name, type, value, shopId]
+   *             properties:
+   *               name:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               type:
+   *                 type: string
+   *                 enum: [percentage, fixed_amount]
+   *               value:
+   *                 type: number
+   *               code:
+   *                 type: string
+   *               usageLimit:
+   *                 type: integer
+   *               isActive:
+   *                 type: boolean
+   *               shopId:
+   *                 type: integer
+   *               expiryDays:
+   *                 type: integer
+   *               applicableProducts:
+   *                 type: array
+   *                 items:
+   *                   type: integer
+   *               excludedProducts:
+   *                 type: array
+   *                 items:
+   *                   type: integer
+   *               minPurchase:
+   *                 type: number
+   *               maxDiscount:
+   *                 type: number
+   *     responses:
+   *       201:
+   *         description: Promotion created
+   *       400:
+   *         description: Invalid input
+   */
   app.post(
     "/api/promotions",
     requireAuth,
@@ -100,104 +149,184 @@ export function registerPromotionRoutes(app: Express) {
     },
   );
 
-  // Get promotions for a shop
-  app.get(
-    "/api/promotions/shop/:id",
-    requireAuth,
-    requireRole(["shop"]),
-    async (req, res) => {
-      try {
-        const shopId = parseInt(req.params.id);
-        const allPromotions = await db
-          .select()
-          .from(promotions)
-          .where(eq(promotions.shopId, shopId));
-        res.json(allPromotions);
-      } catch (error) {
-        logger.error("Error fetching promotions:", error);
-        res
-          .status(400)
-          .json({
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to fetch promotions",
+  /**
+     * @openapi
+     * /api/promotions/shop/{id}:
+     *   get:
+     *     summary: Get promotions for a shop
+     *     parameters:
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: integer
+     *     responses:
+     *       200:
+     *         description: List of promotions
+     *       400:
+     *         description: Invalid shop id
+     */
+    app.get(
+      "/api/promotions/shop/:id",
+      requireAuth,
+      requireRole(["shop"]),
+      async (req, res) => {
+        try {
+          const paramsSchema = z.object({
+            id: z.coerce.number().int().positive(),
           });
-      }
-    },
-  );
+          const parsedParams = paramsSchema.safeParse(req.params);
+          if (!parsedParams.success)
+            return res.status(400).json(parsedParams.error);
 
-  // Update a promotion
-  app.patch(
-    "/api/promotions/:id",
-    requireAuth,
-    requireRole(["shop"]),
-    async (req, res) => {
-      try {
-        const promotionId = parseInt(req.params.id);
-
-        // Get the existing promotion to check ownership
-        const existingPromotions = await db
-          .select()
-          .from(promotions)
-          .where(eq(promotions.shopId, req.user!.id));
-        const promotion = existingPromotions.find((p) => p.id === promotionId);
-
-        if (!promotion) {
-          return res
-            .status(404)
+          const shopId = parsedParams.data.id;
+          const allPromotions = await db
+            .select()
+            .from(promotions)
+            .where(eq(promotions.shopId, shopId));
+          res.json(allPromotions);
+        } catch (error) {
+          logger.error("Error fetching promotions:", error);
+          res
+            .status(400)
             .json({
               message:
-                "Promotion not found or you don't have permission to update it",
+               error instanceof Error
+                  ? error.message
+                  : "Failed to fetch promotions",
             });
         }
+        },
+    );
 
-        // Define a Zod schema for the promotion update with expiryDays
-        const promotionUpdateSchema = z
-          .object({
-            name: z.string().min(1, "Promotion name is required").optional(),
-            description: z.string().optional(),
-            type: z.enum(["percentage", "fixed_amount"]).optional(),
-            value: z.coerce
-              .number()
-              .min(0, "Discount value must be positive")
-              .optional(),
-            code: z.string().optional(),
-            usageLimit: z.coerce.number().min(0).optional(),
-            isActive: z.boolean().optional(),
-            expiryDays: z.coerce.number().min(0).optional(),
-            applicableProducts: z.array(z.number()).optional(),
-            excludedProducts: z.array(z.number()).optional(),
-            minPurchase: z.coerce.number().min(0).optional(),
-            maxDiscount: z.coerce.number().min(0).optional(),
-          })
-          // Only validate name if it's being updated and not just toggling isActive
-          .superRefine((data, ctx) => {
-            // If we're updating name, validate it
-            if (data.name !== undefined && data.name.trim() === "") {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Promotion name is required",
-                path: ["name"],
+    /**
+     * @openapi
+     * /api/promotions/{id}:
+     *   patch:
+     *     summary: Update a promotion
+     *     parameters:
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: integer
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               name:
+     *                 type: string
+     *               description:
+     *                 type: string
+     *               type:
+     *                 type: string
+     *                 enum: [percentage, fixed_amount]
+     *               value:
+     *                 type: number
+     *               code:
+     *                 type: string
+     *               usageLimit:
+     *                 type: integer
+     *               isActive:
+     *                 type: boolean
+     *               expiryDays:
+     *                 type: integer
+     *               applicableProducts:
+     *                 type: array
+     *                 items:
+     *                   type: integer
+     *               excludedProducts:
+     *                 type: array
+     *                 items:
+     *                   type: integer
+     *               minPurchase:
+     *                 type: number
+     *               maxDiscount:
+     *                 type: number
+     *     responses:
+     *       200:
+     *         description: Promotion updated
+     *       400:
+     *         description: Invalid input
+     */
+    app.patch(
+      "/api/promotions/:id",
+      requireAuth,
+      requireRole(["shop"]),
+      async (req, res) => {
+        try {
+          const paramsSchema = z.object({
+            id: z.coerce.number().int().positive(),
+          });
+          const parsedParams = paramsSchema.safeParse(req.params);
+          if (!parsedParams.success)
+            return res.status(400).json(parsedParams.error);
+
+          const promotionId = parsedParams.data.id;
+
+          // Get the existing promotion to check ownership
+          const existingPromotions = await db
+            .select()
+            .from(promotions)
+            .where(eq(promotions.shopId, req.user!.id));
+          const promotion = existingPromotions.find((p) => p.id === promotionId);
+
+          if (!promotion) {
+            return res
+              .status(404)
+              .json({
+                message:
+                  "Promotion not found or you don't have permission to update it",
               });
             }
-          })
-          .refine(
-            (data) => {
-              // Ensure at least one field is provided for the update
-              return Object.keys(data).length > 0;
-            },
-            {
-              message: "At least one field must be provided for update",
-            },
-          );
+            // Define a Zod schema for the promotion update with expiryDays
+          const promotionUpdateSchema = z
+            .object({
+              name: z.string().min(1, "Promotion name is required").optional(),
+              description: z.string().optional(),
+              type: z.enum(["percentage", "fixed_amount"]).optional(),
+              value: z.coerce
+                .number()
+                .min(0, "Discount value must be positive")
+                .optional(),
+              code: z.string().optional(),
+              usageLimit: z.coerce.number().min(0).optional(),
+              isActive: z.boolean().optional(),
+              expiryDays: z.coerce.number().min(0).optional(),
+              applicableProducts: z.array(z.number()).optional(),
+              excludedProducts: z.array(z.number()).optional(),
+              minPurchase: z.coerce.number().min(0).optional(),
+              maxDiscount: z.coerce.number().min(0).optional(),
+            })
+            // Only validate name if it's being updated and not just toggling isActive
+            .superRefine((data, ctx) => {
+              // If we're updating name, validate it
+              if (data.name !== undefined && data.name.trim() === "") {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  message: "Promotion name is required",
+                  path: ["name"],
+                });
+              }
+            })
+            .refine(
+              (data) => {
+                // Ensure at least one field is provided for the update
+                return Object.keys(data).length > 0;
+              },
+              {
+                message: "At least one field must be provided for update",
+              },
+            );
 
-        const result = promotionUpdateSchema.safeParse(req.body);
-        if (!result.success) return res.status(400).json(result.error);
+          const result = promotionUpdateSchema.safeParse(req.body);
+          if (!result.success) return res.status(400).json(result.error);
 
-        const updateData: any = { ...result.data };
-        delete updateData.expiryDays;
-
+          const updateData: any = { ...result.data };
+          delete updateData.expiryDays;
         // Handle expiry days update if provided
         if (result.data.expiryDays !== undefined) {
           const startDate = promotion.startDate;
@@ -250,17 +379,51 @@ export function registerPromotionRoutes(app: Express) {
     },
   );
 
-  // Update promotion status only
-  app.patch(
-    "/api/promotions/:id/status",
-    requireAuth,
-    requireRole(["shop"]),
-    async (req, res) => {
-      try {
-        const promotionId = parseInt(req.params.id);
-        const { isActive } = z
-          .object({ isActive: z.boolean() })
-          .parse(req.body);
+  /**
+     * @openapi
+     * /api/promotions/{id}/status:
+     *   patch:
+     *     summary: Update promotion status
+     *     parameters:
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: integer
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required: [isActive]
+     *             properties:
+     *               isActive:
+     *                 type: boolean
+     *     responses:
+     *       200:
+     *         description: Promotion status updated
+     *       400:
+     *         description: Invalid input
+     */
+    app.patch(
+      "/api/promotions/:id/status",
+      requireAuth,
+      requireRole(["shop"]),
+      async (req, res) => {
+        try {
+          const paramsSchema = z.object({
+            id: z.coerce.number().int().positive(),
+          });
+          const parsedParams = paramsSchema.safeParse(req.params);
+          if (!parsedParams.success)
+            return res.status(400).json(parsedParams.error);
+          const promotionId = parsedParams.data.id;
+
+          const bodySchema = z.object({ isActive: z.boolean() });
+          const bodyResult = bodySchema.safeParse(req.body);
+          if (!bodyResult.success) return res.status(400).json(bodyResult.error);
+          const { isActive } = bodyResult.data;
 
         // Get the existing promotion to check ownership
         const existingPromotions = await db
@@ -306,57 +469,102 @@ export function registerPromotionRoutes(app: Express) {
     },
   );
 
-  // Delete a promotion
-  app.delete(
-    "/api/promotions/:id",
-    requireAuth,
-    requireRole(["shop"]),
-    async (req, res) => {
-      try {
-        const promotionId = parseInt(req.params.id);
+  /**
+     * @openapi
+     * /api/promotions/{id}:
+     *   delete:
+     *     summary: Delete a promotion
+     *     parameters:
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: integer
+     *     responses:
+     *       200:
+     *         description: Promotion deleted successfully
+     *       400:
+     *         description: Invalid promotion id
+     */
+    app.delete(
+      "/api/promotions/:id",
+      requireAuth,
+      requireRole(["shop"]),
+      async (req, res) => {
+        try {
+          const paramsSchema = z.object({
+            id: z.coerce.number().int().positive(),
+          });
+          const parsedParams = paramsSchema.safeParse(req.params);
+          if (!parsedParams.success)
+            return res.status(400).json(parsedParams.error);
+          const promotionId = parsedParams.data.id;
 
-        // Get the existing promotion to check ownership
-        const existingPromotions = await db
-          .select()
-          .from(promotions)
-          .where(eq(promotions.shopId, req.user!.id));
-        const promotion = existingPromotions.find((p) => p.id === promotionId);
+          // Get the existing promotion to check ownership
+          const existingPromotions = await db
+            .select()
+            .from(promotions)
+            .where(eq(promotions.shopId, req.user!.id));
+          const promotion = existingPromotions.find((p) => p.id === promotionId);
 
-        if (!promotion) {
-          return res
-            .status(404)
-            .json({
-              message:
-                "Promotion not found or you don't have permission to delete it",
-            });
-        }
+          if (!promotion) {
+            return res
+              .status(404)
+              .json({
+                message:
+                  "Promotion not found or you don't have permission to delete it",
+              });
+          }
 
         // Delete the promotion
-        await db.delete(promotions).where(eq(promotions.id, promotionId));
+          await db.delete(promotions).where(eq(promotions.id, promotionId));
 
         res.status(200).json({ message: "Promotion deleted successfully" });
-      } catch (error) {
-        logger.error("Error deleting promotion:", error);
-        res
-          .status(400)
-          .json({
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to delete promotion",
-          });
-      }
-    },
-  );
+        } catch (error) {
+          logger.error("Error deleting promotion:", error);
+          res
+            .status(400)
+            .json({
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to delete promotion",
+            });
+        }
+        },
+    );
 
-  // Get active promotions for a shop (for customers at checkout)
+  /**
+   * @openapi
+   * /api/promotions/active/{shopId}:
+   *   get:
+   *     summary: Get active promotions for a shop
+   *     parameters:
+   *       - in: path
+   *         name: shopId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: List of active promotions
+   *       400:
+   *         description: Invalid shop id
+   */
+
   app.get(
     "/api/promotions/active/:shopId",
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const shopId = parseInt(req.params.shopId);
+        const paramsSchema = z.object({
+          shopId: z.coerce.number().int().positive(),
+        });
+        const parsedParams = paramsSchema.safeParse(req.params);
+        if (!parsedParams.success)
+          return res.status(400).json(parsedParams.error);
+        const shopId = parsedParams.data.shopId;
         const now = new Date();
 
         // Get all active and non-expired promotions for the shop
@@ -393,7 +601,42 @@ export function registerPromotionRoutes(app: Express) {
     },
   );
 
-  // Validate and apply a promotion code
+  /**
+   * @openapi
+   * /api/promotions/validate:
+   *   post:
+   *     summary: Validate and calculate promotion discount
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [code, shopId, cartItems, subtotal]
+   *             properties:
+   *               code:
+   *                 type: string
+   *               shopId:
+   *                 type: integer
+   *               cartItems:
+   *                 type: array
+   *                 items:
+   *                   type: object
+   *                   properties:
+   *                     productId:
+   *                       type: integer
+   *                     quantity:
+   *                       type: integer
+   *                     price:
+   *                       type: number
+   *               subtotal:
+   *                 type: number
+   *     responses:
+   *       200:
+   *         description: Promotion validated
+   *       400:
+   *         description: Invalid input
+   */
   app.post(
     "/api/promotions/validate",
     requireAuth,
@@ -550,19 +793,51 @@ export function registerPromotionRoutes(app: Express) {
     },
   );
 
-  // Apply a promotion to an order (called during checkout)
+  /**
+   * @openapi
+   * /api/promotions/{id}/apply:
+   *   post:
+   *     summary: Apply a promotion to an order
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [orderId]
+   *             properties:
+   *               orderId:
+   *                 type: integer
+   *     responses:
+   *       200:
+   *         description: Promotion applied
+   *       400:
+   *         description: Invalid input
+   */
   app.post(
     "/api/promotions/:id/apply",
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const promotionId = parseInt(req.params.id);
-        const { orderId } = req.body;
+        const paramsSchema = z.object({
+          id: z.coerce.number().int().positive(),
+        });
+        const parsedParams = paramsSchema.safeParse(req.params);
+        if (!parsedParams.success)
+          return res.status(400).json(parsedParams.error);
+        const promotionId = parsedParams.data.id;
 
-        if (!orderId) {
-          return res.status(400).json({ message: "Order ID is required" });
-        }
+        const bodySchema = z.object({ orderId: z.coerce.number().int().positive() });
+        const bodyResult = bodySchema.safeParse(req.body);
+        if (!bodyResult.success) return res.status(400).json(bodyResult.error);
+        const { orderId } = bodyResult.data;
 
         // Get the promotion
         const promotionResult = await db
