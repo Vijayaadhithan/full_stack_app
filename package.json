@@ -14,7 +14,7 @@
     "lint": "eslint \"{client,server,shared}/**/*.{ts,tsx,js}\"",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "test": "NODE_ENV=test DATABASE_URL=postgres://localhost/test node --import tsx --test tests/*.test.ts",
-    "test:coverage": "NODE_ENV=test DATABASE_URL=postgres://localhost/test c8 node --import tsx --test tests/*.test.ts",
+    "test:coverage": "NODE_ENV=test DATABASE_URL=postgres://localhost/test c8 --reporter=text --reporter=lcov --check-coverage --lines=30 --functions=30 --branches=30 --statements=30 node --import tsx --test tests/*.test.ts",
     "test:report": "bash scripts/run_tests_with_report.sh",
     "monitor": "node scripts/liveMonitor.js"
   },

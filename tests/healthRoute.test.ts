@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import request from "supertest";
-import { app } from "../server/index";
+// Ensure database configuration is present before loading the app
+process.env.DATABASE_URL = "postgres://localhost/test";
+const { app } = await import("../server/index");
 
 describe("/api/health", () => {
   it("returns service info", async () => {

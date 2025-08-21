@@ -44,6 +44,8 @@ import { db } from "./db";
 import crypto from "crypto";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
+import { bookingsRouter } from "./routes/bookings";
+import { ordersRouter } from "./routes/orders";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
 // Helper function to validate and parse date and time
@@ -223,6 +225,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   setupAuth(app);
+
+  // Register domain routers
+  app.use('/api/bookings', bookingsRouter);
+  app.use('/api/orders', ordersRouter);
 
   // Booking Notification System
   // Get pending booking requests for a provider

@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { MemStorage } from "../server/storage";
+process.env.DATABASE_URL = "postgres://localhost/test";
+const { MemStorage } = await import("../server/storage");
 
 describe("MemStorage basic operations", () => {
   const store = new MemStorage();

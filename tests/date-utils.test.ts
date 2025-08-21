@@ -12,8 +12,7 @@ import {
 describe("date-utils", () => {
   it("converts UTC to IST correctly", () => {
     const date = new Date("2024-01-01T00:00:00Z");
-    const ist = toIndianTime(date);
-    const formatted = format(ist, "HH:mm");
+    const formatted = formatInIndianTime(date, "HH:mm");
     assert.strictEqual(formatted, "05:30");
   });
 
