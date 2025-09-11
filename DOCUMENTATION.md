@@ -314,3 +314,19 @@ The existing RESTful API provides a solid foundation for developing a native And
 - **Responsiveness:** Design layouts that adapt to different screen sizes and orientations on Android devices.
 
 By combining the existing API with native Android development best practices and adapting the design thoughtfully, a high-quality and consistent mobile experience can be achieved.
+
+## 9. Database Backup and Restore
+
+Nightly backups of the PostgreSQL database are scheduled by `scripts/provision.sh`. A cron job runs `pg_dump` at 03:00 UTC and
+uploads the compressed dump to the object storage bucket specified by the `BACKUP_BUCKET` environment variable.
+
+### Restoring from a Backup
+
+1. Download the desired dump from object storage.
+2. Decompress and feed the output into `psql`.
+
+```bash
+aws s3 cp s3://<bucket>/db-2024-01-15.sql.gz - | gunzip | psql "$DATABASE_URL"
+```
+
+The command recreates the database state captured at the time of the dump.
