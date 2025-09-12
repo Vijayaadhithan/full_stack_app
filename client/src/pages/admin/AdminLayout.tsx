@@ -5,13 +5,17 @@ import { Button } from "@/components/ui/button";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { admin, isFetching, logoutMutation } = useAdmin();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   useEffect(() => {
     if (!isFetching && !admin) {
       setLocation("/admin/login");
     }
-  }, [isFetching, admin, setLocation]);
+    // Force password change before accessing other admin pages
+    if (!isFetching && admin?.mustChangePassword && location !== "/admin/change-password") {
+      setLocation("/admin/change-password");
+    }
+  }, [isFetching, admin, location, setLocation]);
 
   if (isFetching) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;

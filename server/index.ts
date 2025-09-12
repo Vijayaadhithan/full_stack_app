@@ -15,6 +15,7 @@ import { swaggerSpec } from "./swagger";
 //import { sendEmail } from "./emailService";
 import { startBookingExpirationJob } from "./jobs/bookingExpirationJob";
 import { startPaymentReminderJob } from "./jobs/paymentReminderJob";
+import { ensureDefaultAdmin } from "./bootstrap";
 
 config();
 // Read allowed CORS origins from environment variable (comma separated)
@@ -31,7 +32,7 @@ export const app = express();
 app.use(express.json());
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.use("/api/admin", adminRoutes);
+// Note: admin routes require session. We mount them AFTER setupAuth (called in registerRoutes).
 
 /**
  * @openapi
@@ -163,6 +164,16 @@ export async function startServer(port?: number) {
   }
 
   const server = await registerRoutes(app);
+
+  // Seed default admin if none exists
+  try {
+    await ensureDefaultAdmin();
+  } catch (e) {
+    logger.error("Failed to ensure default admin:", e);
+  }
+
+  // Mount admin routes after session has been initialized in setupAuth()
+  app.use("/api/admin", adminRoutes);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

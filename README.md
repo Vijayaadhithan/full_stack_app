@@ -113,6 +113,12 @@ In the Google Cloud Console, configure your OAuth client with:
 - **Authorized Admin URIs**
   - `http://localhost:5173/admin/login`
 
+### simple admin login sample
+
+Email: admin@example.com
+Password: admin12345
+To customize in .env: set ADMIN_EMAIL and ADMIN_PASSWORD before starting the server.
+
 ### Development Guidelines
 
 1. The frontend React application is in the `client/` directory

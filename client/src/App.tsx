@@ -49,6 +49,7 @@ const ShopReviews = lazy(() => import("@/pages/shop/reviews"));
 
 // Admin pages
 const AdminLogin = lazy(() => import("@/pages/admin/AdminLogin"));
+const AdminChangePassword = lazy(() => import("@/pages/admin/AdminChangePassword"));
 const AdminLayout = lazy(() => import("@/pages/admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
 const AdminPlatformUserManagement = lazy(
@@ -68,6 +69,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin/change-password" component={AdminChangePassword} />
       <Route path="/admin/dashboard">
         <AdminLayout>
           <AdminDashboard />

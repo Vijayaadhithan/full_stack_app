@@ -1,8 +1,9 @@
 import { createContext, ReactNode, useContext } from "react";
 import { useQuery, useMutation, UseMutationResult } from "@tanstack/react-query";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
-type Admin = { id: string; email: string; roleId: string | null };
+type Admin = { id: string; email: string; roleId: string | null; mustChangePassword?: boolean };
 
 type AdminContextType = {
   admin: Admin | null;
@@ -14,6 +15,7 @@ type AdminContextType = {
 const AdminContext = createContext<AdminContextType | null>(null);
 
 export function AdminProvider({ children }: { children: ReactNode }) {
+  const { toast } = useToast();
   const { data: admin, isFetching } = useQuery<Admin | null>({
     queryKey: ["/api/admin/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -26,6 +28,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: (data: Admin) => {
       queryClient.setQueryData(["/api/admin/me"], data);
+      toast({ title: "Welcome back", description: data.email });
+    },
+    onError: (e: any) => {
+      const message = e?.message?.toString?.() ?? "Login failed";
+      toast({ title: "Login failed", description: message, variant: "destructive" });
     },
   });
 
@@ -35,6 +42,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/admin/me"], null);
+      toast({ title: "Signed out" });
     },
   });
 

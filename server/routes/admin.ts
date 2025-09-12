@@ -23,6 +23,7 @@ const scryptAsync = promisify(scrypt);
 declare module "express-session" {
   interface SessionData {
     adminId?: string;
+    adminMustChangePassword?: boolean;
   }
 }
 
@@ -63,6 +64,9 @@ function checkPermissions(required: string[]) {
 }
 
 router.post("/login", async (req, res) => {
+  if (!req.session) {
+    return res.status(500).json({ message: "Session not initialized" });
+  }
   const { email, password } = req.body ?? {};
   if (!email || !password) return res.status(400).json({ message: "Email and password required" });
   const rows = await db
@@ -74,8 +78,15 @@ router.post("/login", async (req, res) => {
   if (!admin || !(await verifyPassword(password, admin.hashedPassword))) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
+  // Flag password change if logging in with env-provided bootstrap creds
+  if (
+    process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD &&
+    email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD
+  ) {
+    req.session.adminMustChangePassword = true;
+  }
   req.session.adminId = admin.id;
-  res.json({ id: admin.id, email: admin.email, roleId: admin.roleId });
+  res.json({ id: admin.id, email: admin.email, roleId: admin.roleId, mustChangePassword: !!req.session.adminMustChangePassword });
 });
 
 router.post("/logout", (req, res) => {
@@ -89,7 +100,34 @@ router.get("/me", isAdminAuthenticated, async (req, res) => {
     .from(adminUsers)
     .where(eq(adminUsers.id, req.session.adminId!))
     .limit(1);
-  res.json(rows[0]);
+  const base = rows[0];
+  res.json({ ...base, mustChangePassword: !!req.session.adminMustChangePassword });
+});
+
+// Allow admin to change their password
+router.post("/change-password", isAdminAuthenticated, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body ?? {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: "Current and new password required" });
+    }
+    const rows = await db
+      .select()
+      .from(adminUsers)
+      .where(eq(adminUsers.id, req.session!.adminId!))
+      .limit(1);
+    const admin = rows[0];
+    if (!admin) return res.status(404).json({ message: "Admin not found" });
+    const ok = await verifyPassword(currentPassword, admin.hashedPassword);
+    if (!ok) return res.status(401).json({ message: "Current password is incorrect" });
+
+    const hashedPassword = await hashPasswordInternal(newPassword);
+    await db.update(adminUsers).set({ hashedPassword }).where(eq(adminUsers.id, admin.id));
+    if (req.session) req.session.adminMustChangePassword = false;
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(400).json({ message: e?.message || "Failed to change password" });
+  }
 });
 
 router.get(
