@@ -51,6 +51,20 @@ type BookingWithService = Booking & {
     addressCountry?: string;
   } | null;
 };
+type BookingsResponse =
+  | BookingWithService[]
+  | { bookings: BookingWithService[] };
+
+function hasWrappedBookings(
+  data: BookingsResponse | undefined,
+): data is { bookings: BookingWithService[] } {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "bookings" in data &&
+    Array.isArray((data as { bookings: unknown }).bookings)
+  );
+}
 
 export default function Bookings() {
   const { toast } = useToast();
@@ -67,7 +81,7 @@ export default function Bookings() {
   const [disputeReason, setDisputeReason] = useState("");
 
   // Fetch bookings
-  const { data: bookings, isLoading } = useQuery<BookingWithService[]>({
+  const { data: bookings, isLoading } = useQuery<BookingsResponse>({
     queryKey: ["/api/bookings"],
   });
 
@@ -404,15 +418,23 @@ export default function Bookings() {
     );
   }
 
-  const upcomingBookings = bookings?.filter(
+  // Normalize API response to always work with an array
+  const bookingsData = Array.isArray(bookings)
+    ? bookings
+    : hasWrappedBookings(bookings)
+    ? bookings.bookings
+    : [];
+
+  const upcomingBookings = bookingsData.filter(
     (b) =>
       b.status !== "cancelled" &&
       b.status !== "completed" &&
       isAfter(new Date(b.bookingDate), new Date()),
   );
-  const pastBookings = bookings?.filter(
+  const pastBookings = bookingsData.filter(
     (b) =>
-      b.status === "completed" || isBefore(new Date(b.bookingDate), new Date()),
+      b.status === "completed" ||
+      isBefore(new Date(b.bookingDate), new Date()),
   );
 
   return (

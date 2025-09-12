@@ -110,7 +110,8 @@ In the Google Cloud Console, configure your OAuth client with:
 - **Authorized redirect URIs**
   - `https://your-production-api.com/auth/google/callback`
   - `http://localhost:5000/auth/google/callback`
-
+- **Authorized Admin URIs**
+  - `http://localhost:5173/admin/login`
 
 ### Development Guidelines
 

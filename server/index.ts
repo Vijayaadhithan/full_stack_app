@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes"; // Changed from ./routes/index
+import adminRoutes from "./routes/admin";
 //import { setupVite, serveStatic, log } from "./vite";
 import { storage as dbStorage } from "./storage";
 import { config } from "dotenv";
@@ -30,6 +31,7 @@ export const app = express();
 app.use(express.json());
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use("/api/admin", adminRoutes);
 
 /**
  * @openapi

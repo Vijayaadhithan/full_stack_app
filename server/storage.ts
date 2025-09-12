@@ -669,6 +669,7 @@ export class MemStorage implements IStorage {
       deliveryAvailable: null,
       returnsEnabled: true,
       pickupAvailable: null,
+      isSuspended: false,
     };
     this.users.set(id, user);
     return user;

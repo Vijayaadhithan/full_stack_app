@@ -3,6 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { Switch, Route } from "wouter";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth";
+import { AdminProvider } from "@/hooks/use-admin";
 import { LanguageProvider } from "@/contexts/language-context";
 import { ProtectedRoute } from "./lib/protected-route";
 import {
@@ -46,12 +47,57 @@ const ShopInventory = lazy(() => import("@/pages/shop/inventory"));
 const ShopPromotions = lazy(() => import("@/pages/shop/ShopPromotions"));
 const ShopReviews = lazy(() => import("@/pages/shop/reviews"));
 
+// Admin pages
+const AdminLogin = lazy(() => import("@/pages/admin/AdminLogin"));
+const AdminLayout = lazy(() => import("@/pages/admin/AdminLayout"));
+const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
+const AdminPlatformUserManagement = lazy(
+  () => import("@/pages/admin/AdminPlatformUserManagement"),
+);
+const AdminAccountManagement = lazy(
+  () => import("@/pages/admin/AdminAccountManagement"),
+);
+const AdminOrders = lazy(() => import("@/pages/admin/AdminOrders"));
+const AdminBookingsPage = lazy(() => import("@/pages/admin/AdminBookings"));
+const AdminHealth = lazy(() => import("@/pages/admin/AdminHealth"));
+
 const NotFound = lazy(() => import("@/pages/not-found"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password-page")); // Import the new page
 const VerifyEmailPage = lazy(() => import("@/pages/verify-email-page"));
 function Router() {
   return (
     <Switch>
+      <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin/dashboard">
+        <AdminLayout>
+          <AdminDashboard />
+        </AdminLayout>
+      </Route>
+      <Route path="/admin/users">
+        <AdminLayout>
+          <AdminPlatformUserManagement />
+        </AdminLayout>
+      </Route>
+      <Route path="/admin/orders">
+        <AdminLayout>
+          <AdminOrders />
+        </AdminLayout>
+      </Route>
+      <Route path="/admin/bookings">
+        <AdminLayout>
+          <AdminBookingsPage />
+        </AdminLayout>
+      </Route>
+      <Route path="/admin/admins">
+        <AdminLayout>
+          <AdminAccountManagement />
+        </AdminLayout>
+      </Route>
+      <Route path="/admin/health">
+        <AdminLayout>
+          <AdminHealth />
+        </AdminLayout>
+      </Route>
       <Route path="/auth" component={AuthPage} />
       {/* Customer Routes */}
       <ProtectedRoute path="/customer" component={CustomerDashboard} />
@@ -139,17 +185,19 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
         <AuthProvider>
-          {/* Use the existing Router function component here */}
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center min-h-screen">
-                Loading...
-              </div>
-            }
-          >
-            <Router />
-          </Suspense>
-          <Toaster />
+          <AdminProvider>
+            {/* Use the existing Router function component here */}
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center min-h-screen">
+                  Loading...
+                </div>
+              }
+            >
+              <Router />
+            </Suspense>
+            <Toaster />
+          </AdminProvider>
         </AuthProvider>
       </LanguageProvider>
     </QueryClientProvider>

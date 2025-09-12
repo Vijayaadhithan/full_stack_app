@@ -15,7 +15,9 @@ describe("route modules", () => {
     app.use(express.json());
     await registerRoutes(app);
 
-    const resBookings = await request(app).get("/api/bookings");
+    // The bookings router exposes a simple test endpoint under /test to
+    // avoid clashing with the real /api/bookings routes used by the app.
+    const resBookings = await request(app).get("/api/bookings/test");
     assert.equal(resBookings.status, 200);
     assert.equal(resBookings.body.message, "bookings route");
 

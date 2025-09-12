@@ -3,6 +3,8 @@ import type { IStorage } from "../storage";
 import { sendEmail } from "../emailService";
 import logger from "../logger";
 
+export let lastRun: Date | null = null;
+
 export function startPaymentReminderJob(storage: IStorage) {
   const schedule = process.env.PAYMENT_REMINDER_CRON || "30 * * * *"; // hourly at :30
   const reminderDays = parseInt(process.env.PAYMENT_REMINDER_DAYS || "3");
@@ -10,6 +12,7 @@ export function startPaymentReminderJob(storage: IStorage) {
 
   const job = async () => {
     try {
+      lastRun = new Date();
       const now = new Date();
       const reminderCutoff = new Date(
         now.getTime() - reminderDays * 24 * 60 * 60 * 1000,

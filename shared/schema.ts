@@ -8,6 +8,8 @@ import {
   decimal,
   jsonb,
   unique,
+  uuid,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
@@ -62,6 +64,48 @@ export type BlockedTimeSlot = {
   recurringEndDate?: string;
 };
 
+export const adminRoles = pgTable("admin_roles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+});
+
+export const adminPermissions = pgTable("admin_permissions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  action: text("action").notNull().unique(),
+  description: text("description"),
+});
+
+export const adminRolePermissions = pgTable(
+  "admin_role_permissions",
+  {
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => adminRoles.id, { onDelete: "cascade" }),
+    permissionId: uuid("permission_id")
+      .notNull()
+      .references(() => adminPermissions.id, { onDelete: "cascade" }),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.roleId, table.permissionId] }),
+  }),
+);
+
+export const adminUsers = pgTable("admin_users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull().unique(),
+  hashedPassword: text("hashed_password").notNull(),
+  roleId: uuid("role_id").references(() => adminRoles.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type InsertAdminUser = typeof adminUsers.$inferInsert;
+export type AdminRole = typeof adminRoles.$inferSelect;
+export type InsertAdminRole = typeof adminRoles.$inferInsert;
+export type AdminPermission = typeof adminPermissions.$inferSelect;
+export type InsertAdminPermission = typeof adminPermissions.$inferInsert;
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -81,6 +125,7 @@ export const users = pgTable("users", {
   shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
   googleId: text("google_id").unique(), // Added for Google OAuth
   emailVerified: boolean("email_verified").default(false), // Added for Google OAuth
+  isSuspended: boolean("is_suspended").default(false),
   // Provider profile fields
   bio: text("bio"),
   qualifications: text("qualifications"),
