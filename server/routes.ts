@@ -92,6 +92,9 @@ function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
     return res.status(401).send("Unauthorized");
   }
+  if (req.user?.isSuspended) {
+    return res.status(403).json({ message: "Account suspended" });
+  }
   next();
 }
 

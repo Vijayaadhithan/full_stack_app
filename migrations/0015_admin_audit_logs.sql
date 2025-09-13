@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+  id SERIAL PRIMARY KEY,
+  admin_id UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  resource TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+

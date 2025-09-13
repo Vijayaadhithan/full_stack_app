@@ -110,6 +110,16 @@ export const adminUsers = pgTable("admin_users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const adminAuditLogs = pgTable("admin_audit_logs", {
+  id: serial("id").primaryKey(),
+  adminId: uuid("admin_id")
+    .notNull()
+    .references(() => adminUsers.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),
+  resource: text("resource").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export type AdminUser = typeof adminUsers.$inferSelect;
 export type InsertAdminUser = typeof adminUsers.$inferInsert;
 export type AdminRole = typeof adminRoles.$inferSelect;

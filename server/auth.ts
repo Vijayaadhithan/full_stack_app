@@ -78,6 +78,12 @@ export function setupAuth(app: Express) {
     resave: false,
     saveUninitialized: false,
     store: storage.sessionStore,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    },
   };
 
   app.set("trust proxy", 1);
@@ -90,9 +96,12 @@ export function setupAuth(app: Express) {
       const user = await storage.getUserByUsername(username);
       if (!user || !(await comparePasswords(password, user.password))) {
         return done(null, false);
-      } else {
-        return done(null, user);
       }
+      // Block suspended users from logging in
+      if ((user as any)?.isSuspended) {
+        return done(null, false);
+      }
+      return done(null, user);
     }),
   );
 
@@ -143,6 +152,10 @@ export function setupAuth(app: Express) {
               user ? user.id : "null",
             );
             if (user) {
+              // Block suspended users
+              if ((user as any)?.isSuspended) {
+                return done(null, false, { message: "Account suspended" });
+              }
               return done(null, user);
             }
 
@@ -168,6 +181,9 @@ export function setupAuth(app: Express) {
                   googleId: profile.id,
                   emailVerified: profile.emails[0].verified,
                 });
+                if ((user as any)?.isSuspended) {
+                  return done(null, false, { message: "Account suspended" });
+                }
                 return done(null, user);
               }
             }

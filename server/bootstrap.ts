@@ -17,38 +17,7 @@ export async function ensureDefaultAdmin() {
   const envEmail = process.env.ADMIN_EMAIL || "admin@example.com";
   const envPassword = process.env.ADMIN_PASSWORD || "admin12345";
 
-  // Check if an admin with env email exists
-  const adminByEmail = await db
-    .select()
-    .from(adminUsers)
-    .where(eq(adminUsers.email, envEmail))
-    .limit(1);
-
-  const anyAdmin = await db.select().from(adminUsers).limit(1);
-  const needsSeed = anyAdmin.length === 0 && adminByEmail.length === 0;
-
-  if (!needsSeed && adminByEmail.length > 0) {
-    // Update password for envEmail admin to match envPassword so you can sign in
-    const hashedPassword = await hashPasswordInternal(envPassword);
-    await db
-      .update(adminUsers)
-      .set({ hashedPassword })
-      .where(eq(adminUsers.email, envEmail));
-    logger.info(
-      `Admin bootstrap: ensured password for ${envEmail} based on ADMIN_PASSWORD env.`,
-    );
-    return;
-  }
-
-  if (!needsSeed && adminByEmail.length === 0) {
-    logger.info(
-      "Admin bootstrap: existing admin(s) found, but none with ADMIN_EMAIL; creating additional admin for convenience.",
-    );
-  } else {
-    logger.warn("Admin bootstrap: no admins found. Seeding defaults...");
-  }
-
-  // Seed permissions
+  // 1) Seed permissions (idempotent)
   const requiredPermissions = [
     { action: "view_health", description: "View platform health" },
     { action: "manage_users", description: "Manage platform users" },
@@ -57,8 +26,6 @@ export async function ensureDefaultAdmin() {
     { action: "manage_admins", description: "Manage admin accounts and roles" },
     { action: "manage_reviews", description: "Manage reviews" },
   ];
-
-  // Insert permissions if missing
   for (const perm of requiredPermissions) {
     const exists = await db
       .select()
@@ -70,7 +37,7 @@ export async function ensureDefaultAdmin() {
     }
   }
 
-  // Ensure Super Admin role
+  // 2) Ensure Super Admin role exists
   const roleName = "Super Admin";
   let role = (
     await db.select().from(adminRoles).where(eq(adminRoles.name, roleName)).limit(1)
@@ -82,7 +49,7 @@ export async function ensureDefaultAdmin() {
       .returning();
   }
 
-  // Link role to all permissions
+  // 3) Link Super Admin to all permissions (idempotent)
   const perms = await db.select().from(adminPermissions);
   for (const p of perms) {
     const link = await db
@@ -95,15 +62,28 @@ export async function ensureDefaultAdmin() {
     }
   }
 
-  // Create admin user for the env email
-  const email = envEmail;
-  const hashedPassword = await hashPasswordInternal(envPassword);
-  const [admin] = await db
-    .insert(adminUsers)
-    .values({ email, hashedPassword, roleId: role.id })
-    .returning();
+  // 4) Ensure env admin exists and is assigned Super Admin + has password set
+  const byEmail = await db
+    .select()
+    .from(adminUsers)
+    .where(eq(adminUsers.email, envEmail))
+    .limit(1);
 
-  logger.warn(
-    `Admin bootstrap: created default admin ${admin.email}. Change the password via the UI or set ADMIN_EMAIL/ADMIN_PASSWORD env vars.`,
-  );
+  const hashedPassword = await hashPasswordInternal(envPassword);
+  if (byEmail.length > 0) {
+    const existing = byEmail[0];
+    // Update password and ensure role assignment
+    await db
+      .update(adminUsers)
+      .set({ hashedPassword, roleId: existing.roleId ?? role.id })
+      .where(eq(adminUsers.id, existing.id));
+    logger.info(`Admin bootstrap: ensured ${envEmail} exists and has Super Admin role.`);
+  } else {
+    await db
+      .insert(adminUsers)
+      .values({ email: envEmail, hashedPassword, roleId: role.id });
+    logger.warn(
+      `Admin bootstrap: created default admin ${envEmail}. Change the password via the UI or set ADMIN_EMAIL/ADMIN_PASSWORD env vars.`,
+    );
+  }
 }

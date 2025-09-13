@@ -3,7 +3,13 @@ import { useQuery, useMutation, UseMutationResult } from "@tanstack/react-query"
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-type Admin = { id: string; email: string; roleId: string | null; mustChangePassword?: boolean };
+type Admin = {
+  id: string;
+  email: string;
+  roleId: string | null;
+  permissions?: string[];
+  mustChangePassword?: boolean;
+};
 
 type AdminContextType = {
   admin: Admin | null;

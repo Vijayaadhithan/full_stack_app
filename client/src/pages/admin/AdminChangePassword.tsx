@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useAdmin } from "@/hooks/use-admin";
@@ -33,6 +33,10 @@ export default function AdminChangePassword() {
         currentPassword: data.currentPassword,
         newPassword: data.newPassword,
       });
+      // Update admin context to clear mustChangePassword flag
+      queryClient.setQueryData(["/api/admin/me"], (prev: any) =>
+        prev ? { ...prev, mustChangePassword: false } : prev,
+      );
       toast({ title: "Password changed" });
       setLocation("/admin/dashboard");
     } catch (e: any) {
@@ -73,4 +77,3 @@ export default function AdminChangePassword() {
     </div>
   );
 }
-

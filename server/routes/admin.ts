@@ -1,10 +1,12 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { db, testConnection } from "../db";
 import {
   adminUsers,
   adminPermissions,
   adminRolePermissions,
   adminRoles,
+  adminAuditLogs,
   reviews,
   users,
   orders,
@@ -63,7 +65,10 @@ function checkPermissions(required: string[]) {
   };
 }
 
-router.post("/login", async (req, res) => {
+// Apply rate limit to login to mitigate brute-force attacks
+const adminLoginRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
+
+router.post("/login", adminLoginRateLimiter, async (req, res) => {
   if (!req.session) {
     return res.status(500).json({ message: "Session not initialized" });
   }
@@ -79,12 +84,12 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ message: "Invalid credentials" });
   }
   // Flag password change if logging in with env-provided bootstrap creds
-  if (
-    process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD &&
-    email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD
-  ) {
-    req.session.adminMustChangePassword = true;
-  }
+  const needsBootstrapChange =
+    !!process.env.ADMIN_EMAIL &&
+    !!process.env.ADMIN_PASSWORD &&
+    email === process.env.ADMIN_EMAIL &&
+    password === process.env.ADMIN_PASSWORD;
+  req.session.adminMustChangePassword = needsBootstrapChange;
   req.session.adminId = admin.id;
   res.json({ id: admin.id, email: admin.email, roleId: admin.roleId, mustChangePassword: !!req.session.adminMustChangePassword });
 });
@@ -101,7 +106,23 @@ router.get("/me", isAdminAuthenticated, async (req, res) => {
     .where(eq(adminUsers.id, req.session.adminId!))
     .limit(1);
   const base = rows[0];
-  res.json({ ...base, mustChangePassword: !!req.session.adminMustChangePassword });
+  if (!base) return res.status(404).json({ message: "Admin not found" });
+
+  // Derive permissions for this admin's role
+  let permissions: string[] = [];
+  if (base.roleId) {
+    const perms = await db
+      .select({ action: adminPermissions.action })
+      .from(adminRolePermissions)
+      .innerJoin(
+        adminPermissions,
+        eq(adminRolePermissions.permissionId, adminPermissions.id),
+      )
+      .where(eq(adminRolePermissions.roleId, base.roleId));
+    permissions = perms.map((p) => p.action);
+  }
+
+  res.json({ ...base, permissions, mustChangePassword: !!req.session.adminMustChangePassword });
 });
 
 // Allow admin to change their password
@@ -220,6 +241,14 @@ router.patch(
     const { userId } = req.params;
     const { isSuspended } = req.body as { isSuspended: boolean };
     await db.update(users).set({ isSuspended }).where(eq(users.id, Number(userId)));
+    // Audit log (best-effort)
+    try {
+      await db.insert(adminAuditLogs).values({
+        adminId: req.session!.adminId!,
+        action: isSuspended ? "suspend_user" : "unsuspend_user",
+        resource: `user:${userId}`,
+      });
+    } catch {}
     res.json({ success: true });
   },
 );
@@ -251,6 +280,14 @@ router.delete(
   async (req, res) => {
     const { reviewId } = req.params;
     await db.delete(reviews).where(eq(reviews.id, Number(reviewId)));
+    // Audit log (best-effort)
+    try {
+      await db.insert(adminAuditLogs).values({
+        adminId: req.session!.adminId!,
+        action: "delete_review",
+        resource: `review:${reviewId}`,
+      });
+    } catch {}
     res.json({ success: true });
   },
 );
@@ -260,7 +297,9 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["manage_admins"]),
   async (_req, res) => {
-    const all = await db.select().from(adminUsers);
+    const all = await db
+      .select({ id: adminUsers.id, email: adminUsers.email, roleId: adminUsers.roleId, createdAt: adminUsers.createdAt })
+      .from(adminUsers);
     res.json(all);
   },
 );
@@ -278,6 +317,14 @@ router.post(
       .insert(adminUsers)
       .values({ email, hashedPassword, roleId })
       .returning({ id: adminUsers.id, email: adminUsers.email, roleId: adminUsers.roleId });
+    // Audit log (best-effort)
+    try {
+      await db.insert(adminAuditLogs).values({
+        adminId: req.session!.adminId!,
+        action: "create_admin",
+        resource: `admin:${created.id}`,
+      });
+    } catch {}
     res.json(created);
   },
 );
@@ -320,7 +367,29 @@ router.put(
         permissionIds.map((id) => ({ roleId, permissionId: id })),
       );
     }
+    // Audit log (best-effort)
+    try {
+      await db.insert(adminAuditLogs).values({
+        adminId: req.session!.adminId!,
+        action: "update_role_permissions",
+        resource: `role:${roleId}`,
+      });
+    } catch {}
     res.json({ success: true });
+  },
+);
+
+// Audit logs listing endpoint
+router.get(
+  "/audit-logs",
+  isAdminAuthenticated,
+  checkPermissions(["manage_admins"]),
+  async (_req, res) => {
+    const logs = await db
+      .select()
+      .from(adminAuditLogs)
+      .orderBy(sql`created_at DESC`);
+    res.json(logs);
   },
 );
 

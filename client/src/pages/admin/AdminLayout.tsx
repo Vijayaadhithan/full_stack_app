@@ -23,16 +23,19 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   if (!admin) return null;
 
+  const permissions = new Set(admin.permissions || []);
+  const has = (perm: string) => permissions.has(perm);
+
   return (
     <div className="flex min-h-screen">
       <aside className="w-64 bg-gray-100 p-4 space-y-2">
         <nav className="flex flex-col space-y-2">
           <Link href="/admin/dashboard">Dashboard</Link>
-          <Link href="/admin/users">Users</Link>
-          <Link href="/admin/orders">Orders</Link>
-          <Link href="/admin/bookings">Bookings</Link>
-          <Link href="/admin/admins">Admins</Link>
-          <Link href="/admin/health">Health</Link>
+          {has("manage_users") && <Link href="/admin/users">Users</Link>}
+          {has("view_all_orders") && <Link href="/admin/orders">Orders</Link>}
+          {has("view_all_bookings") && <Link href="/admin/bookings">Bookings</Link>}
+          {has("manage_admins") && <Link href="/admin/admins">Admins</Link>}
+          {has("view_health") && <Link href="/admin/health">Health</Link>}
         </nav>
         <Button onClick={() => logoutMutation.mutate()}>Logout</Button>
       </aside>
