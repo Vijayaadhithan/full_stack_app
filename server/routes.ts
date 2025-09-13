@@ -38,6 +38,8 @@ import {
   passwordResetTokens as passwordResetTokensTable,
   User,
   Booking,
+  PaymentMethodType,
+  PaymentMethodSchema,
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { db } from "./db";
@@ -995,33 +997,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         delete (result.data as any).upiQrCodeUrl;
       }
 
-      // Sanitize paymentMethods to ensure it's an array of PaymentMethod, null, or undefined
+      // Sanitize paymentMethods using shared schema
       let updateData: Partial<User> = { ...result.data } as Partial<User>;
       if ("paymentMethods" in updateData) {
-        if (
-          updateData.paymentMethods == null ||
-          Array.isArray(updateData.paymentMethods)
-        ) {
-          // Already valid: array, null, or undefined
-        } else if (
-          typeof updateData.paymentMethods === "object" &&
-          updateData.paymentMethods !== null &&
-          Array.isArray(updateData.paymentMethods)
-        ) {
-          // Already an array, filter out invalid entries
-          updateData.paymentMethods = (
-            updateData.paymentMethods as any[]
-          ).filter(
-            (pm: any) =>
-              pm &&
-              typeof pm === "object" &&
-              typeof pm.type === "string" &&
-              typeof pm.details === "object",
-          );
-        } else {
-          // If it's not valid, set to undefined
-          updateData.paymentMethods = undefined;
-        }
+        const pmResult = PaymentMethodSchema.array().safeParse(
+          (updateData as any).paymentMethods,
+        );
+        updateData.paymentMethods = pmResult.success
+          ? pmResult.data
+          : undefined;
       }
       if (updateData.shopProfile) {
         if (updateData.shopProfile.shippingPolicy === null) {
@@ -2900,6 +2884,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           discount: z.string().or(z.number()).optional(),
           promotionId: z.number().optional(),
           deliveryMethod: z.enum(["delivery", "pickup"]),
+          paymentMethod: PaymentMethodType.optional(),
         });
 
         const result = orderSchema.safeParse(req.body);
@@ -2912,9 +2897,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           discount,
           promotionId,
           deliveryMethod,
+          paymentMethod = "upi",
         } = result.data;
 
-        // Validate that all products exist and have sufficient stock
+        if (deliveryMethod === "delivery" && paymentMethod === "cash") {
+          return res
+            .status(400)
+            .json({
+              message: "Cash payment only available for pickup orders",
+            });
+        }
+
+        // Validate products, stock, and ensure all items are from same shop
+        let shopId: number | null | undefined;
         for (const item of items) {
           const product = await storage.getProduct(item.productId);
           if (!product) {
@@ -2929,14 +2924,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 message: `Insufficient stock for product: ${product.name}`,
               });
           }
+          const productShopId = product.shopId;
+          if (productShopId == null) {
+            return res
+              .status(400)
+              .json({ message: `Product with ID ${item.productId} has no shop` });
+          }
+          if (shopId == null) {
+            shopId = productShopId;
+          } else if (productShopId !== shopId) {
+            return res
+              .status(400)
+              .json({
+                message: "All items must be from the same shop",
+              });
+          }
         }
-
-        // Get the shop ID from the first product
-        const firstProduct = await storage.getProduct(items[0].productId);
-        if (!firstProduct) {
-          return res.status(400).json({ message: "Product not found" });
+        if (shopId === undefined) {
+          return res.status(400).json({ message: "No items provided" });
         }
-        const shopId = firstProduct.shopId;
 
         // If a promotion is applied, verify it's valid
         let promotionCode = null;
@@ -2992,6 +2998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: "pending",
           paymentStatus: "pending",
           deliveryMethod,
+          paymentMethod,
           total: total.toString(),
           orderDate: new Date(),
           shippingAddress: "",
@@ -3353,7 +3360,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!order) return res.status(404).json({ message: "Order not found" });
       if (order.shopId !== req.user!.id)
         return res.status(403).json({ message: "Not authorized" });
-      if (order.paymentStatus !== "verifying") {
+      if (
+        (order.paymentMethod === "upi" && order.paymentStatus !== "verifying") ||
+        (order.paymentMethod === "cash" && order.paymentStatus !== "pending")
+      ) {
         return res
           .status(400)
           .json({ message: "Order is not awaiting verification" });

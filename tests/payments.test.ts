@@ -141,4 +141,32 @@ describe("Payment APIs", () => {
     assert.equal(confirmRes.body.paymentStatus, "paid");
     assert.equal(confirmRes.body.status, "confirmed");
   });
+
+  it("allows cash payment for pickup orders", async () => {
+    const customerAgent = request.agent(app);
+    await customerAgent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const orderRes = await customerAgent.post("/api/orders").send({
+      items: [{ productId: product.id, quantity: 1, price: product.price }],
+      total: product.price,
+      deliveryMethod: "pickup",
+      paymentMethod: "cash",
+    });
+    assert.equal(orderRes.status, 201);
+    const orderId = orderRes.body.order.id;
+    assert.equal(orderRes.body.order.paymentMethod, "cash");
+    assert.equal(orderRes.body.order.paymentStatus, "pending");
+
+    const shopAgent = request.agent(app);
+    await shopAgent
+      .post("/api/login")
+      .send({ username: shop.username, password: "pass" });
+    const confirmRes = await shopAgent.post(
+      `/api/orders/${orderId}/confirm-payment`,
+    );
+    assert.equal(confirmRes.status, 200);
+    assert.equal(confirmRes.body.paymentStatus, "paid");
+  });
 });

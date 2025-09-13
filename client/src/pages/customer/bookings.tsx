@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import type { PaymentMethodType } from "@shared/schema";
+import { PaymentMethodSelector } from "@/components/payment-method-selector";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Booking, Service, Review } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -78,6 +80,8 @@ export default function Bookings() {
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethodType>("upi");
   const [disputeReason, setDisputeReason] = useState("");
 
   // Fetch bookings
@@ -298,6 +302,8 @@ export default function Bookings() {
     onSuccess: () => {
       toast({ title: "Payment submitted, awaiting provider confirmation" });
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      setPaymentReference("");
+      setPaymentMethod("upi");
     },
     onError: (error: Error) => {
       toast({
@@ -513,57 +519,75 @@ export default function Bookings() {
                                   Mark Service as Complete & Pay
                                 </Button>
                               </DialogTrigger>
-                              <DialogContent>
+                                <DialogContent>
                                 <DialogHeader>
                                   <DialogTitle>Submit Payment</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-4 pt-4">
-                                  <div className="flex items-center gap-2">
-                                    <p>
-                                      Send payment to UPI ID:{" "}
-                                      <strong>{booking.provider?.upiId}</strong>
-                                    </p>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      onClick={() => {
-                                        if (booking.provider?.upiId) {
-                                          navigator.clipboard.writeText(
-                                            booking.provider.upiId,
-                                          );
-                                          toast({
-                                            title: "Copied",
-                                            description:
-                                              "UPI ID copied to clipboard",
-                                          });
-                                        }
-                                      }}
-                                    >
-                                      Copy
-                                    </Button>
-                                  </div>
-                                  {booking.provider?.upiQrCodeUrl && (
-                                    <img
-                                      src={booking.provider.upiQrCodeUrl}
-                                      alt="QR"
-                                      className="h-32"
-                                    />
-                                  )}
-                                  <Input
-                                    placeholder="Transaction reference"
-                                    value={paymentReference}
-                                    onChange={(e) =>
-                                      setPaymentReference(e.target.value)
-                                    }
+                                  <PaymentMethodSelector
+                                    value={paymentMethod}
+                                    onChange={setPaymentMethod}
                                   />
+                                  {paymentMethod === "upi" ? (
+                                    <>
+                                      <div className="flex items-center gap-2">
+                                        <p>
+                                          Send payment to UPI ID:{" "}
+                                          <strong>{booking.provider?.upiId}</strong>
+                                        </p>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={() => {
+                                            if (booking.provider?.upiId) {
+                                              navigator.clipboard.writeText(
+                                                booking.provider.upiId,
+                                              );
+                                              toast({
+                                                title: "Copied",
+                                                description:
+                                                  "UPI ID copied to clipboard",
+                                              });
+                                            }
+                                          }}
+                                        >
+                                          Copy
+                                        </Button>
+                                      </div>
+                                      {booking.provider?.upiQrCodeUrl && (
+                                        <img
+                                          src={booking.provider.upiQrCodeUrl}
+                                          alt="QR"
+                                          className="h-32"
+                                        />
+                                      )}
+                                      <Input
+                                        placeholder="Transaction reference"
+                                        value={paymentReference}
+                                        onChange={(e) =>
+                                          setPaymentReference(e.target.value)
+                                        }
+                                      />
+                                    </>
+                                  ) : (
+                                    <p>
+                                      You chose to pay in cash directly to the provider.
+                                    </p>
+                                  )}
                                   <Button
                                     onClick={() =>
                                       paymentMutation.mutate({
                                         bookingId: booking.id,
-                                        paymentReference,
+                                        paymentReference:
+                                          paymentMethod === "cash"
+                                            ? "CASH"
+                                            : paymentReference,
                                       })
                                     }
                                     className="w-full"
+                                    disabled={
+                                      paymentMethod === "upi" && !paymentReference
+                                    }
                                   >
                                     {paymentMutation.isPending && (
                                       <Loader2 className="h-4 w-4 animate-spin mr-2" />

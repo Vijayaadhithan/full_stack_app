@@ -213,37 +213,45 @@ export default function OrderDetails() {
               <CardTitle>Complete Payment</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
+              {order.paymentMethod === "upi" ? (
+                <>
+                  <div>
+                    <p className="font-medium">
+                      Step 1: Pay ₹{order?.total} to {order?.shop?.upiId}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        navigator.clipboard.writeText(order.shop!.upiId!)
+                      }
+                    >
+                      Copy UPI ID
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Input
+                      value={reference}
+                      onChange={(e) => setReference(e.target.value)}
+                      placeholder="Transaction ID"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => submitPaymentMutation.mutate()}
+                      disabled={submitPaymentMutation.isPending || !reference}
+                    >
+                      {submitPaymentMutation.isPending && (
+                        <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                      )}
+                      Submit Confirmation
+                    </Button>
+                  </div>
+                </>
+              ) : (
                 <p className="font-medium">
-                  Step 1: Pay ₹{order?.total} to {order?.shop?.upiId}
+                  Pay ₹{order?.total} in cash when you pick up your order.
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    navigator.clipboard.writeText(order.shop!.upiId!)
-                  }
-                >
-                  Copy UPI ID
-                </Button>
-              </div>
-              <div className="space-y-2">
-                <Input
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="Transaction ID"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => submitPaymentMutation.mutate()}
-                  disabled={submitPaymentMutation.isPending || !reference}
-                >
-                  {submitPaymentMutation.isPending && (
-                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                  )}
-                  Submit Confirmation
-                </Button>
-              </div>
+              )}
             </CardContent>
           </Card>
         )}

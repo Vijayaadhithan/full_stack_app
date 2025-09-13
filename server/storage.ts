@@ -639,12 +639,10 @@ export class MemStorage implements IStorage {
         insertUser.profilePicture === undefined
           ? null
           : insertUser.profilePicture,
-      paymentMethods: Array.isArray(insertUser.paymentMethods)
-        ? insertUser.paymentMethods.map((pm) => ({
-            type: (pm as any).type || "default",
-            details: (pm as any).details || {},
-          }))
-        : null,
+      paymentMethods:
+        insertUser.paymentMethods === undefined
+          ? null
+          : insertUser.paymentMethods,
       shopProfile: null,
       bio: null,
       qualifications: null,

@@ -3,7 +3,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Product, Promotion } from "@shared/schema";
+import { Product, Promotion, PaymentMethodType } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -13,6 +13,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { PaymentMethodSelector } from "@/components/payment-method-selector";
 
 const container = {
   hidden: { opacity: 0 },
@@ -45,6 +46,8 @@ export default function Cart() {
   const [deliveryMethod, setDeliveryMethod] = useState<"delivery" | "pickup">(
     "pickup",
   );
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethodType>("upi");
 
   const { data: shopInfo } = useQuery<any>({
     queryKey: ["shop-info", shopId],
@@ -80,6 +83,12 @@ export default function Cart() {
       }
     }
   }, [shopInfo]);
+
+  useEffect(() => {
+    if (deliveryMethod === "delivery") {
+      setPaymentMethod("upi");
+    }
+  }, [deliveryMethod]);
 
   console.log("Cart items:", cartItems); // Debug log
 
@@ -229,6 +238,7 @@ export default function Cart() {
         discount: discountAmount.toString(),
         promotionId: selectedPromotion?.id,
         deliveryMethod,
+        paymentMethod,
       };
 
       const res = await apiRequest("POST", "/api/orders", orderData);
@@ -499,6 +509,20 @@ export default function Cart() {
                       </div>
                     )}
                   </RadioGroup>
+                </CardContent>
+              </Card>
+            )}
+
+            {deliveryMethod === "pickup" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Payment Method</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <PaymentMethodSelector
+                    value={paymentMethod}
+                    onChange={setPaymentMethod}
+                  />
                 </CardContent>
               </Card>
             )}

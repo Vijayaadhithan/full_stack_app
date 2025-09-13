@@ -12,15 +12,26 @@ import {
   primaryKey,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { relations } from "drizzle-orm";
 import type { SessionData } from "express-session";
 import { z } from "zod";
 
 export type UserRole = "customer" | "provider" | "shop" | "admin";
-export type PaymentMethod = {
-  type: "card" | "upi";
-  details: Record<string, string>;
-};
+export const PaymentMethodType = z.enum(["upi", "cash"]);
+export type PaymentMethodType = z.infer<typeof PaymentMethodType>;
+
+export const PaymentMethodSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("upi"),
+    details: z.object({
+      upiId: z.string(),
+    }),
+  }),
+  z.object({
+    type: z.literal("cash"),
+    details: z.object({}).optional(),
+  }),
+]);
+export type PaymentMethod = z.infer<typeof PaymentMethodSchema>;
 
 // Enhanced shop profile fields
 export type ShopProfile = {
@@ -366,7 +377,7 @@ export const orders = pgTable("orders", {
   total: decimal("total").notNull(),
   shippingAddress: text("shipping_address").notNull(),
   billingAddress: text("billing_address"),
-  paymentMethod: text("payment_method"),
+  paymentMethod: text("payment_method").$type<PaymentMethodType>(),
   trackingInfo: text("tracking_info"),
   notes: text("notes"),
   eReceiptId: text("e_receipt_id"),
@@ -537,14 +548,7 @@ export const insertUserSchema = createInsertSchema(users, {
   username: z.string().optional(),
   password: z.string().optional(),
 }).extend({
-  paymentMethods: z
-    .array(
-      z.object({
-        type: z.enum(["card", "upi"]),
-        details: z.record(z.string()),
-      }),
-    )
-    .optional(),
+  paymentMethods: PaymentMethodSchema.array().optional(),
   averageRating: z.string().optional().default("0"),
   totalReviews: z.number().int().optional().default(0),
 });
@@ -650,7 +654,9 @@ export const insertProductSchema = createInsertSchema(products);
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 
-export const insertOrderSchema = createInsertSchema(orders);
+export const insertOrderSchema = createInsertSchema(orders, {
+  paymentMethod: PaymentMethodType.nullable().optional(),
+});
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 

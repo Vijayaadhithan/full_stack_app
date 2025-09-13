@@ -339,11 +339,15 @@ export default function ShopOrders() {
                           </div>
                         </div>
 
-                        {order.paymentStatus === "verifying" && (
+                        {(order.paymentStatus === "verifying" ||
+                          (order.paymentMethod === "cash" &&
+                            order.paymentStatus === "pending")) && (
                           <div className="p-4 rounded-md bg-yellow-100 border text-sm space-y-2">
-                            <p className="font-medium">
-                              Payment Reference: {order.paymentReference}
-                            </p>
+                            {order.paymentMethod === "upi" && (
+                              <p className="font-medium">
+                                Payment Reference: {order.paymentReference}
+                              </p>
+                            )}
                             <Button
                               size="sm"
                               onClick={() =>
