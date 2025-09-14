@@ -40,6 +40,7 @@ import {
   Booking,
   PaymentMethodType,
   PaymentMethodSchema,
+  shopWorkers,
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { db } from "./db";
@@ -48,6 +49,8 @@ import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 import { bookingsRouter } from "./routes/bookings";
 import { ordersRouter } from "./routes/orders";
+import { registerWorkerRoutes } from "./routes/workers";
+import { requireShopOrWorkerPermission, getWorkerShopId } from "./workerAuth";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
 // Helper function to validate and parse date and time
@@ -234,6 +237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register domain routers
   app.use('/api/bookings', bookingsRouter);
   app.use('/api/orders', ordersRouter);
+  registerWorkerRoutes(app);
 
   // Booking Notification System
   // Get pending booking requests for a provider
@@ -1094,15 +1098,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/products",
     requireAuth,
-    requireRole(["shop"]),
+    requireShopOrWorkerPermission(["products:write"]),
     async (req, res) => {
       try {
         const result = insertProductSchema.safeParse(req.body);
         if (!result.success) return res.status(400).json(result.error);
 
+        const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
         const product = await storage.createProduct({
           ...result.data,
-          shopId: req.user!.id,
+          shopId: shopContextId,
         });
 
         logger.info("Created product:", product);
@@ -1140,7 +1145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch(
     "/api/products/:id",
     requireAuth,
-    requireRole(["shop"]),
+    requireShopOrWorkerPermission(["products:write"]),
     async (req, res) => {
       try {
         const productId = parseInt(req.params.id);
@@ -1150,10 +1155,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Product not found" });
         }
 
-        if (product.shopId !== req.user!.id) {
-          return res
-            .status(403)
-            .json({ message: "Can only update own products" });
+        if (req.user!.role === "shop") {
+          if (product.shopId !== req.user!.id) {
+            return res.status(403).json({ message: "Can only update own products" });
+          }
+        } else if (req.user!.role === "worker") {
+          const workerShopId = (req as any).workerShopId;
+          if (!workerShopId || product.shopId !== workerShopId) {
+            return res.status(403).json({ message: "Worker can only update products of their shop" });
+          }
         }
 
         // Use a Zod schema for partial updates if desired, or rely on storage layer validation
@@ -3165,9 +3175,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(
     "/api/shops/dashboard-stats",
     requireAuth,
-    requireRole(["shop"]),
+    requireShopOrWorkerPermission(["analytics:view"]),
     async (req, res) => {
-      const stats = await storage.getShopDashboardStats(req.user!.id);
+      const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+      const stats = await storage.getShopDashboardStats(shopContextId);
       res.json(stats);
     },
   );
@@ -3175,9 +3186,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(
     "/api/orders/shop/recent",
     requireAuth,
-    requireRole(["shop"]),
+    requireShopOrWorkerPermission(["orders:read"]),
     async (req, res) => {
-      const orders = await storage.getRecentOrdersByShop(req.user!.id);
+      const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+      const orders = await storage.getRecentOrdersByShop(shopContextId);
       const detailed = await Promise.all(
         orders.map(async (order) => {
           const itemsRaw = await storage.getOrderItemsByOrder(order.id);
@@ -3221,13 +3233,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(
     "/api/orders/shop",
     requireAuth,
-    requireRole(["shop"]),
+    requireShopOrWorkerPermission(["orders:read"]),
     async (req, res) => {
       const { status } = req.query;
-      const orders = await storage.getOrdersByShop(
-        req.user!.id,
-        status as string | undefined,
-      );
+      const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+      const orders = await storage.getOrdersByShop(shopContextId, status as string | undefined);
       const detailed = await Promise.all(
         orders.map(async (order) => {
           const itemsRaw = await storage.getOrderItemsByOrder(order.id);
@@ -3275,8 +3285,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     const order = await storage.getOrder(orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
-    if (order.customerId !== req.user!.id && order.shopId !== req.user!.id) {
-      return res.status(403).json({ message: "Not authorized" });
+    if (order.customerId !== req.user!.id) {
+      // Allow shop owners or their workers if the order belongs to their shop
+      if (req.user!.role === "shop") {
+        if (order.shopId !== req.user!.id) {
+          return res.status(403).json({ message: "Not authorized" });
+        }
+      } else if (req.user!.role === "worker") {
+        const workerShopId = await getWorkerShopId(req.user!.id);
+        if (!workerShopId || order.shopId !== workerShopId) {
+          return res.status(403).json({ message: "Not authorized" });
+        }
+      } else {
+        return res.status(403).json({ message: "Not authorized" });
+      }
     }
     const itemsRaw = await storage.getOrderItemsByOrder(order.id);
     const items = await Promise.all(
@@ -3354,14 +3376,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/orders/:id/confirm-payment",
     requireAuth,
-    requireRole(["shop"]),
+    requireShopOrWorkerPermission(["orders:update"]),
     async (req, res) => {
       const orderId = parseInt(req.params.id);
       if (isNaN(orderId))
         return res.status(400).json({ message: "Invalid order id" });
       const order = await storage.getOrder(orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
-      if (order.shopId !== req.user!.id)
+      const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+      if (order.shopId !== shopContextId)
         return res.status(403).json({ message: "Not authorized" });
       if (
         (order.paymentMethod === "upi" && order.paymentStatus !== "verifying") ||
@@ -3452,19 +3475,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  // Order tracking routes
-  app.get("/api/orders/:id/timeline", requireAuth, async (req, res) => {
-    const orderId = parseInt(req.params.id);
-    if (isNaN(orderId))
-      return res.status(400).json({ message: "Invalid order id" });
-    const timeline = await storage.getOrderTimeline(orderId);
-    res.json(timeline);
-  });
+  // Order tracking routes with permissions
+  app.get(
+    "/api/orders/:id/timeline",
+    requireAuth,
+    // If customer, handle directly; otherwise fall through to worker/shop check
+    async (req: any, res, next) => {
+      if (req.user?.role === "customer") {
+        const orderId = parseInt(req.params.id);
+        if (isNaN(orderId))
+          return res.status(400).json({ message: "Invalid order id" });
+        const order = await storage.getOrder(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        if (order.customerId !== req.user.id)
+          return res.status(403).json({ message: "Not authorized" });
+        const timeline = await storage.getOrderTimeline(orderId);
+        return res.json(timeline);
+      }
+      next();
+    },
+    requireShopOrWorkerPermission(["orders:read"]),
+    async (req: any, res) => {
+      const orderId = parseInt(req.params.id);
+      if (isNaN(orderId))
+        return res.status(400).json({ message: "Invalid order id" });
+      const order = await storage.getOrder(orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      const shopContextId = req.user.role === "shop" ? req.user.id : req.workerShopId;
+      if (order.shopId !== shopContextId)
+        return res.status(403).json({ message: "Not authorized" });
+      const timeline = await storage.getOrderTimeline(orderId);
+      res.json(timeline);
+    },
+  );
 
   app.patch(
     "/api/orders/:id/status",
     requireAuth,
-    requireRole(["shop"]),
+    requireShopOrWorkerPermission(["orders:update"]),
     async (req, res) => {
       try {
         const { status, trackingInfo } = req.body;
@@ -3474,7 +3522,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const order = await storage.getOrder(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
-        if (order.shopId !== req.user!.id) {
+        const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        if (order.shopId !== shopContextId) {
           return res.status(403).json({ message: "Not authorized" });
         }
 
@@ -3568,7 +3617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/returns/:id/approve",
     requireAuth,
-    requireRole(["shop"]),
+    requireShopOrWorkerPermission(["returns:manage"]),
     async (req, res) => {
       try {
         const returnRequest = await storage.getReturnRequest(
@@ -3576,6 +3625,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         if (!returnRequest)
           return res.status(404).json({ message: "Return request not found" });
+
+        // Ensure this return belongs to the caller's shop
+        const order = returnRequest.orderId ? await storage.getOrder(returnRequest.orderId) : null;
+        const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        if (!order || order.shopId !== shopContextId) {
+          return res.status(403).json({ message: "Not authorized" });
+        }
 
         // Process refund through Razorpay
         await storage.processRefund(returnRequest.id);
@@ -3587,11 +3643,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
         );
 
-        // Notify customer about approved return
-        const order =
-          returnRequest.orderId !== null
-            ? await storage.getOrder(returnRequest.orderId)
-            : null;
+        // Notify customer about approved return (use the same order instance)
         if (order) {
           await storage.createNotification({
             userId: order.customerId,

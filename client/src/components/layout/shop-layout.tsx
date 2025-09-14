@@ -44,6 +44,13 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
       href: "/shop/promotions",
       icon: Gift,
     },
+    // Workers visible only to shop owners; filtered below
+    {
+      name: "Workers",
+      href: "/shop/workers",
+      icon: Settings,
+      forShopOnly: true,
+    } as any,
     {
       name: "Reviews",
       href: "/shop/reviews",
@@ -83,7 +90,10 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
           </h2>
         </div>
         <nav className="space-y-1 px-3">
-          {navigation.map((item) => {
+          {navigation
+            .filter((item: any) => !item.forShopOnly || user?.role === "shop")
+            .filter((item: any) => !(user?.role === 'worker' && item.name === 'Settings'))
+            .map((item: any) => {
             const Icon = item.icon;
             const isActive = location === item.href;
             return (

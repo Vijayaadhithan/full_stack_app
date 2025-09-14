@@ -11,12 +11,18 @@ export function MainNav() {
   return (
     <header className="border-b">
       <div className="flex h-16 items-center px-4">
-        <Link href={`/${user?.role}`}>
-          <Button variant="ghost" className="flex items-center gap-2">
-            <Home className="h-5 w-5" />
-            Dashboard
-          </Button>
-        </Link>
+        {(() => {
+          const role = user?.role;
+          const to = role === 'worker' ? '/shop' : `/${role}`;
+          return (
+            <Link href={to}>
+              <Button variant="ghost" className="flex items-center gap-2">
+                <Home className="h-5 w-5" />
+                Dashboard
+              </Button>
+            </Link>
+          );
+        })()}
 
         {user?.role === "customer" && (
           <div className="ml-4 flex items-center space-x-2">

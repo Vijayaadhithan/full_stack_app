@@ -46,6 +46,7 @@ const ShopOrders = lazy(() => import("@/pages/shop/orders"));
 const ShopInventory = lazy(() => import("@/pages/shop/inventory"));
 const ShopPromotions = lazy(() => import("@/pages/shop/ShopPromotions"));
 const ShopReviews = lazy(() => import("@/pages/shop/reviews"));
+const ShopWorkers = lazy(() => import("@/pages/shop/workers"));
 
 // Admin pages
 const AdminLogin = lazy(() => import("@/pages/admin/AdminLogin"));
@@ -156,6 +157,7 @@ function Router() {
       <ProtectedRoute path="/shop/inventory" component={ShopInventory} />
       <ProtectedRoute path="/shop/promotions" component={ShopPromotions} />
       <ProtectedRoute path="/shop/reviews" component={ShopReviews} />
+      <ProtectedRoute path="/shop/workers" component={ShopWorkers} />
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/verify-email" component={VerifyEmailPage} />
       <Route path="/" component={AuthPage} />

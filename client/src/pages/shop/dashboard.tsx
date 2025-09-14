@@ -25,9 +25,11 @@ import {
 } from "lucide-react";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 import { apiRequest } from "@/lib/queryClient";
+import { useWorkerPermissions } from "@/hooks/use-worker-permissions";
 
 export default function ShopDashboard() {
   const { user } = useAuth();
+  const { has: can, isWorker, responsibilities } = useWorkerPermissions();
 
   const { data: stats, isLoading: isLoadingStats } = useQuery<DashboardStats>({
     queryKey: ["shopDashboardStats"],
@@ -60,12 +62,14 @@ export default function ShopDashboard() {
               Here's what's happening with your shop today.
             </p>
           </div>
-          <Link href="/shop/products">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add New Product
-            </Button>
-          </Link>
+          {(user?.role === 'shop' || can('products:write')) && (
+            <Link href="/shop/products">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add New Product
+              </Button>
+            </Link>
+          )}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -170,6 +174,51 @@ export default function ShopDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {isWorker && (
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>My Permissions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {responsibilities && responsibilities.length > 0 ? (
+                  <ul className="list-disc pl-5 space-y-1 text-sm">
+                    {responsibilities.map((p) => (
+                      <li key={p}>{p}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No assigned permissions</div>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {(can('orders:read') || can('orders:update')) && (
+                    <Link href="/shop/orders"><Button size="sm">View Orders</Button></Link>
+                  )}
+                  {can('orders:update') && (
+                    <Link href="/shop/orders"><Button size="sm" variant="secondary">Process Payments</Button></Link>
+                  )}
+                  {can('products:write') && (
+                    <Link href="/shop/products"><Button size="sm">Add Product</Button></Link>
+                  )}
+                  {can('promotions:manage') && (
+                    <Link href="/shop/promotions"><Button size="sm">Create Promotion</Button></Link>
+                  )}
+                  {can('analytics:view') && (
+                    <Link href="/shop"><Button size="sm" variant="outline">View Analytics</Button></Link>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2">
           <Card>

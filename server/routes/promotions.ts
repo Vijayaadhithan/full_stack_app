@@ -4,6 +4,8 @@ import { eq, and, gte, lte, isNull, or } from "drizzle-orm"; // Added 'or'
 import { db } from "../db";
 import { promotions, products } from "@shared/schema";
 import logger from "../logger";
+import { requireShopOrWorkerPermission } from "../workerAuth";
+import { getWorkerShopId } from "../workerAuth";
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -75,7 +77,7 @@ export function registerPromotionRoutes(app: Express) {
   app.post(
     "/api/promotions",
     requireAuth,
-    requireRole(["shop"]),
+    requireShopOrWorkerPermission(["promotions:manage"]),
     async (req, res) => {
       try {
         // Define a Zod schema for the promotion with expiryDays
@@ -99,6 +101,10 @@ export function registerPromotionRoutes(app: Express) {
         if (!result.success) return res.status(400).json(result.error);
 
         const { expiryDays, ...promotionData } = result.data;
+        const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
+        if (!shopContextId || promotionData.shopId !== shopContextId) {
+          return res.status(403).json({ message: "Invalid shop context for promotion creation" });
+        }
 
         // Calculate start and end dates
         const startDate = new Date();
@@ -169,7 +175,7 @@ export function registerPromotionRoutes(app: Express) {
     app.get(
       "/api/promotions/shop/:id",
       requireAuth,
-      requireRole(["shop"]),
+      requireShopOrWorkerPermission(["promotions:manage"]),
       async (req, res) => {
         try {
           const paramsSchema = z.object({
@@ -179,7 +185,11 @@ export function registerPromotionRoutes(app: Express) {
           if (!parsedParams.success)
             return res.status(400).json(parsedParams.error);
 
+          const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
           const shopId = parsedParams.data.id;
+          if (!shopContextId || shopId !== shopContextId) {
+            return res.status(403).json({ message: "Invalid shop context" });
+          }
           const allPromotions = await db
             .select()
             .from(promotions)
@@ -255,7 +265,7 @@ export function registerPromotionRoutes(app: Express) {
     app.patch(
       "/api/promotions/:id",
       requireAuth,
-      requireRole(["shop"]),
+      requireShopOrWorkerPermission(["promotions:manage"]),
       async (req, res) => {
         try {
           const paramsSchema = z.object({
@@ -268,10 +278,11 @@ export function registerPromotionRoutes(app: Express) {
           const promotionId = parsedParams.data.id;
 
           // Get the existing promotion to check ownership
+          const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
           const existingPromotions = await db
             .select()
             .from(promotions)
-            .where(eq(promotions.shopId, req.user!.id));
+            .where(eq(promotions.shopId, shopContextId));
           const promotion = existingPromotions.find((p) => p.id === promotionId);
 
           if (!promotion) {
@@ -409,7 +420,7 @@ export function registerPromotionRoutes(app: Express) {
     app.patch(
       "/api/promotions/:id/status",
       requireAuth,
-      requireRole(["shop"]),
+      requireShopOrWorkerPermission(["promotions:manage"]),
       async (req, res) => {
         try {
           const paramsSchema = z.object({
@@ -426,10 +437,11 @@ export function registerPromotionRoutes(app: Express) {
           const { isActive } = bodyResult.data;
 
         // Get the existing promotion to check ownership
+        const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
         const existingPromotions = await db
           .select()
           .from(promotions)
-          .where(eq(promotions.shopId, req.user!.id));
+          .where(eq(promotions.shopId, shopContextId));
         const promotion = existingPromotions.find((p) => p.id === promotionId);
 
         if (!promotion) {
@@ -489,7 +501,7 @@ export function registerPromotionRoutes(app: Express) {
     app.delete(
       "/api/promotions/:id",
       requireAuth,
-      requireRole(["shop"]),
+      requireShopOrWorkerPermission(["promotions:manage"]),
       async (req, res) => {
         try {
           const paramsSchema = z.object({
@@ -501,10 +513,11 @@ export function registerPromotionRoutes(app: Express) {
           const promotionId = parsedParams.data.id;
 
           // Get the existing promotion to check ownership
+          const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
           const existingPromotions = await db
             .select()
             .from(promotions)
-            .where(eq(promotions.shopId, req.user!.id));
+            .where(eq(promotions.shopId, shopContextId));
           const promotion = existingPromotions.find((p) => p.id === promotionId);
 
           if (!promotion) {
@@ -555,8 +568,7 @@ export function registerPromotionRoutes(app: Express) {
   app.get(
     "/api/promotions/active/:shopId",
     requireAuth,
-    requireRole(["customer"]),
-    async (req, res) => {
+    async (req: any, res) => {
       try {
         const paramsSchema = z.object({
           shopId: z.coerce.number().int().positive(),
@@ -564,7 +576,21 @@ export function registerPromotionRoutes(app: Express) {
         const parsedParams = paramsSchema.safeParse(req.params);
         if (!parsedParams.success)
           return res.status(400).json(parsedParams.error);
-        const shopId = parsedParams.data.shopId;
+        const requestedShopId = parsedParams.data.shopId;
+        // Role-based access: customers can view any shop; workers can view only their shop; shops can view only their own
+        if (req.user?.role === "shop") {
+          if (requestedShopId !== req.user.id) {
+            return res.status(403).json({ message: "Invalid shop context" });
+          }
+        } else if (req.user?.role === "worker") {
+          const workerShopId = await getWorkerShopId(req.user.id);
+          if (!workerShopId || requestedShopId !== workerShopId) {
+            return res.status(403).json({ message: "Invalid shop context" });
+          }
+        } else if (req.user?.role !== "customer") {
+          return res.status(403).json({ message: "Forbidden" });
+        }
+        const shopId = requestedShopId;
         const now = new Date();
 
         // Get all active and non-expired promotions for the shop

@@ -161,7 +161,8 @@ export default function AuthPage() {
       !loginMutation.isPending &&
       !registerMutation.isPending
     ) {
-      setLocation(`/${user.role}`);
+      const targetPath = user.role === "worker" ? "/shop" : `/${user.role}`;
+      setLocation(targetPath);
     }
     // Dependencies: user state, auth fetching state, and mutation pending states.
   }, [
@@ -333,7 +334,7 @@ export default function AuthPage() {
                 className="space-y-4"
               >
                 <div className="space-y-1">
-                  <Label htmlFor="username">{t.username}</Label>
+                  <Label htmlFor="username">{`${t.username} / Email / Worker ID`}</Label>
                   <Input id="username" {...loginForm.register("username")} />
                   {loginForm.formState.errors.username && (
                     <p className="text-red-500 text-sm">

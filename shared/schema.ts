@@ -15,7 +15,7 @@ import { createInsertSchema } from "drizzle-zod";
 import type { SessionData } from "express-session";
 import { z } from "zod";
 
-export type UserRole = "customer" | "provider" | "shop" | "admin";
+export type UserRole = "customer" | "provider" | "shop" | "admin" | "worker";
 export const PaymentMethodType = z.enum(["upi", "cash"]);
 export type PaymentMethodType = z.infer<typeof PaymentMethodType>;
 
@@ -127,6 +127,28 @@ export type InsertAdminRole = typeof adminRoles.$inferInsert;
 export type AdminPermission = typeof adminPermissions.$inferSelect;
 export type InsertAdminPermission = typeof adminPermissions.$inferInsert;
 
+// Worker responsibilities for shop workers
+export const WorkerResponsibilities = [
+  // Product management
+  "products:read",
+  "products:write",
+  "inventory:adjust",
+  // Orders and returns
+  "orders:read",
+  "orders:update",
+  "returns:manage",
+  // Promotions and pricing
+  "promotions:manage",
+  // Customer interaction
+  "customers:message",
+  // Bookings/services (in case shop also offers services)
+  "bookings:manage",
+  // Insights
+  "analytics:view",
+] as const;
+export type WorkerResponsibility = (typeof WorkerResponsibilities)[number];
+export const WorkerResponsibilityZ = z.enum(WorkerResponsibilities);
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -174,6 +196,27 @@ export const users = pgTable("users", {
   averageRating: decimal("average_rating").default("0"),
   totalReviews: integer("total_reviews").default(0),
 });
+
+// Link table for shop workers and their responsibilities
+export const shopWorkers = pgTable(
+  "shop_workers",
+  {
+    id: serial("id").primaryKey(),
+    shopId: integer("shop_id").references(() => users.id).notNull(),
+    workerUserId: integer("worker_user_id").references(() => users.id).notNull(),
+    responsibilities: jsonb("responsibilities").$type<WorkerResponsibility[]>().notNull(),
+    active: boolean("active").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => {
+    return {
+      uqWorkerUser: unique("uq_shop_worker_user").on(table.workerUserId),
+      uqShopWorker: unique("uq_shop_worker_pair").on(table.shopId, table.workerUserId),
+    };
+  },
+);
+export type ShopWorker = typeof shopWorkers.$inferSelect;
+export type InsertShopWorker = typeof shopWorkers.$inferInsert;
 
 // Update services table with new availability fields and soft deletion
 export const services = pgTable("services", {
@@ -554,7 +597,7 @@ export const customerProfileSchema = z.object({
 export const insertUserSchema = createInsertSchema(users, {
   shopProfile: shopProfileSchema.optional().nullable(),
   emailVerified: z.boolean().optional().default(false),
-  role: z.enum(["customer", "provider", "shop", "admin"]),
+  role: z.enum(["customer", "provider", "shop", "admin", "worker"]),
   username: z.string().optional(),
   password: z.string().optional(),
 }).extend({

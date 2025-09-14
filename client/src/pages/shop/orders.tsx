@@ -29,6 +29,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
+import { useWorkerPermissions } from "@/hooks/use-worker-permissions";
 import { useLanguage } from "@/contexts/language-context";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -73,6 +74,7 @@ type OrderStatusData = z.infer<typeof orderStatusSchema>;
 
 export default function ShopOrders() {
   const { user } = useAuth();
+  const { has: can } = useWorkerPermissions();
   const { t } = useLanguage();
   const { toast } = useToast();
   const [selectedStatus, setSelectedStatus] = useState<string>("all_orders");
@@ -348,6 +350,7 @@ export default function ShopOrders() {
                                 Payment Reference: {order.paymentReference}
                               </p>
                             )}
+                            {(user?.role === 'shop' || can('orders:update')) && (
                             <Button
                               size="sm"
                               onClick={() =>
@@ -356,6 +359,7 @@ export default function ShopOrders() {
                             >
                               Confirm Payment
                             </Button>
+                            )}
                           </div>
                         )}
 
@@ -372,6 +376,7 @@ export default function ShopOrders() {
                               }
                             }}
                           >
+                            {(user?.role === 'shop' || can('orders:update')) && (
                             <DialogTrigger asChild>
                               <Button
                                 variant="outline"
@@ -383,6 +388,7 @@ export default function ShopOrders() {
                                 {t("update_status")}
                               </Button>
                             </DialogTrigger>
+                            )}
                             <DialogContent>
                               <DialogHeader>
                                 <DialogTitle>
@@ -526,6 +532,7 @@ export default function ShopOrders() {
                           </p>
                         </div>
                         <div className="flex gap-2">
+                          {(user?.role === 'shop' || can('returns:manage')) && (
                           <Button
                             variant="outline"
                             onClick={() =>
@@ -538,6 +545,8 @@ export default function ShopOrders() {
                           >
                             {t("approve_return")}
                           </Button>
+                          )}
+                          {(user?.role === 'shop' || can('returns:manage')) && (
                           <Button
                             variant="outline"
                             className="text-red-600"
@@ -551,6 +560,7 @@ export default function ShopOrders() {
                           >
                             {t("reject_return")}
                           </Button>
+                          )}
                         </div>
                       </div>
 

@@ -39,6 +39,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
+import { useWorkerPermissions } from "@/hooks/use-worker-permissions";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -90,6 +91,9 @@ type PromotionFormData = z.infer<typeof promotionFormSchema>;
 
 export default function ShopPromotions() {
   const { user } = useAuth();
+  const { has: can, isWorker, shopId: workerShopId } = useWorkerPermissions();
+  const canManage = (user?.role === 'shop') || can('promotions:manage');
+  const listShopId = user?.role === 'shop' ? user?.id : (isWorker ? workerShopId : undefined);
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(
@@ -102,8 +106,19 @@ export default function ShopPromotions() {
 
   // Fetch promotions for the current shop
   const { data: promotions, isLoading } = useQuery<Promotion[]>({
-    queryKey: [`/api/promotions/shop/${user?.id}`],
-    enabled: !!user?.id,
+    queryKey: canManage
+      ? ["/api/promotions/shop", listShopId]
+      : ["/api/promotions/active", listShopId],
+    enabled: !!listShopId,
+    queryFn: async () => {
+      if (!listShopId) return [] as Promotion[];
+      const endpoint = canManage
+        ? `/api/promotions/shop/${listShopId}`
+        : `/api/promotions/active/${listShopId}`;
+      const res = await apiRequest("GET", endpoint);
+      if (!res.ok) throw new Error("Failed to fetch promotions");
+      return res.json();
+    },
   });
 
   // Set up React Hook Form with the Zod schema
@@ -290,6 +305,7 @@ export default function ShopPromotions() {
           <h1 className="text-2xl font-bold">Promotions & Discounts</h1>
 
           {/* Dialog trigger button */}
+          {(user?.role === 'shop' || can('promotions:manage')) && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button
@@ -499,6 +515,7 @@ export default function ShopPromotions() {
               </Form>
             </DialogContent>
           </Dialog>
+          )}
         </div>
 
         {/* Listing existing promotions */}
@@ -525,6 +542,7 @@ export default function ShopPromotions() {
                       </p>
                     </div>
                     <div className="flex items-center space-x-1">
+                      {(user?.role === 'shop' || can('promotions:manage')) && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -536,6 +554,8 @@ export default function ShopPromotions() {
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
+                      )}
+                      {(user?.role === 'shop' || can('promotions:manage')) && (
                       <AlertDialog
                         open={
                           deleteConfirmationOpen &&
@@ -598,6 +618,7 @@ export default function ShopPromotions() {
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
+                      )}
                     </div>
                   </div>
 
@@ -632,6 +653,7 @@ export default function ShopPromotions() {
                     <div className="space-y-0.5">
                       <span className="text-sm font-medium">Status</span>
                     </div>
+                    {(user?.role === 'shop' || can('promotions:manage')) ? (
                     <Switch
                       checked={promotion.isActive}
                       onCheckedChange={(checked) =>
@@ -642,6 +664,9 @@ export default function ShopPromotions() {
                       }
                       disabled={updateStatusMutation.isPending}
                     />
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No permission</div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
