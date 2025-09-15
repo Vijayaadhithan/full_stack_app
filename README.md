@@ -113,7 +113,7 @@ In the Google Cloud Console, configure your OAuth client with:
 - **Authorized Admin URIs**
   - `http://localhost:5173/admin/login`
 
-### simple admin login sample
+### Simple admin login sample
 
 Email: admin@example.com
 Password: admin12345

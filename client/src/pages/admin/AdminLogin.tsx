@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAdmin } from "@/hooks/use-admin";
 import { useLocation } from "wouter";
+import LogoMark from "@/components/branding/logo-mark";
 
 const schema = z.object({
   email: z.string().email(),
@@ -42,6 +43,7 @@ export default function AdminLogin() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader>
+          <div className="flex w-full justify-center mb-2"><LogoMark size={52} /></div>
           <CardTitle className="text-center">Admin Login</CardTitle>
           <CardDescription className="text-center">
             Sign in to manage the platform

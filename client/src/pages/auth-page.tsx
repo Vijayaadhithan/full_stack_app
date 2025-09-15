@@ -1,4 +1,5 @@
 import React from 'react';
+import LogoMark from "@/components/branding/logo-mark";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +25,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const translations = {
   en: {
-    welcome: "Welcome to Service & Shop Platform",
+    welcome: "Welcome to DoorStepTN",
     login: "Login",
     register: "Register",
     username: "Username",
@@ -314,6 +315,9 @@ export default function AuthPage() {
                 <SelectItem value="ta">தமிழ்</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex w-full justify-center">
+            <LogoMark size={56} />
           </div>
           <CardTitle className="text-2xl text-center">{t.welcome}</CardTitle>
         </CardHeader>

@@ -1,10 +1,10 @@
-# IndianBudgetTracker Project Documentation
+# DoorStep Project Documentation
 
-This document provides a detailed overview of the IndianBudgetTracker project, including its backend, frontend, database schema, storage mechanisms, and potential for future expansion.
+This document provides a detailed overview of the DoorStep project, including its backend, frontend, database schema, storage mechanisms, and potential for future expansion.
 
 ## 1. Project Overview
 
-IndianBudgetTracker is a platform designed to connect service providers and shops with customers in India. It facilitates booking services, purchasing products, managing profiles, and handling payments.
+DoorStep is a platform designed to connect service providers and shops with customers in India. It facilitates booking services, purchasing products, managing profiles, and handling payments.
 
 ## 2. Setup and Installation
 
@@ -45,7 +45,7 @@ This section guides you through setting up the project environment.
 
     ```bash
     git clone <repository_url>
-    cd IndianBudgetTracker
+    cd DoorStep
     ```
 
 2.  **Install Dependencies:**

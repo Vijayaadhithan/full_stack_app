@@ -94,7 +94,7 @@ async function sendEmailNow(mailOptions: MailOptions): Promise<void> {
 
   try {
     await transporter.sendMail({
-      from: `"IndianBudgetTracker" <${EMAIL_SENDER}>`,
+      from: `"DoorStep" <${EMAIL_SENDER}>`,
       ...mailOptions,
     });
     logger.info(
@@ -116,36 +116,36 @@ export function getVerificationEmailContent(
   name: string,
   verificationLink: string,
 ): MailOptions {
-  const subject = "Verify your IndianBudgetTracker account";
+  const subject = "Verify your DoorStep account";
   const text = `Hi ${name},
 
 Please verify your email address by clicking this link: ${verificationLink}
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${name},</p>
 <p>Please verify your email address by clicking this link: <a href="${verificationLink}">${verificationLink}</a></p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 export function getWelcomeEmailContent(
   name: string,
   verificationLink: string,
 ): MailOptions {
-  const subject = "Welcome to IndianBudgetTracker!";
+  const subject = "Welcome to DoorStep!";
   
   const text = `Hi ${name},
 
-Welcome to IndianBudgetTracker! We're excited to have you on board.
+Welcome to DoorStep! We're excited to have you on board.
 
 Please verify your email address by clicking this link: ${verificationLink}
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${name},</p>
-<p>Welcome to IndianBudgetTracker! We're excited to have you on board.</p>
+<p>Welcome to DoorStep! We're excited to have you on board.</p>
 <p>Please verify your email address by clicking this link: <a href="${verificationLink}">${verificationLink}</a></p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" }; // 'to' will be set by the caller
 }
 
@@ -153,21 +153,21 @@ export function getPasswordResetEmailContent(
   name: string,
   resetLink: string,
 ): MailOptions {
-  const subject = "Password Reset Request for IndianBudgetTracker";
+  const subject = "Password Reset Request for DoorStep";
   const text = `Hi ${name},
 
-You requested a password reset for your IndianBudgetTracker account.
+You requested a password reset for your DoorStep account.
 Click this link to reset your password: ${resetLink}
 
 If you didn't request this, please ignore this email.
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${name},</p>
-<p>You requested a password reset for your IndianBudgetTracker account.</p>
+<p>You requested a password reset for your DoorStep account.</p>
 <p>Click this link to reset your password: <a href="${resetLink}">${resetLink}</a></p>
 <p>If you didn't request this, please ignore this email.</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 
@@ -207,7 +207,7 @@ export function getOrderConfirmationEmailContent(
 ): MailOptions {
   const subject = forShopOwner
     ? "New Order Received!"
-    : "Your IndianBudgetTracker Order Confirmation";
+    : "Your DoorStep Order Confirmation";
 
   const orderDetailsTextLines = [
     `Order ID: ${orderSummary.orderId}`,
@@ -228,19 +228,19 @@ export function getOrderConfirmationEmailContent(
   }
   const text = `Hi ${name},
 
-${forShopOwner ? "A new order has been placed through your shop." : "Thank you for your order on IndianBudgetTracker!"}
+${forShopOwner ? "A new order has been placed through your shop." : "Thank you for your order on DoorStep!"}
 
 ${orderDetailsTextLines.join("\n")}
 Items:\n${formatItemsText(items)}
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${name},</p>
-<p>${forShopOwner ? "A new order has been placed through your shop." : "Thank you for your order on IndianBudgetTracker!"}</p>
+<p>${forShopOwner ? "A new order has been placed through your shop." : "Thank you for your order on DoorStep!"}</p>
 <p><strong>Order Details:</strong></p>
 <ul>${orderDetailsHtmlParts.join("")}</ul>
 <p><strong>Items:</strong></p>
 ${formatItemsHtml(items)}
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 
@@ -272,7 +272,7 @@ ${bookingDetails.customerPhone ? `- Phone: ${bookingDetails.customerPhone}` : ""
 Please review this request in your dashboard.
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${providerName},</p>
 <p>New booking request for <strong>${bookingDetails.serviceName}</strong>.</p>
 <p><strong>Details:</strong></p>
@@ -285,7 +285,7 @@ The IndianBudgetTracker Team`;
     ${bookingDetails.customerPhone ? `<li><strong>Phone:</strong> ${bookingDetails.customerPhone}</li>` : ""}
 </ul>
 <p>Please review this request in your dashboard.</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 
@@ -320,7 +320,7 @@ export function sendBookingUpdateEmail(
   const mailOptions = {
     to,
     subject,
-    text: `Hi ${customerName},\n\nYour booking for ${serviceName} has been updated to ${bookingStatus}.\n\nDetails:\n- Booking ID: ${bookingId}\n- Service: ${serviceName}\n- Status: ${bookingStatus}\n- Date: ${bookingDate}\n- Provider: ${providerName}\n\n${comments ? `Comments: ${comments}\n\n` : ""}You can view your booking details here: ${bookingDetailsUrl}\n\nThanks,\nThe IndianBudgetTracker Team`,
+    text: `Hi ${customerName},\n\nYour booking for ${serviceName} has been updated to ${bookingStatus}.\n\nDetails:\n- Booking ID: ${bookingId}\n- Service: ${serviceName}\n- Status: ${bookingStatus}\n- Date: ${bookingDate}\n- Provider: ${providerName}\n\n${comments ? `Comments: ${comments}\n\n` : ""}You can view your booking details here: ${bookingDetailsUrl}\n\nThanks,\nThe DoorStep Team`,
     html: `<p>Hi ${customerName},</p>
 <p>Your booking for <strong>${serviceName}</strong> has been updated to <strong>${bookingStatus}</strong>.</p>
 <p><strong>Details:</strong></p>
@@ -333,7 +333,7 @@ export function sendBookingUpdateEmail(
 </ul>
 ${comments ? `<p><strong>Comments:</strong> ${comments}</p>` : ""}
 <p>You can <a href="${bookingDetailsUrl}">view your booking details here</a>.</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`,
+<p>Thanks,<br/>The DoorStep Team</p>`,
   };
 
   return sendEmail(mailOptions);
@@ -366,13 +366,13 @@ export function sendBookingRescheduledByCustomerEmail(
   const mailOptions = {
     to,
     subject: `Customer Reschedule Request for Booking #${bookingId}`,
-    text: `Hi ${providerName},\n\nCustomer ${customerName} has requested to reschedule booking #${bookingId} for '${serviceName}'.\nOriginal Date: ${originalBookingDate}\nNew Requested Date: ${newBookingDate}.\n\nPlease review this request in your dashboard: ${bookingDetailsUrl}\n\nThanks,\nThe IndianBudgetTracker Team`,
+    text: `Hi ${providerName},\n\nCustomer ${customerName} has requested to reschedule booking #${bookingId} for '${serviceName}'.\nOriginal Date: ${originalBookingDate}\nNew Requested Date: ${newBookingDate}.\n\nPlease review this request in your dashboard: ${bookingDetailsUrl}\n\nThanks,\nThe DoorStep Team`,
     html: `<p>Hi ${providerName},</p>
 <p>Customer <strong>${customerName}</strong> has requested to reschedule booking #${bookingId} for '<strong>${serviceName}</strong>'.</p>
 <p>Original Date: <strong>${originalBookingDate}</strong></p>
 <p>New Requested Date: <strong>${newBookingDate}</strong></p>
 <p>Please <a href="${bookingDetailsUrl}">review this request in your dashboard</a>.</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`,
+<p>Thanks,<br/>The DoorStep Team</p>`,
   };
 
   return sendEmail(mailOptions);
@@ -407,14 +407,14 @@ export function sendBookingRescheduledByProviderEmail(
   const mailOptions = {
     to,
     subject: `Booking #${bookingId} Has Been Rescheduled by Provider`,
-    text: `Hi ${customerName},\n\nYour booking #${bookingId} for '${serviceName}' with ${providerName} has been rescheduled.\nOriginal Date: ${originalBookingDate}\nNew Date: ${newBookingDate}.\n\n${comments ? `Provider's reason: ${comments}\n` : ""}\nPlease check your updated booking details: ${bookingDetailsUrl}\n\nThanks,\nThe IndianBudgetTracker Team`,
+    text: `Hi ${customerName},\n\nYour booking #${bookingId} for '${serviceName}' with ${providerName} has been rescheduled.\nOriginal Date: ${originalBookingDate}\nNew Date: ${newBookingDate}.\n\n${comments ? `Provider's reason: ${comments}\n` : ""}\nPlease check your updated booking details: ${bookingDetailsUrl}\n\nThanks,\nThe DoorStep Team`,
     html: `<p>Hi ${customerName},</p>
 <p>Your booking #${bookingId} for '<strong>${serviceName}</strong>' with <strong>${providerName}</strong> has been rescheduled.</p>
 <p>Original Date: <strong>${originalBookingDate}</strong></p>
 <p>New Date: <strong>${newBookingDate}</strong></p>
 ${comments ? `<p>Provider's reason: ${comments}</p>` : ""}
 <p>Please <a href="${bookingDetailsUrl}">check your updated booking details</a>.</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`,
+<p>Thanks,<br/>The DoorStep Team</p>`,
   };
 
   return sendEmail(mailOptions);
@@ -433,7 +433,7 @@ export function getBookingUpdateEmailContent(
 ): MailOptions {
   const subject = forProvider
     ? `Booking Update Notification (ID: ${bookingDetails.id})`
-    : `Your IndianBudgetTracker Booking Has Been Updated (ID: ${bookingDetails.id})`;
+    : `Your DoorStep Booking Has Been Updated (ID: ${bookingDetails.id})`;
   let bookingDetailsHtml = "<ul>";
   bookingDetailsHtml += `<li><strong>Booking ID:</strong> ${bookingDetails.id}</li>`;
   if (bookingDetails.serviceName) {
@@ -446,7 +446,7 @@ export function getBookingUpdateEmailContent(
 
   const text = `Hi ${name},
 
-${forProvider ? "A booking has been updated." : "There has been an update to your booking on IndianBudgetTracker."}
+${forProvider ? "A booking has been updated." : "There has been an update to your booking on DoorStep."}
 
 Booking ID: ${bookingDetails.id}
 Previous Status: ${oldStatus}
@@ -456,14 +456,14 @@ Booking Details:
 ${JSON.stringify(bookingDetails, null, 2)}
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${name},</p>
-<p>${forProvider ? "A booking has been updated." : "There has been an update to your booking on IndianBudgetTracker."}</p>
+<p>${forProvider ? "A booking has been updated." : "There has been an update to your booking on DoorStep."}</p>
 <p><strong>Booking ID:</strong> ${bookingDetails.id}</p>
 <p><strong>Previous Status:</strong> ${oldStatus}</p>
 <p><strong>New Status:</strong> ${newStatus}</p>
 <p><strong>Booking Details:</strong></p>${bookingDetailsHtml}
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 
@@ -477,7 +477,7 @@ export function getBookingRequestPendingEmailContent(
     providerName: string;
   },
 ): MailOptions {
-  const subject = "Your Booking Request is Pending - IndianBudgetTracker";
+  const subject = "Your Booking Request is Pending - DoorStep";
   const text = `Hi ${customerName},
 
 Your request for "${bookingDetails.serviceName}" on ${formatIndianDisplay(new Date(bookingDetails.bookingDate), "datetime")} with ${bookingDetails.providerName} has been sent.
@@ -485,11 +485,11 @@ Your request for "${bookingDetails.serviceName}" on ${formatIndianDisplay(new Da
 We'll notify you of any updates from the provider.
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${customerName},</p>
 <p>Your request for "<strong>${bookingDetails.serviceName}</strong>" on <strong>${formatIndianDisplay(new Date(bookingDetails.bookingDate), "datetime")}</strong> with <strong>${bookingDetails.providerName}</strong> has been sent.</p>
 <p>We'll notify you of any updates from the provider.</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 
@@ -498,7 +498,7 @@ export function getBookingAcceptedEmailContent(
   bookingDetails: { serviceName: string; bookingDate: string | Date },
   providerDetails: { name: string; location?: string },
 ): MailOptions {
-  const subject = "Your Booking Has Been Accepted! - IndianBudgetTracker";
+  const subject = "Your Booking Has Been Accepted! - DoorStep";
   const text = `Hi ${customerName},
 
 Great news! Your booking for "${bookingDetails.serviceName}" on ${formatIndianDisplay(new Date(bookingDetails.bookingDate), "datetime")} with ${providerDetails.name} has been accepted.
@@ -508,12 +508,12 @@ ${providerDetails.location ? `Provider Location: ${providerDetails.location}` : 
 We look forward to seeing you!
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${customerName},</p>
 <p>Great news! Your booking for "<strong>${bookingDetails.serviceName}</strong>" on <strong>${formatIndianDisplay(new Date(bookingDetails.bookingDate), "datetime")}</strong> with <strong>${providerDetails.name}</strong> has been accepted.</p>
 ${providerDetails.location ? `<p><strong>Provider Location:</strong> ${providerDetails.location}</p>` : ""}
 <p>We look forward to seeing you!</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 
@@ -522,7 +522,7 @@ export function getBookingRejectedEmailContent(
   bookingDetails: { serviceName: string; bookingDate: string | Date },
   rejectionReason?: string,
 ): MailOptions {
-  const subject = "Your Booking Request Was Rejected - IndianBudgetTracker";
+  const subject = "Your Booking Request Was Rejected - DoorStep";
   let reasonText = "";
   if (rejectionReason) {
     reasonText = `Reason for rejection: ${rejectionReason}`;
@@ -536,12 +536,12 @@ ${reasonText}
 We apologize for any inconvenience.
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${customerName},</p>
 <p>Unfortunately, your booking request for "<strong>${bookingDetails.serviceName}</strong>" on <strong>${formatIndianDisplay(new Date(bookingDetails.bookingDate), "datetime")}</strong> has been rejected.</p>
 ${rejectionReason ? `<p><strong>Reason for rejection:</strong> ${rejectionReason}</p>` : ""}
 <p>We apologize for any inconvenience.</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 
@@ -554,7 +554,7 @@ export function getServicePaymentConfirmedCustomerEmailContent(
   },
   paymentDetails: { amountPaid: number | string; paymentId: string },
 ): MailOptions {
-  const subject = "Service Payment Confirmed - IndianBudgetTracker";
+  const subject = "Service Payment Confirmed - DoorStep";
   const text = `Hi ${customerName},
 
 Your payment for the service booking has been confirmed.
@@ -565,10 +565,10 @@ Date & Time: ${formatIndianDisplay(new Date(bookingDetails.bookingDate), "dateti
 Amount Paid: ${paymentDetails.amountPaid}
 Payment ID: ${paymentDetails.paymentId}
 
-Thank you for using IndianBudgetTracker!
+Thank you for using DoorStep!
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${customerName},</p>
 <p>Your payment for the service booking has been confirmed.</p>
 <p><strong>Booking Details:</strong></p>
@@ -582,8 +582,8 @@ The IndianBudgetTracker Team`;
     <li><strong>Amount Paid:</strong> ${paymentDetails.amountPaid}</li>
     <li><strong>Payment ID:</strong> ${paymentDetails.paymentId}</li>
 </ul>
-<p>Thank you for using IndianBudgetTracker!</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thank you for using DoorStep!</p>
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 
@@ -597,7 +597,7 @@ export function getServiceProviderPaymentReceivedEmailContent(
   customerDetails: { name: string },
   paymentDetails: { amountReceived: number | string; paymentId: string },
 ): MailOptions {
-  const subject = "Payment Received for Service - IndianBudgetTracker";
+  const subject = "Payment Received for Service - DoorStep";
   const text = `Hi ${providerName},
 
 You have received a payment for a service booking.
@@ -610,7 +610,7 @@ Amount Received: ${paymentDetails.amountReceived}
 Payment ID: ${paymentDetails.paymentId}
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${providerName},</p>
 <p>You have received a payment for a service booking.</p>
 <p><strong>Booking Details:</strong></p>
@@ -625,7 +625,7 @@ The IndianBudgetTracker Team`;
     <li><strong>Amount Received:</strong> ${paymentDetails.amountReceived}</li>
     <li><strong>Payment ID:</strong> ${paymentDetails.paymentId}</li>
 </ul>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
 
@@ -634,15 +634,15 @@ export function getGenericNotificationEmailContent(
   title: string,
   message: string,
 ): MailOptions {
-  const subject = `IndianBudgetTracker Notification: ${title}`;
+  const subject = `DoorStep Notification: ${title}`;
   const text = `Hi ${name},
 
 ${message}
 
 Thanks,
-The IndianBudgetTracker Team`;
+The DoorStep Team`;
   const html = `<p>Hi ${name},</p>
 <p>${message}</p>
-<p>Thanks,<br/>The IndianBudgetTracker Team</p>`;
+<p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
