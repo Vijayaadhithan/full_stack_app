@@ -1,5 +1,4 @@
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
 import { db, testConnection } from "../db";
 import {
   adminUsers,
@@ -18,6 +17,7 @@ import { scrypt, timingSafeEqual } from "crypto";
 import { hashPasswordInternal } from "../auth";
 import { lastRun as bookingJobLastRun } from "../jobs/bookingExpirationJob";
 import { lastRun as paymentJobLastRun } from "../jobs/paymentReminderJob";
+import { adminLoginRateLimiter } from "../security/rateLimiters";
 
 const router = Router();
 const scryptAsync = promisify(scrypt);
@@ -64,9 +64,6 @@ function checkPermissions(required: string[]) {
     return res.status(403).json({ message: "Forbidden" });
   };
 }
-
-// Apply rate limit to login to mitigate brute-force attacks
-const adminLoginRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
 
 router.post("/login", adminLoginRateLimiter, async (req, res) => {
   if (!req.session) {

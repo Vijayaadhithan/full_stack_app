@@ -20,6 +20,13 @@ import { insertUserSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import dotenv from "dotenv";
+import {
+  loginLimiter,
+  registerLimiter,
+  verifyEmailLimiter,
+  googleAuthLimiter,
+  deleteAccountLimiter,
+} from "./security/rateLimiters";
 dotenv.config();
 
 declare module "express-session" {
@@ -297,7 +304,7 @@ export function setupAuth(app: Express) {
     done(null, user);
   });
 
-  app.post("/api/register", async (req, res, next) => {
+  app.post("/api/register", registerLimiter, async (req, res, next) => {
     const validationResult = insertUserSchema.safeParse(req.body);
     if (!validationResult.success) {
       return res
@@ -351,9 +358,9 @@ export function setupAuth(app: Express) {
   });
 
   // TODO: Add a new route for email verification
-  app.get("/api/verify-email", verifyEmailHandler);
+  app.get("/api/verify-email", verifyEmailLimiter, verifyEmailHandler);
 
-  app.post("/api/login", passport.authenticate("local"), (req, res) => {
+  app.post("/api/login", loginLimiter, passport.authenticate("local"), (req, res) => {
     res.status(200).json(req.user);
   });
 
@@ -371,7 +378,7 @@ export function setupAuth(app: Express) {
 
   // Google OAuth Routes
   if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
-    app.get("/auth/google", (req, res, next) => {
+    app.get("/auth/google", googleAuthLimiter, (req, res, next) => {
       const role = req.query.role as SelectUser["role"];
       // Basic validation for role. Consider using a predefined list or enum for roles.
       const validRoles: SelectUser["role"][] = ["customer", "provider", "shop"];
@@ -393,6 +400,7 @@ export function setupAuth(app: Express) {
 
     app.get(
       "/auth/google/callback",
+      googleAuthLimiter,
       passport.authenticate("google", {
         // successRedirect: "/", // Redirect to a success page or dashboard
         failureRedirect: `${FRONTEND_URL}/auth`,
@@ -419,7 +427,7 @@ export function setupAuth(app: Express) {
     );
   }
 
-  app.post("/api/delete-account", async (req, res) => {
+  app.post("/api/delete-account", deleteAccountLimiter, async (req, res) => {
     if (!req.isAuthenticated() || !req.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }

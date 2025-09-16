@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet, { type HelmetOptions } from "helmet";
 import { registerRoutes } from "./routes"; // Changed from ./routes/index
 import adminRoutes from "./routes/admin";
 //import { setupVite, serveStatic, log } from "./vite";
@@ -25,10 +26,25 @@ const allowedOrigins = [
   "http://localhost:5173",
 ].filter(Boolean) as string[];
 
+const helmetConfig: HelmetOptions = {
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false,
+  referrerPolicy: { policy: "no-referrer" },
+  contentSecurityPolicy:
+    process.env.NODE_ENV === "production"
+      ? undefined
+      : false,
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const app = express();
+// Security headers and proxy/IP handling
+app.disable("x-powered-by");
+// Trust first proxy (needed for correct client IPs behind proxies/load balancers)
+app.set("trust proxy", 1);
+app.use(helmet(helmetConfig));
 app.use(express.json());
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

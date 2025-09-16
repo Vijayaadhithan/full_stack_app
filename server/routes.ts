@@ -51,6 +51,10 @@ import { bookingsRouter } from "./routes/bookings";
 import { ordersRouter } from "./routes/orders";
 import { registerWorkerRoutes } from "./routes/workers";
 import { requireShopOrWorkerPermission, getWorkerShopId } from "./workerAuth";
+import {
+  requestPasswordResetLimiter,
+  resetPasswordLimiter,
+} from "./security/rateLimiters";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
 // Helper function to validate and parse date and time
@@ -131,8 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ available_endpoints: routes });
   });
 
-  // Password Reset Routes
-  app.post("/api/request-password-reset", async (req, res) => {
+  app.post("/api/request-password-reset", requestPasswordResetLimiter, async (req, res) => {
     const { email } = req.body;
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
@@ -189,7 +192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/reset-password", async (req, res) => {
+  app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
     const { token, newPassword } = req.body;
     if (!token || !newPassword) {
       return res
