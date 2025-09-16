@@ -330,3 +330,24 @@ aws s3 cp s3://<bucket>/db-2024-01-15.sql.gz - | gunzip | psql "$DATABASE_URL"
 ```
 
 The command recreates the database state captured at the time of the dump.
+
+## 10. Performance & Security Enhancements
+
+### 10.1 Redis Backed Caching
+- Set `REDIS_URL` in `.env` (e.g. `redis://localhost:6379`).
+- The `server/cache.ts` helper now prioritises Redis and falls back to the in-memory cache if Redis is unreachable.
+- Cached collections (services/products by category) automatically hydrate from Redis and respect the configured TTL. Use the exported `invalidateCache` or `flushCache` helpers when adding new high-traffic lookups.
+
+### 10.2 Rate Limiting
+- `express-rate-limit` guards login, registration, password resets, Google OAuth flows, and admin login attempts. Limits can be tuned in `server/security/rateLimiters.ts`.
+- All sensitive routes emit standard error messages to avoid leaking account existence and use proxy headers from Nginx for accurate per-IP throttling.
+
+### 10.3 Hardened HTTP Headers
+- `helmet` is enabled globally in `server/index.ts`. The configuration denies framing, disables legacy Flash/xdomain requests, and enables HSTS automatically when `NODE_ENV=production`.
+- Additional headers (CSP, XSS protection) can be layered on per route if you serve mixed frontend assets.
+
+### 10.4 Load Balancing with Nginx
+- An example configuration lives in `deploy/nginx-load-balancer.conf` and forwards traffic to multiple Express instances while propagating proxy metadata.
+- Place the file in `/etc/nginx/conf.d/` (or equivalent), update upstream server addresses, and reload Nginx: `sudo nginx -t && sudo systemctl reload nginx`.
+- When terminating TLS at Nginx, ensure `app.set("trust proxy", 1)` remains set so Express and the rate limiting middleware honour the correct client IP.
+

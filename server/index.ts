@@ -26,14 +26,22 @@ const allowedOrigins = [
   "http://localhost:5173",
 ].filter(Boolean) as string[];
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const helmetConfig: HelmetOptions = {
   crossOriginResourcePolicy: { policy: "cross-origin" },
   crossOriginEmbedderPolicy: false,
   referrerPolicy: { policy: "no-referrer" },
-  contentSecurityPolicy:
-    process.env.NODE_ENV === "production"
-      ? undefined
-      : false,
+  frameguard: { action: "deny" },
+  permittedCrossDomainPolicies: { permittedPolicies: "none" },
+  ...(isProduction
+    ? {
+        hsts: { maxAge: 60 * 60 * 24 * 365, includeSubDomains: true, preload: true },
+      }
+    : {
+        contentSecurityPolicy: false,
+        hsts: false,
+      }),
 };
 
 const __filename = fileURLToPath(import.meta.url);

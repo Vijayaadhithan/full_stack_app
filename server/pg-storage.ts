@@ -830,7 +830,7 @@ export class PostgresStorage implements IStorage {
 
   async getServicesByCategory(category: string): Promise<Service[]> {
     const key = `services_category_${category}`;
-    const cached = getCache<Service[]>(key);
+    const cached = await getCache<Service[]>(key);
     if (cached) return cached;
 
     const result = await db
@@ -839,7 +839,7 @@ export class PostgresStorage implements IStorage {
       .where(
         and(eq(services.category, category), eq(services.isDeleted, false)),
       );
-    setCache(key, result);
+    await setCache(key, result);
     return result;
   }
 
@@ -1092,7 +1092,7 @@ export class PostgresStorage implements IStorage {
 
   async getProductsByCategory(category: string): Promise<Product[]> {
     const key = `products_category_${category}`;
-    const cached = getCache<Product[]>(key);
+    const cached = await getCache<Product[]>(key);
     if (cached) return cached;
 
     const result = await db
@@ -1101,7 +1101,7 @@ export class PostgresStorage implements IStorage {
       .where(
         and(eq(products.category, category), eq(products.isDeleted, false)),
       );
-    setCache(key, result);
+    await setCache(key, result);
     return result;
   }
 
