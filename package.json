@@ -114,7 +114,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.2.0",
+    "@capacitor/cli": "^7.4.3",
     "@capacitor/core": "^7.2.0",
     "@replit/vite-plugin-cartographer": "^0.0.11",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
