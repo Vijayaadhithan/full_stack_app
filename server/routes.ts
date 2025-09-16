@@ -57,6 +57,8 @@ import {
 } from "./security/rateLimiters";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
+const PLATFORM_SERVICE_FEE = 1;
+
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(
   dateStr: string,
@@ -2908,7 +2910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const {
           items,
-          total,
+          total: requestedTotal,
           subtotal,
           discount,
           promotionId,
@@ -2960,6 +2962,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "No items provided" });
         }
 
+        const toNumber = (value: string | number) =>
+          typeof value === "number" ? value : Number(value);
+        const optionalToNumber = (value: string | number | undefined) =>
+          value === undefined ? undefined : toNumber(value);
+
+        const subtotalFromRequest = optionalToNumber(subtotal);
+        const subtotalValue =
+          subtotalFromRequest !== undefined
+            ? subtotalFromRequest
+            : items.reduce((sum, item) => sum + toNumber(item.price) * item.quantity, 0);
+
+        if (!Number.isFinite(subtotalValue)) {
+          return res.status(400).json({ message: "Invalid subtotal amount" });
+        }
+
+        const discountValue = optionalToNumber(discount) ?? 0;
+        if (!Number.isFinite(discountValue)) {
+          return res.status(400).json({ message: "Invalid discount amount" });
+        }
+
+        const computedTotalRaw =
+          subtotalValue - discountValue + PLATFORM_SERVICE_FEE;
+        if (!Number.isFinite(computedTotalRaw)) {
+          return res.status(400).json({ message: "Invalid order amount" });
+        }
+
+        const computedTotal = Number(computedTotalRaw.toFixed(2));
+        const totalAsString = computedTotal.toFixed(2);
+
+        const requestedTotalValue = optionalToNumber(requestedTotal);
+        if (
+          requestedTotalValue !== undefined &&
+          Math.abs(requestedTotalValue - computedTotal) > 0.01
+        ) {
+          logger.warn(
+            `Order total mismatch for user ${req.user!.id}: requested ${requestedTotalValue}, computed ${computedTotal}`,
+          );
+        }
+
         // If a promotion is applied, verify it's valid
         let promotionCode = null;
         if (promotionId) {
@@ -3005,9 +3046,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           promotionCode = promotion.code || null;
         }
 
-        // Payment gateway removed. Create the order directly without initiating payment.
-        const originalAmount = parseFloat(total.toString());
-
         const newOrder = await storage.createOrder({
           customerId: req.user!.id,
           shopId,
@@ -3015,7 +3053,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           paymentStatus: "pending",
           deliveryMethod,
           paymentMethod,
-          total: total.toString(),
+          total: totalAsString,
           orderDate: new Date(),
           shippingAddress: "",
           billingAddress: "",
@@ -3050,6 +3088,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           const shop = await storage.getUser(shopId); // Assuming shop owner is a user
 
+          const customerDisplayName = customer.name || customer.username;
+          const shopDisplayName = shop?.name || shop?.username || "DoorStep Shop";
+
           if (customer) {
             // Build itemsWithNames for email
             const itemsWithNames = await Promise.all(
@@ -3062,11 +3103,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 };
               }),
             );
-            const customerEmailContent = getOrderConfirmationEmailContent(
-              customer.name || customer.username,
-              { orderId: newOrder.id, total: newOrder.total },
-              itemsWithNames,
-            );
+            const customerEmailContent = getOrderConfirmationEmailContent({
+              recipientName: customerDisplayName,
+              customerName: customerDisplayName,
+              shopName: shopDisplayName,
+              orderNumber: newOrder.id,
+              total: newOrder.total,
+              items: itemsWithNames,
+            });
             await sendEmail({
               to: customer.email,
               subject: customerEmailContent.subject,
@@ -3087,16 +3131,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 };
               }),
             );
-            const shopEmailContent = getOrderConfirmationEmailContent(
-              shop.name || shop.username,
-              {
-                orderId: newOrder.id,
-                total: newOrder.total,
-                customerName: customer.name || customer.username,
-              },
-              itemsWithNames,
-              true,
-            );
+            const shopEmailContent = getOrderConfirmationEmailContent({
+              recipientName: shopDisplayName,
+              customerName: customerDisplayName,
+              shopName: shopDisplayName,
+              orderNumber: newOrder.id,
+              total: newOrder.total,
+              items: itemsWithNames,
+              forShopOwner: true,
+            });
             await sendEmail({
               to: shop.email,
               subject: shopEmailContent.subject,

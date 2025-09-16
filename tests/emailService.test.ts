@@ -8,7 +8,6 @@ import {
   getBookingConfirmationEmailContent,
 } from "../server/emailService";
 
-const orderSummary = { orderId: 1, total: "100" };
 const items = [{ name: "item", quantity: 2, price: "50" }];
 
 describe("email templates", () => {
@@ -30,9 +29,31 @@ describe("email templates", () => {
   });
 
   it("creates order confirmation for customer", () => {
-    const mail = getOrderConfirmationEmailContent("John", orderSummary, items);
-    assert.ok(mail.subject.includes("Confirmation"));
-    assert.ok(mail.text.includes("Order ID"));
+    const mail = getOrderConfirmationEmailContent({
+      recipientName: "John",
+      customerName: "John",
+      shopName: "Spice Shop",
+      orderNumber: 1,
+      total: "100",
+      items,
+    });
+    assert.ok(mail.subject.includes("Order Confirmation #1 from Spice Shop"));
+    assert.ok(mail.text.includes("Hi John,"));
+    assert.ok(mail.text.includes("Order Number: 1"));
+  });
+
+  it("creates order notification for shop owner", () => {
+    const mail = getOrderConfirmationEmailContent({
+      recipientName: "Shop Owner",
+      customerName: "John",
+      shopName: "Spice Shop",
+      orderNumber: 1,
+      total: "100",
+      items,
+      forShopOwner: true,
+    });
+    assert.ok(mail.subject.includes("New Order #1 from John"));
+    assert.ok(mail.text.includes("Hi Shop Owner,"));
   });
 
   it("creates booking confirmation for provider", () => {

@@ -7,13 +7,19 @@ import { Product, Promotion, PaymentMethodType } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { Minus, Plus, Trash2, Tag, RefreshCw, Check } from "lucide-react";
+import { Minus, Plus, Trash2, Tag, RefreshCw, Check, Info } from "lucide-react";
 import { useState, useEffect } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { PaymentMethodSelector } from "@/components/payment-method-selector";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const container = {
   hidden: { opacity: 0 },
@@ -165,8 +171,8 @@ export default function Cart() {
       0,
     ) ?? 0; // Use nullish coalescing for default value
 
-  // Platform fee is fixed at 3rs
-  const platformFee = 3;
+  // Platform service fee is fixed at ₹1
+  const platformFee = 1;
 
   // Calculate the final total after applying promotion and adding platform fee
   const totalAmount = subtotal - discountAmount + platformFee;
@@ -292,7 +298,8 @@ export default function Cart() {
   };
 
   return (
-    <DashboardLayout>
+    <TooltipProvider>
+      <DashboardLayout>
       <motion.div
         variants={container}
         initial="hidden"
@@ -554,7 +561,23 @@ export default function Cart() {
                 )}
 
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Platform Fee</span>
+                  <span className="flex items-center gap-1">
+                    Platform Service Fee
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground focus:outline-none"
+                          aria-label="Learn more about the platform service fee"
+                        >
+                          <Info className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-sm">
+                        This small fee helps us operate the platform and provide you with support.
+                      </TooltipContent>
+                    </Tooltip>
+                  </span>
                   <span>₹{platformFee.toFixed(2)}</span>
                 </div>
 
@@ -585,6 +608,7 @@ export default function Cart() {
           </div>
         )}
       </motion.div>
-    </DashboardLayout>
+      </DashboardLayout>
+    </TooltipProvider>
   );
 }

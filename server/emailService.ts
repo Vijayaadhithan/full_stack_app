@@ -179,6 +179,16 @@ export interface OrderItemInfo {
   price: string | number;
 }
 
+export interface OrderConfirmationEmailOptions {
+  recipientName: string;
+  customerName: string;
+  shopName: string;
+  orderNumber: number | string;
+  total: string | number;
+  items: OrderItemInfo[];
+  forShopOwner?: boolean;
+}
+
 function formatItemsText(items: OrderItemInfo[]): string {
   return items
     .map((item) => `- ${item.name} x${item.quantity} @ ₹${item.price}`)
@@ -195,47 +205,48 @@ function formatItemsHtml(items: OrderItemInfo[]): string {
   );
 }
 
-export function getOrderConfirmationEmailContent(
-  name: string,
-  orderSummary: {
-    orderId: number | string;
-    total: string | number;
-    customerName?: string;
-  },
-  items: OrderItemInfo[],
-  forShopOwner: boolean = false,
-): MailOptions {
+export function getOrderConfirmationEmailContent({
+  recipientName,
+  customerName,
+  shopName,
+  orderNumber,
+  total,
+  items,
+  forShopOwner = false,
+}: OrderConfirmationEmailOptions): MailOptions {
   const subject = forShopOwner
-    ? "New Order Received!"
-    : "Your DoorStep Order Confirmation";
+    ? `New Order #${orderNumber} from ${customerName}`
+    : `Order Confirmation #${orderNumber} from ${shopName}`;
+
+  const greetingName = forShopOwner ? recipientName : customerName;
+  const introLine = forShopOwner
+    ? `A new order has been placed on ${shopName} by ${customerName}.`
+    : `Thank you for your order from ${shopName}!`;
 
   const orderDetailsTextLines = [
-    `Order ID: ${orderSummary.orderId}`,
-    `Total: ${orderSummary.total}`,
+    `Order Number: ${orderNumber}`,
+    `Total: ${total}`,
+    `${forShopOwner ? "Customer" : "Shop"}: ${forShopOwner ? customerName : shopName}`,
   ];
-  if (orderSummary.customerName) {
-    orderDetailsTextLines.push(`Customer: ${orderSummary.customerName}`);
-  }
 
   const orderDetailsHtmlParts = [
-    `<li><strong>Order ID:</strong> ${orderSummary.orderId}</li>`,
-    `<li><strong>Total:</strong> ${orderSummary.total}</li>`,
+    `<li><strong>Order Number:</strong> ${orderNumber}</li>`,
+    `<li><strong>Total:</strong> ${total}</li>`,
+    `<li><strong>${forShopOwner ? "Customer" : "Shop"}:</strong> ${
+      forShopOwner ? customerName : shopName
+    }</li>`,
   ];
-  if (orderSummary.customerName) {
-    orderDetailsHtmlParts.push(
-      `<li><strong>Customer:</strong> ${orderSummary.customerName}</li>`,
-    );
-  }
-  const text = `Hi ${name},
 
-${forShopOwner ? "A new order has been placed through your shop." : "Thank you for your order on DoorStep!"}
+  const text = `Hi ${greetingName},
+
+${introLine}
 
 ${orderDetailsTextLines.join("\n")}
 Items:\n${formatItemsText(items)}
 Thanks,
 The DoorStep Team`;
-  const html = `<p>Hi ${name},</p>
-<p>${forShopOwner ? "A new order has been placed through your shop." : "Thank you for your order on DoorStep!"}</p>
+  const html = `<p>Hi ${greetingName},</p>
+<p>${introLine}</p>
 <p><strong>Order Details:</strong></p>
 <ul>${orderDetailsHtmlParts.join("")}</ul>
 <p><strong>Items:</strong></p>
