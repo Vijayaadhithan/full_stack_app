@@ -29,7 +29,7 @@
     "@hookform/resolvers": "^3.9.1",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@mui/material": "^7.0.2",
-    "@neondatabase/serverless": "^0.10.4",
+    "@neondatabase/serverless": "^1.0.1",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-alert-dialog": "^1.1.2",
     "@radix-ui/react-aspect-ratio": "^1.1.0",
