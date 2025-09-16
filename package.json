@@ -80,7 +80,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.1",
     "express-session": "^1.18.1",
-    "framer-motion": "^11.13.1",
+    "framer-motion": "^12.23.13",
     "googleapis": "^149.0.0",
     "helmet": "^7.0.0",
     "input-otp": "^1.2.4",
