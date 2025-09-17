@@ -385,3 +385,345 @@
 {"level":30,"time":1758113013792,"pid":12267,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
 {"level":30,"time":1758113013793,"pid":12267,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
 {"level":30,"time":1758113013795,"pid":12267,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114630039,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Running booking expiration job"}
+{"level":30,"time":1758114630119,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Completed booking expiration job"}
+{"level":30,"time":1758114630200,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Admin bootstrap: ensured vjaadhi2799@gmail.com exists and has Super Admin role."}
+{"level":30,"time":1758114630202,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Server is running on port 5000"}
+{"level":30,"time":1758114640215,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114640215,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114640215,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114640215,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114640223,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114640232,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114640391,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114640411,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114640411,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114640411,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114640411,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114640415,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114640417,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114640418,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114640419,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114640420,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114662508,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Filtered services:"}
+{"level":30,"time":1758114664565,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Received request for service ID:"}
+{"level":30,"time":1758114664565,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Raw ID parameter:"}
+{"level":30,"time":1758114664565,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114664571,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114664571,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Service from storage:"}
+{"level":30,"time":1758114664572,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Provider details:"}
+{"level":30,"time":1758114664574,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Sending response data:"}
+{"level":30,"time":1758114671878,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114671882,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114671888,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114671889,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114674569,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114674587,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114675894,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Email sent to vijaythriller11@gmail.com with subject \"New Booking Request!\""}
+{"level":30,"time":1758114676633,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Email sent to vjaadhi2799@gmail.com with subject \"Your Booking Request is Pending - DoorStep\""}
+{"level":30,"time":1758114682665,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114682665,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114682665,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114682665,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114682665,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114682669,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114682669,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114682669,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114682669,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114682678,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114682681,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114682682,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114682683,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114682686,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114682705,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114682727,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114682728,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114682730,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114699105,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114699106,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114699107,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114699107,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114699107,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114699111,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114699114,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114699117,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114699127,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114699130,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114699135,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114699135,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114699135,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114699135,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114699159,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114699161,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114699164,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114699166,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114700344,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114700344,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114700345,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114700345,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114700345,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114700358,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114700364,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114700365,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114700365,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114700372,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114710767,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] Attempting to update booking 5"}
+{"level":30,"time":1758114710775,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114710781,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114710781,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] Customer 1 rescheduling booking 5 to 2025-09-19T13:11:00.000Z"}
+{"level":30,"time":1758114710946,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] Successfully updated booking 5:"}
+{"level":30,"time":1758114711036,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114711037,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114711037,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114711037,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114711037,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114711059,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114711064,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114711066,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114711070,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114711073,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114714217,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Email sent to vijaythriller11@gmail.com with subject \"Customer Reschedule Request for Booking #5\""}
+{"level":30,"time":1758114726117,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Filtered services:"}
+{"level":30,"time":1758114732042,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/users/:id - Received request for user ID:"}
+{"level":30,"time":1758114732042,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/users/:id - Raw ID parameter:"}
+{"level":30,"time":1758114732101,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Shop products:"}
+{"level":30,"time":1758114732103,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/users/:id - User from storage:"}
+{"level":30,"time":1758114740975,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: undefined"}
+{"level":30,"time":1758114755805,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Received profile for 106384086492108015356"}
+{"level":30,"time":1758114755805,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Attempting to find user by Google ID: 106384086492108015356"}
+{"level":30,"time":1758114755813,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] User found by Google ID:"}
+{"level":30,"time":1758114755820,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Authentication successful, redirecting user"}
+{"level":30,"time":1758114757612,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114757612,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114757612,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114757612,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114757612,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114757615,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114757619,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114757622,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114757624,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114757625,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114757721,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Provider services:"}
+{"level":30,"time":1758114783614,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114783614,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114783614,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114783614,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114783614,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114783616,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114783618,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114783618,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114783621,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114783621,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114790901,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API DEBUG] Attempting to update booking status. Booking ID: 5, Received Status: accepted, Received Rejection Reason: undefined"}
+{"level":30,"time":1758114790902,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API DEBUG] Fetched booking for ID 5:"}
+{"level":30,"time":1758114790902,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API DEBUG] Attempting to fetch service with ID: 1 for authorization. Provider ID from token: 2"}
+{"level":30,"time":1758114790902,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114790903,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114790903,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API DEBUG] Fetched service for ID 1:"}
+{"level":30,"time":1758114790903,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API DEBUG] Validating status for booking ID 5. Status: accepted"}
+{"level":30,"time":1758114790903,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API DEBUG] Checking for rejection reason for booking ID 5. Status: accepted, Rejection Reason: undefined"}
+{"level":30,"time":1758114790903,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API DEBUG] All pre-update checks passed for booking ID 5. Proceeding to update booking status."}
+{"level":30,"time":1758114790917,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API PATCH /api/bookings/:id/status] Booking ID: 5. Status updated to accepted. Customer email notifications are now handled by dedicated routes: /api/bookings/:id/notify-customer-accepted and /api/bookings/:id/notify-customer-rejected."}
+{"level":30,"time":1758114790920,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] Booking status updated successfully: ID=5, Status=accepted"}
+{"level":30,"time":1758114790920,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] Notification sent to customer: ID=1"}
+{"level":30,"time":1758114790961,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[NEW ACCEPT EMAIL ROUTE - Booking ID: 5] Request received."}
+{"level":30,"time":1758114790963,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[NEW ACCEPT EMAIL ROUTE - Booking ID: 5] Fetching customer ID: 1"}
+{"level":30,"time":1758114790971,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[NEW ACCEPT EMAIL ROUTE - Booking ID: 5] Fetched customer:"}
+{"level":30,"time":1758114790971,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[NEW ACCEPT EMAIL ROUTE - Booking ID: 5] Fetching service details ID: 1"}
+{"level":30,"time":1758114790971,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114790981,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114790981,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[NEW ACCEPT EMAIL ROUTE - Booking ID: 5] Fetched serviceDetails:"}
+{"level":30,"time":1758114790981,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[NEW ACCEPT EMAIL ROUTE - Booking ID: 5] Fetching provider ID: 2"}
+{"level":30,"time":1758114790983,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[NEW ACCEPT EMAIL ROUTE - Booking ID: 5] Fetched provider:"}
+{"level":30,"time":1758114790988,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[NEW ACCEPT EMAIL ROUTE - Booking ID: 5] Attempting 'Booking Accepted' email to vjaadhi2799@gmail.com"}
+{"level":30,"time":1758114790988,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[NEW ACCEPT EMAIL ROUTE - Booking ID: 5] 'Booking Accepted' email SENT to vjaadhi2799@gmail.com"}
+{"level":30,"time":1758114791026,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114791026,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114791027,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114791027,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114791027,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114791033,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114791034,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114791035,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114791036,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114791036,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114794187,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Email sent to vjaadhi2799@gmail.com with subject \"Your Booking Has Been Accepted! - DoorStep\""}
+{"level":30,"time":1758114795775,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114795777,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114801785,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: undefined"}
+{"level":30,"time":1758114807584,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Received profile for 103665178317295253139"}
+{"level":30,"time":1758114807584,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Attempting to find user by Google ID: 103665178317295253139"}
+{"level":30,"time":1758114807587,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] User found by Google ID:"}
+{"level":30,"time":1758114807592,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Authentication successful, redirecting user"}
+{"level":30,"time":1758114809005,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809005,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809005,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809005,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809005,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809015,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114809016,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114809019,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114809019,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114809024,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114809136,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809136,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809136,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809136,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809136,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114809140,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114809140,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114809141,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114809142,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114809143,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114815416,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114815417,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114815417,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114815417,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114815417,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114815421,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114815422,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114815423,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114815424,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114815425,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114822715,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114822717,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114822720,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114822723,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114822756,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114822756,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114822756,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114822756,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114822756,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114822760,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114822764,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114822765,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114822768,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114822770,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114825508,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Email sent to vijaythriller11@gmail.com with subject \"DoorStep Notification: Payment Submitted\""}
+{"level":30,"time":1758114836890,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: undefined"}
+{"level":30,"time":1758114844308,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Received profile for 106384086492108015356"}
+{"level":30,"time":1758114844308,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Attempting to find user by Google ID: 106384086492108015356"}
+{"level":30,"time":1758114844311,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] User found by Google ID:"}
+{"level":30,"time":1758114844321,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Authentication successful, redirecting user"}
+{"level":30,"time":1758114846265,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114846265,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114846265,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114846265,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114846265,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114846270,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114846271,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114846273,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114846275,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114846275,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114846298,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Provider services:"}
+{"level":30,"time":1758114849738,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114849738,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114849738,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114849738,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114849738,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114849741,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114849742,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114849743,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114849744,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114849746,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114851327,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114851328,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114851384,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114851384,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114851384,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114851384,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114851384,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114851437,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114851438,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114851439,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114851439,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114851440,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114854305,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Email sent to vjaadhi2799@gmail.com with subject \"Service Payment Confirmed - DoorStep\""}
+{"level":30,"time":1758114857172,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Email sent to vijaythriller11@gmail.com with subject \"Payment Received for Service - DoorStep\""}
+{"level":30,"time":1758114865657,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Provider services:"}
+{"level":30,"time":1758114865671,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114865671,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114865672,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114865672,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114865672,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114865675,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114865675,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114865677,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114865678,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114865679,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114869847,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: undefined"}
+{"level":30,"time":1758114877331,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Received profile for 117391487767276488906"}
+{"level":30,"time":1758114877331,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Attempting to find user by Google ID: 117391487767276488906"}
+{"level":30,"time":1758114877338,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] User found by Google ID:"}
+{"level":30,"time":1758114877346,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Authentication successful, redirecting user"}
+{"level":30,"time":1758114898961,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Shop products:"}
+{"level":30,"time":1758114946080,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Shop products:"}
+{"level":30,"time":1758114952099,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/products/:id PATCH - Updated product:"}
+{"level":30,"time":1758114952126,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Shop products:"}
+{"level":30,"time":1758114963133,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: undefined"}
+{"level":30,"time":1758114968782,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Received profile for 103665178317295253139"}
+{"level":30,"time":1758114968782,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Attempting to find user by Google ID: 103665178317295253139"}
+{"level":30,"time":1758114968785,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] User found by Google ID:"}
+{"level":30,"time":1758114968790,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[Google OAuth] Authentication successful, redirecting user"}
+{"level":30,"time":1758114970142,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970142,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970142,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970142,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970142,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970147,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114970148,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114970149,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114970150,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114970151,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114970153,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970153,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970153,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970153,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970153,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114970161,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114970162,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114970163,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114970163,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114970183,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978424,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978424,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978424,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978424,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978425,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978427,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978428,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978430,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978430,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978432,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978448,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978448,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978448,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978448,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978448,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114978452,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978452,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978453,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978454,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114978454,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114980295,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114980295,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114980295,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114980295,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114980295,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114980304,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114980305,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114980306,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114980306,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114980307,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114993242,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Filtered services:"}
+{"level":30,"time":1758114995490,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Received request for service ID:"}
+{"level":30,"time":1758114995490,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Raw ID parameter:"}
+{"level":30,"time":1758114995490,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Getting service with ID:"}
+{"level":30,"time":1758114995491,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Found service:"}
+{"level":30,"time":1758114995491,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Service from storage:"}
+{"level":30,"time":1758114995493,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Provider details:"}
+{"level":30,"time":1758114995496,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/services/:id - Sending response data:"}
+{"level":30,"time":1758115002768,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/users/:id - Received request for user ID:"}
+{"level":30,"time":1758115002768,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/users/:id - Raw ID parameter:"}
+{"level":30,"time":1758115002771,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"[API] /api/users/:id - User from storage:"}
+{"level":30,"time":1758115002804,"pid":13477,"hostname":"vijays-MacBook-Air.local","msg":"Shop products:"}

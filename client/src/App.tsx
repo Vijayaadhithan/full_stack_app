@@ -6,6 +6,7 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { AdminProvider } from "@/hooks/use-admin";
 import { LanguageProvider } from "@/contexts/language-context";
 import { ProtectedRoute } from "./lib/protected-route";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import {
   initializePushNotifications,
   getCurrentPosition,
@@ -202,16 +203,18 @@ function App() {
       <LanguageProvider>
         <AuthProvider>
           <AdminProvider>
-            {/* Use the existing Router function component here */}
-            <Suspense
-              fallback={
-                <div className="flex items-center justify-center min-h-screen">
-                  Loading...
-                </div>
-              }
-            >
-              <Router />
-            </Suspense>
+            <ErrorBoundary>
+              {/* Use the existing Router function component here */}
+              <Suspense
+                fallback={
+                  <div className="flex min-h-screen items-center justify-center">
+                    Loading...
+                  </div>
+                }
+              >
+                <Router />
+              </Suspense>
+            </ErrorBoundary>
             <Toaster />
           </AdminProvider>
         </AuthProvider>
