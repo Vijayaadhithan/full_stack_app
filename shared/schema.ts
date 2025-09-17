@@ -777,7 +777,7 @@ export const Booking = z.object({
     "disputed",
   ]), // Removed 'expired' as it's handled internally
   comments: z.string().optional(),
-  rejectionReason: z.string().optional(),
+  rejectionReason: z.string().nullable().optional(),
   rescheduleDate: z.string().optional(), // ISO string format
   createdAt: z.string(), // ISO string format
   updatedAt: z.string(), // ISO string format

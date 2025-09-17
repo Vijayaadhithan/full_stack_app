@@ -962,11 +962,20 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getBookingsByCustomer(customerId: number): Promise<Booking[]> {
+  async getBookingsByCustomer(
+    customerId: number,
+    filters?: { status?: Booking["status"] },
+  ): Promise<Booking[]> {
+    const baseCondition = eq(bookings.customerId, customerId);
+    const whereClause = filters?.status
+      ? and(baseCondition, eq(bookings.status, filters.status))
+      : baseCondition;
+
     return await db
       .select()
       .from(bookings)
-      .where(eq(bookings.customerId, customerId));
+      .where(whereClause)
+      .orderBy(desc(bookings.bookingDate));
   }
 
   async getBookingsByProvider(providerId: number): Promise<Booking[]> {
@@ -1457,11 +1466,23 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getOrdersByCustomer(customerId: number): Promise<Order[]> {
+  async getOrdersByCustomer(
+    customerId: number,
+    filters?: { status?: Order["status"] },
+  ): Promise<Order[]> {
+    const conditions = [eq(orders.customerId, customerId)];
+    if (filters?.status) {
+      conditions.push(eq(orders.status, filters.status as any));
+    }
+
+    const whereClause =
+      conditions.length > 1 ? and(...conditions) : conditions[0];
+
     return await db
       .select()
       .from(orders)
-      .where(eq(orders.customerId, customerId));
+      .where(whereClause)
+      .orderBy(desc(orders.orderDate));
   }
 
   async getOrdersByShop(shopId: number, status?: string): Promise<Order[]> {

@@ -38,6 +38,7 @@ import {
   passwordResetTokens as passwordResetTokensTable,
   User,
   Booking,
+  Order,
   PaymentMethodType,
   PaymentMethodSchema,
   shopWorkers,
@@ -2419,7 +2420,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const bookings = await storage.getBookingsByCustomer(req.user!.id);
+        const allowedStatusFilters: Booking["status"][] = [
+          "pending",
+          "accepted",
+          "rejected",
+          "rescheduled",
+          "completed",
+          "cancelled",
+          "expired",
+          "rescheduled_pending_provider_approval",
+          "awaiting_payment",
+          "disputed",
+        ];
+
+        const rawStatus =
+          typeof req.query.status === "string"
+            ? req.query.status.trim().toLowerCase()
+            : undefined;
+
+        let statusFilter: Booking["status"] | undefined;
+        if (rawStatus && rawStatus !== "all") {
+          if (allowedStatusFilters.includes(rawStatus as Booking["status"])) {
+            statusFilter = rawStatus as Booking["status"];
+          } else {
+            return res.status(400).json({ message: "Invalid status filter" });
+          }
+        }
+
+        const bookings = await storage.getBookingsByCustomer(req.user!.id, {
+          status: statusFilter,
+        });
 
         // Enrich bookings with service details
         const enrichedBookings = await Promise.all(
@@ -2446,6 +2476,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             return {
               ...booking,
+              status: booking.status,
+              rejectionReason: booking.rejectionReason ?? null,
               service: service || { name: "Unknown Service" },
               providerName: provider?.name || "Unknown Provider",
               displayAddress: displayAddress,
@@ -3181,7 +3213,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
-      const orders = await storage.getOrdersByCustomer(req.user!.id);
+      const allowedOrderStatus: Order["status"][] = [
+        "pending",
+        "cancelled",
+        "confirmed",
+        "processing",
+        "packed",
+        "shipped",
+        "delivered",
+        "returned",
+      ];
+
+      const rawStatus =
+        typeof req.query.status === "string"
+          ? req.query.status.trim().toLowerCase()
+          : undefined;
+
+      let statusFilter: Order["status"] | undefined;
+      if (rawStatus && rawStatus !== "all") {
+        if (allowedOrderStatus.includes(rawStatus as Order["status"])) {
+          statusFilter = rawStatus as Order["status"];
+        } else {
+          return res.status(400).json({ message: "Invalid status filter" });
+        }
+      }
+
+      const orders = await storage.getOrdersByCustomer(req.user!.id, {
+        status: statusFilter,
+      });
       const detailed = await Promise.all(
         orders.map(async (order) => {
           const itemsRaw = await storage.getOrderItemsByOrder(order.id);

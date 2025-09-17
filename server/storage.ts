@@ -96,7 +96,10 @@ export interface IStorage {
   // Booking operations
   createBooking(booking: InsertBooking): Promise<Booking>;
   getBooking(id: number): Promise<Booking | undefined>;
-  getBookingsByCustomer(customerId: number): Promise<Booking[]>;
+  getBookingsByCustomer(
+    customerId: number,
+    filters?: { status?: Booking["status"] },
+  ): Promise<Booking[]>;
   getBookingsByProvider(providerId: number): Promise<Booking[]>;
   getBookingsByStatus(status: string): Promise<Booking[]>;
   updateBooking(id: number, booking: Partial<Booking>): Promise<Booking>;
@@ -135,7 +138,10 @@ export interface IStorage {
   // Order operations
   createOrder(order: InsertOrder): Promise<Order>;
   getOrder(id: number): Promise<Order | undefined>;
-  getOrdersByCustomer(customerId: number): Promise<Order[]>;
+  getOrdersByCustomer(
+    customerId: number,
+    filters?: { status?: Order["status"] },
+  ): Promise<Order[]>;
   getOrdersByShop(shopId: number, status?: string): Promise<Order[]>;
   getRecentOrdersByShop(shopId: number): Promise<Order[]>;
   getShopDashboardStats(shopId: number): Promise<DashboardStats>;
@@ -852,10 +858,24 @@ export class MemStorage implements IStorage {
     return this.bookings.get(id);
   }
 
-  async getBookingsByCustomer(customerId: number): Promise<Booking[]> {
-    return Array.from(this.bookings.values()).filter(
-      (booking) => booking.customerId === customerId,
-    );
+  async getBookingsByCustomer(
+    customerId: number,
+    filters?: { status?: Booking["status"] },
+  ): Promise<Booking[]> {
+    const parseDate = (value: unknown) => {
+      if (!value) return 0;
+      const timestamp = new Date(value as Date).getTime();
+      return Number.isNaN(timestamp) ? 0 : timestamp;
+    };
+
+    return Array.from(this.bookings.values())
+      .filter((booking) => booking.customerId === customerId)
+      .filter((booking) =>
+        filters?.status ? booking.status === filters.status : true,
+      )
+      .sort(
+        (a, b) => parseDate(b.bookingDate ?? b.createdAt) - parseDate(a.bookingDate ?? a.createdAt),
+      );
   }
 
   async getBookingsByProvider(providerId: number): Promise<Booking[]> {
@@ -1203,10 +1223,22 @@ export class MemStorage implements IStorage {
     return this.orders.get(id);
   }
 
-  async getOrdersByCustomer(customerId: number): Promise<Order[]> {
-    return Array.from(this.orders.values()).filter(
-      (order) => order.customerId === customerId,
-    );
+  async getOrdersByCustomer(
+    customerId: number,
+    filters?: { status?: Order["status"] },
+  ): Promise<Order[]> {
+    const parseDate = (value: unknown) => {
+      if (!value) return 0;
+      const timestamp = new Date(value as Date).getTime();
+      return Number.isNaN(timestamp) ? 0 : timestamp;
+    };
+
+    return Array.from(this.orders.values())
+      .filter((order) => order.customerId === customerId)
+      .filter((order) =>
+        filters?.status ? order.status === filters.status : true,
+      )
+      .sort((a, b) => parseDate(b.orderDate) - parseDate(a.orderDate));
   }
 
   async getOrdersByShop(shopId: number, status?: string): Promise<Order[]> {

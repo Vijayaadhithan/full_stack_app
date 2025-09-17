@@ -1,13 +1,21 @@
-import React from 'react';
+import React from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { Order } from "@shared/schema";
 import { motion } from "framer-motion";
 import { Package, ArrowLeft, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 import { formatIndianDisplay } from "@shared/date-utils";
+import { apiRequest } from "@/lib/queryClient";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -19,9 +27,48 @@ const itemVariants = {
   show: { opacity: 1, y: 0 },
 };
 
+type OrderStatusFilter = "all" | Order["status"];
+
+const ORDER_STATUS_OPTIONS: {
+  value: OrderStatusFilter;
+  label: string;
+}[] = [
+  { value: "all", label: "All" },
+  { value: "pending", label: "Pending" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "processing", label: "Processing" },
+  { value: "packed", label: "Packed" },
+  { value: "shipped", label: "Shipped" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "returned", label: "Returned" },
+];
+
+const ORDER_STATUS_LABELS: Record<Order["status"], string> = {
+  pending: "Pending",
+  cancelled: "Cancelled",
+  confirmed: "Confirmed",
+  processing: "Processing",
+  packed: "Packed",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  returned: "Returned",
+};
+
 export default function Orders() {
+  const [statusFilter, setStatusFilter] = React.useState<OrderStatusFilter>(
+    "all",
+  );
   const { data: orders, isLoading } = useQuery<Order[]>({
-    queryKey: ["/api/orders/customer"],
+    queryKey: ["/api/orders/customer", statusFilter],
+    queryFn: async () => {
+      const query =
+        statusFilter === "all"
+          ? ""
+          : `?status=${encodeURIComponent(statusFilter)}`;
+      const res = await apiRequest("GET", `/api/orders/customer${query}`);
+      return res.json();
+    },
   });
 
   return (
@@ -32,14 +79,33 @@ export default function Orders() {
         animate="show"
         className="max-w-4xl mx-auto space-y-6 p-6"
       >
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">My Orders</h1>
-          <Link href="/customer">
-            <Button variant="ghost">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
-            </Button>
-          </Link>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-2xl font-bold">My Orders</h1>
+            <Link href="/customer">
+              <Button variant="ghost">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </Link>
+          </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) =>
+              setStatusFilter(value as OrderStatusFilter)
+            }
+          >
+            <SelectTrigger className="w-full md:w-[220px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              {ORDER_STATUS_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {isLoading ? (
@@ -77,8 +143,8 @@ export default function Orders() {
                       </div>
                       <div className="flex flex-col items-end justify-between">
                         <p className="font-semibold">₹{order.total}</p>
-                        <p className="text-sm text-muted-foreground capitalize">
-                          {order.status}
+                        <p className="text-sm text-muted-foreground">
+                          {ORDER_STATUS_LABELS[order.status] || order.status}
                         </p>
                         <Link href={`/customer/order/${order.id}`}>
                           <Button size="sm" variant="outline" className="mt-2">

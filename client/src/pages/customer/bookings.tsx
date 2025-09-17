@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -57,6 +58,53 @@ type BookingsResponse =
   | BookingWithService[]
   | { bookings: BookingWithService[] };
 
+type BookingStatusFilter = "all" | "pending" | "accepted" | "rejected";
+type CustomerBookingStatus = Booking["status"];
+
+const BOOKING_STATUS_FILTER_OPTIONS: {
+  value: BookingStatusFilter;
+  label: string;
+}[] = [
+  { value: "all", label: "All" },
+  { value: "pending", label: "Pending" },
+  { value: "accepted", label: "Accepted" },
+  { value: "rejected", label: "Rejected" },
+];
+
+const BOOKING_STATUS_LABELS: Record<CustomerBookingStatus, string> = {
+  pending: "Pending",
+  accepted: "Accepted",
+  rejected: "Rejected",
+  rescheduled: "Rescheduled",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  expired: "Expired",
+  rescheduled_pending_provider_approval: "Awaiting Provider Approval",
+  awaiting_payment: "Awaiting Payment",
+  disputed: "Disputed",
+};
+
+const BOOKING_STATUS_BADGE_CLASSES: Partial<
+  Record<CustomerBookingStatus, string>
+> = {
+  pending: "bg-amber-50 text-amber-700 border-amber-200",
+  accepted: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  rejected: "bg-rose-50 text-rose-700 border-rose-200",
+  rescheduled: "bg-violet-50 text-violet-700 border-violet-200",
+  rescheduled_pending_provider_approval:
+    "bg-violet-50 text-violet-700 border-violet-200",
+  completed: "bg-sky-50 text-sky-700 border-sky-200",
+  cancelled: "bg-slate-100 text-slate-700 border-slate-300",
+  awaiting_payment: "bg-blue-50 text-blue-700 border-blue-200",
+  disputed: "bg-amber-100 text-amber-800 border-amber-200",
+};
+
+const getBookingStatusBadgeClass = (status: CustomerBookingStatus) =>
+  `border ${
+    BOOKING_STATUS_BADGE_CLASSES[status] ||
+    "bg-slate-100 text-slate-700 border-slate-200"
+  }`;
+
 function hasWrappedBookings(
   data: BookingsResponse | undefined,
 ): data is { bookings: BookingWithService[] } {
@@ -83,10 +131,17 @@ export default function Bookings() {
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethodType>("upi");
   const [disputeReason, setDisputeReason] = useState("");
+  const [statusFilter, setStatusFilter] = useState<BookingStatusFilter>("all");
 
   // Fetch bookings
   const { data: bookings, isLoading } = useQuery<BookingsResponse>({
-    queryKey: ["/api/bookings"],
+    queryKey: ["/api/bookings", statusFilter],
+    queryFn: async () => {
+      const query =
+        statusFilter === "all" ? "" : `?status=${encodeURIComponent(statusFilter)}`;
+      const res = await apiRequest("GET", `/api/bookings${query}`);
+      return res.json();
+    },
   });
 
   // REMOVED: Fetch available slots for rescheduling (providerAvailability query and related useEffects)
@@ -456,10 +511,29 @@ export default function Bookings() {
       >
         <h1 className="text-2xl font-bold">My Bookings</h1>
         <Tabs defaultValue="upcoming">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-            <TabsTrigger value="past">Past</TabsTrigger>
-          </TabsList>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <TabsList className="grid w-full grid-cols-2 sm:w-auto">
+              <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+              <TabsTrigger value="past">Past</TabsTrigger>
+            </TabsList>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) =>
+                setStatusFilter(value as BookingStatusFilter)
+              }
+            >
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                {BOOKING_STATUS_FILTER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Upcoming */}
           <TabsContent value="upcoming">
@@ -474,11 +548,19 @@ export default function Bookings() {
                 >
                   <Card>
                     <CardContent className="pt-6">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-semibold">
-                            {booking.service.name}
-                          </h3>
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-semibold">
+                              {booking.service.name}
+                            </h3>
+                            <Badge
+                              variant="outline"
+                              className={getBookingStatusBadgeClass(booking.status)}
+                            >
+                              {BOOKING_STATUS_LABELS[booking.status] || booking.status}
+                            </Badge>
+                          </div>
                           <p className="text-sm text-muted-foreground">
                             <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
                             {formatIndianDisplay(booking.bookingDate, "date")}
@@ -507,6 +589,12 @@ export default function Bookings() {
                                 <strong>Phone:</strong> {booking.provider.phone}
                               </p>
                             </div>
+                          )}
+                          {booking.status === "rejected" && (
+                            <p className="mt-2 text-sm text-destructive">
+                              <strong>Reason:</strong>{" "}
+                              {booking.rejectionReason || "No reason provided"}
+                            </p>
                           )}
                         </div>
                         <div className="space-x-2">
@@ -817,11 +905,19 @@ export default function Bookings() {
                 >
                   <Card>
                     <CardContent className="pt-6">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-semibold">
-                            {booking.service.name}
-                          </h3>
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-semibold">
+                              {booking.service.name}
+                            </h3>
+                            <Badge
+                              variant="outline"
+                              className={getBookingStatusBadgeClass(booking.status)}
+                            >
+                              {BOOKING_STATUS_LABELS[booking.status] || booking.status}
+                            </Badge>
+                          </div>
                           <p className="text-sm text-muted-foreground">
                             <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
                             {formatIndianDisplay(booking.bookingDate, "date")}
@@ -850,6 +946,12 @@ export default function Bookings() {
                                 <strong>Phone:</strong> {booking.provider.phone}
                               </p>
                             </div>
+                          )}
+                          {booking.status === "rejected" && (
+                            <p className="mt-2 text-sm text-destructive">
+                              <strong>Reason:</strong>{" "}
+                              {booking.rejectionReason || "No reason provided"}
+                            </p>
                           )}
                         </div>
                         <div className="space-x-2">
