@@ -63,6 +63,7 @@ const AdminOrders = lazy(() => import("@/pages/admin/AdminOrders"));
 const AdminShopAnalytics = lazy(() => import("@/pages/admin/AdminShopAnalytics"));
 const AdminBookingsPage = lazy(() => import("@/pages/admin/AdminBookings"));
 const AdminHealth = lazy(() => import("@/pages/admin/AdminHealth"));
+const AdminMonitoring = lazy(() => import("@/pages/admin/AdminMonitoring"));
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password-page")); // Import the new page
@@ -105,6 +106,11 @@ function Router() {
       <Route path="/admin/health">
         <AdminLayout>
           <AdminHealth />
+        </AdminLayout>
+      </Route>
+      <Route path="/admin/monitoring">
+        <AdminLayout>
+          <AdminMonitoring />
         </AdminLayout>
       </Route>
       <Route path="/auth" component={AuthPage} />

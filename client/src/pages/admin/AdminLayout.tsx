@@ -39,6 +39,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           {has("view_all_bookings") && <Link href="/admin/bookings">Bookings</Link>}
           {has("manage_admins") && <Link href="/admin/admins">Admins</Link>}
           {has("view_health") && <Link href="/admin/health">Health</Link>}
+          {(has("view_health") || has("view_all_orders")) && (
+            <Link href="/admin/monitoring">Monitoring</Link>
+          )}
         </nav>
         <Button onClick={() => logoutMutation.mutate()}>Logout</Button>
       </aside>

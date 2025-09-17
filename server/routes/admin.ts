@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { promises as fs } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import { db, testConnection } from "../db";
 import {
   adminUsers,
@@ -11,16 +13,65 @@ import {
   orders,
   bookings,
 } from "@shared/schema";
-import { eq, count, sum, sql, and } from "drizzle-orm";
+import { eq, count, sum, sql, and, desc } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { promisify } from "util";
 import { scrypt, timingSafeEqual } from "crypto";
 import { hashPasswordInternal } from "../auth";
 import { lastRun as bookingJobLastRun } from "../jobs/bookingExpirationJob";
 import { lastRun as paymentJobLastRun } from "../jobs/paymentReminderJob";
 import { adminLoginRateLimiter } from "../security/rateLimiters";
+import { LOG_FILE_PATH } from "../logger";
 
 const router = Router();
 const scryptAsync = promisify(scrypt);
+
+const LOG_READ_MAX_BYTES = 1024 * 1024; // 1MB slice from tail of log file
+const LOG_DEFAULT_LIMIT = 100;
+const TRANSACTIONS_MAX_PAGE_SIZE = 100;
+
+const ORDER_STATUSES = [
+  "pending",
+  "confirmed",
+  "processing",
+  "packed",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "returned",
+] as const;
+
+const PAYMENT_STATUSES = ["pending", "verifying", "paid", "failed"] as const;
+
+type OrderStatusFilter = (typeof ORDER_STATUSES)[number];
+type PaymentStatusFilter = (typeof PAYMENT_STATUSES)[number];
+
+function isOrderStatus(value: string): value is OrderStatusFilter {
+  return ORDER_STATUSES.some((status) => status === value);
+}
+
+function isPaymentStatus(value: string): value is PaymentStatusFilter {
+  return PAYMENT_STATUSES.some((status) => status === value);
+}
+
+const levelNameByNumber: Record<number, string> = {
+  10: "trace",
+  20: "debug",
+  30: "info",
+  40: "warn",
+  50: "error",
+  60: "fatal",
+};
+
+const levelNumbersByLabel: Record<string, number[]> = {
+  trace: [10],
+  debug: [20],
+  info: [30],
+  warn: [40],
+  error: [50, 60],
+  fatal: [60],
+};
 
 declare module "express-session" {
   interface SessionData {
@@ -177,6 +228,213 @@ router.get(
         bookingExpiration: bookingJobLastRun?.toISOString() ?? null,
         paymentReminder: paymentJobLastRun?.toISOString() ?? null,
       },
+    });
+  },
+);
+
+router.get(
+  "/logs",
+  isAdminAuthenticated,
+  checkPermissions(["view_health"]),
+  async (req, res) => {
+    const requestedLimit = parseInt((req.query.limit as string) || "", 10);
+    const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.min(requestedLimit, 500)
+      : LOG_DEFAULT_LIMIT;
+    const levelParam = ((req.query.level as string) || "").toLowerCase();
+    const filteredLevels = levelNumbersByLabel[levelParam];
+
+    try {
+      const stats = await fs.stat(LOG_FILE_PATH);
+      if (!stats.isFile() || stats.size === 0) {
+        return res.json({ logs: [] });
+      }
+
+      const readSize = Math.min(stats.size, LOG_READ_MAX_BYTES);
+      let fileHandle: FileHandle | undefined;
+
+      try {
+        fileHandle = await fs.open(LOG_FILE_PATH, "r");
+        const buffer = Buffer.alloc(readSize);
+        await fileHandle.read(buffer, 0, readSize, stats.size - readSize);
+        const lines = buffer
+          .toString("utf-8")
+          .split(/\r?\n/)
+          .filter((line) => line.trim().length > 0);
+
+        const parsed = lines
+          .map((line) => {
+            try {
+              return JSON.parse(line) as Record<string, unknown>;
+            } catch {
+              return null;
+            }
+          })
+          .filter((entry): entry is Record<string, unknown> => entry !== null);
+
+        const filtered = parsed.filter((entry) => {
+          if (typeof entry.level !== "number") return false;
+          if (!filteredLevels) return true;
+          return filteredLevels.includes(entry.level);
+        });
+
+        const slice = filtered.slice(-limit).reverse();
+        const logs = slice.map((entry) => {
+          const { level, time, msg, pid, hostname, ...rest } = entry as Record<string, unknown> & {
+            level: number;
+            time?: number | string;
+            msg?: string;
+            pid?: number;
+            hostname?: string;
+          };
+
+          let timestamp = new Date().toISOString();
+          if (typeof time === "number") {
+            timestamp = new Date(time).toISOString();
+          } else if (typeof time === "string") {
+            const numeric = Number(time);
+            const date = Number.isFinite(numeric) ? new Date(numeric) : new Date(time);
+            if (!Number.isNaN(date.getTime())) {
+              timestamp = date.toISOString();
+            }
+          }
+
+          const metadata = { ...rest };
+          delete metadata.time;
+          delete metadata.msg;
+          delete metadata.level;
+          delete metadata.pid;
+          delete metadata.hostname;
+
+          return {
+            timestamp,
+            level: levelNameByNumber[level] ?? String(level),
+            message: msg ?? "",
+            metadata: Object.keys(metadata).length ? metadata : undefined,
+          };
+        });
+
+        return res.json({ logs });
+      } finally {
+        await fileHandle?.close();
+      }
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+        return res.json({ logs: [] });
+      }
+      return res.status(500).json({ message: "Failed to read logs" });
+    }
+  },
+);
+
+router.get(
+  "/transactions",
+  isAdminAuthenticated,
+  checkPermissions(["view_all_orders"]),
+  async (req, res) => {
+    const pageParam = parseInt((req.query.page as string) || "", 10);
+    const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+    const pageSizeParam = parseInt((req.query.pageSize as string) || (req.query.limit as string) || "", 10);
+    const pageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0
+      ? Math.min(pageSizeParam, TRANSACTIONS_MAX_PAGE_SIZE)
+      : 20;
+    const offset = (page - 1) * pageSize;
+
+    const statusFilter = (req.query.status as string) || "";
+    const paymentStatusFilter = (req.query.paymentStatus as string) || "";
+    const customerFilter = (req.query.customer as string) || "";
+    const shopFilter = (req.query.shop as string) || "";
+    const searchFilter = (req.query.search as string) || "";
+
+    const customerAlias = alias(users, "customer_users");
+    const shopAlias = alias(users, "shop_users");
+
+    const filters: SQL<unknown>[] = [];
+
+    if (statusFilter && isOrderStatus(statusFilter)) {
+      filters.push(eq(orders.status, statusFilter));
+    }
+
+    if (paymentStatusFilter && isPaymentStatus(paymentStatusFilter)) {
+      filters.push(eq(orders.paymentStatus, paymentStatusFilter));
+    }
+
+    if (customerFilter) {
+      const like = `%${customerFilter}%`;
+      filters.push(
+        sql`(${customerAlias.name} ILIKE ${like} OR ${customerAlias.email} ILIKE ${like})`,
+      );
+    }
+
+    if (shopFilter) {
+      const like = `%${shopFilter}%`;
+      filters.push(sql`(${shopAlias.name} ILIKE ${like} OR ${shopAlias.email} ILIKE ${like})`);
+    }
+
+    if (searchFilter) {
+      const like = `%${searchFilter}%`;
+      filters.push(
+        sql`(${customerAlias.name} ILIKE ${like} OR ${customerAlias.email} ILIKE ${like} OR ${shopAlias.name} ILIKE ${like} OR ${shopAlias.email} ILIKE ${like} OR ${orders.paymentReference} ILIKE ${like})`,
+      );
+    }
+
+    const whereClause = filters.length ? and(...filters) : undefined;
+
+    const baseQuery = db
+      .select({
+        id: orders.id,
+        status: orders.status,
+        paymentStatus: orders.paymentStatus,
+        total: orders.total,
+        paymentReference: orders.paymentReference,
+        orderDate: orders.orderDate,
+        customerId: orders.customerId,
+        shopId: orders.shopId,
+        customerName: customerAlias.name,
+        customerEmail: customerAlias.email,
+        shopName: shopAlias.name,
+        shopEmail: shopAlias.email,
+        totalCount: sql<number>`count(*) over ()`,
+      })
+      .from(orders)
+      .leftJoin(customerAlias, eq(customerAlias.id, orders.customerId))
+      .leftJoin(shopAlias, eq(shopAlias.id, orders.shopId));
+
+    const rows = await (whereClause ? baseQuery.where(whereClause) : baseQuery)
+      .orderBy(desc(orders.orderDate), desc(orders.id))
+      .limit(pageSize)
+      .offset(offset);
+
+    const total = rows.length ? Number(rows[0].totalCount) : 0;
+    const transactions = rows.map(({ totalCount: _totalCount, ...row }) => ({
+      id: row.id,
+      status: row.status,
+      paymentStatus: row.paymentStatus,
+      total: row.total,
+      paymentReference: row.paymentReference,
+      orderDate: row.orderDate ? row.orderDate.toISOString() : null,
+      customer: row.customerId
+        ? {
+            id: row.customerId,
+            name: row.customerName ?? null,
+            email: row.customerEmail ?? null,
+          }
+        : null,
+      shop: row.shopId
+        ? {
+            id: row.shopId,
+            name: row.shopName ?? null,
+            email: row.shopEmail ?? null,
+          }
+        : null,
+    }));
+
+    return res.json({
+      page,
+      pageSize,
+      total,
+      hasMore: total > page * pageSize,
+      transactions,
     });
   },
 );

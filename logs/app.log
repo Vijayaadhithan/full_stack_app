@@ -1,0 +1,23 @@
+{"level":30,"time":1758092514950,"pid":16705,"hostname":"vijays-Air","msg":"Running booking expiration job"}
+{"level":30,"time":1758092515055,"pid":16705,"hostname":"vijays-Air","msg":"Completed booking expiration job"}
+{"level":30,"time":1758092515148,"pid":16705,"hostname":"vijays-Air","msg":"Admin bootstrap: ensured vjaadhi2799@gmail.com exists and has Super Admin role."}
+{"level":30,"time":1758092515151,"pid":16705,"hostname":"vijays-Air","msg":"Server is running on port 5000"}
+{"level":30,"time":1758092557460,"pid":16705,"hostname":"vijays-Air","msg":"✅ Database connection successful"}
+{"level":30,"time":1758092625827,"pid":16705,"hostname":"vijays-Air","msg":"[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: undefined"}
+{"level":30,"time":1758092631591,"pid":16705,"hostname":"vijays-Air","msg":"[Google OAuth] Received profile for 103665178317295253139"}
+{"level":30,"time":1758092631591,"pid":16705,"hostname":"vijays-Air","msg":"[Google OAuth] Attempting to find user by Google ID: 103665178317295253139"}
+{"level":30,"time":1758092631596,"pid":16705,"hostname":"vijays-Air","msg":"[Google OAuth] User found by Google ID:"}
+{"level":30,"time":1758092631605,"pid":16705,"hostname":"vijays-Air","msg":"[Google OAuth] Authentication successful, redirecting user"}
+{"level":30,"time":1758092633530,"pid":16705,"hostname":"vijays-Air","msg":"Getting service with ID:"}
+{"level":30,"time":1758092633530,"pid":16705,"hostname":"vijays-Air","msg":"Getting service with ID:"}
+{"level":30,"time":1758092633531,"pid":16705,"hostname":"vijays-Air","msg":"Getting service with ID:"}
+{"level":30,"time":1758092633532,"pid":16705,"hostname":"vijays-Air","msg":"Getting service with ID:"}
+{"level":30,"time":1758092633536,"pid":16705,"hostname":"vijays-Air","msg":"Found service:"}
+{"level":30,"time":1758092633537,"pid":16705,"hostname":"vijays-Air","msg":"Found service:"}
+{"level":30,"time":1758092633572,"pid":16705,"hostname":"vijays-Air","msg":"Found service:"}
+{"level":30,"time":1758092633577,"pid":16705,"hostname":"vijays-Air","msg":"Found service:"}
+{"level":30,"time":1758092665617,"pid":16705,"hostname":"vijays-Air","msg":"Filtered services:"}
+{"level":30,"time":1758092670652,"pid":16705,"hostname":"vijays-Air","msg":"Shop products:"}
+{"level":30,"time":1758092670660,"pid":16705,"hostname":"vijays-Air","msg":"[API] /api/users/:id - Received request for user ID:"}
+{"level":30,"time":1758092670660,"pid":16705,"hostname":"vijays-Air","msg":"[API] /api/users/:id - Raw ID parameter:"}
+{"level":30,"time":1758092670661,"pid":16705,"hostname":"vijays-Air","msg":"[API] /api/users/:id - User from storage:"}
