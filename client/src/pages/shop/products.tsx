@@ -54,6 +54,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Product } from "@shared/schema";
+import { productFilterConfig } from "@shared/config";
 import { z } from "zod";
 import { useState } from "react";
 
@@ -94,6 +95,30 @@ export default function ShopProducts() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+
+  const findCategory = (value: string) => {
+    const lower = value.toLowerCase();
+    return (
+      productFilterConfig.categories.find(
+        (category) => category.value === lower,
+      ) ??
+      productFilterConfig.categories.find(
+        (category) => category.label.toLowerCase() === lower,
+      )
+    );
+  };
+
+  const normalizeCategoryValue = (value: string | null | undefined) => {
+    if (!value) return "";
+    const match = findCategory(value);
+    return match?.value ?? value.toLowerCase();
+  };
+
+  const getCategoryLabel = (value: string | null | undefined) => {
+    if (!value) return "";
+    const match = findCategory(value);
+    return match?.label ?? value;
+  };
 
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: [`/api/products/shop/${user?.id}`],
@@ -140,7 +165,7 @@ export default function ShopProducts() {
       price: Number(product.price),
       mrp: Number(product.mrp),
       stock: product.stock,
-      category: product.category,
+      category: normalizeCategoryValue(product.category),
       images: product.images || [],
       isAvailable: product.isAvailable ?? true, // Default to true if null
       shopId: user?.id || 0,
@@ -362,11 +387,16 @@ export default function ShopProducts() {
   };
 
   const onSubmit = (data: ProductFormData) => {
+    const payload = {
+      ...data,
+      category: normalizeCategoryValue(data.category),
+    };
+
     if (editingProduct) {
       console.log("Updating product with ID:", editingProduct.id);
-      updateProductMutation.mutate({ id: editingProduct.id, data });
+      updateProductMutation.mutate({ id: editingProduct.id, data: payload });
     } else {
-      createProductMutation.mutate(data);
+      createProductMutation.mutate(payload);
     }
   };
 
@@ -514,21 +544,18 @@ export default function ShopProducts() {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                <SelectItem value="Electronics">
-                                  {t("electronics")}
-                                </SelectItem>
-                                <SelectItem value="Fashion">
-                                  {t("fashion")}
-                                </SelectItem>
-                                <SelectItem value="Home">
-                                  {t("home_living")}
-                                </SelectItem>
-                                <SelectItem value="Beauty">
-                                  {t("beauty_personal_care")}
-                                </SelectItem>
-                                <SelectItem value="Books">
-                                  {t("books_stationery")}
-                                </SelectItem>
+                                {productFilterConfig.categories.map(
+                                  (category) => (
+                                    <SelectItem
+                                      key={category.value}
+                                      value={category.value}
+                                    >
+                                      {category.translationKey
+                                        ? t(category.translationKey)
+                                        : category.label}
+                                    </SelectItem>
+                                  ),
+                                )}
                               </SelectContent>
                             </Select>
                             <FormMessage />
@@ -1020,7 +1047,9 @@ export default function ShopProducts() {
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span>{t("category")}</span>
-                      <span className="font-semibold">{product.category}</span>
+                      <span className="font-semibold">
+                        {getCategoryLabel(product.category)}
+                      </span>
                     </div>
                   </div>
 

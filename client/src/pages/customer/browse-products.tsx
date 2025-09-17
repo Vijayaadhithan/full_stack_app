@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Product } from "@shared/schema";
+import { productFilterConfig } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -42,22 +43,47 @@ const item = {
 
 export default function BrowseProducts() {
   const { toast } = useToast();
-  const [filters, setFilters] = useState({
+
+  type ProductFilters = {
+    searchTerm: string;
+    category: string;
+    minPrice: string;
+    maxPrice: string;
+    locationCity: string;
+    locationState: string;
+    attributes: Record<string, string>;
+  };
+
+  const createAttributeDefaults = () =>
+    Object.fromEntries(
+      productFilterConfig.attributeFilters.map(({ key }) => [key, ""]),
+    ) as Record<string, string>;
+
+  const [filters, setFilters] = useState<ProductFilters>(() => ({
     searchTerm: "",
-    category: undefined as string | undefined,
+    category: "all",
     minPrice: "",
     maxPrice: "",
     locationCity: "",
     locationState: "",
-    color: "",
-    size: "",
-  });
+    attributes: createAttributeDefaults(),
+  }));
 
   const handleFilterChange = (
-    key: keyof typeof filters,
-    value: string | undefined,
+    key: keyof Omit<ProductFilters, "attributes">,
+    value: string,
   ) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleAttributeChange = (key: string, value: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      attributes: {
+        ...prev.attributes,
+        [key]: value,
+      },
+    }));
   };
 
   const {
@@ -77,11 +103,14 @@ export default function BrowseProducts() {
         params.append("locationCity", filters.locationCity);
       if (filters.locationState)
         params.append("locationState", filters.locationState);
-      const attr: Record<string, string> = {};
-      if (filters.color) attr.color = filters.color;
-      if (filters.size) attr.size = filters.size;
-      if (Object.keys(attr).length > 0)
-        params.append("attributes", JSON.stringify(attr));
+      const attributeEntries = Object.entries(filters.attributes).filter(
+        ([, value]) => value,
+      );
+      if (attributeEntries.length > 0)
+        params.append(
+          "attributes",
+          JSON.stringify(Object.fromEntries(attributeEntries)),
+        );
 
       const queryString = params.toString();
       const response = await apiRequest(
@@ -188,23 +217,18 @@ export default function BrowseProducts() {
             </div>
             <Select
               value={filters.category}
-              onValueChange={(value) =>
-                handleFilterChange(
-                  "category",
-                  value === "all" ? undefined : value,
-                )
-              }
+              onValueChange={(value) => handleFilterChange("category", value)}
             >
               <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="electronics">Electronics</SelectItem>
-                <SelectItem value="clothing">Clothing</SelectItem>
-                <SelectItem value="books">Books</SelectItem>
-                <SelectItem value="home">Home &amp; Living</SelectItem>
-                {/* TODO: Fetch categories dynamically */}
+                {productFilterConfig.categories.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>
+                    {category.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Popover>
@@ -258,24 +282,41 @@ export default function BrowseProducts() {
                     }
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="color">Color</Label>
-                  <Input
-                    id="color"
-                    value={filters.color}
-                    onChange={(e) =>
-                      handleFilterChange("color", e.target.value)
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="size">Size</Label>
-                  <Input
-                    id="size"
-                    value={filters.size}
-                    onChange={(e) => handleFilterChange("size", e.target.value)}
-                  />
-                </div>
+                {productFilterConfig.attributeFilters.map((attribute) => (
+                  <div className="space-y-2" key={attribute.key}>
+                    <Label htmlFor={`attribute-${attribute.key}`}>
+                      {attribute.label}
+                    </Label>
+                    {attribute.type === "select" && attribute.options ? (
+                      <Select
+                        value={filters.attributes[attribute.key] ?? ""}
+                        onValueChange={(value) =>
+                          handleAttributeChange(attribute.key, value)
+                        }
+                      >
+                        <SelectTrigger id={`attribute-${attribute.key}`}>
+                          <SelectValue placeholder={attribute.label} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {attribute.options.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id={`attribute-${attribute.key}`}
+                        placeholder={attribute.placeholder ?? attribute.label}
+                        value={filters.attributes[attribute.key] ?? ""}
+                        onChange={(e) =>
+                          handleAttributeChange(attribute.key, e.target.value)
+                        }
+                      />
+                    )}
+                  </div>
+                ))}
               </PopoverContent>
             </Popover>
           </div>

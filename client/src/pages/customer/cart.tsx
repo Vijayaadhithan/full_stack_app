@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Product, Promotion, PaymentMethodType } from "@shared/schema";
+import { platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -171,8 +172,7 @@ export default function Cart() {
       0,
     ) ?? 0; // Use nullish coalescing for default value
 
-  // Platform service fee is fixed at ₹1
-  const platformFee = 1;
+  const platformFee = platformFees.productOrder;
 
   // Calculate the final total after applying promotion and adding platform fee
   const totalAmount = subtotal - discountAmount + platformFee;

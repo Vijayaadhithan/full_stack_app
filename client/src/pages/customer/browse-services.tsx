@@ -15,6 +15,7 @@ import { Link } from "wouter";
 import { Loader2, MapPin, Star, Clock, Search, Filter } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Service } from "@shared/schema";
+import { serviceFilterConfig } from "@shared/config";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -24,15 +25,6 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-
-const categories = [
-  "All",
-  "Beauty & Wellness",
-  "Home Services",
-  "Professional Services",
-  "Health & Fitness",
-  "Education & Training",
-];
 
 const container = {
   hidden: { opacity: 0 },
@@ -51,7 +43,7 @@ export default function BrowseServices() {
   const { toast } = useToast();
   const [filters, setFilters] = useState({
     searchTerm: "",
-    category: "All",
+    category: "all",
     minPrice: "",
     maxPrice: "",
     locationCity: "",
@@ -71,7 +63,7 @@ export default function BrowseServices() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.searchTerm) params.append("searchTerm", filters.searchTerm);
-      if (filters.category && filters.category !== "All")
+      if (filters.category && filters.category !== "all")
         params.append("category", filters.category);
       if (filters.minPrice) params.append("minPrice", filters.minPrice);
       if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
@@ -138,9 +130,9 @@ export default function BrowseServices() {
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
+                {serviceFilterConfig.categories.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>
+                    {category.label}
                   </SelectItem>
                 ))}
               </SelectContent>

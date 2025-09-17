@@ -43,6 +43,7 @@ import {
   PaymentMethodSchema,
   shopWorkers,
 } from "@shared/schema";
+import { platformFees } from "@shared/config";
 import { eq, and } from "drizzle-orm";
 import { db } from "./db";
 import crypto from "crypto";
@@ -58,7 +59,7 @@ import {
 } from "./security/rateLimiters";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
-const PLATFORM_SERVICE_FEE = 1;
+const PLATFORM_SERVICE_FEE = platformFees.productOrder;
 
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(
@@ -1358,7 +1359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.query;
 
       const filters: any = {};
-      if (category) filters.category = String(category);
+      if (category) filters.category = String(category).toLowerCase();
       if (minPrice) filters.minPrice = parseFloat(String(minPrice));
       if (maxPrice) filters.maxPrice = parseFloat(String(maxPrice));
       if (searchTerm) filters.searchTerm = String(searchTerm);
@@ -3831,7 +3832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.query;
 
       const filters: any = {};
-      if (category) filters.category = String(category);
+      if (category) filters.category = String(category).toLowerCase();
       if (minPrice) filters.minPrice = parseFloat(String(minPrice));
       if (maxPrice) filters.maxPrice = parseFloat(String(maxPrice));
       if (tags)

@@ -17,6 +17,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { Product, User } from "@shared/schema";
+import { productFilterConfig } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -65,9 +66,7 @@ export default function ShopDetails() {
   console.log("ShopDetails component - Shop ID from params:", id);
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(
-    undefined,
-  );
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const {
     data: shop,
@@ -177,16 +176,23 @@ export default function ShopDetails() {
       },
     });
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+
   const filteredProducts =
-    products?.filter(
-      (product) =>
-        (!selectedCategory || product.category === selectedCategory) &&
-        (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (product.description &&
-            product.description
-              .toLowerCase()
-              .includes(searchQuery.toLowerCase()))),
-    ) ?? []; // Provide default empty array if products is undefined
+    products?.filter((product) => {
+      const productCategory = product.category?.toLowerCase() ?? "";
+      const matchesCategory =
+        selectedCategory === "all" ||
+        productCategory === selectedCategory.toLowerCase();
+
+      if (!matchesCategory) return false;
+
+      if (queryTokens.length === 0) return true;
+
+      const searchableText = `${product.name} ${product.description ?? ""}`.toLowerCase();
+      return queryTokens.every((token) => searchableText.includes(token));
+    }) ?? []; // Provide default empty array if products is undefined
 
   const isLoading = shopLoading || productsLoading;
 
@@ -287,20 +293,19 @@ export default function ShopDetails() {
                 />
               </div>
               <Select
-                value={selectedCategory ?? ""}
-                onValueChange={(value) =>
-                  setSelectedCategory(value === "" ? undefined : value)
-                }
+                value={selectedCategory}
+                onValueChange={(value) => setSelectedCategory(value)}
               >
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {/* <SelectItem value="">All Categories</SelectItem> */}
-                  <SelectItem value="electronics">Electronics</SelectItem>
-                  <SelectItem value="clothing">Clothing</SelectItem>
-                  <SelectItem value="books">Books</SelectItem>
-                  <SelectItem value="home">Home & Living</SelectItem>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {productFilterConfig.categories.map((category) => (
+                    <SelectItem key={category.value} value={category.value}>
+                      {category.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

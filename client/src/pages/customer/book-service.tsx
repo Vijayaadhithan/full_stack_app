@@ -12,6 +12,7 @@ import {
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Service, User } from "@shared/schema";
+import { platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/language-context";
@@ -460,6 +461,7 @@ export default function BookService() {
   const { id } = useParams<{ id: string }>();
   const { t } = useLanguage();
   const { toast } = useToast();
+  const platformFee = platformFees.serviceBooking;
   const [selectedDate, setSelectedDate] = useState<Date>(new Date()); // Represents the *day* selected, time part is ignored
   const [selectedTime, setSelectedTime] = useState<string>(); // Store the selected UTC start time string
   const [serviceLocation, setServiceLocation] = useState<
@@ -981,12 +983,15 @@ export default function BookService() {
               </div>
               <div className="flex justify-between py-2 text-gray-600">
                 <span>Platform Fee:</span>
-                <span>₹3.00</span>
+                <span>₹{platformFee.toFixed(2)}</span>
               </div>
               <div className="flex justify-between py-2 font-bold">
                 <span>Total:</span>
                 <span>
-                  ₹{(parseFloat(service?.price || "0") + 3).toFixed(2)}
+                  ₹{(
+                    parseFloat(service?.price || "0") +
+                    platformFee
+                  ).toFixed(2)}
                 </span>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import session from "express-session";
 import pgSession from "connect-pg-simple";
 import { db } from "./db";
+import type { SQL } from "drizzle-orm";
 import logger from "./logger";
 import { getCache, setCache } from "./cache";
 import { sendEmail, getGenericNotificationEmailContent } from "./emailService"; // Added for sending emails
@@ -335,9 +336,14 @@ export class PostgresStorage implements IStorage {
     let query: any = db.select().from(products);
     let joinedUsers = false;
 
+    const escapeLikePattern = (value: string) =>
+      value.replace(/[%_]/g, (char) => `\\${char}`);
+
     if (filters) {
       if (filters.category) {
-        conditions.push(eq(products.category, filters.category));
+        conditions.push(
+          sql`LOWER(${products.category}) = LOWER(${filters.category})`,
+        );
       }
       if (filters.minPrice) {
         conditions.push(sql`${products.price} >= ${filters.minPrice}`);
@@ -346,10 +352,35 @@ export class PostgresStorage implements IStorage {
         conditions.push(sql`${products.price} <= ${filters.maxPrice}`);
       }
       if (filters.searchTerm) {
-        const searchTermLike = `%${filters.searchTerm}%`;
-        conditions.push(
-          sql`(${products.name} ILIKE ${searchTermLike} OR ${products.description} ILIKE ${searchTermLike})`,
-        );
+        const normalizedTerm = String(filters.searchTerm).trim();
+        if (normalizedTerm.length > 0) {
+          const escapedPhrase = `%${escapeLikePattern(normalizedTerm)}%`;
+          const phraseMatch = sql`(${products.name} ILIKE ${escapedPhrase} OR ${products.description} ILIKE ${escapedPhrase})`;
+          const wordClauses = normalizedTerm
+            .split(/\s+/)
+            .filter((word) => word.length > 0)
+            .map((word) => {
+              const escapedWord = `%${escapeLikePattern(word)}%`;
+              return sql`(${products.name} ILIKE ${escapedWord} OR ${products.description} ILIKE ${escapedWord})`;
+            });
+
+          if (wordClauses.length > 0) {
+            let combinedWords: SQL | null = null;
+            for (const clause of wordClauses) {
+              combinedWords = combinedWords
+                ? sql`${combinedWords} AND ${clause}`
+                : clause;
+            }
+
+            if (combinedWords) {
+              conditions.push(sql`(${phraseMatch} OR (${combinedWords}))`);
+            } else {
+              conditions.push(phraseMatch);
+            }
+          } else {
+            conditions.push(phraseMatch);
+          }
+        }
       }
       if (filters.shopId) {
         conditions.push(eq(products.shopId, filters.shopId));
@@ -869,9 +900,14 @@ export class PostgresStorage implements IStorage {
   async getServices(filters?: any): Promise<Service[]> {
     // Build an array of conditions starting with the non-deleted check
     const conditions = [eq(services.isDeleted, false)];
+    const escapeLikePattern = (value: string) =>
+      value.replace(/[%_]/g, (char) => `\\${char}`);
+
     if (filters) {
       if (filters.category) {
-        conditions.push(eq(services.category, filters.category));
+        conditions.push(
+          sql`LOWER(${services.category}) = LOWER(${filters.category})`,
+        );
       }
       if (filters.minPrice) {
         conditions.push(sql`${services.price} >= ${filters.minPrice}`);
@@ -880,10 +916,35 @@ export class PostgresStorage implements IStorage {
         conditions.push(sql`${services.price} <= ${filters.maxPrice}`);
       }
       if (filters.searchTerm) {
-        const searchTermLike = `%${filters.searchTerm}%`;
-        conditions.push(
-          sql`(${services.name} ILIKE ${searchTermLike} OR ${services.description} ILIKE ${searchTermLike})`,
-        );
+        const normalizedTerm = String(filters.searchTerm).trim();
+        if (normalizedTerm.length > 0) {
+          const escapedPhrase = `%${escapeLikePattern(normalizedTerm)}%`;
+          const phraseMatch = sql`(${services.name} ILIKE ${escapedPhrase} OR ${services.description} ILIKE ${escapedPhrase})`;
+          const wordClauses = normalizedTerm
+            .split(/\s+/)
+            .filter((word) => word.length > 0)
+            .map((word) => {
+              const escapedWord = `%${escapeLikePattern(word)}%`;
+              return sql`(${services.name} ILIKE ${escapedWord} OR ${services.description} ILIKE ${escapedWord})`;
+            });
+
+          if (wordClauses.length > 0) {
+            let combinedWords: SQL | null = null;
+            for (const clause of wordClauses) {
+              combinedWords = combinedWords
+                ? sql`${combinedWords} AND ${clause}`
+                : clause;
+            }
+
+            if (combinedWords) {
+              conditions.push(sql`(${phraseMatch} OR (${combinedWords}))`);
+            } else {
+              conditions.push(phraseMatch);
+            }
+          } else {
+            conditions.push(phraseMatch);
+          }
+        }
       }
       if (filters.providerId) {
         conditions.push(eq(services.providerId, filters.providerId));

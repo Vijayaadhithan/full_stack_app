@@ -538,21 +538,78 @@ export class MemStorage implements IStorage {
   }
 
   // Add implementation for getProducts
-  async getProducts(filters?: {
-    category?: string;
-    isAvailable?: boolean;
-  }): Promise<Product[]> {
+  async getProducts(filters?: any): Promise<Product[]> {
     let results = Array.from(this.products.values()).filter(
       (p) => !p.isDeleted,
     );
-    if (filters) {
-      if (filters.category) {
-        results = results.filter((p) => p.category === filters.category);
-      }
-      if (typeof filters.isAvailable === "boolean") {
-        results = results.filter((p) => p.isAvailable === filters.isAvailable);
+
+    if (!filters) {
+      return results;
+    }
+
+    if (filters.category) {
+      const target = String(filters.category).toLowerCase();
+      results = results.filter(
+        (p) => (p.category ?? "").toLowerCase() === target,
+      );
+    }
+
+    if (filters.minPrice !== undefined) {
+      const minPrice = Number(filters.minPrice);
+      if (!Number.isNaN(minPrice)) {
+        results = results.filter((p) => Number(p.price) >= minPrice);
       }
     }
+
+    if (filters.maxPrice !== undefined) {
+      const maxPrice = Number(filters.maxPrice);
+      if (!Number.isNaN(maxPrice)) {
+        results = results.filter((p) => Number(p.price) <= maxPrice);
+      }
+    }
+
+    if (typeof filters.isAvailable === "boolean") {
+      results = results.filter((p) => p.isAvailable === filters.isAvailable);
+    }
+
+    if (filters.searchTerm) {
+      const normalized = String(filters.searchTerm).trim().toLowerCase();
+      if (normalized.length > 0) {
+        const tokens = normalized.split(/\s+/).filter(Boolean);
+        results = results.filter((product) => {
+          const searchable = `${product.name} ${product.description ?? ""}`.toLowerCase();
+          if (searchable.includes(normalized)) return true;
+          if (!tokens.length) return false;
+          return tokens.every((token) => searchable.includes(token));
+        });
+      }
+    }
+
+    if (filters.attributes) {
+      const entries = Object.entries(filters.attributes).filter(
+        ([, value]) => value !== undefined && value !== null && String(value).length > 0,
+      );
+      if (entries.length > 0) {
+        results = results.filter((product) => {
+          const specs = (product as any).specifications as
+            | Record<string, unknown>
+            | undefined
+            | null;
+          return entries.every(([key, rawValue]) => {
+            const target = String(rawValue).toLowerCase();
+            const specValue = specs?.[key];
+            if (specValue !== undefined && specValue !== null) {
+              return String(specValue).toLowerCase() === target;
+            }
+            const directValue = (product as any)[key];
+            return directValue
+              ? String(directValue).toLowerCase().includes(target)
+              : false;
+          });
+        });
+      }
+    }
+
     return results;
   }
 
