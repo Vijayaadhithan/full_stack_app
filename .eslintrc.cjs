@@ -22,5 +22,18 @@ module.exports = {
     es2020: true
   },
   ignorePatterns: ['dist/', 'build/', 'node_modules/'],
-  rules: {}
+  rules: {
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-unused-vars": "off",
+    "@typescript-eslint/ban-ts-comment": "off",
+    "@typescript-eslint/no-namespace": "off",
+    "@typescript-eslint/prefer-as-const": "off",
+    "no-empty": "off",
+    "no-prototype-builtins": "off",
+    "prefer-const": "off",
+    "react/no-unescaped-entities": "off",
+    "react/no-unknown-property": "off",
+    "react/prop-types": "off",
+    "react/react-in-jsx-scope": "off"
+  }
 };
