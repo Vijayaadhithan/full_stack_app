@@ -1707,10 +1707,23 @@ export class PostgresStorage implements IStorage {
   }
 
   async getNotificationsByUser(userId: number): Promise<Notification[]> {
-    return await db
-      .select()
+    const rows = await db
+      .select({
+        id: notifications.id,
+        userId: notifications.userId,
+        type: notifications.type,
+        title: notifications.title,
+        message: notifications.message,
+        isRead: notifications.isRead,
+        relatedBookingId: notifications.relatedBookingId,
+        createdAt: sql<Date>`(${notifications.createdAt} AT TIME ZONE 'Asia/Kolkata')`,
+      })
       .from(notifications)
       .where(eq(notifications.userId, userId));
+    return rows.map((row) => ({
+      ...row,
+      createdAt: row.createdAt ?? null,
+    }));
   }
 
   async markNotificationAsRead(id: number): Promise<void> {

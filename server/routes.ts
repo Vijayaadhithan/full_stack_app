@@ -370,26 +370,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (service.providerId) {
           const providerUser = await storage.getUser(service.providerId);
           if (providerUser) {
+            const formattedRescheduleDate = formatIndianDisplay(
+              bookingDate,
+              "datetime",
+            );
             notificationPromises.push(
               storage.createNotification({
                 userId: service.providerId,
                 type: "booking_rescheduled_request",
                 title: "Reschedule Request",
-                message: `Customer ${currentUser.name || "ID: " + currentUser.id} requested to reschedule booking #${bookingId} for '${service.name}' to ${new Date(bookingDate).toLocaleString()}. Please review.`,
+                message: `Customer ${currentUser.name || "ID: " + currentUser.id} requested to reschedule booking #${bookingId} for '${service.name}' to ${formattedRescheduleDate}. Please review.`,
                 isRead: false,
                 relatedBookingId: bookingId,
               }),
             );
             if (providerUser.email) {
+              const formattedOriginalDate = originalBookingDate
+                ? formatIndianDisplay(originalBookingDate, "datetime")
+                : "N/A";
+              const formattedNewDate = formatIndianDisplay(
+                bookingDate,
+                "datetime",
+              );
               emailPromise = emailService
                 .sendBookingRescheduledByCustomerEmail(providerUser.email, {
                   providerName: providerUser.name || "Provider",
                   customerName: currentUser.name || "Customer",
                   serviceName: service.name,
-                  originalBookingDate: originalBookingDate
-                    ? new Date(originalBookingDate).toLocaleString()
-                    : "N/A",
-                  newBookingDate: new Date(bookingDate).toLocaleString(),
+                  originalBookingDate: formattedOriginalDate,
+                  newBookingDate: formattedNewDate,
                   bookingId: bookingId.toString(),
                   loginUrl: `${process.env.APP_BASE_URL}/login`,
                   bookingDetailsUrl: `${process.env.APP_BASE_URL}/provider/bookings`,
@@ -424,26 +433,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (booking.customerId) {
           const customerUser = await storage.getUser(booking.customerId);
           if (customerUser) {
+            const formattedProviderRescheduleDate = formatIndianDisplay(
+              bookingDate,
+              "datetime",
+            );
             notificationPromises.push(
               storage.createNotification({
                 userId: booking.customerId,
                 type: "booking_rescheduled_by_provider",
                 title: "Booking Rescheduled by Provider",
-                message: `Provider ${currentUser.name || "ID: " + currentUser.id} has rescheduled your booking #${bookingId} for '${service.name}' to ${new Date(bookingDate).toLocaleString()}. ${comments ? "Comments: " + comments : ""}`,
+                message: `Provider ${
+                  currentUser.name || "ID: " + currentUser.id
+                } has rescheduled your booking #${bookingId} for '${
+                  service.name
+                }' to ${formattedProviderRescheduleDate}. ${
+                  comments ? "Comments: " + comments : ""
+                }`,
                 isRead: false,
                 relatedBookingId: bookingId,
               }),
             );
             if (customerUser.email) {
+              const formattedOriginalDate = originalBookingDate
+                ? formatIndianDisplay(originalBookingDate, "datetime")
+                : "N/A";
+              const formattedNewDate = formatIndianDisplay(
+                bookingDate,
+                "datetime",
+              );
               emailPromise = emailService
                 .sendBookingRescheduledByProviderEmail(customerUser.email, {
                   customerName: customerUser.name || "Customer",
                   providerName: currentUser.name || "Provider",
                   serviceName: service.name,
-                  originalBookingDate: originalBookingDate
-                    ? new Date(originalBookingDate).toLocaleString()
-                    : "N/A",
-                  newBookingDate: new Date(bookingDate).toLocaleString(),
+                  originalBookingDate: formattedOriginalDate,
+                  newBookingDate: formattedNewDate,
                   bookingId: bookingId.toString(),
                   comments: comments || undefined,
                   loginUrl: `${process.env.BASE_URL}/login`,
@@ -488,7 +512,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               status === "accepted"
             ) {
               notificationTitle = "Reschedule Confirmed";
-              notificationMessage = `Your reschedule request for booking #${bookingId} ('${service.name}') has been accepted. New date: ${booking.bookingDate ? new Date(booking.bookingDate).toLocaleString() : "N/A"}`;
+              const formattedRescheduledDate = booking.bookingDate
+                ? formatIndianDisplay(booking.bookingDate, "datetime")
+                : "N/A";
+              notificationMessage = `Your reschedule request for booking #${bookingId} ('${service.name}') has been accepted. New date: ${formattedRescheduledDate}`;
               emailSubject = "Reschedule Confirmed";
             } else if (
               booking.status === "rescheduled_pending_provider_approval" &&
@@ -519,7 +546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   serviceName: service.name,
                   bookingStatus: status,
                   bookingDate: booking.bookingDate
-                    ? new Date(booking.bookingDate).toLocaleString()
+                    ? formatIndianDisplay(booking.bookingDate, "datetime")
                     : "N/A",
                   bookingId: bookingId.toString(),
                   providerName: currentUser.name || "Provider",
