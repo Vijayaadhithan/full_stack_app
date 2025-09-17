@@ -33,6 +33,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <Link href="/admin/dashboard">Dashboard</Link>
           {has("manage_users") && <Link href="/admin/users">Users</Link>}
           {has("view_all_orders") && <Link href="/admin/orders">Orders</Link>}
+          {has("view_all_orders") && (
+            <Link href="/admin/shop-analytics">Shop Analytics</Link>
+          )}
           {has("view_all_bookings") && <Link href="/admin/bookings">Bookings</Link>}
           {has("manage_admins") && <Link href="/admin/admins">Admins</Link>}
           {has("view_health") && <Link href="/admin/health">Health</Link>}

@@ -11,7 +11,7 @@ import {
   orders,
   bookings,
 } from "@shared/schema";
-import { eq, count, sum, sql } from "drizzle-orm";
+import { eq, count, sum, sql, and } from "drizzle-orm";
 import { promisify } from "util";
 import { scrypt, timingSafeEqual } from "crypto";
 import { hashPasswordInternal } from "../auth";
@@ -257,6 +257,36 @@ router.get(
   async (_req, res) => {
     const all = await db.select().from(orders);
     res.json(all);
+  },
+);
+
+router.get(
+  "/shops/transactions",
+  isAdminAuthenticated,
+  checkPermissions(["view_all_orders"]),
+  async (_req, res) => {
+    const results = await db
+      .select({
+        shopId: users.id,
+        shopName: users.name,
+        transactionCount: sql<number>`count(${orders.id})`,
+      })
+      .from(users)
+      .leftJoin(
+        orders,
+        and(eq(users.id, orders.shopId), eq(orders.paymentStatus, "paid")),
+      )
+      .where(eq(users.role, "shop"))
+      .groupBy(users.id, users.name)
+      .orderBy(sql`count(${orders.id}) DESC`);
+
+    const formatted = results.map((row) => ({
+      shopId: row.shopId,
+      shopName: row.shopName,
+      transactionCount: Number(row.transactionCount ?? 0),
+    }));
+
+    res.json(formatted);
   },
 );
 

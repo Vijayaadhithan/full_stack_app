@@ -60,6 +60,7 @@ const AdminAccountManagement = lazy(
   () => import("@/pages/admin/AdminAccountManagement"),
 );
 const AdminOrders = lazy(() => import("@/pages/admin/AdminOrders"));
+const AdminShopAnalytics = lazy(() => import("@/pages/admin/AdminShopAnalytics"));
 const AdminBookingsPage = lazy(() => import("@/pages/admin/AdminBookings"));
 const AdminHealth = lazy(() => import("@/pages/admin/AdminHealth"));
 
@@ -84,6 +85,11 @@ function Router() {
       <Route path="/admin/orders">
         <AdminLayout>
           <AdminOrders />
+        </AdminLayout>
+      </Route>
+      <Route path="/admin/shop-analytics">
+        <AdminLayout>
+          <AdminShopAnalytics />
         </AdminLayout>
       </Route>
       <Route path="/admin/bookings">
