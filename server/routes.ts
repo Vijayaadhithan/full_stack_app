@@ -61,6 +61,158 @@ import {
 
 const PLATFORM_SERVICE_FEE = platformFees.productOrder;
 
+const isValidDateString = (value: string) =>
+  !Number.isNaN(new Date(value).getTime());
+
+const dateStringSchema = z
+  .string()
+  .refine(isValidDateString, { message: "Invalid date format" });
+
+const bookingStatusSchema = z.enum([
+  "pending",
+  "accepted",
+  "rejected",
+  "rescheduled",
+  "completed",
+  "cancelled",
+  "expired",
+  "rescheduled_pending_provider_approval",
+  "awaiting_payment",
+  "disputed",
+  "rescheduled_by_provider",
+]);
+
+const requestPasswordResetSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+const bookingActionSchema = z
+  .object({
+    status: bookingStatusSchema.optional(),
+    comments: z.string().trim().max(500).optional(),
+    bookingDate: dateStringSchema.optional(),
+    changedBy: z.number().int().optional(),
+  })
+  .refine(
+    (value) => value.status !== undefined || value.bookingDate !== undefined,
+    {
+      message: "status or bookingDate is required",
+      path: ["status"],
+    },
+  );
+
+const bookingDisputeSchema = z.object({
+  reason: z.string().trim().min(5).max(500),
+});
+
+const bookingResolutionSchema = z.object({
+  resolutionStatus: z.enum(["completed", "cancelled"]),
+});
+
+const bookingCreateSchema = z.object({
+  serviceId: z.number().int().positive(),
+  bookingDate: dateStringSchema,
+  serviceLocation: z.enum(["customer", "provider"]),
+});
+
+const bookingStatusUpdateSchema = z
+  .object({
+    status: z.enum(["accepted", "rejected", "rescheduled"]),
+    rejectionReason: z.string().trim().min(1).max(500).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "rejected" && !value.rejectionReason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Rejection reason is required when rejecting a booking",
+        path: ["rejectionReason"],
+      });
+    }
+  });
+
+const paymentReferenceSchema = z.object({
+  paymentReference: z.string().trim().min(1).max(100),
+});
+
+const waitlistJoinSchema = z.object({
+  serviceId: z.number().int().positive(),
+  preferredDate: dateStringSchema,
+});
+
+const cartItemSchema = z.object({
+  productId: z.number().int().positive(),
+  quantity: z.number().int().min(1),
+});
+
+const wishlistItemSchema = z.object({
+  productId: z.number().int().positive(),
+});
+
+const reviewUpdateSchema = z
+  .object({
+    rating: z.number().int().min(1).max(5).optional(),
+    review: z.string().trim().min(1).max(2000).optional(),
+  })
+  .refine((value) => value.rating !== undefined || value.review !== undefined, {
+    message: "Provide a rating or review to update",
+    path: ["rating"],
+  });
+
+const reviewReplySchema = z
+  .union([
+    z.object({ response: z.string().trim().min(1).max(2000) }),
+    z.object({ reply: z.string().trim().min(1).max(2000) }),
+  ])
+  .transform((value) =>
+    "response" in value ? { reply: value.response } : { reply: value.reply },
+  );
+
+const notificationsMarkAllSchema = z.object({
+  role: z.enum(["customer", "provider", "shop", "worker", "admin"]).optional(),
+});
+
+const productUpdateSchema = insertProductSchema.partial();
+
+const serviceUpdateSchema = insertServiceSchema
+  .partial()
+  .extend({
+    serviceLocationType: z
+      .enum(["customer_location", "provider_location"])
+      .optional(),
+  });
+
+const orderPaymentReferenceSchema = z.object({
+  paymentReference: z.string().trim().min(1).max(100),
+});
+
+const orderStatusUpdateSchema = z.object({
+  status: z.enum([
+    "pending",
+    "cancelled",
+    "confirmed",
+    "processing",
+    "packed",
+    "shipped",
+    "delivered",
+    "returned",
+  ]),
+  trackingInfo: z.string().trim().max(500).optional(),
+});
+
+const bookingRejectionNotificationSchema = z.object({
+  rejectionReason: z.string().trim().max(500).optional(),
+});
+
+const formatValidationError = (error: z.ZodError) => ({
+  message: "Invalid input",
+  errors: error.flatten(),
+});
+
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(
   dateStr: string,
@@ -140,10 +292,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/request-password-reset", requestPasswordResetLimiter, async (req, res) => {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ message: "Email is required" });
+    const parsedBody = requestPasswordResetSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json(formatValidationError(parsedBody.error));
     }
+
+    const { email } = parsedBody.data;
 
     try {
       const user = await storage.getUserByEmail(email);
@@ -197,7 +351,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
-    const { token, newPassword } = req.body;
+    const parsedBody = resetPasswordSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json(formatValidationError(parsedBody.error));
+    }
+
+    const { token, newPassword } = parsedBody.data;
     if (!token || !newPassword) {
       return res
         .status(400)
@@ -325,8 +484,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/bookings/:id", requireAuth, async (req, res) => {
     try {
       const bookingId = parseInt(req.params.id);
+      const parsedBody = bookingActionSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
       // Destructure bookingDate as well, it might be undefined if not a reschedule
-      const { status, comments, bookingDate, changedBy } = req.body;
+      const { status, comments, bookingDate, changedBy } = parsedBody.data;
       const currentUser = req.user!;
 
       logger.info(`[API] Attempting to update booking ${bookingId}`);
@@ -916,7 +1079,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const bookingId = parseInt(req.params.id);
-        const { reason } = req.body;
+        const parsedBody = bookingDisputeSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+        const { reason } = parsedBody.data;
         const booking = await storage.getBooking(bookingId);
         if (!booking)
           return res.status(404).json({ message: "Booking not found" });
@@ -958,11 +1125,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const bookingId = parseInt(req.params.id);
-        const { resolutionStatus } = req.body as {
-          resolutionStatus: "completed" | "cancelled";
-        };
-        if (!["completed", "cancelled"].includes(resolutionStatus))
-          return res.status(400).json({ message: "Invalid resolutionStatus" });
+        const parsedBody = bookingResolutionSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+        const { resolutionStatus } = parsedBody.data;
         const booking = await storage.getBooking(bookingId);
         if (!booking)
           return res.status(404).json({ message: "Booking not found" });
@@ -1200,31 +1367,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Use a Zod schema for partial updates if desired, or rely on storage layer validation
-        // For now, directly pass the body. The storage layer handles partial updates.
-        const updateData = req.body;
+        const parsedBody = productUpdateSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+
+        if (Object.keys(parsedBody.data).length === 0) {
+          return res.status(400).json({ message: "No product fields provided" });
+        }
+
+        const updateData: Record<string, unknown> = { ...parsedBody.data };
 
         // Sanitize numeric fields to prevent 'undefined' string errors
         const numericFields = ["price", "mrp", "stock"];
         for (const field of numericFields) {
-          if (
-            updateData.hasOwnProperty(field) &&
-            updateData[field] === "undefined"
-          ) {
-            delete updateData[field];
-          } else if (
-            updateData.hasOwnProperty(field) &&
-            typeof updateData[field] === "string" &&
-            updateData[field].trim() === ""
-          ) {
-            // Also remove if it's an empty string after trimming, as this can also cause issues for numeric types
-            delete updateData[field];
-          } else if (
-            updateData.hasOwnProperty(field) &&
-            updateData[field] === null
-          ) {
-            // Also remove if it's null
-            delete updateData[field];
+          if (Object.prototype.hasOwnProperty.call(updateData, field)) {
+            const value = updateData[field];
+            if (value === "undefined" || value === null) {
+              delete updateData[field];
+            } else if (typeof value === "string" && value.trim() === "") {
+              delete updateData[field];
+            }
           }
         }
 
@@ -1351,7 +1514,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Can only update own services" });
         }
 
-        const updatedService = await storage.updateService(serviceId, req.body);
+        const parsedBody = serviceUpdateSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+
+        if (Object.keys(parsedBody.data).length === 0) {
+          return res.status(400).json({ message: "No service fields provided" });
+        }
+
+        const updatedService = await storage.updateService(
+          serviceId,
+          parsedBody.data,
+        );
         logger.info(
           "[API] /api/services/:id PATCH - Updated service:",
           updatedService,
@@ -1720,8 +1895,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        // Destructure bookingDate and serviceLocation. Remove date, time, providerAddress.
-        const { serviceId, bookingDate, serviceLocation } = req.body;
+        const parsedBody = bookingCreateSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+
+        const { serviceId, bookingDate, serviceLocation } = parsedBody.data;
 
         // Get service details
         const service = await storage.getService(serviceId);
@@ -1729,25 +1908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Service not found" });
         }
 
-        // Validate bookingDate is a valid ISO string
         const bookingDateTime = new Date(bookingDate);
-        if (isNaN(bookingDateTime.getTime())) {
-          return res
-            .status(400)
-            .json({
-              message: "Invalid booking date format. Expected ISO string.",
-            });
-        }
-
-        // Validate serviceLocation
-        if (serviceLocation !== "customer" && serviceLocation !== "provider") {
-          return res
-            .status(400)
-            .json({
-              message:
-                "Invalid service location. Must be 'customer' or 'provider'.",
-            });
-        }
         const isAvailable = await storage.checkAvailability(
           serviceId,
           bookingDateTime,
@@ -1853,7 +2014,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const { status, rejectionReason } = req.body;
+        const parsedBody = bookingStatusUpdateSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+        const { status, rejectionReason } = parsedBody.data;
         const bookingId = parseInt(req.params.id);
 
         logger.info(
@@ -1887,37 +2052,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res
             .status(403)
             .json({ message: "Not authorized to update this booking" });
-        }
-
-        logger.info(
-          `[API DEBUG] Validating status for booking ID ${bookingId}. Status: ${status}`,
-        );
-        // Validate status
-        if (!["accepted", "rejected", "rescheduled"].includes(status)) {
-          logger.info(
-            `[API DEBUG] Invalid status: ${status} for booking ID ${bookingId}. Returning 400.`,
-          );
-          return res
-            .status(400)
-            .json({
-              message:
-                "Invalid status. Must be 'accepted', 'rejected', or 'rescheduled'",
-            });
-        }
-
-        logger.info(
-          `[API DEBUG] Checking for rejection reason for booking ID ${bookingId}. Status: ${status}, Rejection Reason: ${rejectionReason}`,
-        );
-        // Require rejection reason if status is rejected
-        if (status === "rejected" && !rejectionReason) {
-          logger.info(
-            `[API DEBUG] Rejection reason is required but not provided for booking ID ${bookingId} (status: 'rejected'). Rejection Reason: '${rejectionReason}'. Returning 400.`,
-          );
-          return res
-            .status(400)
-            .json({
-              message: "Rejection reason is required when rejecting a booking",
-            });
         }
 
         logger.info(
@@ -2219,7 +2353,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       const bookingId = req.params.id;
-      const { rejectionReason } = req.body;
+      const parsedBody = bookingRejectionNotificationSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+      const { rejectionReason } = parsedBody.data;
       logger.info(
         `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Request received. Reason: ${rejectionReason || "None"}`,
       );
@@ -2349,7 +2487,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const { paymentReference } = req.body;
+        const parsedBody = paymentReferenceSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+        const { paymentReference } = parsedBody.data;
         const bookingId = parseInt(req.params.id);
 
         const booking = await storage.getBooking(bookingId);
@@ -2410,7 +2552,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const { paymentReference } = req.body;
+        const parsedBody = paymentReferenceSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+        const { paymentReference } = parsedBody.data;
         const bookingId = parseInt(req.params.id);
 
         const booking = await storage.getBooking(bookingId);
@@ -2629,7 +2775,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
-      const { serviceId, preferredDate } = req.body;
+      const parsedBody = waitlistJoinSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+      const { serviceId, preferredDate } = parsedBody.data;
       await storage.joinWaitlist(
         req.user!.id,
         serviceId,
@@ -2655,7 +2805,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
-      const { productId, quantity } = req.body;
+      const parsedBody = cartItemSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+      const { productId, quantity } = parsedBody.data;
       try {
         await storage.addToCart(req.user!.id, productId, quantity);
         res.json({ success: true });
@@ -2719,7 +2873,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
-      const { productId } = req.body;
+      const parsedBody = wishlistItemSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+      const { productId } = parsedBody.data;
       await storage.addToWishlist(req.user!.id, productId);
       res.json({ success: true }); // Send proper JSON response
     },
@@ -2826,7 +2984,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const reviewId = parseInt(req.params.id);
-        const { rating, review } = req.body;
+        const parsedBody = reviewUpdateSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+
+        const updatePayload: Record<string, unknown> = {};
+        if (parsedBody.data.rating !== undefined) {
+          updatePayload.rating = parsedBody.data.rating;
+        }
+        if (parsedBody.data.review !== undefined) {
+          updatePayload.review = parsedBody.data.review;
+        }
 
         // Verify the review belongs to this user
         const existingReview = await storage.getReviewById(reviewId);
@@ -2841,10 +3010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Update the review
-        const updatedReview = await storage.updateReview(reviewId, {
-          rating,
-          review,
-        });
+        const updatedReview = await storage.updateReview(reviewId, updatePayload);
         res.json(updatedReview);
       } catch (error) {
         logger.error("Error updating review:", error);
@@ -2877,7 +3043,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const { response } = req.body;
+        const parsedBody = reviewReplySchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+        const { reply } = parsedBody.data;
         const reviewId = parseInt(req.params.id);
 
         // Get the review
@@ -2898,7 +3068,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Update the review with the provider's reply
         const updatedReview = await storage.updateReview(reviewId, {
-          providerReply: response,
+          providerReply: reply,
         } as any);
         res.json(updatedReview);
       } catch (error) {
@@ -2930,7 +3100,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/notifications/mark-all-read",
     requireAuth,
     async (req, res) => {
-      const { role } = req.body;
+      const parsedBody = notificationsMarkAllSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+      const { role } = parsedBody.data;
       // Pass both user ID and role to properly filter notifications
       await storage.markAllNotificationsAsRead(req.user!.id, role);
       res.sendStatus(200);
@@ -3480,10 +3654,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     async (req, res) => {
       const orderId = parseInt(req.params.id);
-      const { paymentReference } = req.body as { paymentReference: string };
-      if (isNaN(orderId) || !paymentReference) {
+      const parsedBody = orderPaymentReferenceSchema.safeParse(req.body);
+      if (isNaN(orderId)) {
         return res.status(400).json({ message: "Invalid request" });
       }
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+      const { paymentReference } = parsedBody.data;
       const order = await storage.getOrder(orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
       if (order.customerId !== req.user!.id) {
@@ -3648,7 +3826,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireShopOrWorkerPermission(["orders:update"]),
     async (req, res) => {
       try {
-        const { status, trackingInfo } = req.body;
+        const parsedBody = orderStatusUpdateSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+        const { status, trackingInfo } = parsedBody.data;
         const orderId = parseInt(req.params.id);
         if (isNaN(orderId)) {
           return res.status(400).json({ message: "Invalid order id" });
@@ -3822,26 +4004,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "User not found" });
     }
     res.json(user);
-  });
-
-  app.patch("/api/users/:id", requireAuth, async (req, res) => {
-    try {
-      const userId = parseInt(req.params.id);
-      if (userId !== req.user!.id) {
-        return res.status(403).json({ message: "Can only update own profile" });
-      }
-
-      const updatedUser = await storage.updateUser(userId, req.body);
-      res.json(updatedUser);
-    } catch (error) {
-      logger.error("Error updating user:", error);
-      res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error ? error.message : "Failed to update user",
-        });
-    }
   });
 
   app.get("/api/products", requireAuth, async (req, res) => {
@@ -4107,7 +4269,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const reviewId = parseInt(req.params.id);
-        const { rating, review } = req.body;
+        const parsedBody = reviewUpdateSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+
+        const updatePayload: Record<string, unknown> = {};
+        if (parsedBody.data.rating !== undefined) {
+          updatePayload.rating = parsedBody.data.rating;
+        }
+        if (parsedBody.data.review !== undefined) {
+          updatePayload.review = parsedBody.data.review;
+        }
 
         const existing = await storage.getProductReviewById(reviewId);
         if (!existing) {
@@ -4119,10 +4292,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "You can only edit your own reviews" });
         }
 
-        const updated = await storage.updateProductReview(reviewId, {
-          rating,
-          review,
-        });
+        const updated = await storage.updateProductReview(reviewId, updatePayload);
         res.json(updated);
       } catch (error) {
         logger.error("Error updating product review:", error);
@@ -4143,7 +4313,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["shop"]),
     async (req, res) => {
       try {
-        const { reply } = req.body;
+        const parsedBody = reviewReplySchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res.status(400).json(formatValidationError(parsedBody.error));
+        }
+        const { reply } = parsedBody.data;
         const reviewId = parseInt(req.params.id);
         const existingReview = await storage.getProductReviewById(reviewId);
         if (!existingReview) {

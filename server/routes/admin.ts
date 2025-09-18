@@ -2,6 +2,7 @@ import { Router } from "express";
 import { promises as fs } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { db, testConnection } from "../db";
+import { z } from "zod";
 import {
   adminUsers,
   adminPermissions,
@@ -13,6 +14,7 @@ import {
   orders,
   bookings,
 } from "@shared/schema";
+import { performanceMetricSchema } from "@shared/performance";
 import { eq, count, sum, sql, and, desc } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -22,7 +24,7 @@ import { hashPasswordInternal } from "../auth";
 import { lastRun as bookingJobLastRun } from "../jobs/bookingExpirationJob";
 import { lastRun as paymentJobLastRun } from "../jobs/paymentReminderJob";
 import { adminLoginRateLimiter } from "../security/rateLimiters";
-import { LOG_FILE_PATH } from "../logger";
+import logger, { LOG_FILE_PATH } from "../logger";
 
 const router = Router();
 const scryptAsync = promisify(scrypt);
@@ -30,6 +32,45 @@ const scryptAsync = promisify(scrypt);
 const LOG_READ_MAX_BYTES = 1024 * 1024; // 1MB slice from tail of log file
 const LOG_DEFAULT_LIMIT = 100;
 const TRANSACTIONS_MAX_PAGE_SIZE = 100;
+
+const adminLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+const adminPasswordChangeSchema = z.object({
+  currentPassword: z.string().min(8),
+  newPassword: z.string().min(8),
+});
+
+const adminSuspendUserSchema = z.object({
+  isSuspended: z.boolean(),
+});
+
+const adminAccountCreateSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  roleId: z.string().uuid(),
+});
+
+const adminRoleCreateSchema = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().trim().max(500).optional(),
+});
+
+const adminRolePermissionSchema = z.object({
+  permissionIds: z.array(z.string().uuid()).default([]),
+});
+
+const performanceMetricEnvelopeSchema = z.union([
+  performanceMetricSchema,
+  z.array(performanceMetricSchema),
+]);
+
+const formatValidationError = (error: z.ZodError) => ({
+  message: "Invalid input",
+  errors: error.flatten(),
+});
 
 const ORDER_STATUSES = [
   "pending",
@@ -120,8 +161,11 @@ router.post("/login", adminLoginRateLimiter, async (req, res) => {
   if (!req.session) {
     return res.status(500).json({ message: "Session not initialized" });
   }
-  const { email, password } = req.body ?? {};
-  if (!email || !password) return res.status(400).json({ message: "Email and password required" });
+  const parsedBody = adminLoginSchema.safeParse(req.body);
+  if (!parsedBody.success) {
+    return res.status(400).json(formatValidationError(parsedBody.error));
+  }
+  const { email, password } = parsedBody.data;
   const rows = await db
     .select()
     .from(adminUsers)
@@ -176,10 +220,11 @@ router.get("/me", isAdminAuthenticated, async (req, res) => {
 // Allow admin to change their password
 router.post("/change-password", isAdminAuthenticated, async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body ?? {};
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ message: "Current and new password required" });
+    const parsedBody = adminPasswordChangeSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json(formatValidationError(parsedBody.error));
     }
+    const { currentPassword, newPassword } = parsedBody.data;
     const rows = await db
       .select()
       .from(adminUsers)
@@ -324,6 +369,38 @@ router.get(
       }
       return res.status(500).json({ message: "Failed to read logs" });
     }
+  },
+);
+
+router.post(
+  "/performance-metrics",
+  isAdminAuthenticated,
+  async (req, res) => {
+    const parsedBody = performanceMetricEnvelopeSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json(formatValidationError(parsedBody.error));
+    }
+
+    const metrics = Array.isArray(parsedBody.data)
+      ? parsedBody.data
+      : [parsedBody.data];
+
+    if (metrics.length > 20) {
+      return res
+        .status(400)
+        .json({ message: "Too many metrics submitted at once" });
+    }
+
+    logger.info(
+      {
+        adminId: req.session?.adminId,
+        metrics,
+        source: "admin-ui",
+      },
+      "Received admin performance metrics",
+    );
+
+    res.status(204).send();
   },
 );
 
@@ -494,7 +571,11 @@ router.patch(
   checkPermissions(["manage_users"]),
   async (req, res) => {
     const { userId } = req.params;
-    const { isSuspended } = req.body as { isSuspended: boolean };
+    const parsedBody = adminSuspendUserSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json(formatValidationError(parsedBody.error));
+    }
+    const { isSuspended } = parsedBody.data;
     await db.update(users).set({ isSuspended }).where(eq(users.id, Number(userId)));
     // Audit log (best-effort)
     try {
@@ -594,9 +675,11 @@ router.post(
   isAdminAuthenticated,
   checkPermissions(["manage_admins"]),
   async (req, res) => {
-    const { email, password, roleId } = req.body ?? {};
-    if (!email || !password || !roleId)
-      return res.status(400).json({ message: "Missing fields" });
+    const parsedBody = adminAccountCreateSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json(formatValidationError(parsedBody.error));
+    }
+    const { email, password, roleId } = parsedBody.data;
     const hashedPassword = await hashPasswordInternal(password);
     const [created] = await db
       .insert(adminUsers)
@@ -629,8 +712,11 @@ router.post(
   isAdminAuthenticated,
   checkPermissions(["manage_admins"]),
   async (req, res) => {
-    const { name, description } = req.body ?? {};
-    if (!name) return res.status(400).json({ message: "Name required" });
+    const parsedBody = adminRoleCreateSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json(formatValidationError(parsedBody.error));
+    }
+    const { name, description } = parsedBody.data;
     const [role] = await db
       .insert(adminRoles)
       .values({ name, description })
@@ -645,7 +731,11 @@ router.put(
   checkPermissions(["manage_admins"]),
   async (req, res) => {
     const { roleId } = req.params;
-    const { permissionIds } = req.body as { permissionIds: string[] };
+    const parsedBody = adminRolePermissionSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) {
+      return res.status(400).json(formatValidationError(parsedBody.error));
+    }
+    const { permissionIds } = parsedBody.data;
     await db.delete(adminRolePermissions).where(eq(adminRolePermissions.roleId, roleId));
     if (permissionIds?.length) {
       await db.insert(adminRolePermissions).values(

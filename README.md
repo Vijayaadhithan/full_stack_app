@@ -91,6 +91,35 @@ The application will be available at:
 
 - Frontend: http://localhost:5173
 - API: http://localhost:5000/api
+
+## Production Deployment
+
+1. Build both the client and API bundles:
+
+   ```bash
+   npm run build
+   ```
+
+2. Install [PM2](https://pm2.keymetrics.io/) globally if you have not already:
+
+   ```bash
+   npm install --global pm2
+   ```
+
+3. Start the compiled server with the provided `ecosystem.config.js` definition:
+
+   ```bash
+   pm2 start ecosystem.config.js
+   ```
+
+4. (Optional) Enable PM2 startup scripts so the API restarts automatically when the host reboots:
+
+   ```bash
+   pm2 startup
+   pm2 save
+   ```
+
+You can inspect runtime health with `pm2 status` and tail structured logs with `pm2 logs server`.
 ### Google OAuth Login Flow
 
 1. The React app links users to `http://localhost:5000/auth/google`
