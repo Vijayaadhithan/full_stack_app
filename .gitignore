@@ -7,3 +7,5 @@ vite.config.ts.*
 .env
 /reports
 /coverage
+/logs
+app.log

@@ -321,61 +321,72 @@ export default function ShopDetails() {
             <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredProducts.map((product) => (
                 <motion.div key={product.id} variants={item}>
-                  <Card className="h-full flex flex-col">
-                    <div className="aspect-square relative overflow-hidden">
-                      <img
-                        src={
-                          product.images?.[0] ||
-                          "https://via.placeholder.com/400"
-                        }
-                        alt={product.name}
-                        className="object-cover w-full h-full"
-                      />
-                      {product.mrp &&
-                        parseFloat(product.mrp) > parseFloat(product.price) && (
-                          <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
-                            {Math.round(
-                              ((parseFloat(product.mrp) -
-                                parseFloat(product.price)) /
-                                parseFloat(product.mrp)) *
-                                100,
-                            )}
-                            % OFF
-                          </div>
-                        )}
-                    </div>
-                    <CardContent className="flex-1 p-4">
-                      <h3 className="font-semibold truncate">{product.name}</h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                        {product.description ?? "No description"}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <p className="font-semibold">₹{product.price}</p>
-                        <div className="flex gap-2">
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            onClick={() =>
-                              addToWishlistMutation.mutate(product.id)
-                            }
-                            disabled={addToWishlistMutation.isPending}
-                          >
-                            <Heart className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            onClick={() => addToCartMutation.mutate(product.id)}
-                            disabled={
-                              !product.isAvailable ||
-                              addToCartMutation.isPending
-                            }
-                          >
-                            <ShoppingCart className="h-4 w-4" />
-                          </Button>
-                        </div>
+                  <Link
+                    href={`/customer/shops/${product.shopId}/products/${product.id}`}
+                    className="block h-full"
+                  >
+                    <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
+                      <div className="aspect-square relative overflow-hidden">
+                        <img
+                          src={
+                            product.images?.[0] ||
+                            "https://via.placeholder.com/400"
+                          }
+                          alt={product.name}
+                          className="object-cover w-full h-full"
+                        />
+                        {product.mrp &&
+                          parseFloat(product.mrp) > parseFloat(product.price) && (
+                            <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                              {Math.round(
+                                ((parseFloat(product.mrp) -
+                                  parseFloat(product.price)) /
+                                  parseFloat(product.mrp)) *
+                                  100,
+                              )}
+                              % OFF
+                            </div>
+                          )}
                       </div>
-                    </CardContent>
-                  </Card>
+                      <CardContent className="flex-1 p-4">
+                        <h3 className="font-semibold truncate">{product.name}</h3>
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                          {product.description ?? "No description"}
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold">₹{product.price}</p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                addToWishlistMutation.mutate(product.id);
+                              }}
+                              disabled={addToWishlistMutation.isPending}
+                            >
+                              <Heart className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                addToCartMutation.mutate(product.id);
+                              }}
+                              disabled={
+                                !product.isAvailable ||
+                                addToCartMutation.isPending
+                              }
+                            >
+                              <ShoppingCart className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
                 </motion.div>
               ))}
             </div>

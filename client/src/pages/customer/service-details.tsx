@@ -1,7 +1,13 @@
 import React from 'react';
 import { useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -163,6 +169,64 @@ export default function ServiceDetails() {
                 <p className="mt-2 font-semibold">₹{service.price}</p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Star className="h-5 w-5 fill-yellow-500 text-yellow-500" />
+              Ratings & Reviews
+            </CardTitle>
+            <CardDescription>
+              {service.rating && service.reviews?.length
+                ? `${service.rating.toFixed(1)} out of 5 • ${service.reviews.length} review${
+                    service.reviews.length !== 1 ? "s" : ""
+                  }`
+                : "No reviews yet"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!service.reviews?.length ? (
+              <p className="text-sm text-muted-foreground">
+                Customers haven’t reviewed this service yet.
+              </p>
+            ) : (
+              service.reviews.map((review) => (
+                <div
+                  key={review.id}
+                  className="rounded-lg border p-4 space-y-2 bg-muted/30"
+                >
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: 5 }).map((_, index) => (
+                        <Star
+                          key={index}
+                          className={`h-4 w-4 ${
+                            index < review.rating
+                              ? "fill-yellow-400 text-yellow-500"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    {review.createdAt && (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(review.createdAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  {review.review ? (
+                    <p className="text-sm text-muted-foreground">
+                      {review.review}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">
+                      No written feedback provided.
+                    </p>
+                  )}
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </motion.div>

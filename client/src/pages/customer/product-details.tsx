@@ -9,11 +9,11 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Product, User } from "@shared/schema";
+import { Product, ProductReview, User } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useParams, Link } from "wouter";
-import { ShoppingCart, Heart, ArrowLeft, Store } from "lucide-react";
+import { ShoppingCart, Heart, ArrowLeft, Store, Star, Loader2 } from "lucide-react";
 import Meta from "@/components/meta";
 
 export default function ProductDetails() {
@@ -31,6 +31,20 @@ export default function ProductDetails() {
     queryKey: [`/api/shops/${shopId}`],
     enabled: !!shopId,
   });
+
+  const {
+    data: reviews,
+    isLoading: isLoadingReviews,
+  } = useQuery<ProductReview[]>({
+    queryKey: [`/api/reviews/product/${productId}`],
+    enabled: !!productId,
+  });
+
+  const averageRating =
+    reviews && reviews.length > 0
+      ? reviews.reduce((total, review) => total + review.rating, 0) /
+        reviews.length
+      : null;
 
   const addToCartMutation = useMutation({
     mutationFn: async (productId: number) => {
@@ -185,6 +199,14 @@ export default function ProductDetails() {
                   </span>
                 )}
               </div>
+              {averageRating !== null && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-500" />
+                  <span>
+                    {averageRating.toFixed(1)} out of 5 ({reviews?.length} reviews)
+                  </span>
+                </div>
+              )}
               <p
                 className={`text-sm font-medium ${product.isAvailable && product.stock > 0 ? "text-green-600" : "text-red-600"}`}
               >
@@ -221,6 +243,76 @@ export default function ProductDetails() {
                 </Button>
               </div>
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Star className="h-5 w-5 fill-yellow-400 text-yellow-500" />
+              Ratings & Reviews
+            </CardTitle>
+            <CardDescription>
+              {averageRating !== null
+                ? `${averageRating.toFixed(1)} out of 5 • ${reviews?.length ?? 0} review${
+                    (reviews?.length ?? 0) !== 1 ? "s" : ""
+                  }`
+                : "No reviews yet"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isLoadingReviews ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : !reviews?.length ? (
+              <p className="text-muted-foreground text-sm">
+                Customers haven’t reviewed this product yet.
+              </p>
+            ) : (
+              reviews.map((review) => (
+                <div
+                  key={review.id}
+                  className="rounded-lg border p-4 space-y-2 bg-muted/30"
+                >
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: 5 }).map((_, index) => (
+                        <Star
+                          key={index}
+                          className={`h-4 w-4 ${
+                            index < review.rating
+                              ? "fill-yellow-400 text-yellow-500"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    {review.createdAt && (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(review.createdAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  {review.review ? (
+                    <p className="text-sm text-muted-foreground">
+                      {review.review}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">
+                      No written feedback provided.
+                    </p>
+                  )}
+                  {review.shopReply && (
+                    <div className="rounded-md bg-background/80 border border-dashed p-3 text-sm">
+                      <p className="font-medium">Shop reply</p>
+                      <p className="text-muted-foreground mt-1">
+                        {review.shopReply}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
