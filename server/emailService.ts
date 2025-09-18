@@ -187,6 +187,11 @@ export interface OrderConfirmationEmailOptions {
   total: string | number;
   items: OrderItemInfo[];
   forShopOwner?: boolean;
+  deliveryMethod?: "delivery" | "pickup";
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  shopPhone?: string | null;
+  shopAddress?: string | null;
 }
 
 function formatItemsText(items: OrderItemInfo[]): string {
@@ -213,6 +218,11 @@ export function getOrderConfirmationEmailContent({
   total,
   items,
   forShopOwner = false,
+  deliveryMethod,
+  customerPhone,
+  customerAddress,
+  shopPhone,
+  shopAddress,
 }: OrderConfirmationEmailOptions): MailOptions {
   const subject = forShopOwner
     ? `New Order #${orderNumber} from ${customerName}`
@@ -223,11 +233,32 @@ export function getOrderConfirmationEmailContent({
     ? `A new order has been placed on ${shopName} by ${customerName}.`
     : `Thank you for your order from ${shopName}!`;
 
+  const isDelivery = deliveryMethod === "delivery";
+  const deliveryLabel =
+    deliveryMethod === "delivery" ? "Home Delivery" : deliveryMethod === "pickup" ? "In-Store Pickup" : undefined;
+  const contactLabel = isDelivery ? "Customer" : "Shop";
+  const contactPhone = (isDelivery ? customerPhone : shopPhone) ?? undefined;
+  const contactAddress = (isDelivery ? customerAddress : shopAddress) ?? undefined;
+
   const orderDetailsTextLines = [
     `Order Number: ${orderNumber}`,
     `Total: ${total}`,
     `${forShopOwner ? "Customer" : "Shop"}: ${forShopOwner ? customerName : shopName}`,
   ];
+
+  if (deliveryLabel) {
+    orderDetailsTextLines.push(`Delivery Method: ${deliveryLabel}`);
+  }
+
+  if (contactPhone || contactAddress) {
+    orderDetailsTextLines.push(`${contactLabel} Contact:`);
+    if (contactPhone) {
+      orderDetailsTextLines.push(`- Phone: ${contactPhone}`);
+    }
+    if (contactAddress) {
+      orderDetailsTextLines.push(`- Address: ${contactAddress}`);
+    }
+  }
 
   const orderDetailsHtmlParts = [
     `<li><strong>Order Number:</strong> ${orderNumber}</li>`,
@@ -236,6 +267,24 @@ export function getOrderConfirmationEmailContent({
       forShopOwner ? customerName : shopName
     }</li>`,
   ];
+
+  if (deliveryLabel) {
+    orderDetailsHtmlParts.push(
+      `<li><strong>Delivery Method:</strong> ${deliveryLabel}</li>`,
+    );
+  }
+
+  if (contactPhone) {
+    orderDetailsHtmlParts.push(
+      `<li><strong>${contactLabel} Phone:</strong> ${contactPhone}</li>`,
+    );
+  }
+
+  if (contactAddress) {
+    orderDetailsHtmlParts.push(
+      `<li><strong>${contactLabel} Address:</strong> ${contactAddress}</li>`,
+    );
+  }
 
   const text = `Hi ${greetingName},
 

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Service, User, Review } from "@shared/schema";
-import { Loader2, MapPin, Clock, Star } from "lucide-react";
+import { Loader2, MapPin, Clock, Star, Phone } from "lucide-react";
 import { motion } from "framer-motion";
 import { useParams, Link } from "wouter";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
@@ -146,6 +146,10 @@ export default function ServiceProvider() {
                   <p className="text-muted-foreground mt-2 flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
                     {formatAddress(service.provider)}
+                  </p>
+                  <p className="text-muted-foreground flex items-center gap-2">
+                    <Phone className="h-4 w-4" />
+                    {service.provider?.phone || "Phone not available"}
                   </p>
                 </div>
               </CardContent>

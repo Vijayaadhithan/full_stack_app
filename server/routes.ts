@@ -64,6 +64,29 @@ const PLATFORM_SERVICE_FEE = platformFees.productOrder;
 const isValidDateString = (value: string) =>
   !Number.isNaN(new Date(value).getTime());
 
+const formatUserAddress = (
+  user?:
+    | Pick<
+        User,
+        | "addressStreet"
+        | "addressCity"
+        | "addressState"
+        | "addressPostalCode"
+        | "addressCountry"
+      >
+    | null,
+) => {
+  if (!user) return "";
+  const parts = [
+    user.addressStreet,
+    user.addressCity,
+    user.addressState,
+    user.addressPostalCode,
+    user.addressCountry,
+  ].filter((part): part is string => Boolean(part && part.trim()));
+  return parts.join(", ");
+};
+
 const dateStringSchema = z
   .string()
   .refine(isValidDateString, { message: "Invalid date format" });
@@ -1669,6 +1692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: provider.id,
           name: provider.name,
           email: provider.email,
+          phone: provider.phone,
           profilePicture: provider.profilePicture,
           // Include address fields
           addressStreet: provider.addressStreet,
@@ -3280,8 +3304,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           promotionCode = promotion.code || null;
         }
 
+        const customer = req.user!;
+        if (shopId == null) {
+          return res
+            .status(400)
+            .json({ message: "Shop information is missing" });
+        }
+
+        const shop = await storage.getUser(shopId);
+        if (!shop) {
+          return res.status(404).json({ message: "Shop not found" });
+        }
+
+        const customerAddress = formatUserAddress(customer);
+        const shopAddress = formatUserAddress(shop);
+        const derivedShippingAddress =
+          deliveryMethod === "delivery" ? customerAddress : shopAddress;
+        const shippingAddress = derivedShippingAddress || "";
+        const derivedBillingAddress =
+          deliveryMethod === "delivery" ? customerAddress : shopAddress;
+
         const newOrder = await storage.createOrder({
-          customerId: req.user!.id,
+          customerId: customer.id,
           shopId,
           status: "pending",
           paymentStatus: "pending",
@@ -3289,8 +3333,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           paymentMethod,
           total: totalAsString,
           orderDate: new Date(),
-          shippingAddress: "",
-          billingAddress: "",
+          shippingAddress,
+          billingAddress: derivedBillingAddress || "",
         });
         logger.info(`Created order ${newOrder.id}`);
         // Create order items
@@ -3314,73 +3358,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Send order confirmation emails
         try {
-          const customer = req.user!;
-          if (shopId === null) {
-            return res
-              .status(400)
-              .json({ message: "Shop information is missing" });
-          }
-          const shop = await storage.getUser(shopId); // Assuming shop owner is a user
-
+          const shopDisplayName = shop.name || shop.username || "DoorStep Shop";
           const customerDisplayName = customer.name || customer.username;
-          const shopDisplayName = shop?.name || shop?.username || "DoorStep Shop";
 
-          if (customer) {
-            // Build itemsWithNames for email
-            const itemsWithNames = await Promise.all(
-              items.map(async (item) => {
-                const product = await storage.getProduct(item.productId);
-                return {
-                  name: product?.name ?? "",
-                  quantity: item.quantity,
-                  price: item.price,
-                };
-              }),
-            );
-            const customerEmailContent = getOrderConfirmationEmailContent({
-              recipientName: customerDisplayName,
-              customerName: customerDisplayName,
-              shopName: shopDisplayName,
-              orderNumber: newOrder.id,
-              total: newOrder.total,
-              items: itemsWithNames,
-            });
-            await sendEmail({
-              to: customer.email,
-              subject: customerEmailContent.subject,
-              text: customerEmailContent.text,
-              html: customerEmailContent.html,
-            });
-          }
+          const itemsWithNames = await Promise.all(
+            items.map(async (item) => {
+              const product = await storage.getProduct(item.productId);
+              return {
+                name: product?.name ?? "",
+                quantity: item.quantity,
+                price: item.price,
+              };
+            }),
+          );
 
-          if (shop) {
-            // Use the same itemsWithNames for shop email
-            const itemsWithNames = await Promise.all(
-              items.map(async (item) => {
-                const product = await storage.getProduct(item.productId);
-                return {
-                  name: product?.name ?? "",
-                  quantity: item.quantity,
-                  price: item.price,
-                };
-              }),
-            );
-            const shopEmailContent = getOrderConfirmationEmailContent({
-              recipientName: shopDisplayName,
-              customerName: customerDisplayName,
-              shopName: shopDisplayName,
-              orderNumber: newOrder.id,
-              total: newOrder.total,
-              items: itemsWithNames,
-              forShopOwner: true,
-            });
-            await sendEmail({
-              to: shop.email,
-              subject: shopEmailContent.subject,
-              text: shopEmailContent.text,
-              html: shopEmailContent.html,
-            });
-          }
+          const contactDetails = {
+            deliveryMethod,
+            customerPhone: customer.phone,
+            customerAddress: customerAddress || undefined,
+            shopPhone: shop.phone,
+            shopAddress: shopAddress || undefined,
+          };
+
+          const customerEmailContent = getOrderConfirmationEmailContent({
+            recipientName: customerDisplayName,
+            customerName: customerDisplayName,
+            shopName: shopDisplayName,
+            orderNumber: newOrder.id,
+            total: newOrder.total,
+            items: itemsWithNames,
+            ...contactDetails,
+          });
+          await sendEmail({
+            to: customer.email,
+            subject: customerEmailContent.subject,
+            text: customerEmailContent.text,
+            html: customerEmailContent.html,
+          });
+
+          const shopEmailContent = getOrderConfirmationEmailContent({
+            recipientName: shopDisplayName,
+            customerName: customerDisplayName,
+            shopName: shopDisplayName,
+            orderNumber: newOrder.id,
+            total: newOrder.total,
+            items: itemsWithNames,
+            forShopOwner: true,
+            ...contactDetails,
+          });
+          await sendEmail({
+            to: shop.email,
+            subject: shopEmailContent.subject,
+            text: shopEmailContent.text,
+            html: shopEmailContent.html,
+          });
         } catch (emailError) {
           logger.error("Error sending order confirmation emails:", emailError);
           // Don't let email failure break the order creation flow
@@ -3634,13 +3665,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ...order,
       items,
       customer: customer
-        ? { name: customer.name, phone: customer.phone, email: customer.email }
+        ? {
+            name: customer.name,
+            phone: customer.phone,
+            email: customer.email,
+            address: formatUserAddress(customer),
+          }
         : undefined,
       shop: shop
         ? {
             name: shop.name,
             phone: shop.phone,
             email: shop.email,
+            address: formatUserAddress(shop),
             upiId: (shop as any).upiId,
             returnsEnabled: (shop as any).returnsEnabled,
           }

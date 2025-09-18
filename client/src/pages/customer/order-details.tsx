@@ -52,6 +52,13 @@ interface DetailedOrder extends Order {
     name?: string | null;
     email?: string | null;
     returnsEnabled?: boolean;
+    address?: string | null;
+  };
+  customer?: {
+    name?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    address?: string | null;
   };
   items?: {
     id: number;
@@ -266,6 +273,53 @@ export default function OrderDetails() {
             </CardContent>
           </Card>
         )}
+
+        {order && (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                {order.deliveryMethod === "delivery"
+                  ? "Customer Contact"
+                  : "Shop Contact"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Delivery Method</span>
+                <span className="font-medium">
+                  {order.deliveryMethod === "delivery"
+                    ? "Home Delivery"
+                    : "In-Store Pickup"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Name</span>
+                <span className="font-medium">
+                  {order.deliveryMethod === "delivery"
+                    ? order.customer?.name || "Not provided"
+                    : order.shop?.name || "Not provided"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Mobile</span>
+                <span className="font-medium">
+                  {order.deliveryMethod === "delivery"
+                    ? order.customer?.phone || "Not provided"
+                    : order.shop?.phone || "Not provided"}
+                </span>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Address</p>
+                <p className="font-medium">
+                  {order.deliveryMethod === "delivery"
+                    ? order.customer?.address || "Not provided"
+                    : order.shop?.address || "Not provided"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>Items</CardTitle>
