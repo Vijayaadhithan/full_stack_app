@@ -25,6 +25,7 @@ export async function ensureDefaultAdmin() {
     { action: "view_all_bookings", description: "View all bookings" },
     { action: "manage_admins", description: "Manage admin accounts and roles" },
     { action: "manage_reviews", description: "Manage reviews" },
+    { action: "manage_settings", description: "Manage platform settings" },
   ];
   for (const perm of requiredPermissions) {
     const exists = await db

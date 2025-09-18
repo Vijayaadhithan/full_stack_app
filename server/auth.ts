@@ -8,8 +8,9 @@ import { scrypt, randomBytes, timingSafeEqual , createHash} from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import {
-  sendEmail,
+  sendNotificationEmail,
   getWelcomeEmailContent,
+  mapUserRoleToRecipient,
   //getVerificationEmailContent,
 } from "./emailService";
 import {
@@ -278,12 +279,21 @@ export function setupAuth(app: Express) {
               createdUser.name || createdUser.username,
               FRONTEND_URL,
             );
-            await sendEmail({
-              to: createdUser.email,
-              subject: emailContent.subject,
-              text: emailContent.text,
-              html: emailContent.html,
-            });
+            if (createdUser.email) {
+              await sendNotificationEmail({
+                to: createdUser.email,
+                subject: emailContent.subject,
+                text: emailContent.text,
+                html: emailContent.html,
+                notificationType: "welcome",
+                recipientType: mapUserRoleToRecipient(createdUser.role),
+                context: { userId: createdUser.id },
+              });
+            } else {
+              logger.warn(
+                "[Google OAuth] Skipping welcome email because created user has no email address.",
+              );
+            }
 
             return done(null, createdUser);
           } catch (err) {
@@ -344,12 +354,21 @@ export function setupAuth(app: Express) {
       user.name || user.username,
       verificationLink,
     );
-    await sendEmail({
-      to: user.email,
-      subject: welcomeContent.subject,
-      text: welcomeContent.text,
-      html: welcomeContent.html,
-    });
+    if (user.email) {
+      await sendNotificationEmail({
+        to: user.email,
+        subject: welcomeContent.subject,
+        text: welcomeContent.text,
+        html: welcomeContent.html,
+        notificationType: "verification",
+        recipientType: mapUserRoleToRecipient(user.role),
+        context: { userId: user.id },
+      });
+    } else {
+      logger.warn(
+        "[Auth] Skipping verification email because registered user has no email address.",
+      );
+    }
 
     req.login(user, (err) => {
       if (err) return next(err);

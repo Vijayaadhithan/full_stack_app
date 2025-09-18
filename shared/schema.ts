@@ -330,6 +330,29 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
 });
+
+export const emailNotificationPreferenceOverrides = pgTable(
+  "email_notification_preferences",
+  {
+    id: serial("id").primaryKey(),
+    notificationType: text("notification_type").notNull(),
+    recipientType: text("recipient_type")
+      .$type<"customer" | "serviceProvider" | "shop">()
+      .notNull(),
+    enabled: boolean("enabled").notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    updatedByAdminId: uuid("updated_by_admin_id").references(
+      () => adminUsers.id,
+      { onDelete: "set null" },
+    ),
+  },
+  (table) => ({
+    notificationRecipientUnique: unique("email_notification_pref_unique").on(
+      table.notificationType,
+      table.recipientType,
+    ),
+  }),
+);
 // Update the reviews table to link with e-receipt
 export const reviews = pgTable(
   "reviews",

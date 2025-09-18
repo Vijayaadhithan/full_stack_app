@@ -3,6 +3,12 @@ import nodemailer from "nodemailer";
 import { OAuth2Client } from "google-auth-library";
 import logger from "./logger";
 import { addJob } from "./jobQueue";
+import type {
+  EmailNotificationType,
+  EmailRecipient,
+} from "@shared/config";
+import type { UserRole } from "@shared/schema";
+import { isEmailNotificationEnabled } from "./emailPreferences";
 
 const GMAIL_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GMAIL_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -73,6 +79,28 @@ interface MailOptions {
   html?: string;
 }
 
+export interface NotificationContext {
+  orderId?: string | number;
+  bookingId?: string | number;
+  userId?: string | number;
+  reason?: string;
+  [key: string]: unknown;
+}
+
+export interface NotificationMailOptions extends MailOptions {
+  notificationType: EmailNotificationType;
+  recipientType: EmailRecipient;
+  context?: NotificationContext;
+}
+
+export function mapUserRoleToRecipient(
+  role: UserRole | null | undefined,
+): EmailRecipient {
+  if (role === "shop") return "shop";
+  if (role === "provider") return "serviceProvider";
+  return "customer";
+}
+
 async function sendEmailNow(mailOptions: MailOptions): Promise<void> {
   if (
     !GMAIL_CLIENT_ID ||
@@ -106,9 +134,39 @@ async function sendEmailNow(mailOptions: MailOptions): Promise<void> {
     return;
   }
 }
-export async function sendEmail(mailOptions: MailOptions): Promise<boolean> {
+function enqueueEmail(mailOptions: MailOptions): boolean {
   addJob(() => sendEmailNow(mailOptions));
   return true;
+}
+
+export async function sendEmail(mailOptions: MailOptions): Promise<boolean> {
+  return enqueueEmail(mailOptions);
+}
+
+export async function sendNotificationEmail(
+  mailOptions: NotificationMailOptions,
+): Promise<boolean> {
+  const { notificationType, recipientType, context, ...transportOptions } =
+    mailOptions;
+  const allowed = await isEmailNotificationEnabled(
+    notificationType,
+    recipientType,
+  );
+
+  if (!allowed) {
+    const contextSuffix = context
+      ? ` context=${JSON.stringify(context)}`
+      : "";
+    logger.info(
+      `[EmailService] Skipping '${notificationType}' email to '${transportOptions.to}' for recipient '${recipientType}'.${contextSuffix}`,
+    );
+    return false;
+  }
+
+  logger.debug(
+    `[EmailService] Queuing '${notificationType}' email to '${transportOptions.to}' for recipient '${recipientType}'.`,
+  );
+  return enqueueEmail(transportOptions);
 }
 
 // --- Template Functions --- //
@@ -396,7 +454,12 @@ ${comments ? `<p><strong>Comments:</strong> ${comments}</p>` : ""}
 <p>Thanks,<br/>The DoorStep Team</p>`,
   };
 
-  return sendEmail(mailOptions);
+  return sendNotificationEmail({
+    ...mailOptions,
+    notificationType: "bookingUpdate",
+    recipientType: "customer",
+    context: { bookingId },
+  });
 }
 
 export function sendBookingRescheduledByCustomerEmail(
@@ -435,7 +498,12 @@ export function sendBookingRescheduledByCustomerEmail(
 <p>Thanks,<br/>The DoorStep Team</p>`,
   };
 
-  return sendEmail(mailOptions);
+  return sendNotificationEmail({
+    ...mailOptions,
+    notificationType: "bookingRescheduledByCustomer",
+    recipientType: "serviceProvider",
+    context: { bookingId },
+  });
 }
 
 export function sendBookingRescheduledByProviderEmail(
@@ -477,7 +545,12 @@ ${comments ? `<p>Provider's reason: ${comments}</p>` : ""}
 <p>Thanks,<br/>The DoorStep Team</p>`,
   };
 
-  return sendEmail(mailOptions);
+  return sendNotificationEmail({
+    ...mailOptions,
+    notificationType: "bookingRescheduledByProvider",
+    recipientType: "customer",
+    context: { bookingId },
+  });
 }
 
 export function getBookingUpdateEmailContent(

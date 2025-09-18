@@ -4,7 +4,11 @@ import { db } from "./db";
 import type { SQL } from "drizzle-orm";
 import logger from "./logger";
 import { getCache, setCache } from "./cache";
-import { sendEmail, getGenericNotificationEmailContent } from "./emailService"; // Added for sending emails
+import {
+  sendNotificationEmail,
+  getGenericNotificationEmailContent,
+  mapUserRoleToRecipient,
+} from "./emailService"; // Added for sending emails
 import {
   User,
   InsertUser,
@@ -1688,11 +1692,14 @@ export class PostgresStorage implements IStorage {
             newNotification.title,
             newNotification.message,
           );
-          await sendEmail({
+          await sendNotificationEmail({
             to: user.email,
             subject: emailContent.subject,
             text: emailContent.text,
             html: emailContent.html,
+            notificationType: "genericNotification",
+            recipientType: mapUserRoleToRecipient(user.role),
+            context: { notificationId: newNotification.id, userId: user.id },
           });
         }
       } catch (emailError) {
@@ -2141,11 +2148,15 @@ export class PostgresStorage implements IStorage {
         subject,
         message,
       );
-      await sendEmail({
+      const resolvedRole = (user?.role ?? "customer") as UserRole;
+      await sendNotificationEmail({
         to: emailAddress,
         subject: emailContent.subject,
         text: emailContent.text,
         html: emailContent.html,
+        notificationType: "genericNotification",
+        recipientType: mapUserRoleToRecipient(resolvedRole),
+        context: { userId: user?.id },
       });
       logger.info(
         `Email notification sent to ${emailAddress} with subject "${subject}"`,

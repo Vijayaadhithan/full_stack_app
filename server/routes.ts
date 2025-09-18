@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import logger from "./logger";
 import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
 import {
-  sendEmail,
+  sendNotificationEmail,
+  mapUserRoleToRecipient,
   getPasswordResetEmailContent,
   getOrderConfirmationEmailContent,
   getBookingConfirmationEmailContent,
@@ -352,12 +353,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resetLink,
       );
 
-      await sendEmail({
-        to: user.email,
-        subject: emailContent.subject,
-        text: emailContent.text,
-        html: emailContent.html,
-      });
+      if (user.email) {
+        await sendNotificationEmail({
+          to: user.email,
+          subject: emailContent.subject,
+          text: emailContent.text,
+          html: emailContent.html,
+          notificationType: "passwordReset",
+          recipientType: mapUserRoleToRecipient(user.role),
+          context: { userId: user.id },
+        });
+      } else {
+        logger.warn(
+          `Password reset attempted for user ${user.id}, but no email is available.`,
+        );
+      }
 
       return res
         .status(200)
@@ -1989,11 +1999,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   customerPhone,
                 },
               );
-            await sendEmail({
+            await sendNotificationEmail({
               to: provider.email,
               subject: providerBookingEmailContent.subject,
               text: providerBookingEmailContent.text,
               html: providerBookingEmailContent.html,
+              notificationType: "bookingRequest",
+              recipientType: "serviceProvider",
+              context: { bookingId: booking.id },
             });
             const customerPendingEmailContent =
               getBookingRequestPendingEmailContent(
@@ -2004,11 +2017,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   providerName: provider.name || provider.username,
                 },
               );
-            await sendEmail({
+            await sendNotificationEmail({
               to: customer.email,
               subject: customerPendingEmailContent.subject,
               text: customerPendingEmailContent.text,
               html: customerPendingEmailContent.html,
+              notificationType: "bookingPendingCustomer",
+              recipientType: "customer",
+              context: { bookingId: booking.id },
             });
           }
         } catch (fetchError) {
@@ -2192,7 +2208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (booking.customerId) {
           customer = await storage.getUser(booking.customerId);
           if (customer?.email) {
-            const mail =
+            const mailOptions =
               emailService.getServicePaymentConfirmedCustomerEmailContent(
                 customer.name || customer.username,
                 {
@@ -2205,13 +2221,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   paymentId: booking.paymentReference || "N/A",
                 },
               );
-            mail.to = customer.email;
-            await sendEmail(mail);
+            await sendNotificationEmail({
+              ...mailOptions,
+              to: customer.email,
+              notificationType: "servicePaymentConfirmedCustomer",
+              recipientType: "customer",
+              context: { bookingId, userId: customer.id },
+            });
           }
         }
         const provider = await storage.getUser(service.providerId!);
         if (provider?.email) {
-          const mail =
+          const mailOptions =
             emailService.getServiceProviderPaymentReceivedEmailContent(
               provider.name || provider.username,
               {
@@ -2225,8 +2246,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 paymentId: booking.paymentReference || "N/A",
               },
             );
-          mail.to = provider.email;
-          await sendEmail(mail);
+          await sendNotificationEmail({
+            ...mailOptions,
+            to: provider.email,
+            notificationType: "serviceProviderPaymentReceived",
+            recipientType: "serviceProvider",
+            context: { bookingId, userId: provider.id },
+          });
         }
         res.json({ booking: updatedBooking });
       } catch (error) {
@@ -2344,11 +2370,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.info(
           `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Accepted' email to ${customer.email}`,
         );
-        await sendEmail({
+        await sendNotificationEmail({
           to: customer.email,
           subject: emailContent.subject,
           text: emailContent.text,
           html: emailContent.html,
+          notificationType: "bookingAccepted",
+          recipientType: "customer",
+          context: { bookingId: booking.id, userId: customer.id },
         });
         logger.info(
           `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Accepted' email SENT to ${customer.email}`,
@@ -2478,11 +2507,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.info(
           `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Rejected' email to ${customer.email}`,
         );
-        await sendEmail({
+        await sendNotificationEmail({
           to: customer.email,
           subject: emailContent.subject,
           text: emailContent.text,
           html: emailContent.html,
+          notificationType: "bookingRejected",
+          recipientType: "customer",
+          context: { bookingId: booking.id, userId: customer.id },
         });
         logger.info(
           `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Rejected' email SENT to ${customer.email}`,
@@ -2549,8 +2581,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               "Payment Submitted",
               `Customer submitted payment reference for booking #${bookingId}. Please confirm receipt.`,
             );
-            mail.to = provider.email;
-            await sendEmail(mail);
+            await sendNotificationEmail({
+              ...mail,
+              to: provider.email,
+              notificationType: "bookingUpdate",
+              recipientType: "serviceProvider",
+              context: { bookingId, userId: provider.id },
+            });
           }
         }
 
@@ -3389,12 +3426,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             items: itemsWithNames,
             ...contactDetails,
           });
-          await sendEmail({
-            to: customer.email,
-            subject: customerEmailContent.subject,
-            text: customerEmailContent.text,
-            html: customerEmailContent.html,
-          });
+          if (customer.email) {
+            await sendNotificationEmail({
+              to: customer.email,
+              subject: customerEmailContent.subject,
+              text: customerEmailContent.text,
+              html: customerEmailContent.html,
+              notificationType: "orderConfirmation",
+              recipientType: "customer",
+              context: { orderId: newOrder.id, userId: customer.id },
+            });
+          } else {
+            logger.warn(
+              `Order ${newOrder.id}: customer ${customer.id} has no email. Skipping confirmation email.`,
+            );
+          }
 
           const shopEmailContent = getOrderConfirmationEmailContent({
             recipientName: shopDisplayName,
@@ -3406,12 +3452,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             forShopOwner: true,
             ...contactDetails,
           });
-          await sendEmail({
-            to: shop.email,
-            subject: shopEmailContent.subject,
-            text: shopEmailContent.text,
-            html: shopEmailContent.html,
-          });
+          if (shop.email) {
+            await sendNotificationEmail({
+              to: shop.email,
+              subject: shopEmailContent.subject,
+              text: shopEmailContent.text,
+              html: shopEmailContent.html,
+              notificationType: "orderConfirmation",
+              recipientType: "shop",
+              context: { orderId: newOrder.id, userId: shop.id },
+            });
+          } else {
+            logger.warn(
+              `Order ${newOrder.id}: shop ${shop.id} has no email. Skipping confirmation email.`,
+            );
+          }
         } catch (emailError) {
           logger.error("Error sending order confirmation emails:", emailError);
           // Don't let email failure break the order creation flow

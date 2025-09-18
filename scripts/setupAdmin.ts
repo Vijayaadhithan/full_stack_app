@@ -16,6 +16,7 @@ async function main() {
     { action: "view_health", description: "View system health" },
     { action: "view_all_bookings", description: "View all bookings" },
     { action: "manage_reviews", description: "Manage reviews" },
+    { action: "manage_settings", description: "Manage platform settings" },
   ];
 
   for (const perm of basePermissions) {
