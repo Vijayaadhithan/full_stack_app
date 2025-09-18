@@ -83,14 +83,19 @@ async function fetchOverrides(): Promise<EmailPreferenceOverrides> {
   } catch (error) {
     const message =
       error instanceof Error ? error.message.toLowerCase() : "unknown error";
-    if (message.includes("email_notification_preferences") &&
-        message.includes("does not exist")) {
+    if (
+      message.includes("email_notification_preferences") &&
+      message.includes("does not exist")
+    ) {
       logger.warn(
-        "[EmailPreferences] Overrides table missing. Run migration 0017_email_notification_preferences.sql to enable admin overrides.",
+        "[EmailPreferences] Overrides table missing. Run migration 0017 email_notification_preferences.sql to enable admin overrides.",
+      );
+    } else if (message.includes("does not exist")) {
+      logger.warn(
+        "[EmailPreferences] Database unavailable while loading overrides. Falling back to defaults.",
       );
     } else {
-      logger.error({ err: error }, "[EmailPreferences] Failed to load overrides");
-      throw error;
+      logger.error({ err: error }, "[EmailPreferences] Failed to load overrides; falling back to defaults");
     }
   }
 
