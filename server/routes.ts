@@ -2827,8 +2827,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
-      const bookings = await storage.getBookingsByCustomer(req.user!.id);
-      res.json(bookings);
+      try {
+        const bookings = await storage.getBookingsByCustomer(req.user!.id);
+        res.json(bookings);
+      } catch (error) {
+        logger.error("Error fetching customer bookings:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch bookings",
+          });
+      }
     },
   );
   app.post(
@@ -2841,22 +2853,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json(formatValidationError(parsedBody.error));
       }
       const { serviceId, preferredDate } = parsedBody.data;
-      await storage.joinWaitlist(
-        req.user!.id,
-        serviceId,
-        new Date(preferredDate),
-      );
+      try {
+        await storage.joinWaitlist(
+          req.user!.id,
+          serviceId,
+          new Date(preferredDate),
+        );
 
-      // Create notification
-      await storage.createNotification({
-        userId: req.user!.id,
-        type: "booking",
-        title: "Added to Waitlist",
-        message:
-          "You've been added to the waitlist. We'll notify you when a slot becomes available.",
-      });
+        // Create notification
+        await storage.createNotification({
+          userId: req.user!.id,
+          type: "booking",
+          title: "Added to Waitlist",
+          message:
+            "You've been added to the waitlist. We'll notify you when a slot becomes available.",
+        });
 
-      res.sendStatus(200);
+        res.sendStatus(200);
+      } catch (error) {
+        logger.error("Error joining waitlist:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to join waitlist",
+          });
+      }
     },
   );
 
@@ -2939,8 +2963,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json(formatValidationError(parsedBody.error));
       }
       const { productId } = parsedBody.data;
-      await storage.addToWishlist(req.user!.id, productId);
-      res.json({ success: true }); // Send proper JSON response
+      try {
+        await storage.addToWishlist(req.user!.id, productId);
+        res.json({ success: true }); // Send proper JSON response
+      } catch (error) {
+        logger.error("Error adding to wishlist:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to update wishlist",
+          });
+      }
     },
   );
 
@@ -2949,11 +2985,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
-      await storage.removeFromWishlist(
-        req.user!.id,
-        parseInt(req.params.productId),
-      );
-      res.sendStatus(200);
+      try {
+        await storage.removeFromWishlist(
+          req.user!.id,
+          parseInt(req.params.productId),
+        );
+        res.sendStatus(200);
+      } catch (error) {
+        logger.error("Error removing from wishlist:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to update wishlist",
+          });
+      }
     },
   );
 
@@ -2962,8 +3010,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
-      const wishlist = await storage.getWishlist(req.user!.id);
-      res.json(wishlist);
+      try {
+        const wishlist = await storage.getWishlist(req.user!.id);
+        res.json(wishlist);
+      } catch (error) {
+        logger.error("Error fetching wishlist:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch wishlist",
+          });
+      }
     },
   );
 
@@ -3088,13 +3148,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   app.get("/api/reviews/service/:id", requireAuth, async (req, res) => {
-    const reviews = await storage.getReviewsByService(parseInt(req.params.id));
-    res.json(reviews);
+    try {
+      const reviews = await storage.getReviewsByService(parseInt(req.params.id));
+      res.json(reviews);
+    } catch (error) {
+      logger.error("Error fetching service reviews:", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to fetch reviews",
+        });
+    }
   });
 
   app.get("/api/reviews/provider/:id", requireAuth, async (req, res) => {
-    const reviews = await storage.getReviewsByProvider(parseInt(req.params.id));
-    res.json(reviews);
+    try {
+      const reviews = await storage.getReviewsByProvider(parseInt(req.params.id));
+      res.json(reviews);
+    } catch (error) {
+      logger.error("Error fetching provider reviews:", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to fetch reviews",
+        });
+    }
   });
 
   // Add endpoint for service providers to reply to reviews
@@ -3148,13 +3232,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Notification routes
   app.get("/api/notifications", requireAuth, async (req, res) => {
-    const notifications = await storage.getNotificationsByUser(req.user!.id);
-    res.json(notifications);
+    try {
+      const notifications = await storage.getNotificationsByUser(req.user!.id);
+      res.json(notifications);
+    } catch (error) {
+      logger.error("Error fetching notifications:", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to fetch notifications",
+        });
+    }
   });
 
   app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
-    await storage.markNotificationAsRead(parseInt(req.params.id));
-    res.sendStatus(200);
+    try {
+      await storage.markNotificationAsRead(parseInt(req.params.id));
+      res.sendStatus(200);
+    } catch (error) {
+      logger.error("Error marking notification as read:", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to update notification",
+        });
+    }
   });
 
   app.patch(
@@ -3166,15 +3274,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json(formatValidationError(parsedBody.error));
       }
       const { role } = parsedBody.data;
-      // Pass both user ID and role to properly filter notifications
-      await storage.markAllNotificationsAsRead(req.user!.id, role);
-      res.sendStatus(200);
+      try {
+        // Pass both user ID and role to properly filter notifications
+        await storage.markAllNotificationsAsRead(req.user!.id, role);
+        res.sendStatus(200);
+      } catch (error) {
+        logger.error("Error marking notifications as read:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to update notifications",
+          });
+      }
     },
   );
 
   app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
-    await storage.deleteNotification(parseInt(req.params.id));
-    res.sendStatus(200);
+    try {
+      await storage.deleteNotification(parseInt(req.params.id));
+      res.sendStatus(200);
+    } catch (error) {
+      logger.error("Error deleting notification:", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete notification",
+        });
+    }
   });
 
   // Order Management
@@ -3501,67 +3633,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
-      const allowedOrderStatus: Order["status"][] = [
-        "pending",
-        "cancelled",
-        "confirmed",
-        "processing",
-        "packed",
-        "shipped",
-        "delivered",
-        "returned",
-      ];
+      try {
+        const allowedOrderStatus: Order["status"][] = [
+          "pending",
+          "cancelled",
+          "confirmed",
+          "processing",
+          "packed",
+          "shipped",
+          "delivered",
+          "returned",
+        ];
 
-      const rawStatus =
-        typeof req.query.status === "string"
-          ? req.query.status.trim().toLowerCase()
-          : undefined;
+        const rawStatus =
+          typeof req.query.status === "string"
+            ? req.query.status.trim().toLowerCase()
+            : undefined;
 
-      let statusFilter: Order["status"] | undefined;
-      if (rawStatus && rawStatus !== "all") {
-        if (allowedOrderStatus.includes(rawStatus as Order["status"])) {
-          statusFilter = rawStatus as Order["status"];
-        } else {
-          return res.status(400).json({ message: "Invalid status filter" });
+        let statusFilter: Order["status"] | undefined;
+        if (rawStatus && rawStatus !== "all") {
+          if (allowedOrderStatus.includes(rawStatus as Order["status"])) {
+            statusFilter = rawStatus as Order["status"];
+          } else {
+            return res.status(400).json({ message: "Invalid status filter" });
+          }
         }
-      }
 
-      const orders = await storage.getOrdersByCustomer(req.user!.id, {
-        status: statusFilter,
-      });
-      const detailed = await Promise.all(
-        orders.map(async (order) => {
-          const itemsRaw = await storage.getOrderItemsByOrder(order.id);
-          const items = await Promise.all(
-            itemsRaw.map(async (item) => {
-              const product =
-                item.productId !== null
-                  ? await storage.getProduct(item.productId)
-                  : null;
-              return {
-                id: item.id,
-                productId: item.productId,
-                name: product?.name ?? "",
-                quantity: item.quantity,
-                price: item.price,
-                total: item.total,
-              };
-            }),
-          );
-          const shop =
-            order.shopId !== null
-              ? await storage.getUser(order.shopId)
-              : undefined;
-          return {
-            ...order,
-            items,
-            shop: shop
-              ? { name: shop.name, phone: shop.phone, email: shop.email }
-              : undefined,
-          };
-        }),
-      );
-      res.json(detailed);
+        const orders = await storage.getOrdersByCustomer(req.user!.id, {
+          status: statusFilter,
+        });
+        const detailed = await Promise.all(
+          orders.map(async (order) => {
+            const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+            const items = await Promise.all(
+              itemsRaw.map(async (item) => {
+                const product =
+                  item.productId !== null
+                    ? await storage.getProduct(item.productId)
+                    : null;
+                return {
+                  id: item.id,
+                  productId: item.productId,
+                  name: product?.name ?? "",
+                  quantity: item.quantity,
+                  price: item.price,
+                  total: item.total,
+                };
+              }),
+            );
+            const shop =
+              order.shopId !== null
+                ? await storage.getUser(order.shopId)
+                : undefined;
+            return {
+              ...order,
+              items,
+              shop: shop
+                ? { name: shop.name, phone: shop.phone, email: shop.email }
+                : undefined,
+            };
+          }),
+        );
+        res.json(detailed);
+      } catch (error) {
+        logger.error("Error fetching customer orders:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch orders",
+          });
+      }
     },
   );
 
@@ -3570,9 +3714,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireShopOrWorkerPermission(["analytics:view"]),
     async (req, res) => {
-      const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
-      const stats = await storage.getShopDashboardStats(shopContextId);
-      res.json(stats);
+      try {
+        const shopContextId =
+          req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const stats = await storage.getShopDashboardStats(shopContextId);
+        res.json(stats);
+      } catch (error) {
+        logger.error("Error fetching shop dashboard stats:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch dashboard stats",
+          });
+      }
     },
   );
 
@@ -3581,45 +3738,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireShopOrWorkerPermission(["orders:read"]),
     async (req, res) => {
-      const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
-      const orders = await storage.getRecentOrdersByShop(shopContextId);
-      const detailed = await Promise.all(
-        orders.map(async (order) => {
-          const itemsRaw = await storage.getOrderItemsByOrder(order.id);
-          const items = await Promise.all(
-            itemsRaw.map(async (item) => {
-              const product =
-                item.productId !== null
-                  ? await storage.getProduct(item.productId)
-                  : null;
-              return {
-                id: item.id,
-                productId: item.productId,
-                name: product?.name ?? "",
-                quantity: item.quantity,
-                price: item.price,
-                total: item.total,
-              };
-            }),
-          );
-          const customer =
-            order.customerId !== null
-              ? await storage.getUser(order.customerId)
-              : undefined;
-          return {
-            ...order,
-            items,
-            customer: customer
-              ? {
-                  name: customer.name,
-                  phone: customer.phone,
-                  email: customer.email,
-                }
-              : undefined,
-          };
-        }),
-      );
-      res.json(detailed);
+      try {
+        const shopContextId =
+          req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const orders = await storage.getRecentOrdersByShop(shopContextId);
+        const detailed = await Promise.all(
+          orders.map(async (order) => {
+            const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+            const items = await Promise.all(
+              itemsRaw.map(async (item) => {
+                const product =
+                  item.productId !== null
+                    ? await storage.getProduct(item.productId)
+                    : null;
+                return {
+                  id: item.id,
+                  productId: item.productId,
+                  name: product?.name ?? "",
+                  quantity: item.quantity,
+                  price: item.price,
+                  total: item.total,
+                };
+              }),
+            );
+            const customer =
+              order.customerId !== null
+                ? await storage.getUser(order.customerId)
+                : undefined;
+            return {
+              ...order,
+              items,
+              customer: customer
+                ? {
+                    name: customer.name,
+                    phone: customer.phone,
+                    email: customer.email,
+                  }
+                : undefined,
+            };
+          }),
+        );
+        res.json(detailed);
+      } catch (error) {
+        logger.error("Error fetching recent shop orders:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch orders",
+          });
+      }
     },
   );
 
@@ -3628,46 +3798,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireShopOrWorkerPermission(["orders:read"]),
     async (req, res) => {
-      const { status } = req.query;
-      const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
-      const orders = await storage.getOrdersByShop(shopContextId, status as string | undefined);
-      const detailed = await Promise.all(
-        orders.map(async (order) => {
-          const itemsRaw = await storage.getOrderItemsByOrder(order.id);
-          const items = await Promise.all(
-            itemsRaw.map(async (item) => {
-              const product =
-                item.productId !== null
-                  ? await storage.getProduct(item.productId)
-                  : null;
-              return {
-                id: item.id,
-                productId: item.productId,
-                name: product?.name ?? "",
-                quantity: item.quantity,
-                price: item.price,
-                total: item.total,
-              };
-            }),
-          );
-          const customer =
-            order.customerId !== null
-              ? await storage.getUser(order.customerId)
-              : undefined;
-          return {
-            ...order,
-            items,
-            customer: customer
-              ? {
-                  name: customer.name,
-                  phone: customer.phone,
-                  email: customer.email,
-                }
-              : undefined,
-          };
-        }),
-      );
-      res.json(detailed);
+      try {
+        const { status } = req.query;
+        const shopContextId =
+          req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const orders = await storage.getOrdersByShop(
+          shopContextId,
+          status as string | undefined,
+        );
+        const detailed = await Promise.all(
+          orders.map(async (order) => {
+            const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+            const items = await Promise.all(
+              itemsRaw.map(async (item) => {
+                const product =
+                  item.productId !== null
+                    ? await storage.getProduct(item.productId)
+                    : null;
+                return {
+                  id: item.id,
+                  productId: item.productId,
+                  name: product?.name ?? "",
+                  quantity: item.quantity,
+                  price: item.price,
+                  total: item.total,
+                };
+              }),
+            );
+            const customer =
+              order.customerId !== null
+                ? await storage.getUser(order.customerId)
+                : undefined;
+            return {
+              ...order,
+              items,
+              customer: customer
+                ? {
+                    name: customer.name,
+                    phone: customer.phone,
+                    email: customer.email,
+                  }
+                : undefined,
+            };
+          }),
+        );
+        res.json(detailed);
+      } catch (error) {
+        logger.error("Error fetching shop orders:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch orders",
+          });
+      }
     },
   );
 
@@ -3676,68 +3862,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (isNaN(orderId)) {
       return res.status(400).json({ message: "Invalid order id" });
     }
-    const order = await storage.getOrder(orderId);
-    if (!order) return res.status(404).json({ message: "Order not found" });
-    if (order.customerId !== req.user!.id) {
-      // Allow shop owners or their workers if the order belongs to their shop
-      if (req.user!.role === "shop") {
-        if (order.shopId !== req.user!.id) {
+    try {
+      const order = await storage.getOrder(orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      if (order.customerId !== req.user!.id) {
+        // Allow shop owners or their workers if the order belongs to their shop
+        if (req.user!.role === "shop") {
+          if (order.shopId !== req.user!.id) {
+            return res.status(403).json({ message: "Not authorized" });
+          }
+        } else if (req.user!.role === "worker") {
+          const workerShopId = await getWorkerShopId(req.user!.id);
+          if (!workerShopId || order.shopId !== workerShopId) {
+            return res.status(403).json({ message: "Not authorized" });
+          }
+        } else {
           return res.status(403).json({ message: "Not authorized" });
         }
-      } else if (req.user!.role === "worker") {
-        const workerShopId = await getWorkerShopId(req.user!.id);
-        if (!workerShopId || order.shopId !== workerShopId) {
-          return res.status(403).json({ message: "Not authorized" });
-        }
-      } else {
-        return res.status(403).json({ message: "Not authorized" });
       }
+      const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+      const items = await Promise.all(
+        itemsRaw.map(async (item) => {
+          const product =
+            item.productId !== null
+              ? await storage.getProduct(item.productId)
+              : null;
+          return {
+            id: item.id,
+            productId: item.productId,
+            name: product?.name ?? "",
+            quantity: item.quantity,
+            price: item.price,
+            total: item.total,
+          };
+        }),
+      );
+      const customer =
+        order.customerId !== null
+          ? await storage.getUser(order.customerId)
+          : undefined;
+      const shop =
+        order.shopId !== null ? await storage.getUser(order.shopId) : undefined;
+      res.json({
+        ...order,
+        items,
+        customer: customer
+          ? {
+              name: customer.name,
+              phone: customer.phone,
+              email: customer.email,
+              address: formatUserAddress(customer),
+            }
+          : undefined,
+        shop: shop
+          ? {
+              name: shop.name,
+              phone: shop.phone,
+              email: shop.email,
+              address: formatUserAddress(shop),
+              upiId: (shop as any).upiId,
+              returnsEnabled: (shop as any).returnsEnabled,
+            }
+          : undefined,
+      });
+    } catch (error) {
+      logger.error("Error fetching order details:", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to fetch order",
+        });
     }
-    const itemsRaw = await storage.getOrderItemsByOrder(order.id);
-    const items = await Promise.all(
-      itemsRaw.map(async (item) => {
-        const product =
-          item.productId !== null
-            ? await storage.getProduct(item.productId)
-            : null;
-        return {
-          id: item.id,
-          productId: item.productId,
-          name: product?.name ?? "",
-          quantity: item.quantity,
-          price: item.price,
-          total: item.total,
-        };
-      }),
-    );
-    const customer =
-      order.customerId !== null
-        ? await storage.getUser(order.customerId)
-        : undefined;
-    const shop =
-      order.shopId !== null ? await storage.getUser(order.shopId) : undefined;
-    res.json({
-      ...order,
-      items,
-      customer: customer
-        ? {
-            name: customer.name,
-            phone: customer.phone,
-            email: customer.email,
-            address: formatUserAddress(customer),
-          }
-        : undefined,
-      shop: shop
-        ? {
-            name: shop.name,
-            phone: shop.phone,
-            email: shop.email,
-            address: formatUserAddress(shop),
-            upiId: (shop as any).upiId,
-            returnsEnabled: (shop as any).returnsEnabled,
-          }
-        : undefined,
-    });
   });
 
   // Customer submits payment reference for manual verification
@@ -3754,24 +3952,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json(formatValidationError(parsedBody.error));
       }
       const { paymentReference } = parsedBody.data;
-      const order = await storage.getOrder(orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      if (order.customerId !== req.user!.id) {
-        return res.status(403).json({ message: "Not authorized" });
-      }
-      const updated = await storage.updateOrder(orderId, {
-        paymentStatus: "verifying",
-        paymentReference,
-      });
-      if (order.shopId) {
-        await storage.createNotification({
-          userId: order.shopId,
-          type: "order",
-          title: "Action Required",
-          message: `Payment reference for Order #${orderId} has been submitted. Please verify.`,
+      try {
+        const order = await storage.getOrder(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        if (order.customerId !== req.user!.id) {
+          return res.status(403).json({ message: "Not authorized" });
+        }
+        const updated = await storage.updateOrder(orderId, {
+          paymentStatus: "verifying",
+          paymentReference,
         });
+        if (order.shopId) {
+          await storage.createNotification({
+            userId: order.shopId,
+            type: "order",
+            title: "Action Required",
+            message: `Payment reference for Order #${orderId} has been submitted. Please verify.`,
+          });
+        }
+        res.json(updated);
+      } catch (error) {
+        logger.error("Error submitting payment reference:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to submit payment reference",
+          });
       }
-      res.json(updated);
     },
   );
 
@@ -3784,32 +3994,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orderId = parseInt(req.params.id);
       if (isNaN(orderId))
         return res.status(400).json({ message: "Invalid order id" });
-      const order = await storage.getOrder(orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
-      if (order.shopId !== shopContextId)
-        return res.status(403).json({ message: "Not authorized" });
-      if (
-        (order.paymentMethod === "upi" && order.paymentStatus !== "verifying") ||
-        (order.paymentMethod === "cash" && order.paymentStatus !== "pending")
-      ) {
-        return res
-          .status(400)
-          .json({ message: "Order is not awaiting verification" });
-      }
-      const updated = await storage.updateOrder(orderId, {
-        paymentStatus: "paid",
-        status: "confirmed",
-      });
-      if (order.customerId) {
-        await storage.createNotification({
-          userId: order.customerId,
-          type: "order",
-          title: "Payment Confirmed",
-          message: `Payment Confirmed! Your Order #${orderId} is now being processed.`,
+      try {
+        const order = await storage.getOrder(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        const shopContextId =
+          req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        if (order.shopId !== shopContextId)
+          return res.status(403).json({ message: "Not authorized" });
+        if (
+          (order.paymentMethod === "upi" && order.paymentStatus !== "verifying") ||
+          (order.paymentMethod === "cash" && order.paymentStatus !== "pending")
+        ) {
+          return res
+            .status(400)
+            .json({ message: "Order is not awaiting verification" });
+        }
+        const updated = await storage.updateOrder(orderId, {
+          paymentStatus: "paid",
+          status: "confirmed",
         });
+        if (order.customerId) {
+          await storage.createNotification({
+            userId: order.customerId,
+            type: "order",
+            title: "Payment Confirmed",
+            message: `Payment Confirmed! Your Order #${orderId} is now being processed.`,
+          });
+        }
+        res.json(updated);
+      } catch (error) {
+        logger.error("Error confirming payment:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to confirm payment",
+          });
       }
-      res.json(updated);
     },
   );
 
@@ -3817,23 +4040,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/services/:id/bookings", requireAuth, async (req, res) => {
     const { date } = req.query;
     const serviceId = parseInt(req.params.id);
+    try {
+      const service = await storage.getService(serviceId);
+      if (!service)
+        return res.status(404).json({ message: "Service not found" });
 
-    const service = await storage.getService(serviceId);
-    if (!service) return res.status(404).json({ message: "Service not found" });
-
-    const bookings = await storage.getBookingsByService(
-      serviceId,
-      new Date(date as string),
-    );
-    res.json(
-      bookings.map((booking) => ({
-        start: booking.bookingDate,
-        end: new Date(
-          booking.bookingDate.getTime() +
-            (service.duration + (service.bufferTime || 0)) * 60000,
-        ),
-      })),
-    );
+      const bookings = await storage.getBookingsByService(
+        serviceId,
+        new Date(date as string),
+      );
+      res.json(
+        bookings.map((booking) => ({
+          start: booking.bookingDate,
+          end: new Date(
+            booking.bookingDate.getTime() +
+              (service.duration + (service.bufferTime || 0)) * 60000,
+          ),
+        })),
+      );
+    } catch (error) {
+      logger.error("Error fetching service bookings:", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to fetch bookings",
+        });
+    }
   });
 
   // Enhanced booking routes with notifications
@@ -3842,39 +4077,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["provider"]),
     async (req, res) => {
-      const booking = await storage.updateBooking(parseInt(req.params.id), {
-        status: "accepted",
-      });
-
-      // Send confirmation notifications
-      const customer =
-        booking.customerId !== null
-          ? await storage.getUser(booking.customerId)
-          : null;
-      if (customer) {
-        // Create in-app notification
-        await storage.createNotification({
-          userId: customer.id,
-          type: "booking",
-          title: "Booking Confirmed",
-          message: `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
+      try {
+        const booking = await storage.updateBooking(parseInt(req.params.id), {
+          status: "accepted",
         });
 
-        // Send SMS notification
-        await storage.sendSMSNotification(
-          customer.phone,
-          `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
-        );
+        // Send confirmation notifications
+        const customer =
+          booking.customerId !== null
+            ? await storage.getUser(booking.customerId)
+            : null;
+        if (customer) {
+          // Create in-app notification
+          await storage.createNotification({
+            userId: customer.id,
+            type: "booking",
+            title: "Booking Confirmed",
+            message: `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
+          });
 
-        // Send email notification
-        await storage.sendEmailNotification(
-          customer.email,
-          "Booking Confirmation",
-          `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
-        );
+          // Send SMS notification
+          await storage.sendSMSNotification(
+            customer.phone,
+            `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
+          );
+
+          // Send email notification
+          await storage.sendEmailNotification(
+            customer.email,
+            "Booking Confirmation",
+            `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
+          );
+        }
+
+        res.json(booking);
+      } catch (error) {
+        logger.error("Error confirming booking:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to confirm booking",
+          });
       }
-
-      res.json(booking);
     },
   );
 
@@ -3888,12 +4135,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const orderId = parseInt(req.params.id);
         if (isNaN(orderId))
           return res.status(400).json({ message: "Invalid order id" });
-        const order = await storage.getOrder(orderId);
-        if (!order) return res.status(404).json({ message: "Order not found" });
-        if (order.customerId !== req.user.id)
-          return res.status(403).json({ message: "Not authorized" });
-        const timeline = await storage.getOrderTimeline(orderId);
-        return res.json(timeline);
+        try {
+          const order = await storage.getOrder(orderId);
+          if (!order) return res.status(404).json({ message: "Order not found" });
+          if (order.customerId !== req.user.id)
+            return res.status(403).json({ message: "Not authorized" });
+          const timeline = await storage.getOrderTimeline(orderId);
+          return res.json(timeline);
+        } catch (error) {
+          logger.error("Error fetching customer order timeline:", error);
+          return res
+            .status(500)
+            .json({
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to fetch order timeline",
+            });
+        }
       }
       next();
     },
@@ -3902,13 +4161,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orderId = parseInt(req.params.id);
       if (isNaN(orderId))
         return res.status(400).json({ message: "Invalid order id" });
-      const order = await storage.getOrder(orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      const shopContextId = req.user.role === "shop" ? req.user.id : req.workerShopId;
-      if (order.shopId !== shopContextId)
-        return res.status(403).json({ message: "Not authorized" });
-      const timeline = await storage.getOrderTimeline(orderId);
-      res.json(timeline);
+      try {
+        const order = await storage.getOrder(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        const shopContextId =
+          req.user.role === "shop" ? req.user.id : req.workerShopId;
+        if (order.shopId !== shopContextId)
+          return res.status(403).json({ message: "Not authorized" });
+        const timeline = await storage.getOrderTimeline(orderId);
+        res.json(timeline);
+      } catch (error) {
+        logger.error("Error fetching order timeline for shop/worker:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch order timeline",
+          });
+      }
     },
   );
 
@@ -3990,32 +4262,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(orderId))
         return res.status(400).json({ message: "Invalid order id" });
 
-      const order = await storage.getOrder(orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
+      try {
+        const order = await storage.getOrder(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
 
-      if (order.status === "delivered") {
-        const returnRequest = await (storage as any).createReturnRequest({
-          ...result.data,
-          orderId: order.id,
-          status: "pending",
-          customerId: req.user!.id,
-        });
+        if (order.status === "delivered") {
+          const returnRequest = await (storage as any).createReturnRequest({
+            ...result.data,
+            orderId: order.id,
+            status: "pending",
+            customerId: req.user!.id,
+          });
 
-        // Create notification for return request
-        await storage.createNotification({
-          userId: order.customerId,
-          type: "return",
-          title: "Return Request Received",
-          message:
-            "Your return request has been received and is being processed.",
-        });
+          // Create notification for return request
+          await storage.createNotification({
+            userId: order.customerId,
+            type: "return",
+            title: "Return Request Received",
+            message:
+              "Your return request has been received and is being processed.",
+          });
 
-        res.status(201).json(returnRequest);
-      } else {
+          res.status(201).json(returnRequest);
+        } else {
+          res
+            .status(400)
+            .json({
+              message: "Order must be delivered before initiating return",
+            });
+        }
+      } catch (error) {
+        logger.error("Error creating return request:", error);
         res
-          .status(400)
+          .status(500)
           .json({
-            message: "Order must be delivered before initiating return",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to create return request",
           });
       }
     },
@@ -4091,11 +4375,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add this route for user details
   app.get("/api/users/:id", requireAuth, async (req, res) => {
-    const user = await storage.getUser(parseInt(req.params.id));
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    try {
+      const user = await storage.getUser(parseInt(req.params.id));
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      logger.error("Error fetching user:", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to fetch user",
+        });
     }
-    res.json(user);
   });
 
   app.get("/api/products", requireAuth, async (req, res) => {
@@ -4331,12 +4627,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!result.data.orderId) {
         return res.status(400).json({ message: "Order id required" });
       }
-      const order = await storage.getOrder(result.data.orderId);
-      if (!order || order.customerId !== req.user!.id) {
-        return res.status(403).json({ message: "Cannot review this order" });
-      }
-
       try {
+        const order = await storage.getOrder(result.data.orderId);
+        if (!order || order.customerId !== req.user!.id) {
+          return res.status(403).json({ message: "Cannot review this order" });
+        }
+
         const review = await storage.createProductReview({
           ...result.data,
           customerId: req.user!.id,
