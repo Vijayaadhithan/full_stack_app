@@ -3,6 +3,76 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import type { MonitoringSnapshot } from "@shared/monitoring";
+
+const OVERVIEW_REFRESH_INTERVAL = 15000;
+
+const integerFormatter = new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: 0,
+});
+const decimalFormatter = new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: 1,
+});
+const percentFormatter = new Intl.NumberFormat("en-IN", {
+  style: "percent",
+  maximumFractionDigits: 1,
+});
+
+function formatNumber(value: number | null | undefined, digits = 1) {
+  if (value === null || value === undefined) return "—";
+  if (digits === 0) return integerFormatter.format(value);
+  return new Intl.NumberFormat("en-IN", { maximumFractionDigits: digits }).format(value);
+}
+
+function formatPercent(
+  value: number | null | undefined,
+  { alreadyRatio = false }: { alreadyRatio?: boolean } = {},
+) {
+  if (value === null || value === undefined) return "—";
+  const ratio = alreadyRatio ? value : value / 100;
+  return percentFormatter.format(ratio);
+}
+
+function formatDuration(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  if (value >= 1000) {
+    return `${decimalFormatter.format(value / 1000)} s`;
+  }
+  return `${integerFormatter.format(value)} ms`;
+}
+
+function formatBytes(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let index = 0;
+  let current = value;
+  while (current >= 1024 && index < units.length - 1) {
+    current /= 1024;
+    index += 1;
+  }
+  const formatter = index === 0 ? integerFormatter : decimalFormatter;
+  return `${formatter.format(current)} ${units[index]}`;
+}
+
+type FrontendMetricName = MonitoringSnapshot["frontend"]["metrics"][number]["name"];
+
+function formatFrontendMetricValue(
+  name: FrontendMetricName,
+  value: number | null | undefined,
+) {
+  if (value === null || value === undefined) return "—";
+  if (name === "CLS") {
+    return decimalFormatter.format(value);
+  }
+  return formatDuration(value);
+}
 
 type HealthResponse = Record<string, unknown>;
 
@@ -31,18 +101,458 @@ type TransactionsResponse = {
 };
 
 export default function AdminMonitoring() {
+  const monitoringQuery = useQuery<MonitoringSnapshot>({
+    queryKey: ["/api/admin/monitoring/summary"],
+    queryFn: () => apiRequest("GET", "/api/admin/monitoring/summary").then((r) => r.json()),
+    refetchInterval: OVERVIEW_REFRESH_INTERVAL,
+  });
+
+  const snapshot = monitoringQuery.data;
+
   return (
     <div className="space-y-8">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Monitoring &amp; Logging</h1>
         <p className="text-sm text-muted-foreground">
-          Track API health, inspect recent logs, and audit transaction activity from one place.
+          Track platform health, performance, and audit events from one place.
         </p>
       </header>
+      <MonitoringOverview
+        snapshot={snapshot}
+        isFetching={monitoringQuery.isFetching}
+        onRefresh={() => monitoringQuery.refetch()}
+      />
+      <div className="grid gap-8 xl:grid-cols-2">
+        <RequestPerformanceSection
+          snapshot={snapshot}
+          isFetching={monitoringQuery.isFetching}
+        />
+        <ErrorRateSection
+          snapshot={snapshot}
+          isFetching={monitoringQuery.isFetching}
+        />
+      </div>
+      <ResourceUsageSection
+        snapshot={snapshot}
+        isFetching={monitoringQuery.isFetching}
+      />
+      <FrontendMetricsSection
+        snapshot={snapshot}
+        isFetching={monitoringQuery.isFetching}
+      />
       <ApiStatusSection />
       <LogViewerSection />
       <TransactionViewerSection />
     </div>
+  );
+}
+
+type SectionProps = {
+  snapshot: MonitoringSnapshot | undefined;
+  isFetching: boolean;
+};
+
+function MonitoringOverview({ snapshot, isFetching, onRefresh }: SectionProps & { onRefresh: () => void }) {
+  const requests = snapshot?.requests;
+  const errors = snapshot?.errors;
+  const resources = snapshot?.resources;
+
+  const errorCount = requests
+    ? requests.statusBuckets.clientError + requests.statusBuckets.serverError
+    : 0;
+  const errorRate = requests?.total ? errorCount / requests.total : 0;
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold">Live Overview</h2>
+          <p className="text-sm text-muted-foreground">
+            Updated every {OVERVIEW_REFRESH_INTERVAL / 1000}s. Use refresh to sample on demand.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRefresh}
+          disabled={isFetching}
+        >
+          Refresh
+        </Button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Requests / minute</CardDescription>
+            <CardTitle className="text-2xl">
+              {formatNumber(requests?.rpm ?? null)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Total in window: {formatNumber(requests?.total ?? null, 0)}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Average latency</CardDescription>
+            <CardTitle className="text-2xl">
+              {formatDuration(requests?.avgDurationMs ?? null)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            P95 {formatDuration(requests?.p95DurationMs ?? null)} · P99 {formatDuration(requests?.p99DurationMs ?? null)}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Error rate</CardDescription>
+            <CardTitle className="text-2xl">
+              {formatPercent(errorRate, { alreadyRatio: true })}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {formatNumber(errors?.perMinute ?? null)} errors / minute
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Resource usage</CardDescription>
+            <CardTitle className="text-2xl">
+              Heap {formatBytes(resources?.memory.heapUsedBytes ?? null)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-1">
+            <div>CPU {formatPercent(resources?.cpu.percent ?? null)}</div>
+            <div>In-flight {formatNumber(requests?.inFlight ?? null, 0)}</div>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+  );
+}
+
+function RequestPerformanceSection({ snapshot, isFetching }: SectionProps) {
+  const requests = snapshot?.requests;
+
+  const statusBreakdown = useMemo(() => {
+    if (!requests) return null;
+    return [
+      { label: "2xx", value: requests.statusBuckets.success },
+      { label: "4xx", value: requests.statusBuckets.clientError },
+      { label: "5xx", value: requests.statusBuckets.serverError },
+    ];
+  }, [requests]);
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">Request Performance</h2>
+        <span className="text-sm text-muted-foreground">
+          {isFetching ? "Refreshing..." : `Window: ${requests?.windowMs ? Math.round(requests.windowMs / 60000) : 0}m`}
+        </span>
+      </div>
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div className="text-sm text-muted-foreground">Latency</div>
+              <div className="text-lg font-semibold">
+                {formatDuration(requests?.p95DurationMs ?? null)}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                P95 ({formatDuration(requests?.p99DurationMs ?? null)} at P99)
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Status distribution</div>
+              <div className="mt-1 flex flex-wrap gap-3 text-sm">
+                {statusBreakdown?.map((bucket) => (
+                  <span key={bucket.label} className="rounded border px-2 py-1">
+                    {bucket.label}: {formatNumber(bucket.value, 0)}
+                  </span>
+                )) ?? <span className="text-muted-foreground">No samples</span>}
+              </div>
+            </div>
+          </div>
+          <div className="mt-6 overflow-hidden rounded border">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Endpoint</th>
+                  <th className="px-3 py-2 font-medium">Requests</th>
+                  <th className="px-3 py-2 font-medium">Avg</th>
+                  <th className="px-3 py-2 font-medium">P95</th>
+                  <th className="px-3 py-2 font-medium">Error %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requests?.topEndpoints.length ? (
+                  requests.topEndpoints.map((endpoint) => (
+                    <tr key={`${endpoint.method}-${endpoint.path}`} className="border-t">
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{endpoint.method}</div>
+                        <div className="text-xs text-muted-foreground break-all">{endpoint.path}</div>
+                      </td>
+                      <td className="px-3 py-2">{formatNumber(endpoint.count, 0)}</td>
+                      <td className="px-3 py-2">{formatDuration(endpoint.avgDurationMs ?? null)}</td>
+                      <td className="px-3 py-2">{formatDuration(endpoint.p95DurationMs ?? null)}</td>
+                      <td className="px-3 py-2">{formatPercent(endpoint.errorRate ?? null, { alreadyRatio: true })}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="px-3 py-4 text-center text-muted-foreground" colSpan={5}>
+                      {isFetching ? "Loading request data..." : "No request samples captured yet."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function ErrorRateSection({ snapshot, isFetching }: SectionProps) {
+  const errors = snapshot?.errors;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">Error Tracking</h2>
+        <span className="text-sm text-muted-foreground">
+          {isFetching ? "Refreshing..." : "Last hour window"}
+        </span>
+      </div>
+      <Card>
+        <CardContent className="p-6 space-y-6">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <div className="text-sm text-muted-foreground">Errors / minute</div>
+              <div className="text-lg font-semibold">{formatNumber(errors?.perMinute ?? null)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Last 5 minutes</div>
+              <div className="text-lg font-semibold">{formatNumber(errors?.lastFiveMinutes ?? null, 0)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Last hour</div>
+              <div className="text-lg font-semibold">{formatNumber(errors?.lastHour ?? null, 0)}</div>
+            </div>
+          </div>
+          <div className="overflow-hidden rounded border">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-3 py-2 font-medium">When</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Method</th>
+                  <th className="px-3 py-2 font-medium">Path</th>
+                  <th className="px-3 py-2 font-medium">Duration</th>
+                </tr>
+              </thead>
+              <tbody>
+                {errors?.recent.length ? (
+                  [...errors.recent]
+                    .slice()
+                    .reverse()
+                    .map((entry) => (
+                      <tr key={`${entry.timestamp}-${entry.method}-${entry.path}`} className="border-t">
+                        <td className="px-3 py-2 text-xs">
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 text-xs uppercase">{entry.status}</td>
+                        <td className="px-3 py-2 text-xs uppercase">{entry.method}</td>
+                        <td className="px-3 py-2 text-xs break-all">{entry.path}</td>
+                        <td className="px-3 py-2 text-xs">{formatDuration(entry.durationMs)}</td>
+                      </tr>
+                    ))
+                ) : (
+                  <tr>
+                    <td className="px-3 py-4 text-center text-muted-foreground" colSpan={5}>
+                      {isFetching ? "Loading errors..." : "No errors captured in the last hour."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function ResourceUsageSection({ snapshot, isFetching }: SectionProps) {
+  const resources = snapshot?.resources;
+  const uptime = resources ? Math.round(resources.uptimeSeconds / 3600) : null;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">Resource Usage</h2>
+        <span className="text-sm text-muted-foreground">
+          {isFetching ? "Refreshing..." : "Instantaneous sample"}
+        </span>
+      </div>
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <div className="text-sm text-muted-foreground">CPU</div>
+              <div className="text-lg font-semibold">
+                {formatPercent(resources?.cpu.percent ?? null)}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                User {formatPercent(resources?.cpu.userPercent ?? null)} · System {formatPercent(resources?.cpu.systemPercent ?? null)}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Memory</div>
+              <div className="text-lg font-semibold">
+                {formatBytes(resources?.memory.heapUsedBytes ?? null)}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                RSS {formatBytes(resources?.memory.rssBytes ?? null)}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Load average</div>
+              <div className="text-lg font-semibold">
+                {resources?.loadAverage
+                  ? resources.loadAverage.map((value) => decimalFormatter.format(value)).join(" · ")
+                  : "—"}
+              </div>
+              <div className="text-xs text-muted-foreground">1m · 5m · 15m</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Event loop</div>
+              <div className="text-lg font-semibold">
+                {resources?.eventLoopDelayMs
+                  ? `${formatDuration(resources.eventLoopDelayMs.mean)} avg`
+                  : "—"}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {resources?.eventLoopDelayMs
+                  ? `P95 ${formatDuration(resources.eventLoopDelayMs.p95)} · Max ${formatDuration(resources.eventLoopDelayMs.max)}`
+                  : "Awaiting samples"}
+              </div>
+            </div>
+          </div>
+          <div className="mt-6 text-sm text-muted-foreground">
+            Uptime {uptime !== null ? `${uptime}h` : "—"}
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function FrontendMetricsSection({ snapshot, isFetching }: SectionProps) {
+  const frontend = snapshot?.frontend;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">Frontend Performance Telemetry</h2>
+        <span className="text-sm text-muted-foreground">
+          {isFetching ? "Refreshing..." : `Window: ${frontend ? Math.round(frontend.windowMs / 60000) : 0}m`}
+        </span>
+      </div>
+      <Card>
+        <CardContent className="p-6 space-y-6">
+          <div className="overflow-hidden rounded border">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Metric</th>
+                  <th className="px-3 py-2 font-medium">Average</th>
+                  <th className="px-3 py-2 font-medium">P95</th>
+                  <th className="px-3 py-2 font-medium">Samples</th>
+                  <th className="px-3 py-2 font-medium">Good%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {frontend?.metrics.length ? (
+                  frontend.metrics.map((metric) => {
+                    const goodRatio = metric.sampleCount
+                      ? metric.ratingCounts.good / metric.sampleCount
+                      : null;
+                    return (
+                      <tr key={metric.name} className="border-t">
+                        <td className="px-3 py-2 font-medium">{metric.name}</td>
+                        <td className="px-3 py-2">
+                          {formatFrontendMetricValue(metric.name, metric.average ?? null)}
+                        </td>
+                        <td className="px-3 py-2">
+                          {formatFrontendMetricValue(metric.name, metric.p95 ?? null)}
+                        </td>
+                        <td className="px-3 py-2">{formatNumber(metric.sampleCount, 0)}</td>
+                        <td className="px-3 py-2">
+                          {goodRatio !== null
+                            ? formatPercent(goodRatio, { alreadyRatio: true })
+                            : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td className="px-3 py-4 text-center text-muted-foreground" colSpan={5}>
+                      {isFetching ? "Loading browser telemetry..." : "No frontend metrics received yet."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h3 className="text-sm font-medium">Recent samples</h3>
+            <div className="mt-2 overflow-auto rounded border">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">When</th>
+                    <th className="px-3 py-2 font-medium">Metric</th>
+                    <th className="px-3 py-2 font-medium">Value</th>
+                    <th className="px-3 py-2 font-medium">Rating</th>
+                    <th className="px-3 py-2 font-medium">Page</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {frontend?.recentSamples.length ? (
+                    [...frontend.recentSamples]
+                      .slice()
+                      .reverse()
+                      .map((sample) => (
+                        <tr key={`${sample.timestamp}-${sample.name}-${sample.page}`} className="border-t">
+                          <td className="px-3 py-2 text-xs">
+                            {new Date(sample.timestamp).toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2 text-xs uppercase">{sample.name}</td>
+                          <td className="px-3 py-2 text-xs">
+                            {formatFrontendMetricValue(sample.name, sample.value)}
+                          </td>
+                          <td className="px-3 py-2 text-xs capitalize">{sample.rating}</td>
+                          <td className="px-3 py-2 text-xs break-all">{sample.page}</td>
+                        </tr>
+                      ))
+                  ) : (
+                    <tr>
+                      <td className="px-3 py-4 text-center text-muted-foreground" colSpan={5}>
+                        {isFetching ? "Waiting for samples..." : "No telemetry captured in the window."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
   );
 }
 

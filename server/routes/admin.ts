@@ -26,6 +26,10 @@ import { lastRun as paymentJobLastRun } from "../jobs/paymentReminderJob";
 import { adminLoginRateLimiter } from "../security/rateLimiters";
 import logger, { LOG_FILE_PATH } from "../logger";
 import {
+  getMonitoringSnapshot,
+  recordFrontendMetric,
+} from "../monitoring/metrics";
+import {
   getEffectiveEmailPreferences,
   getEmailPreferenceOverridesMap,
   resetEmailPreference,
@@ -587,7 +591,20 @@ router.post(
       "Received admin performance metrics",
     );
 
+    for (const metric of metrics) {
+      recordFrontendMetric(metric);
+    }
+
     res.status(204).send();
+  },
+);
+
+router.get(
+  "/monitoring/summary",
+  isAdminAuthenticated,
+  checkPermissions(["view_health"]),
+  async (_req, res) => {
+    res.json(getMonitoringSnapshot());
   },
 );
 

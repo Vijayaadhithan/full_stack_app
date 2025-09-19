@@ -19,6 +19,7 @@ import { startBookingExpirationJob } from "./jobs/bookingExpirationJob";
 import { startPaymentReminderJob } from "./jobs/paymentReminderJob";
 import { ensureDefaultAdmin } from "./bootstrap";
 import { reportError } from "./monitoring/errorReporter";
+import { trackRequestStart } from "./monitoring/metrics";
 
 config();
 // Read allowed CORS origins from environment variable (comma separated)
@@ -195,6 +196,28 @@ app.use(helmet(helmetConfig));
 app.use(express.json());
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use((req, res, next) => {
+  const endTimer = trackRequestStart();
+  const finalize = () => {
+    const routePath = req.route?.path
+      ? `${req.baseUrl || ""}${req.route.path}`
+      : req.originalUrl?.split("?")[0] || req.path;
+    let status = res.statusCode;
+    if (!res.headersSent && !res.writableEnded) {
+      status = 499;
+    }
+    endTimer({
+      method: req.method,
+      path: routePath,
+      status,
+    });
+  };
+
+  res.once("finish", finalize);
+  res.once("close", finalize);
+
+  next();
+});
 // Note: admin routes require session. We mount them AFTER setupAuth (called in registerRoutes).
 
 /**
