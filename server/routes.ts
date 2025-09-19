@@ -1969,7 +1969,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `You have a new booking request for ${service.name}`,
         });
 
-        // --- Razorpay Integration Logic (if configured) ---
+        // --- Payment provider integration hook (if configured) ---
         try {
           const customer = await storage.getUser(booking.customerId!);
           const provider =
@@ -4040,7 +4040,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ message: "Not authorized" });
         }
 
-        // Process refund through Razorpay
+        // Process refund through configured payment provider
         await storage.processRefund(returnRequest.id);
 
         const updatedReturn = await storage.updateReturnRequest(

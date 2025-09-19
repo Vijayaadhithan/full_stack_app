@@ -54,9 +54,6 @@ PORT=5000
 NODE_ENV=development
 SESSION_SECRET=your-session-secret
 
-# Razorpay Configuration (optional for payment features)
-RAZORPAY_KEY_ID=your-razorpay-key
-RAZORPAY_KEY_SECRET=your-razorpay-secret
 ```
 
 ### Installation
@@ -231,7 +228,6 @@ pm2 start ecosystem.config.js
 - Track orders and bookings
 - Review and rate services/products
 - Multi-language support (English, Hindi, Tamil)
-- Integrated payment system (Razorpay)
 
 ### Service Provider Features
 
@@ -306,7 +302,6 @@ pm2 start ecosystem.config.js
 - State Management: TanStack Query
 - Routing: wouter
 - Forms: react-hook-form
-- Payment Gateway: Razorpay
 
 ## Contributing
 

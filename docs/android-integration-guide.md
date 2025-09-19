@@ -135,7 +135,6 @@ Update `.env` (or platform environment variables) before deploying:
 - `DATABASE_URL=postgres://…`
 - `DB_POOL_SIZE`, `DB_SLOW_THRESHOLD_MS` tuned for production workload.
 - `REDIS_URL` if you plan to use Redis-backed session storage.
-- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` with live keys.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `EMAIL_SENDER` for OAuth/email flows.
 - Cron-related envs (`BOOKING_EXPIRATION_CRON`, `PAYMENT_REMINDER_CRON`, `CRON_TZ`) set to production cadence.
 
@@ -187,7 +186,6 @@ Also:
 ## 10. Post-Deployment Checks
 - Confirm session cookies are `Secure`, `HttpOnly`, and have reasonable expiry.
 - Ensure `helmet` HSTS is active in production (auto-enabled when `NODE_ENV=production`).
-- Validate Razorpay live keys on the mobile checkout flow (sandbox vs live environment toggles).
 - Monitor Google OAuth quota and refresh token usage.
 - Review server logs for 401/403 spikes from mobile clients to catch CORS/cookie regressions early.
 

@@ -1772,7 +1772,7 @@ export class MemStorage implements IStorage {
     const returnRequest = await this.getReturnRequest(returnRequestId);
     if (!returnRequest) throw new Error("Return request not found");
 
-    // In a real implementation, this would integrate with Razorpay's refund API
+    // In a real implementation, this would integrate with a payment provider's refund API
     returnRequest.status = "refunded";
     this.returnRequests.set(returnRequestId, returnRequest);
   }

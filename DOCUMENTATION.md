@@ -97,13 +97,12 @@ This section guides you through setting up the project environment.
 - **ORM:** Drizzle ORM
 - **Authentication:** Passport.js (Local Strategy) with express-session
 - **File Uploads:** Multer
-- **Payments:** Razorpay (Integrated for processing payments, managing vendor payouts, and handling payment splits)
 - **Environment Variables:** `dotenv`
 
 ### 2.2. Project Structure (`/server`)
 
 - `index.ts`: Main entry point for the server. Sets up Express, CORS, JSON parsing, file uploads (Multer), static file serving, scheduled tasks (booking expiration), Vite integration (for development), and error handling.
-- `routes.ts`: Defines all API endpoints. Organizes routes for users, services, bookings, products, orders, reviews, notifications, returns, promotions, payments (including Razorpay integration), and file uploads. It coordinates with various services, including those in the `services/` directory.
+- `routes.ts`: Defines all API endpoints. Organizes routes for users, services, bookings, products, orders, reviews, notifications, returns, promotions, and file uploads. It coordinates with various services, including those in the `services/` directory.
 - `routes/`: Contains modular route handlers (e.g., `promotions.ts`, `shops.ts`).
 - `db.ts`: Configures the PostgreSQL database connection using `postgres` and initializes Drizzle ORM.
 - `auth.ts`: Sets up Passport.js for authentication, including local strategy, password hashing (scrypt), session management, and login/register/logout routes.
@@ -112,7 +111,6 @@ This section guides you through setting up the project environment.
 - `ist-utils.ts`: Provides utility functions for handling Indian Standard Time (IST). This includes converting JavaScript dates to IST strings for database storage, getting the current date and time in IST, converting database timestamp strings back to IST Date objects, calculating expiration dates in IST, and converting arrays of dates to IST. These functions are crucial for ensuring consistent date and time handling across server operations, especially for features like booking expirations and logging.
 - `pg-storage.ts`: Implements the `IStorage` interface using PostgreSQL as the backend, managed with Drizzle ORM. It handles various data operations such as fetching users by email or Google ID, deleting users and their associated data (services, bookings, products, orders, reviews, notifications), updating product reviews, and processing refunds. It leverages utility functions from `ist-utils.ts` for correct IST date handling in database interactions. It is also used by `connect-pg-simple` for session storage.
 - `services/`: Contains business logic services that are used by the routes.
-  - `razorpay-route.ts`: Manages Razorpay integration. This includes creating Razorpay linked accounts for vendors, calculating platform fees, and handling payment splits for orders and bookings. It interacts directly with the Razorpay API.
 
 ### 2.3. Key Features & API Endpoints
 
@@ -144,8 +142,6 @@ This section guides you through setting up the project environment.
   - `GET /api/bookings/customer/history`: Get booking history for a customer.
   - `GET /api/bookings/:id`: Get details of a specific booking.
   - `PATCH /api/bookings/:id`: Update booking status (accept, reject, cancel, etc.).
-  - `POST /api/bookings/:id/pay`: Initiate payment for a booking (Razorpay).
-  - `POST /api/bookings/payment/verify`: Verify Razorpay payment.
 - **Products (Shops):**
   - `POST /api/products`: Create a new product.
   - `GET /api/products`: Get list of products.
@@ -170,12 +166,6 @@ This section guides you through setting up the project environment.
 - **File Uploads:**
   - `POST /api/upload`: Upload a file (e.g., profile picture, product image).
   - `/uploads/*`: Serves uploaded files statically.
-- **Payment Processing (Razorpay):**
-  - The system integrates with Razorpay for handling payments for bookings and orders.
-  - Vendor Onboarding: Supports creating Razorpay linked accounts for service providers and shops to facilitate direct payouts.
-  - Fee Calculation: Automatically calculates platform fees on transactions.
-  - Payment Splitting: Manages the distribution of funds between vendors and the platform for completed orders and bookings.
-  - Secure payment verification is handled via backend endpoints interacting with Razorpay.
 - **Promotions (Shops):** (Managed via `routes/promotions.ts`)
   - Endpoints for creating, managing, and applying promotions.
 - **Shop Management:** (Managed via `routes/shops.ts`)
@@ -251,10 +241,10 @@ Defined in `/shared/schema.ts` using Drizzle ORM. Key tables include:
 
 - `users`: Stores user information (customers, providers, shops, admins), including profile details, address, roles, and potentially shop/provider-specific fields.
 - `services`: Details about services offered by providers, including pricing, duration, availability settings (working hours, breaks, buffer time, max bookings), location type, and soft deletion flag.
-- `bookings`: Records booking requests, linking customers and services, storing date/time, status, payment details (including Razorpay IDs), expiration time, and location.
+- `bookings`: Records booking requests, linking customers and services, storing date/time, status, payment details, expiration time, and location.
 - `booking_history`: Tracks changes in booking statuses.
 - `products`: Information about products sold by shops, including pricing, stock, category, images, specifications, and soft deletion flag.
-- `orders`: Records customer orders from shops, including status, total amount, shipping details, payment info (including Razorpay IDs), and return status.
+- `orders`: Records customer orders from shops, including status, total amount, shipping details, payment info, and return status.
 - `order_items`: Line items for each order.
 - `reviews`: Customer reviews for services.
 - `product_reviews`: Customer reviews for products.
@@ -299,7 +289,6 @@ The existing RESTful API provides a solid foundation for developing a native And
 4.  **Key Feature Implementation:**
     - Replicate core user flows (authentication, browsing, booking, ordering, profile management) using native UI components.
     - Utilize the API client (Retrofit) to fetch and send data to the backend.
-    - Integrate **Razorpay's Android SDK** for handling payments, coordinating with the backend verification endpoints (`/api/bookings/payment/verify`, etc.).
     - Implement background tasks for data synchronization or offline support if necessary.
 5.  **Push Notifications:**
     - Integrate **Firebase Cloud Messaging (FCM)** into the Android app.
@@ -350,4 +339,3 @@ The command recreates the database state captured at the time of the dump.
 - An example configuration lives in `deploy/nginx-load-balancer.conf` and forwards traffic to multiple Express instances while propagating proxy metadata.
 - Place the file in `/etc/nginx/conf.d/` (or equivalent), update upstream server addresses, and reload Nginx: `sudo nginx -t && sudo systemctl reload nginx`.
 - When terminating TLS at Nginx, ensure `app.set("trust proxy", 1)` remains set so Express and the rate limiting middleware honour the correct client IP.
-

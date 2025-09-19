@@ -441,25 +441,10 @@ router.get(
   checkPermissions(["view_health"]),
   async (_req, res) => {
     const dbOk = await testConnection();
-    let razorpay = "unconfigured";
-    if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
-      try {
-        const auth = Buffer.from(
-          `${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`,
-        ).toString("base64");
-        const resp = await fetch(
-          "https://api.razorpay.com/v1/payments?count=1",
-          { headers: { Authorization: `Basic ${auth}` } },
-        );
-        razorpay = resp.status < 500 ? "ok" : "error";
-      } catch {
-        razorpay = "error";
-      }
-    }
+
     res.json({
       database: dbOk ? "ok" : "error",
       api: "ok",
-      razorpay,
       jobs: {
         bookingExpiration: bookingJobLastRun?.toISOString() ?? null,
         paymentReminder: paymentJobLastRun?.toISOString() ?? null,
@@ -721,21 +706,32 @@ router.get(
 );
 
 router.get("/dashboard-stats", isAdminAuthenticated, async (_req, res) => {
-  const [{ count: userCount }] = await db.select({ count: count() }).from(users);
-  const [{ count: orderCount }] = await db.select({ count: count() }).from(orders);
-  const [{ sum: totalRevenue }] = await db
-    .select({ sum: sum(orders.total) })
-    .from(orders)
-    .where(eq(orders.paymentStatus, "paid"));
-  const [{ count: bookingCount }] = await db.select({ count: count() }).from(bookings);
-  const [{ count: pendingOrders }] = await db
-    .select({ count: count() })
-    .from(orders)
-    .where(eq(orders.status, "pending"));
-  const [{ count: todayBookings }] = await db
-    .select({ count: count() })
-    .from(bookings)
-    .where(sql`date(${bookings.bookingDate}) = CURRENT_DATE`);
+  const [userCountResult, orderCountResult, totalRevenueResult, bookingCountResult, pendingOrdersResult, todayBookingsResult] =
+    await Promise.all([
+      db.select({ count: count() }).from(users),
+      db.select({ count: count() }).from(orders),
+      db
+        .select({ sum: sum(orders.total) })
+        .from(orders)
+        .where(eq(orders.paymentStatus, "paid")),
+      db.select({ count: count() }).from(bookings),
+      db
+        .select({ count: count() })
+        .from(orders)
+        .where(eq(orders.status, "pending")),
+      db
+        .select({ count: count() })
+        .from(bookings)
+        .where(sql`date(${bookings.bookingDate}) = CURRENT_DATE`),
+    ]);
+
+  const [{ count: userCount }] = userCountResult;
+  const [{ count: orderCount }] = orderCountResult;
+  const [{ sum: totalRevenue }] = totalRevenueResult;
+  const [{ count: bookingCount }] = bookingCountResult;
+  const [{ count: pendingOrders }] = pendingOrdersResult;
+  const [{ count: todayBookings }] = todayBookingsResult;
+
   res.json({
     totalUsers: userCount,
     totalOrders: orderCount,
