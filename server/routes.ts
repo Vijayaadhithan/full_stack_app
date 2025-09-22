@@ -1,6 +1,6 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
-import logger from "./logger";
+import logger, { LogCategory, runWithLogContext } from "./logger";
 import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
 import { sendEmail, getPasswordResetEmailContent } from "./emailService";
 import { storage } from "./storage";
@@ -48,6 +48,35 @@ import {
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
 const PLATFORM_SERVICE_FEE = platformFees.productOrder;
+
+type RequestWithAuth = Request & {
+  user?: { id?: number | string; role?: string; isSuspended?: boolean } | null;
+  session?: (Request["session"] & { adminId?: string | null }) | null;
+};
+
+function resolveLogCategory(req: RequestWithAuth): LogCategory {
+  const originalUrl = req.originalUrl || req.url || "";
+  if (req.session?.adminId || originalUrl.startsWith("/api/admin")) {
+    return "admin";
+  }
+
+  const role = req.user?.role;
+  if (!role) {
+    return "other";
+  }
+
+  if (role === "provider" || role === "worker") {
+    return "service_provider";
+  }
+  if (role === "shop") {
+    return "shop_owner";
+  }
+  if (role === "customer") {
+    return "customer";
+  }
+
+  return "other";
+}
 
 const isValidDateString = (value: string) =>
   !Number.isNaN(new Date(value).getTime());
@@ -421,6 +450,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   setupAuth(app);
+
+  app.use((req, _res, next) => {
+    const request = req as RequestWithAuth;
+    const category = resolveLogCategory(request);
+    const initialContext = {
+      category,
+      userId: request.user?.id ?? request.session?.adminId ?? undefined,
+      userRole: request.user?.role ?? undefined,
+      adminId: request.session?.adminId ?? undefined,
+    };
+
+    runWithLogContext(() => next(), initialContext);
+  });
 
   // Register domain routers
   app.use('/api/bookings', bookingsRouter);

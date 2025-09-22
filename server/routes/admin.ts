@@ -25,6 +25,7 @@ import { lastRun as bookingJobLastRun } from "../jobs/bookingExpirationJob";
 import { lastRun as paymentJobLastRun } from "../jobs/paymentReminderJob";
 import { adminLoginRateLimiter } from "../security/rateLimiters";
 import logger, { LOG_FILE_PATH } from "../logger";
+import type { LogCategory } from "../logger";
 import {
   getMonitoringSnapshot,
   recordFrontendMetric,
@@ -36,6 +37,32 @@ const scryptAsync = promisify(scrypt);
 const LOG_READ_MAX_BYTES = 1024 * 1024; // 1MB slice from tail of log file
 const LOG_DEFAULT_LIMIT = 100;
 const TRANSACTIONS_MAX_PAGE_SIZE = 100;
+const LOG_CATEGORIES: LogCategory[] = [
+  "admin",
+  "service_provider",
+  "customer",
+  "shop_owner",
+  "other",
+];
+
+const LOG_CATEGORY_ALIASES: Record<string, LogCategory> = {
+  admin: "admin",
+  "service-provider": "service_provider",
+  "service_provider": "service_provider",
+  provider: "service_provider",
+  worker: "service_provider",
+  "shop-owner": "shop_owner",
+  "shop_owner": "shop_owner",
+  shop: "shop_owner",
+  customer: "customer",
+  other: "other",
+};
+
+function normalizeLogCategory(value: unknown): LogCategory | undefined {
+  if (!value || typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  return LOG_CATEGORY_ALIASES[normalized];
+}
 
 const adminLoginSchema = z.object({
   email: z.string().email(),
@@ -276,6 +303,8 @@ router.get(
       : LOG_DEFAULT_LIMIT;
     const levelParam = ((req.query.level as string) || "").toLowerCase();
     const filteredLevels = levelNumbersByLabel[levelParam];
+    const rawCategoryParam = req.query.category as string | undefined;
+    const normalizedCategory = normalizeLogCategory(rawCategoryParam);
 
     try {
       const stats = await fs.stat(LOG_FILE_PATH);
@@ -307,18 +336,39 @@ router.get(
 
         const filtered = parsed.filter((entry) => {
           if (typeof entry.level !== "number") return false;
+          if (normalizedCategory) {
+            const entryCategory = normalizeLogCategory((entry as { category?: unknown }).category);
+            if ((entryCategory ?? "other") !== normalizedCategory) {
+              return false;
+            }
+          }
           if (!filteredLevels) return true;
           return filteredLevels.includes(entry.level);
         });
 
         const slice = filtered.slice(-limit).reverse();
         const logs = slice.map((entry) => {
-          const { level, time, msg, pid, hostname, ...rest } = entry as Record<string, unknown> & {
+          const {
+            level,
+            time,
+            msg,
+            pid,
+            hostname,
+            category: entryCategoryRaw,
+            userId,
+            userRole,
+            adminId,
+            ...rest
+          } = entry as Record<string, unknown> & {
             level: number;
             time?: number | string;
             msg?: string;
             pid?: number;
             hostname?: string;
+            category?: unknown;
+            userId?: unknown;
+            userRole?: unknown;
+            adminId?: unknown;
           };
 
           let timestamp = new Date().toISOString();
@@ -332,7 +382,12 @@ router.get(
             }
           }
 
-          const metadata = { ...rest };
+          const logCategory = normalizeLogCategory(entryCategoryRaw) ?? "other";
+          const metadata: Record<string, unknown> = {};
+          if (userId !== undefined) metadata.userId = userId;
+          if (userRole !== undefined) metadata.userRole = userRole;
+          if (adminId !== undefined) metadata.adminId = adminId;
+          Object.assign(metadata, rest);
           delete metadata.time;
           delete metadata.msg;
           delete metadata.level;
@@ -343,11 +398,15 @@ router.get(
             timestamp,
             level: levelNameByNumber[level] ?? String(level),
             message: msg ?? "",
+            category: logCategory,
             metadata: Object.keys(metadata).length ? metadata : undefined,
           };
         });
 
-        return res.json({ logs });
+        return res.json({
+          logs,
+          availableCategories: LOG_CATEGORIES,
+        });
       } finally {
         await fileHandle?.close();
       }

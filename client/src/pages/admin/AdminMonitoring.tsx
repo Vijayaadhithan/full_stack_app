@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { MonitoringSnapshot } from "@shared/monitoring";
 
 const OVERVIEW_REFRESH_INTERVAL = 15000;
@@ -80,7 +81,15 @@ type LogEntry = {
   timestamp: string;
   level: string;
   message: string;
+  category: LogCategory;
   metadata?: Record<string, unknown>;
+};
+
+type LogCategory = "admin" | "service_provider" | "customer" | "shop_owner" | "other";
+
+type LogResponse = {
+  logs: LogEntry[];
+  availableCategories?: LogCategory[];
 };
 
 type TransactionsResponse = {
@@ -588,30 +597,112 @@ const LOG_LEVEL_OPTIONS = [
   { label: "Debug", value: "debug" },
 ];
 
+const LOG_CATEGORY_OPTIONS: Array<{
+  label: string;
+  value: LogCategory;
+  description: string;
+}> = [
+  {
+    label: "Admin",
+    value: "admin",
+    description: "Authentication, audit events, and monitoring from the admin console.",
+  },
+  {
+    label: "Service Providers",
+    value: "service_provider",
+    description: "Logs emitted while providers and workers manage services or bookings.",
+  },
+  {
+    label: "Customers",
+    value: "customer",
+    description: "Activity triggered from the customer apps such as orders and bookings.",
+  },
+  {
+    label: "Shop Owners",
+    value: "shop_owner",
+    description: "Shop management actions including catalog updates and fulfilment.",
+  },
+  {
+    label: "Other",
+    value: "other",
+    description: "Background jobs, integrations, and any uncategorised system logs.",
+  },
+];
+
+const CATEGORY_LABELS = LOG_CATEGORY_OPTIONS.reduce(
+  (acc, option) => {
+    acc[option.value] = option.label;
+    return acc;
+  },
+  {} as Record<LogCategory, string>,
+);
+
 function LogViewerSection() {
   const [level, setLevel] = useState("all");
+  const [category, setCategory] = useState<LogCategory>("admin");
 
-  const logQuery = useQuery<{ logs: LogEntry[] }>({
-    queryKey: ["/api/admin/logs", { level }],
+  const logQuery = useQuery<LogResponse>({
+    queryKey: ["/api/admin/logs", { level, category }],
     queryFn: () => {
       const params = new URLSearchParams({ limit: "200" });
       if (level !== "all") params.set("level", level);
+      if (category) params.set("category", category);
       const query = params.toString();
       return apiRequest("GET", `/api/admin/logs${query ? `?${query}` : ""}`).then((r) => r.json());
     },
     refetchInterval: 15000,
   });
 
+  useEffect(() => {
+    const categories = logQuery.data?.availableCategories;
+    if (!categories || categories.length === 0) return;
+    if (categories.includes(category)) return;
+    setCategory(categories[0]);
+  }, [category, logQuery.data?.availableCategories]);
+
   const logData = logQuery.data?.logs ?? [];
+  const availableCategories = new Set(
+    logQuery.data?.availableCategories ?? LOG_CATEGORY_OPTIONS.map((option) => option.value),
+  );
+  const activeCategory = LOG_CATEGORY_OPTIONS.find((option) => option.value === category);
+  const activeDescription =
+    activeCategory?.description ?? "Visualise logs grouped by user segment.";
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="space-y-1">
-          <h2 className="text-xl font-semibold">Log Viewer</h2>
-          <p className="text-sm text-muted-foreground">
-            Automatically refreshes every 15 seconds. Use the filter to focus on a log level.
-          </p>
+    <section className="space-y-4">
+      <div className="space-y-1">
+        <h2 className="text-xl font-semibold">Log Viewer</h2>
+        <p className="text-sm text-muted-foreground">
+          Segment platform logs by audience. Automatically refreshes every 15 seconds. Use
+          the level filter to adjust verbosity.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex-1 space-y-2">
+          <ToggleGroup
+            type="single"
+            size="sm"
+            variant="outline"
+            value={category}
+            onValueChange={(value) => value && setCategory(value as LogCategory)}
+            className="flex flex-wrap gap-2"
+          >
+            {LOG_CATEGORY_OPTIONS.map((option) => {
+              const isAvailable = availableCategories.has(option.value);
+              const disableOption = !isAvailable && category !== option.value && !logQuery.isFetching;
+              return (
+                <ToggleGroupItem
+                  key={option.value}
+                  value={option.value}
+                  aria-label={`${option.label} logs`}
+                  disabled={disableOption}
+                >
+                  {option.label}
+                </ToggleGroupItem>
+              );
+            })}
+          </ToggleGroup>
+          <p className="text-xs text-muted-foreground">{activeDescription}</p>
         </div>
         <div className="flex items-center gap-2">
           <label className="text-sm text-muted-foreground" htmlFor="log-level">
@@ -645,6 +736,7 @@ function LogViewerSection() {
             <tr>
               <th className="px-3 py-2 font-medium">Timestamp</th>
               <th className="px-3 py-2 font-medium">Level</th>
+              <th className="px-3 py-2 font-medium">Category</th>
               <th className="px-3 py-2 font-medium">Message</th>
               <th className="px-3 py-2 font-medium">Metadata</th>
             </tr>
@@ -652,8 +744,8 @@ function LogViewerSection() {
           <tbody>
             {logData.length === 0 && (
               <tr>
-                <td className="px-3 py-4 text-center text-muted-foreground" colSpan={4}>
-                  {logQuery.isFetching ? "Loading logs..." : "No log entries found."}
+                <td className="px-3 py-4 text-center text-muted-foreground" colSpan={5}>
+                  {logQuery.isFetching ? "Loading logs..." : "No log entries found for this segment."}
                 </td>
               </tr>
             )}
@@ -661,6 +753,9 @@ function LogViewerSection() {
               <tr key={`${log.timestamp}-${index}`} className="border-t">
                 <td className="px-3 py-2 align-top font-mono text-xs">{log.timestamp}</td>
                 <td className="px-3 py-2 align-top text-xs uppercase">{log.level}</td>
+                <td className="px-3 py-2 align-top text-xs uppercase text-muted-foreground">
+                  {CATEGORY_LABELS[log.category] ?? log.category}
+                </td>
                 <td className="px-3 py-2 align-top text-sm">{log.message || ""}</td>
                 <td className="px-3 py-2 align-top text-xs">
                   {log.metadata ? (

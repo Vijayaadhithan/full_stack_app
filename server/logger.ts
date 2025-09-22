@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 import pino from "pino";
 
 type PinoTransportTarget = {
@@ -10,6 +11,36 @@ type PinoTransportTarget = {
     mkdir?: boolean;
   };
 };
+
+export type LogCategory =
+  | "admin"
+  | "service_provider"
+  | "customer"
+  | "shop_owner"
+  | "other";
+
+type LogContext = {
+  category?: LogCategory;
+  userId?: string | number;
+  userRole?: string;
+  adminId?: string;
+};
+
+const logContextStorage = new AsyncLocalStorage<LogContext>();
+
+export function runWithLogContext<T>(callback: () => T, initialContext: LogContext = {}): T {
+  return logContextStorage.run(initialContext, callback);
+}
+
+export function setLogContext(context: Partial<LogContext>): void {
+  const store = logContextStorage.getStore();
+  if (!store) return;
+  Object.assign(store, context);
+}
+
+export function getLogContext(): LogContext | undefined {
+  return logContextStorage.getStore();
+}
 
 const level = process.env.LOG_LEVEL || "info";
 const logFilePath =
@@ -39,7 +70,16 @@ if (process.env.LOG_TO_STDOUT !== "false") {
 
 const transport = pino.transport({ targets });
 
-const logger = pino({ level }, transport);
+const logger = pino(
+  {
+    level,
+    mixin() {
+      const context = logContextStorage.getStore();
+      return context ? { ...context } : {};
+    },
+  },
+  transport,
+);
 
 export const LOG_FILE_PATH = logFilePath;
 
