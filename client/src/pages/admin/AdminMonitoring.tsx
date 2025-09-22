@@ -766,6 +766,7 @@ function TransactionViewerSection() {
           <option value="confirmed">Confirmed</option>
           <option value="processing">Processing</option>
           <option value="packed">Packed</option>
+          <option value="dispatched">Dispatched</option>
           <option value="shipped">Shipped</option>
           <option value="delivered">Delivered</option>
           <option value="cancelled">Cancelled</option>

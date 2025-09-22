@@ -41,7 +41,13 @@ import { z } from "zod";
 import { formatIndianDisplay } from "@shared/date-utils";
 // Define the type for timeline updates
 interface TimelineUpdate {
-  status: "pending" | "confirmed" | "packed" | "shipped" | "delivered";
+  status:
+    | "pending"
+    | "confirmed"
+    | "packed"
+    | "dispatched"
+    | "shipped"
+    | "delivered";
   trackingInfo?: string;
   timestamp: string | Date;
 }
@@ -185,6 +191,7 @@ export default function OrderDetails() {
     pending: <AlertCircle className="h-5 w-5 text-yellow-500" />,
     confirmed: <CheckCircle className="h-5 w-5 text-green-500" />,
     packed: <Package className="h-5 w-5 text-blue-500" />,
+    dispatched: <Truck className="h-5 w-5 text-blue-500" />,
     shipped: <Truck className="h-5 w-5 text-blue-500" />,
     delivered: <Package className="h-5 w-5 text-green-500" />,
   };
@@ -192,9 +199,12 @@ export default function OrderDetails() {
   const getStatusLabel = (status: TimelineUpdate["status"]) => {
     if (order?.deliveryMethod === "pickup") {
       if (status === "shipped") return "Ready to Collect";
+      if (status === "dispatched") return "Ready to Collect";
       if (status === "delivered") return "Collected";
     } else {
-      if (status === "shipped") return "Dispatched";
+      if (status === "shipped" || status === "dispatched") {
+        return "Dispatched";
+      }
     }
     return status.charAt(0).toUpperCase() + status.slice(1);
   };

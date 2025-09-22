@@ -2,20 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import logger from "./logger";
 import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
-import {
-  sendNotificationEmail,
-  mapUserRoleToRecipient,
-  getPasswordResetEmailContent,
-  getOrderConfirmationEmailContent,
-  getBookingConfirmationEmailContent,
-  getBookingUpdateEmailContent,
-  getBookingRequestPendingEmailContent,
-  getBookingAcceptedEmailContent,
-  getBookingRejectedEmailContent,
-  getServicePaymentConfirmedCustomerEmailContent,
-  getServiceProviderPaymentReceivedEmailContent,
-} from "./emailService";
-import * as emailService from "./emailService"; // Added for sending emails
+import { sendEmail, getPasswordResetEmailContent } from "./emailService";
 import { storage } from "./storage";
 import { z } from "zod";
 import {
@@ -229,15 +216,12 @@ const orderStatusUpdateSchema = z.object({
     "confirmed",
     "processing",
     "packed",
+    "dispatched",
     "shipped",
     "delivered",
     "returned",
   ]),
   trackingInfo: z.string().trim().max(500).optional(),
-});
-
-const bookingRejectionNotificationSchema = z.object({
-  rejectionReason: z.string().trim().max(500).optional(),
 });
 
 const formatValidationError = (error: z.ZodError) => ({
@@ -362,14 +346,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       if (user.email) {
-        await sendNotificationEmail({
+        await sendEmail({
           to: user.email,
           subject: emailContent.subject,
           text: emailContent.text,
           html: emailContent.html,
-          notificationType: "passwordReset",
-          recipientType: mapUserRoleToRecipient(user.role),
-          context: { userId: user.id },
         });
       } else {
         logger.warn(
@@ -553,7 +534,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let updatedBookingData = {};
       let notificationPromises = [];
-      let emailPromise = Promise.resolve(); // To avoid undefined errors if no email is sent
 
       // Scenario 1: Customer reschedules
       if (
@@ -588,33 +568,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 relatedBookingId: bookingId,
               }),
             );
-            if (providerUser.email) {
-              const formattedOriginalDate = originalBookingDate
-                ? formatIndianDisplay(originalBookingDate, "datetime")
-                : "N/A";
-              const formattedNewDate = formatIndianDisplay(
-                bookingDate,
-                "datetime",
-              );
-              emailPromise = emailService
-                .sendBookingRescheduledByCustomerEmail(providerUser.email, {
-                  providerName: providerUser.name || "Provider",
-                  customerName: currentUser.name || "Customer",
-                  serviceName: service.name,
-                  originalBookingDate: formattedOriginalDate,
-                  newBookingDate: formattedNewDate,
-                  bookingId: bookingId.toString(),
-                  loginUrl: `${process.env.APP_BASE_URL}/login`,
-                  bookingDetailsUrl: `${process.env.APP_BASE_URL}/provider/bookings`,
-                })
-                .then(() => {})
-                .catch((err: unknown) =>
-                  logger.error(
-                    "[API] Failed to send reschedule request email to provider:",
-                    err,
-                  ),
-                );
-            }
           }
         }
       }
@@ -657,34 +610,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 relatedBookingId: bookingId,
               }),
             );
-            if (customerUser.email) {
-              const formattedOriginalDate = originalBookingDate
-                ? formatIndianDisplay(originalBookingDate, "datetime")
-                : "N/A";
-              const formattedNewDate = formatIndianDisplay(
-                bookingDate,
-                "datetime",
-              );
-              emailPromise = emailService
-                .sendBookingRescheduledByProviderEmail(customerUser.email, {
-                  customerName: customerUser.name || "Customer",
-                  providerName: currentUser.name || "Provider",
-                  serviceName: service.name,
-                  originalBookingDate: formattedOriginalDate,
-                  newBookingDate: formattedNewDate,
-                  bookingId: bookingId.toString(),
-                  comments: comments || undefined,
-                  loginUrl: `${process.env.BASE_URL}/login`,
-                  bookingDetailsUrl: `${process.env.BASE_URL}/customer/bookings`,
-                })
-                .then(() => {})
-                .catch((err: unknown) =>
-                  logger.error(
-                    "[API] Failed to send reschedule by provider email to customer:",
-                    err,
-                  ),
-                );
-            }
           }
         }
       }
@@ -743,30 +668,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 relatedBookingId: bookingId,
               }),
             );
-            if (customerUser.email) {
-              emailPromise = emailService
-                .sendBookingUpdateEmail(customerUser.email, {
-                  customerName: customerUser.name || "Customer",
-                  serviceName: service.name,
-                  bookingStatus: status,
-                  bookingDate: booking.bookingDate
-                    ? formatIndianDisplay(booking.bookingDate, "datetime")
-                    : "N/A",
-                  bookingId: bookingId.toString(),
-                  providerName: currentUser.name || "Provider",
-                  comments: comments || "",
-                  subject: emailSubject,
-                  loginUrl: `${process.env.BASE_URL}/login`,
-                  bookingDetailsUrl: `${process.env.BASE_URL}/customer/bookings`,
-                })
-                .then(() => {})
-                .catch((err: unknown) =>
-                  logger.error(
-                    "[API] Failed to send booking update email to customer:",
-                    err,
-                  ),
-                );
-            }
           }
         }
       }
@@ -796,10 +697,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 relatedBookingId: bookingId,
               }),
             );
-            // Optional: Email to provider about cancellation
-            if (providerUser.email) {
-              // emailService.sendBookingCancelledByCustomerEmail(...)
-            }
+            // Email notifications removed
           }
         }
       } else {
@@ -816,7 +714,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedBookingData,
       );
       await Promise.all(notificationPromises);
-      await emailPromise; // Wait for email to be processed
 
       logger.info(
         `[API] Successfully updated booking ${bookingId}:`,
@@ -1993,69 +1890,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         // --- Payment provider integration hook (if configured) ---
-        try {
-          const customer = await storage.getUser(booking.customerId!);
-          const provider =
-            service.providerId !== null
-              ? await storage.getUser(service.providerId)
-              : null;
-          if (customer && provider && customer.email && provider.email) {
-            const customerAddress =
-              booking.serviceLocation === "customer"
-                ? `${customer.addressStreet || ""} ${customer.addressCity || ""} ${customer.addressState || ""}`.trim() ||
-                  "Not specified"
-                : "Provider Location";
-            const customerPhone =
-              booking.serviceLocation === "customer"
-                ? customer.phone
-                : undefined;
-
-            const providerBookingEmailContent =
-              getBookingConfirmationEmailContent(
-                provider.name || provider.username,
-                {
-                  bookingId: booking.id.toString(),
-                  customerName: customer.name || customer.username,
-                  serviceName: service.name,
-                  bookingDate: booking.bookingDate,
-                  customerAddress,
-                  customerPhone,
-                },
-              );
-            await sendNotificationEmail({
-              to: provider.email,
-              subject: providerBookingEmailContent.subject,
-              text: providerBookingEmailContent.text,
-              html: providerBookingEmailContent.html,
-              notificationType: "bookingRequest",
-              recipientType: "serviceProvider",
-              context: { bookingId: booking.id },
-            });
-            const customerPendingEmailContent =
-              getBookingRequestPendingEmailContent(
-                customer.name || customer.username,
-                {
-                  serviceName: service.name,
-                  bookingDate: booking.bookingDate,
-                  providerName: provider.name || provider.username,
-                },
-              );
-            await sendNotificationEmail({
-              to: customer.email,
-              subject: customerPendingEmailContent.subject,
-              text: customerPendingEmailContent.text,
-              html: customerPendingEmailContent.html,
-              notificationType: "bookingPendingCustomer",
-              recipientType: "customer",
-              context: { bookingId: booking.id },
-            });
-          }
-        } catch (fetchError) {
-          logger.error(
-            `[API] Error sending booking emails (Booking ID: ${booking.id}):`,
-            fetchError,
-          );
-        }
         res.status(201).json({ booking, paymentRequired: false });
       } catch (error) {
         logger.error("Error creating booking:", error);
@@ -2103,7 +1937,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.info(
           `[API DEBUG] Attempting to fetch service with ID: ${booking.serviceId} for authorization. Provider ID from token: ${req.user!.id}`,
         );
-        const service = await storage.getService(booking.serviceId!);
+        const service =
+          booking.serviceId !== null
+            ? await storage.getService(booking.serviceId)
+            : null;
         logger.info(
           `[API DEBUG] Fetched service for ID ${booking.serviceId}:`,
           service ? `Found (Provider ID: ${service.providerId})` : "Not Found",
@@ -2127,16 +1964,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         logger.info(
-          `[API PATCH /api/bookings/:id/status] Booking ID: ${bookingId}. Status updated to ${updatedBooking.status}. Customer email notifications are now handled by dedicated routes: /api/bookings/:id/notify-customer-accepted and /api/bookings/:id/notify-customer-rejected.`,
+          `[API PATCH /api/bookings/:id/status] Booking ID: ${bookingId}. Status updated to ${updatedBooking.status}. Email notifications are disabled for booking updates.`,
         );
-        // Email sending logic for customer acceptance/rejection has been removed from this route.
-        // It is now handled by dedicated endpoints: POST /api/bookings/:id/notify-customer-accepted and POST /api/bookings/:id/notify-customer-rejected.
 
         // Create notification for customer
+        const serviceName = service?.name ?? "your booking";
         const notificationMessage =
           status === "rejected"
-            ? `Your booking for ${service.name} was rejected. Reason: ${rejectionReason}`
-            : `Your booking for ${service.name} has been accepted. The service provider will meet you at the scheduled time.`;
+            ? `Your booking for ${serviceName} was rejected. Reason: ${rejectionReason}`
+            : `Your booking for ${serviceName} has been accepted. The service provider will meet you at the scheduled time.`;
 
         const notificationTitle =
           status === "rejected" ? "Booking Rejected" : "Booking Accepted";
@@ -2227,56 +2063,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           title: "Payment Confirmed",
           message: `Provider confirmed payment for booking #${bookingId}.`,
         });
-        let customer: Awaited<ReturnType<typeof storage.getUser>> | undefined;
-        if (booking.customerId) {
-          customer = await storage.getUser(booking.customerId);
-          if (customer?.email) {
-            const mailOptions =
-              emailService.getServicePaymentConfirmedCustomerEmailContent(
-                customer.name || customer.username,
-                {
-                  bookingId: bookingId.toString(),
-                  serviceName: service.name,
-                  bookingDate: booking.bookingDate,
-                },
-                {
-                  amountPaid: service.price,
-                  paymentId: booking.paymentReference || "N/A",
-                },
-              );
-            await sendNotificationEmail({
-              ...mailOptions,
-              to: customer.email,
-              notificationType: "servicePaymentConfirmedCustomer",
-              recipientType: "customer",
-              context: { bookingId, userId: customer.id },
-            });
-          }
-        }
-        const provider = await storage.getUser(service.providerId!);
-        if (provider?.email) {
-          const mailOptions =
-            emailService.getServiceProviderPaymentReceivedEmailContent(
-              provider.name || provider.username,
-              {
-                bookingId: bookingId.toString(),
-                serviceName: service.name,
-                bookingDate: booking.bookingDate,
-              },
-              { name: customer?.name || customer?.username || "Customer" },
-              {
-                amountReceived: service.price,
-                paymentId: booking.paymentReference || "N/A",
-              },
-            );
-          await sendNotificationEmail({
-            ...mailOptions,
-            to: provider.email,
-            notificationType: "serviceProviderPaymentReceived",
-            recipientType: "serviceProvider",
-            context: { bookingId, userId: provider.id },
-          });
-        }
         res.json({ booking: updatedBooking });
       } catch (error) {
         logger.error("Error completing service by provider:", error);
@@ -2298,127 +2084,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["provider"]),
     async (req, res) => {
-      const bookingId = req.params.id;
       logger.info(
-        `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Request received.`,
+        `[Bookings] Skipping acceptance email for booking ${req.params.id}; email notifications are disabled.`,
       );
-      try {
-        const parsedBookingId = parseInt(bookingId);
-        if (isNaN(parsedBookingId)) {
-          logger.error(
-            `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Invalid booking ID format.`,
-          );
-          return res
-            .status(400)
-            .json({ message: "Invalid booking ID format." });
-        }
-
-        const booking = await storage.getBooking(parsedBookingId);
-        if (!booking) {
-          logger.error(
-            `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Booking not found.`,
-          );
-          return res.status(404).json({ message: "Booking not found" });
-        }
-
-        if (booking.status !== "accepted") {
-          logger.warn(
-            `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Booking status is '${booking.status}', not 'accepted', but proceeding with email as requested by this route.`,
-          );
-        }
-
-        logger.info(
-          `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching customer ID: ${booking.customerId}`,
-        );
-        const customer = await storage.getUser(booking.customerId!);
-        logger.info(
-          `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched customer:`,
-          customer
-            ? { id: customer.id, name: customer.name, email: customer.email }
-            : "NOT FOUND",
-        );
-
-        logger.info(
-          `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching service details ID: ${booking.serviceId}`,
-        );
-        const serviceDetails = await storage.getService(booking.serviceId!);
-        logger.info(
-          `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched serviceDetails:`,
-          serviceDetails
-            ? {
-                id: serviceDetails.id,
-                name: serviceDetails.name,
-                providerId: serviceDetails.providerId,
-              }
-            : "NOT FOUND",
-        );
-
-        logger.info(
-          `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching provider ID: ${serviceDetails?.providerId}`,
-        );
-        const provider =
-          serviceDetails && serviceDetails.providerId !== null
-            ? await storage.getUser(serviceDetails.providerId)
-            : null;
-        logger.info(
-          `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched provider:`,
-          provider ? { id: provider.id, name: provider.name } : "NOT FOUND",
-        );
-
-        if (!customer || !customer.email || !serviceDetails || !provider) {
-          logger.error(
-            `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Cannot send 'accepted' email: Essential data missing. Customer: ${!!customer}, Email: ${!!customer?.email}, Service: ${!!serviceDetails}, Provider: ${!!provider}.`,
-          );
-          return res
-            .status(500)
-            .json({
-              message: `Cannot send 'accepted' email: Essential data missing for booking ID ${bookingId}.`,
-            });
-        }
-
-        const emailContent = getBookingAcceptedEmailContent(
-          customer.name || customer.username,
-          {
-            serviceName: serviceDetails.name,
-            bookingDate: booking.bookingDate,
-          },
-          {
-            name: provider.name || provider.username,
-            location: serviceDetails.addressStreet
-              ? `${serviceDetails.addressStreet}, ${serviceDetails.addressCity || ""}`.trim()
-              : serviceDetails.addressCity || "Provider's Location",
-          },
-        );
-
-        logger.info(
-          `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Accepted' email to ${customer.email}`,
-        );
-        await sendNotificationEmail({
-          to: customer.email,
-          subject: emailContent.subject,
-          text: emailContent.text,
-          html: emailContent.html,
-          notificationType: "bookingAccepted",
-          recipientType: "customer",
-          context: { bookingId: booking.id, userId: customer.id },
-        });
-        logger.info(
-          `[NEW ACCEPT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Accepted' email SENT to ${customer.email}`,
-        );
-
-        res
-          .status(200)
-          .json({
-            message:
-              "Customer notification for booking acceptance has been queued.",
-          });
-      } catch (error) {
-        logger.error(
-          `[NEW ACCEPT EMAIL ROUTE ERROR - Booking ID: ${bookingId}]`,
-          error,
-        );
-        res.status(500).json({ message: "Failed to send acceptance email." });
-      }
+      res
+        .status(200)
+        .json({ message: "Email notifications are disabled for bookings." });
     },
   );
 
@@ -2428,134 +2099,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["provider"]),
     async (req, res) => {
-      const bookingId = req.params.id;
-      const parsedBody = bookingRejectionNotificationSchema.safeParse(req.body);
-      if (!parsedBody.success) {
-        return res.status(400).json(formatValidationError(parsedBody.error));
-      }
-      const { rejectionReason } = parsedBody.data;
       logger.info(
-        `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Request received. Reason: ${rejectionReason || "None"}`,
+        `[Bookings] Skipping rejection email for booking ${req.params.id}; email notifications are disabled.`,
       );
-      try {
-        const parsedBookingId = parseInt(bookingId);
-        if (isNaN(parsedBookingId)) {
-          logger.error(
-            `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Invalid booking ID format.`,
-          );
-          return res
-            .status(400)
-            .json({ message: "Invalid booking ID format." });
-        }
-
-        const booking = await storage.getBooking(parsedBookingId);
-        if (!booking) {
-          logger.error(
-            `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Booking not found.`,
-          );
-          return res.status(404).json({ message: "Booking not found" });
-        }
-
-        if (booking.status !== "rejected") {
-          logger.warn(
-            `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Booking status is '${booking.status}', not 'rejected', but proceeding with email as requested by this route.`,
-          );
-        }
-
-        logger.info(
-          `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching customer ID: ${booking.customerId}`,
-        );
-        const customer = await storage.getUser(booking.customerId!);
-        logger.info(
-          `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched customer:`,
-          customer
-            ? { id: customer.id, name: customer.name, email: customer.email }
-            : "NOT FOUND",
-        );
-
-        logger.info(
-          `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching service details ID: ${booking.serviceId}`,
-        );
-        const serviceDetails = await storage.getService(booking.serviceId!);
-        logger.info(
-          `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched serviceDetails:`,
-          serviceDetails
-            ? {
-                id: serviceDetails.id,
-                name: serviceDetails.name,
-                providerId: serviceDetails.providerId,
-              }
-            : "NOT FOUND",
-        );
-
-        // Provider data is not strictly needed for rejection email content but fetching for consistency / future use
-        logger.info(
-          `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetching provider ID: ${serviceDetails?.providerId}`,
-        );
-        const provider =
-          serviceDetails && serviceDetails.providerId !== null
-            ? await storage.getUser(serviceDetails.providerId)
-            : null;
-        logger.info(
-          `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Fetched provider:`,
-          provider ? { id: provider.id, name: provider.name } : "NOT FOUND",
-        );
-
-        if (!customer || !customer.email || !serviceDetails) {
-          // Provider is optional for rejection email content
-          logger.error(
-            `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Cannot send 'rejected' email: Essential data missing. Customer: ${!!customer}, Email: ${!!customer?.email}, Service: ${!!serviceDetails}.`,
-          );
-          return res
-            .status(500)
-            .json({
-              message: `Cannot send 'rejected' email: Essential data missing for booking ID ${bookingId}.`,
-            });
-        }
-
-        const finalRejectionReason =
-          rejectionReason ||
-          booking.rejectionReason ||
-          "No specific reason provided.";
-
-        const emailContent = getBookingRejectedEmailContent(
-          customer.name || customer.username,
-          {
-            serviceName: serviceDetails.name,
-            bookingDate: booking.bookingDate,
-          },
-          finalRejectionReason,
-        );
-
-        logger.info(
-          `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] Attempting 'Booking Rejected' email to ${customer.email}`,
-        );
-        await sendNotificationEmail({
-          to: customer.email,
-          subject: emailContent.subject,
-          text: emailContent.text,
-          html: emailContent.html,
-          notificationType: "bookingRejected",
-          recipientType: "customer",
-          context: { bookingId: booking.id, userId: customer.id },
-        });
-        logger.info(
-          `[NEW REJECT EMAIL ROUTE - Booking ID: ${bookingId}] 'Booking Rejected' email SENT to ${customer.email}`,
-        );
-
-        res
-          .status(200)
-          .json({
-            message:
-              "Customer notification for booking rejection has been queued.",
-          });
-      } catch (error) {
-        logger.error(
-          `[NEW REJECT EMAIL ROUTE ERROR - Booking ID: ${bookingId}]`,
-          error,
-        );
-        res.status(500).json({ message: "Failed to send rejection email." });
-      }
+      res
+        .status(200)
+        .json({ message: "Email notifications are disabled for bookings." });
     },
   );
 
@@ -2596,23 +2145,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `Customer submitted payment reference for booking #${bookingId}.`,
         });
         const service = await storage.getService(booking.serviceId!);
-        if (service?.providerId) {
-          const provider = await storage.getUser(service.providerId);
-          if (provider?.email) {
-            const mail = emailService.getGenericNotificationEmailContent(
-              provider.name,
-              "Payment Submitted",
-              `Customer submitted payment reference for booking #${bookingId}. Please confirm receipt.`,
-            );
-            await sendNotificationEmail({
-              ...mail,
-              to: provider.email,
-              notificationType: "bookingUpdate",
-              recipientType: "serviceProvider",
-              context: { bookingId, userId: provider.id },
-            });
-          }
-        }
 
         res.json({ booking: updatedBooking });
       } catch (error) {
@@ -3548,85 +3080,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Clear cart after order creation
         await storage.clearCart(req.user!.id);
 
-        // Send order confirmation emails
-        try {
-          const shopDisplayName = shop.name || shop.username || "DoorStep Shop";
-          const customerDisplayName = customer.name || customer.username;
-
-          const itemsWithNames = await Promise.all(
-            items.map(async (item) => {
-              const product = await storage.getProduct(item.productId);
-              return {
-                name: product?.name ?? "",
-                quantity: item.quantity,
-                price: item.price,
-              };
-            }),
-          );
-
-          const contactDetails = {
-            deliveryMethod,
-            customerPhone: customer.phone,
-            customerAddress: customerAddress || undefined,
-            shopPhone: shop.phone,
-            shopAddress: shopAddress || undefined,
-          };
-
-          const customerEmailContent = getOrderConfirmationEmailContent({
-            recipientName: customerDisplayName,
-            customerName: customerDisplayName,
-            shopName: shopDisplayName,
-            orderNumber: newOrder.id,
-            total: newOrder.total,
-            items: itemsWithNames,
-            ...contactDetails,
-          });
-          if (customer.email) {
-            await sendNotificationEmail({
-              to: customer.email,
-              subject: customerEmailContent.subject,
-              text: customerEmailContent.text,
-              html: customerEmailContent.html,
-              notificationType: "orderConfirmation",
-              recipientType: "customer",
-              context: { orderId: newOrder.id, userId: customer.id },
-            });
-          } else {
-            logger.warn(
-              `Order ${newOrder.id}: customer ${customer.id} has no email. Skipping confirmation email.`,
-            );
-          }
-
-          const shopEmailContent = getOrderConfirmationEmailContent({
-            recipientName: shopDisplayName,
-            customerName: customerDisplayName,
-            shopName: shopDisplayName,
-            orderNumber: newOrder.id,
-            total: newOrder.total,
-            items: itemsWithNames,
-            forShopOwner: true,
-            ...contactDetails,
-          });
-          if (shop.email) {
-            await sendNotificationEmail({
-              to: shop.email,
-              subject: shopEmailContent.subject,
-              text: shopEmailContent.text,
-              html: shopEmailContent.html,
-              notificationType: "orderConfirmation",
-              recipientType: "shop",
-              context: { orderId: newOrder.id, userId: shop.id },
-            });
-          } else {
-            logger.warn(
-              `Order ${newOrder.id}: shop ${shop.id} has no email. Skipping confirmation email.`,
-            );
-          }
-        } catch (emailError) {
-          logger.error("Error sending order confirmation emails:", emailError);
-          // Don't let email failure break the order creation flow
-        }
-
         res.status(201).json({ order: newOrder });
       } catch (error) {
         logger.error("Order creation error:", error);
@@ -4125,12 +3578,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
           );
 
-          // Send email notification
-          await storage.sendEmailNotification(
-            customer.email,
-            "Booking Confirmation",
-            `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
-          );
+          // Email notifications removed
         }
 
         res.json(booking);
@@ -4244,7 +3692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         // Send SMS notification for important status updates
-        if (["confirmed", "shipped", "delivered"].includes(status)) {
+        if (["confirmed", "dispatched", "shipped", "delivered"].includes(status)) {
           const customer =
             updated.customerId !== null
               ? await storage.getUser(updated.customerId)

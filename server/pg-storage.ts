@@ -5,11 +5,6 @@ import type { SQL } from "drizzle-orm";
 import logger from "./logger";
 import { getCache, setCache } from "./cache";
 import {
-  sendNotificationEmail,
-  getGenericNotificationEmailContent,
-  mapUserRoleToRecipient,
-} from "./emailService"; // Added for sending emails
-import {
   User,
   InsertUser,
   Service,
@@ -46,6 +41,7 @@ import {
   cart,
   wishlist,
   waitlist,
+  shopWorkers,
   promotions,
   returns,
   productReviews,
@@ -209,6 +205,12 @@ export class PostgresStorage implements IStorage {
         await tx
           .delete(orderItems)
           .where(sql`${orderItems.orderId} IN ${allOrderIds}`);
+        await tx
+          .delete(orderStatusUpdates)
+          .where(sql`${orderStatusUpdates.orderId} IN ${allOrderIds}`);
+        await tx
+          .delete(productReviews)
+          .where(sql`${productReviews.orderId} IN ${allOrderIds}`);
       }
       if (productIds.length > 0) {
         // OrderItems for shop owner's products
@@ -240,6 +242,9 @@ export class PostgresStorage implements IStorage {
         await tx
           .delete(wishlist)
           .where(sql`${wishlist.productId} IN ${productIds}`);
+        await tx
+          .delete(productReviews)
+          .where(sql`${productReviews.productId} IN ${productIds}`);
         // Then, delete the products themselves
         await tx.delete(products).where(eq(products.shopId, userId));
       }
@@ -250,6 +255,18 @@ export class PostgresStorage implements IStorage {
       await tx.delete(notifications).where(eq(notifications.userId, userId));
       await tx.delete(cart).where(eq(cart.customerId, userId));
       await tx.delete(wishlist).where(eq(wishlist.customerId, userId));
+      await tx.delete(productReviews).where(eq(productReviews.customerId, userId));
+      await tx.delete(waitlist).where(eq(waitlist.customerId, userId));
+      if (serviceIds.length > 0) {
+        await tx
+          .delete(waitlist)
+          .where(sql`${waitlist.serviceId} IN ${serviceIds}`);
+      }
+      await tx
+        .delete(shopWorkers)
+        .where(
+          sql`${shopWorkers.workerUserId} = ${userId} OR ${shopWorkers.shopId} = ${userId}`,
+        );
 
       // Delete services (after related bookings/reviews are handled)
       if (serviceIds.length > 0) {
@@ -1670,46 +1687,6 @@ export class PostgresStorage implements IStorage {
     const newNotification = result[0];
 
     // Define critical notification types that should trigger an email
-    const criticalNotificationTypes: string[] = [
-      "account_security",
-      "payment_failed",
-      "service_unavailable",
-      "booking_expired",
-    ];
-
-    if (
-      newNotification &&
-      criticalNotificationTypes.includes(newNotification.type)
-    ) {
-      try {
-        if (newNotification.userId === null) {
-          throw new Error("Invalid userId: null");
-        }
-        const user = await this.getUser(newNotification.userId);
-        if (user && user.email) {
-          const emailContent = getGenericNotificationEmailContent(
-            user.name || user.username,
-            newNotification.title,
-            newNotification.message,
-          );
-          await sendNotificationEmail({
-            to: user.email,
-            subject: emailContent.subject,
-            text: emailContent.text,
-            html: emailContent.html,
-            notificationType: "genericNotification",
-            recipientType: mapUserRoleToRecipient(user.role),
-            context: { notificationId: newNotification.id, userId: user.id },
-          });
-        }
-      } catch (emailError) {
-        logger.error(
-          `Error sending critical notification email for notification ID ${newNotification.id}:`,
-          emailError,
-        );
-        // Do not let email failure prevent notification creation
-      }
-    }
     return newNotification;
   }
 
@@ -2131,43 +2108,6 @@ export class PostgresStorage implements IStorage {
   // ─── ENHANCED NOTIFICATION & ORDER TRACKING ───────────────────────
   async sendSMSNotification(phone: string, message: string): Promise<void> {
     logger.info(`SMS to ${phone}: ${message}`);
-  }
-
-  async sendEmailNotification(
-    emailAddress: string,
-    subject: string,
-    message: string,
-    userName?: string,
-  ): Promise<void> {
-    try {
-      const user = await this.getUserByEmail(emailAddress);
-      const recipientName =
-        userName || (user ? user.name || user.username : "User");
-      const emailContent = getGenericNotificationEmailContent(
-        recipientName,
-        subject,
-        message,
-      );
-      const resolvedRole = (user?.role ?? "customer") as UserRole;
-      await sendNotificationEmail({
-        to: emailAddress,
-        subject: emailContent.subject,
-        text: emailContent.text,
-        html: emailContent.html,
-        notificationType: "genericNotification",
-        recipientType: mapUserRoleToRecipient(resolvedRole),
-        context: { userId: user?.id },
-      });
-      logger.info(
-        `Email notification sent to ${emailAddress} with subject "${subject}"`,
-      );
-    } catch (error) {
-      logger.error(
-        `Failed to send email notification to ${emailAddress}:`,
-        error,
-      );
-      // Optionally, rethrow or handle as per application's error handling strategy
-    }
   }
 
   async updateOrderStatus(

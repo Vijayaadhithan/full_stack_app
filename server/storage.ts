@@ -37,6 +37,7 @@ export type OrderStatus =
   | "confirmed"
   | "processing"
   | "packed"
+  | "dispatched"
   | "shipped"
   | "delivered"
   | "returned";
@@ -210,11 +211,6 @@ export interface IStorage {
 
   // Enhanced notification operations
   sendSMSNotification(phone: string, message: string): Promise<void>;
-  sendEmailNotification(
-    email: string,
-    subject: string,
-    message: string,
-  ): Promise<void>;
 
   // Enhanced order tracking
   updateOrderStatus(
@@ -359,6 +355,12 @@ export class MemStorage implements IStorage {
         });
         // Delete order status updates
         this.orderStatusUpdates.delete(orderId);
+        // Delete product reviews linked to the order
+        this.productReviews.forEach((review, reviewId) => {
+          if ((review as any).orderId === orderId) {
+            this.productReviews.delete(reviewId);
+          }
+        });
       }
     });
     orderIdsToDelete.forEach((id) => this.orders.delete(id));
@@ -1781,15 +1783,6 @@ export class MemStorage implements IStorage {
   async sendSMSNotification(phone: string, message: string): Promise<void> {
     // In a real implementation, this would integrate with an SMS service
     logger.info(`SMS to ${phone}: ${message}`);
-  }
-
-  async sendEmailNotification(
-    email: string,
-    subject: string,
-    message: string,
-  ): Promise<void> {
-    // In a real implementation, this would integrate with an email service
-    logger.info(`Email to ${email}: ${subject} - ${message}`);
   }
 
   // Enhanced order tracking

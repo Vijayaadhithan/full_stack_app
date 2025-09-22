@@ -439,6 +439,7 @@ export const orders = pgTable("orders", {
       | "confirmed"
       | "processing"
       | "packed"
+      | "dispatched"
       | "shipped"
       | "delivered"
       | "returned"

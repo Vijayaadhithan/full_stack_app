@@ -20,8 +20,6 @@ const requireAuth: RequestHandler = (req, res, next) => {
   next();
 };
 
-bookingsRouter.use(requireAuth);
-
 /**
  * Basic test route for the bookings module. Real booking routes are
  * implemented in `routes.ts`. The test route is namespaced under `/test`
@@ -31,5 +29,8 @@ bookingsRouter.use(requireAuth);
 bookingsRouter.get("/test", (_req, res) => {
   res.json({ message: "bookings route" });
 });
+
+// Require authentication for any additional booking routes that may be added.
+bookingsRouter.use(requireAuth);
 
 export default bookingsRouter;

@@ -176,60 +176,6 @@ export default function ProviderBookings() {
       setActionType(null);
       setSelectedBooking(null);
 
-      // New logic for email notification
-      const bookingId = updatedBooking.id;
-
-      if (updatedBooking.status === "accepted") {
-        console.log(
-          `[FRONTEND bookings.tsx] Booking ${bookingId} accepted. Triggering acceptance email.`,
-        );
-        try {
-          await apiRequest(
-            "POST",
-            `/api/bookings/${bookingId}/notify-customer-accepted`,
-          );
-          console.log(
-            `[FRONTEND bookings.tsx] Acceptance email trigger for booking ${bookingId} sent.`,
-          );
-        } catch (emailError) {
-          console.error(
-            `[FRONTEND bookings.tsx] Failed to trigger acceptance email for ${bookingId}:`,
-            emailError,
-          );
-          toast({
-            title: "Email Notification Issue",
-            description:
-              "Failed to send acceptance email to customer. Please check logs.",
-            variant: "default",
-          });
-        }
-      } else if (updatedBooking.status === "rejected") {
-        const rejectionReason = inputData.comments;
-        console.log(
-          `[FRONTEND bookings.tsx] Booking ${bookingId} rejected. Triggering rejection email. Reason: ${rejectionReason}`,
-        );
-        try {
-          await apiRequest(
-            "POST",
-            `/api/bookings/${bookingId}/notify-customer-rejected`,
-            { rejectionReason },
-          );
-          console.log(
-            `[FRONTEND bookings.tsx] Rejection email trigger for booking ${bookingId} sent.`,
-          );
-        } catch (emailError) {
-          console.error(
-            `[FRONTEND bookings.tsx] Failed to trigger rejection email for ${bookingId}:`,
-            emailError,
-          );
-          toast({
-            title: "Email Notification Issue",
-            description:
-              "Failed to send rejection email to customer. Please check logs.",
-            variant: "default",
-          });
-        }
-      }
     },
     onError: (error: Error) => {
       toast({

@@ -44,9 +44,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           {(has("view_health") || has("view_all_orders")) && (
             <Link href="/admin/monitoring">Monitoring</Link>
           )}
-          {has("manage_settings") && (
-            <Link href="/admin/email-preferences">Email Preferences</Link>
-          )}
         </nav>
         <Button onClick={() => logoutMutation.mutate()}>Logout</Button>
       </aside>

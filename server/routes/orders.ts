@@ -20,8 +20,6 @@ const requireAuth: RequestHandler = (req, res, next) => {
   next();
 };
 
-ordersRouter.use(requireAuth);
-
 /**
  * Basic test route for orders module. Real order routes will be
  * implemented here in the future.
@@ -29,5 +27,8 @@ ordersRouter.use(requireAuth);
 ordersRouter.get("/", (_req, res) => {
   res.json({ message: "orders route" });
 });
+
+// Require authentication for any additional order routes.
+ordersRouter.use(requireAuth);
 
 export default ordersRouter;

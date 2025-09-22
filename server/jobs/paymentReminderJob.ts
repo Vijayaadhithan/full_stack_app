@@ -1,11 +1,6 @@
 import cron from "node-cron";
 import type { IStorage } from "../storage";
-import {
-  sendNotificationEmail,
-  mapUserRoleToRecipient,
-} from "../emailService";
 import logger from "../logger";
-
 export let lastRun: Date | null = null;
 
 export function startPaymentReminderJob(storage: IStorage) {
@@ -40,14 +35,9 @@ export function startPaymentReminderJob(storage: IStorage) {
             .getService(b.serviceId!)
             .then((s) => (s ? storage.getUser(s.providerId!) : null));
           if (provider && provider.email) {
-            await sendNotificationEmail({
-              to: provider.email,
-              subject: "Payment Pending",
-              text: `Booking #${b.id} is awaiting your payment confirmation.`,
-              notificationType: "genericNotification",
-              recipientType: mapUserRoleToRecipient(provider.role),
-              context: { bookingId: b.id },
-            });
+            logger.info(
+              `[PaymentReminderJob] Skipping email reminder for booking ${b.id}; email notifications disabled.`,
+            );
           }
         }
       }

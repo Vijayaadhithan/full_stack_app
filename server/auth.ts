@@ -7,12 +7,7 @@ import logger from "./logger";
 import { scrypt, randomBytes, timingSafeEqual , createHash} from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import {
-  sendNotificationEmail,
-  getWelcomeEmailContent,
-  mapUserRoleToRecipient,
-  //getVerificationEmailContent,
-} from "./emailService";
+import { sendEmail, getWelcomeEmailContent } from "./emailService";
 import {
   User as SelectUser,
   emailVerificationTokens as emailVerificationTokensTable,
@@ -280,14 +275,11 @@ export function setupAuth(app: Express) {
               FRONTEND_URL,
             );
             if (createdUser.email) {
-              await sendNotificationEmail({
+              await sendEmail({
                 to: createdUser.email,
                 subject: emailContent.subject,
                 text: emailContent.text,
                 html: emailContent.html,
-                notificationType: "welcome",
-                recipientType: mapUserRoleToRecipient(createdUser.role),
-                context: { userId: createdUser.id },
               });
             } else {
               logger.warn(
@@ -355,14 +347,11 @@ export function setupAuth(app: Express) {
       verificationLink,
     );
     if (user.email) {
-      await sendNotificationEmail({
+      await sendEmail({
         to: user.email,
         subject: welcomeContent.subject,
         text: welcomeContent.text,
         html: welcomeContent.html,
-        notificationType: "verification",
-        recipientType: mapUserRoleToRecipient(user.role),
-        context: { userId: user.id },
       });
     } else {
       logger.warn(
@@ -466,7 +455,7 @@ export function setupAuth(app: Express) {
         });
       });
     } catch (error) {
-      logger.error("Error deleting user account:", error);
+      logger.error({ err: error }, "Error deleting user account");
       res.status(500).json({ message: "Failed to delete account." });
     }
   });
