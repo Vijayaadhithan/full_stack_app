@@ -115,6 +115,14 @@ const resetPasswordSchema = z.object({
   newPassword: z.string().min(8),
 });
 
+const userIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+const productIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
 const bookingActionSchema = z
   .object({
     status: bookingStatusSchema.optional(),
@@ -304,7 +312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       200:
    *         description: A JSON array of available endpoints
    */
-  app.get("/api", (req, res) => {
+  app.get("/api", requireAuth, (req, res) => {
     const routes = app._router.stack
       .filter((r: any) => r.route && r.route.path)
       .map((r: any) => ({
@@ -1224,7 +1232,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/users/:id", requireAuth, async (req, res) => {
     try {
-      const userId = parseInt(req.params.id);
+      const paramsResult = userIdParamSchema.safeParse(req.params);
+      if (!paramsResult.success) {
+        return res.status(400).json({ message: "Invalid user ID format" });
+      }
+
+      const userId = paramsResult.data.id;
       if (userId !== req.user!.id) {
         return res.status(403).json({ message: "Can only update own profile" });
       }
@@ -1296,17 +1309,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user by ID
   app.get("/api/users/:id", requireAuth, async (req, res) => {
     try {
-      const userId = parseInt(req.params.id);
+      logger.info("[API] /api/users/:id - Raw ID parameter:", req.params.id);
+
+      const paramsResult = userIdParamSchema.safeParse(req.params);
+      if (!paramsResult.success) {
+        logger.info(
+          "[API] /api/users/:id - Invalid user ID format",
+          paramsResult.error.flatten(),
+        );
+        return res.status(400).json({ message: "Invalid user ID format" });
+      }
+
+      const userId = paramsResult.data.id;
       logger.info(
         "[API] /api/users/:id - Received request for user ID:",
         userId,
       );
-      logger.info("[API] /api/users/:id - Raw ID parameter:", req.params.id);
-
-      if (isNaN(userId)) {
-        logger.info("[API] /api/users/:id - Invalid user ID format");
-        return res.status(400).json({ message: "Invalid user ID format" });
-      }
 
       const user = await storage.getUser(userId);
       logger.info("[API] /api/users/:id - User from storage:", user);
@@ -1382,22 +1400,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireShopOrWorkerPermission(["products:write"]),
     async (req, res) => {
       try {
-        const productId = parseInt(req.params.id);
+        const paramsResult = productIdParamSchema.safeParse(req.params);
+        if (!paramsResult.success) {
+          return res.status(400).json({ message: "Invalid product ID format" });
+        }
+
+        const productId = paramsResult.data.id;
         const product = await storage.getProduct(productId);
 
         if (!product) {
           return res.status(404).json({ message: "Product not found" });
         }
 
-        if (req.user!.role === "shop") {
-          if (product.shopId !== req.user!.id) {
-            return res.status(403).json({ message: "Can only update own products" });
-          }
-        } else if (req.user!.role === "worker") {
-          const workerShopId = (req as any).workerShopId;
-          if (!workerShopId || product.shopId !== workerShopId) {
-            return res.status(403).json({ message: "Worker can only update products of their shop" });
-          }
+        const shopContextId =
+          req.user!.role === "shop"
+            ? req.user!.id
+            : req.user!.role === "worker"
+              ? (req as any).workerShopId
+              : null;
+
+        if (!shopContextId || product.shopId !== shopContextId) {
+          return res.status(403).json({ message: "Not authorized to update this product" });
         }
 
         const parsedBody = productUpdateSchema.safeParse(req.body);
@@ -4376,7 +4399,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add this route for user details
   app.get("/api/users/:id", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(parseInt(req.params.id));
+      const paramsResult = userIdParamSchema.safeParse(req.params);
+      if (!paramsResult.success) {
+        return res.status(400).json({ message: "Invalid user ID format" });
+      }
+
+      const user = await storage.getUser(paramsResult.data.id);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
