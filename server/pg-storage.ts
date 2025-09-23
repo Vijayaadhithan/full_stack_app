@@ -4,6 +4,7 @@ import { db } from "./db";
 import type { SQL } from "drizzle-orm";
 import logger from "./logger";
 import { getCache, setCache } from "./cache";
+import { createHash } from "crypto";
 import {
   User,
   InsertUser,
@@ -73,6 +74,89 @@ interface InsertBlockedTimeSlot {
   date: Date;
   startTime: string;
   endTime: string;
+}
+
+const PRODUCT_CACHE_PREFIX = "products";
+const PRODUCT_CACHE_TTL_MS = 60_000; // 60 seconds cache to balance freshness and throughput
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, v]) => `${JSON.stringify(key)}:${stableStringify(v)}`);
+
+  return `{${entries.join(",")}}`;
+}
+
+function normalizeProductFilters(filters: Record<string, unknown>) {
+  const normalized: Record<string, unknown> = {};
+
+  if (filters.category) {
+    normalized.category = String(filters.category).toLowerCase();
+  }
+  if (filters.minPrice !== undefined) {
+    const value = Number(filters.minPrice);
+    if (Number.isFinite(value)) {
+      normalized.minPrice = value;
+    }
+  }
+  if (filters.maxPrice !== undefined) {
+    const value = Number(filters.maxPrice);
+    if (Number.isFinite(value)) {
+      normalized.maxPrice = value;
+    }
+  }
+  if (filters.tags) {
+    normalized.tags = [...(filters.tags as Array<string | number>)]
+      .map((tag) => String(tag))
+      .sort();
+  }
+  if (filters.searchTerm) {
+    normalized.searchTerm = String(filters.searchTerm).trim();
+  }
+  if (filters.shopId !== undefined) {
+    const value = Number(filters.shopId);
+    if (Number.isFinite(value)) {
+      normalized.shopId = value;
+    }
+  }
+  if (filters.attributes && typeof filters.attributes === "object") {
+    const entries = Object.entries(filters.attributes as Record<string, unknown>)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .sort(([a], [b]) => a.localeCompare(b));
+    normalized.attributes = Object.fromEntries(entries);
+  }
+  if (filters.locationCity) {
+    normalized.locationCity = String(filters.locationCity).trim();
+  }
+  if (filters.locationState) {
+    normalized.locationState = String(filters.locationState).trim();
+  }
+
+  return normalized;
+}
+
+function buildProductCacheKey(filters?: Record<string, unknown>): string {
+  if (!filters || Object.keys(filters).length === 0) {
+    return `${PRODUCT_CACHE_PREFIX}:all`;
+  }
+
+  const normalized = normalizeProductFilters(filters);
+  if (Object.keys(normalized).length === 0) {
+    return `${PRODUCT_CACHE_PREFIX}:all`;
+  }
+
+  const serialized = stableStringify(normalized);
+  const digest = createHash("sha256").update(serialized).digest("hex");
+  return `${PRODUCT_CACHE_PREFIX}:${digest}`;
 }
 
 export class PostgresStorage implements IStorage {
@@ -352,6 +436,12 @@ export class PostgresStorage implements IStorage {
   }
 
   async getProducts(filters?: any): Promise<Product[]> {
+    const cacheKey = buildProductCacheKey(filters ?? {});
+    const cached = await getCache<Product[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     // Always filter out soft deleted products
     const conditions = [eq(products.isDeleted, false)];
     let query: any = db.select().from(products);
@@ -439,11 +529,12 @@ export class PostgresStorage implements IStorage {
     }
 
     const results = await query;
-    if (joinedUsers) {
-      // When joined with users, drizzle returns objects with `products` key
-      return results.map((r: any) => r.products as Product);
-    }
-    return results as Product[];
+    const normalizedResults = joinedUsers
+      ? (results as any[]).map((r) => r.products as Product)
+      : (results as Product[]);
+
+    await setCache(cacheKey, normalizedResults, PRODUCT_CACHE_TTL_MS);
+    return normalizedResults;
   }
 
   async getPromotionsByShop(shopId: number): Promise<Promotion[]> {
