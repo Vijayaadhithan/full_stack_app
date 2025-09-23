@@ -76,7 +76,7 @@ const LOGGABLE_HEADERS = [
 const MAX_SANITIZE_DEPTH = 3;
 const MAX_STRING_LENGTH = 200;
 
-function shouldMaskKey(key: string): boolean {
+export function shouldMaskKey(key: string): boolean {
   const lowerKey = key.toLowerCase();
   return MASK_PATTERNS.some((pattern) => lowerKey.includes(pattern));
 }
@@ -117,14 +117,14 @@ function sanitizeValue(value: unknown, depth = 0): unknown {
   return value;
 }
 
-function sanitizeRecord(
+export function sanitizeRecord(
   value: unknown,
 ): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") return undefined;
   return sanitizeValue(value) as Record<string, unknown>;
 }
 
-function sanitizeBody(body: unknown): unknown {
+export function sanitizeBody(body: unknown): unknown {
   if (body === undefined || body === null) return body;
   if (Buffer.isBuffer(body)) return `[buffer:${body.length}]`;
   if (typeof body === "string") {
@@ -136,7 +136,7 @@ function sanitizeBody(body: unknown): unknown {
   return body;
 }
 
-function sanitizeHeaders(
+export function sanitizeHeaders(
   headers: Request["headers"],
 ): Record<string, string | string[]> | undefined {
   const result: Record<string, string | string[]> = {};
@@ -150,7 +150,7 @@ function sanitizeHeaders(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function extractStatusCode(error: unknown): number {
+export function extractStatusCode(error: unknown): number {
   if (error && typeof error === "object") {
     const candidate = (error as { status?: unknown }).status;
     const candidateCode = (error as { statusCode?: unknown }).statusCode;
@@ -168,7 +168,7 @@ function extractStatusCode(error: unknown): number {
   return 500;
 }
 
-function resolveErrorMessage(error: unknown): string {
+export function resolveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
