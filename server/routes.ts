@@ -3327,6 +3327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "confirmed",
           "processing",
           "packed",
+          "dispatched",
           "shipped",
           "delivered",
           "returned",
@@ -3499,12 +3500,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "confirmed",
           "processing",
           "packed",
+          "dispatched",
           "shipped",
           "delivered",
           "returned",
         ];
 
-        const normalizedStatus = parsedQuery.data.status?.toLowerCase();
+        const rawStatus = parsedQuery.data.status?.toLowerCase();
+        const normalizedStatus =
+          rawStatus === "all_orders" ? "all" : rawStatus;
 
         let statusFilter: Order["status"] | undefined;
         if (normalizedStatus && normalizedStatus !== "all") {

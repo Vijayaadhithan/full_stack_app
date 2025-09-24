@@ -77,7 +77,7 @@ export default function ShopOrders() {
   const { has: can } = useWorkerPermissions();
   const { t } = useLanguage();
   const { toast } = useToast();
-  const [selectedStatus, setSelectedStatus] = useState<string>("all_orders");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(
     null,
   );
@@ -89,10 +89,11 @@ export default function ShopOrders() {
     queryKey: ["orders", "shop", selectedStatus],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await apiRequest(
-        "GET",
-        `/api/orders/shop?status=${selectedStatus}`,
-      );
+      const url =
+        selectedStatus === "all"
+          ? "/api/orders/shop"
+          : `/api/orders/shop?status=${selectedStatus}`;
+      const res = await apiRequest("GET", url);
       if (!res.ok) throw new Error("Network response was not ok");
       return res.json();
     },
@@ -244,7 +245,7 @@ export default function ShopOrders() {
                 <SelectValue placeholder={t("filter_by_status")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all_orders">{t("all_orders")}</SelectItem>
+                <SelectItem value="all">{t("all_orders")}</SelectItem>
                 <SelectItem value="confirmed">{t("confirmed")}</SelectItem>
                 <SelectItem value="packed">{t("packed")}</SelectItem>
                 <SelectItem value="dispatched">{t("dispatched")}</SelectItem>

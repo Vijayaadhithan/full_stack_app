@@ -602,12 +602,18 @@ export default function Bookings() {
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button
-                                  onClick={() => setSelectedBooking(booking)}
+                                  onClick={() => {
+                                    setSelectedBooking(booking);
+                                    setPaymentMethod("upi");
+                                    setPaymentReference(
+                                      booking.paymentReference || "",
+                                    );
+                                  }}
                                 >
                                   Mark Service as Complete & Pay
                                 </Button>
                               </DialogTrigger>
-                                <DialogContent>
+                              <DialogContent>
                                 <DialogHeader>
                                   <DialogTitle>Submit Payment</DialogTitle>
                                 </DialogHeader>
@@ -955,6 +961,100 @@ export default function Bookings() {
                           )}
                         </div>
                         <div className="space-x-2">
+                          {booking.status === "accepted" && (
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button
+                                  onClick={() => {
+                                    setSelectedBooking(booking);
+                                    setPaymentMethod("upi");
+                                    setPaymentReference(
+                                      booking.paymentReference || "",
+                                    );
+                                  }}
+                                >
+                                  Mark Service as Complete & Pay
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Submit Payment</DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 pt-4">
+                                  <PaymentMethodSelector
+                                    value={paymentMethod}
+                                    onChange={setPaymentMethod}
+                                  />
+                                  {paymentMethod === "upi" ? (
+                                    <>
+                                      <div className="flex items-center gap-2">
+                                        <p>
+                                          Send payment to UPI ID:{" "}
+                                          <strong>{booking.provider?.upiId}</strong>
+                                        </p>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={() => {
+                                            if (booking.provider?.upiId) {
+                                              navigator.clipboard.writeText(
+                                                booking.provider.upiId,
+                                              );
+                                              toast({
+                                                title: "Copied",
+                                                description:
+                                                  "UPI ID copied to clipboard",
+                                              });
+                                            }
+                                          }}
+                                        >
+                                          Copy
+                                        </Button>
+                                      </div>
+                                      {booking.provider?.upiQrCodeUrl && (
+                                        <img
+                                          src={booking.provider.upiQrCodeUrl}
+                                          alt="QR"
+                                          className="h-32"
+                                        />
+                                      )}
+                                      <Input
+                                        placeholder="Transaction reference"
+                                        value={paymentReference}
+                                        onChange={(e) =>
+                                          setPaymentReference(e.target.value)
+                                        }
+                                      />
+                                    </>
+                                  ) : (
+                                    <p>
+                                      You chose to pay in cash directly to the provider.
+                                    </p>
+                                  )}
+                                  <Button
+                                    onClick={() =>
+                                      paymentMutation.mutate({
+                                        bookingId: booking.id,
+                                        paymentReference:
+                                          paymentMethod === "cash"
+                                            ? "CASH"
+                                            : paymentReference,
+                                      })
+                                    }
+                                    className="w-full"
+                                    disabled={
+                                      paymentMethod === "upi" && !paymentReference
+                                    }
+                                  >
+                                    {paymentMutation.isPending && (
+                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    )}
+                                    Submit and Confirm Payment
+                                  </Button>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          )}
                           {booking.status === "awaiting_payment" && (
                             <>
                               <p className="text-sm">
