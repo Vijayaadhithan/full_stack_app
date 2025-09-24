@@ -201,10 +201,14 @@ export function registerWorkerRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         await ensureShopWorkersTable();
-        const workerId = (req.query.workerId as string | undefined)?.trim();
-        if (!workerId || workerId.length < 3) {
-          return res.status(400).json({ message: "workerId must be at least 3 characters" });
+        const parsedQuery = workerIdAvailabilitySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+          return res.status(400).json({
+            message: "Invalid workerId",
+            errors: parsedQuery.error.flatten(),
+          });
         }
+        const { workerId } = parsedQuery.data;
         const existing = await db.select().from(users).where(eq(users.username, workerId));
         const available = !existing[0];
         return res.json({ workerId, available });
@@ -214,6 +218,12 @@ export function registerWorkerRoutes(app: Express) {
       }
     },
   );
+
+  const workerIdAvailabilitySchema = z
+    .object({
+      workerId: z.string().trim().min(3, "workerId must be at least 3 characters"),
+    })
+    .strict();
 
   // Update worker details/responsibilities or reset password
   const updateWorkerSchema = z.object({
@@ -231,8 +241,10 @@ export function registerWorkerRoutes(app: Express) {
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
       await ensureShopWorkersTable();
-      const workerUserId = Number(req.params.workerUserId);
-      if (isNaN(workerUserId)) return res.status(400).json({ message: "Invalid worker id" });
+      const workerUserId = req.validatedParams?.workerUserId;
+      if (typeof workerUserId !== "number") {
+        return res.status(400).json({ message: "Invalid worker id" });
+      }
 
       const parsed = updateWorkerSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json(parsed.error.flatten());
@@ -282,8 +294,10 @@ export function registerWorkerRoutes(app: Express) {
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
       await ensureShopWorkersTable();
-      const workerUserId = Number(req.params.workerUserId);
-      if (isNaN(workerUserId)) return res.status(400).json({ message: "Invalid worker id" });
+      const workerUserId = req.validatedParams?.workerUserId;
+      if (typeof workerUserId !== "number") {
+        return res.status(400).json({ message: "Invalid worker id" });
+      }
       try {
         const result = await db
           .select({
@@ -315,8 +329,10 @@ export function registerWorkerRoutes(app: Express) {
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
       await ensureShopWorkersTable();
-      const workerUserId = Number(req.params.workerUserId);
-      if (isNaN(workerUserId)) return res.status(400).json({ message: "Invalid worker id" });
+      const workerUserId = req.validatedParams?.workerUserId;
+      if (typeof workerUserId !== "number") {
+        return res.status(400).json({ message: "Invalid worker id" });
+      }
       try {
         // Verify the link belongs to this shop
         const link = await db

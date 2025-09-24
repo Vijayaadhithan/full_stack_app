@@ -119,6 +119,53 @@ const PAYMENT_STATUSES = ["pending", "verifying", "paid", "failed"] as const;
 type OrderStatusFilter = (typeof ORDER_STATUSES)[number];
 type PaymentStatusFilter = (typeof PAYMENT_STATUSES)[number];
 
+const optionalPositiveInt = z
+  .preprocess((value) => {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === "string" && value.trim() === "") return undefined;
+    return value;
+  }, z.coerce.number().int().positive())
+  .optional();
+
+const optionalTrimmedString = z
+  .preprocess((value) => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    }
+    return undefined;
+  }, z.string())
+  .optional();
+
+const adminLogsQuerySchema = z
+  .object({
+    limit: optionalPositiveInt,
+    level: optionalTrimmedString,
+    category: optionalTrimmedString,
+  })
+  .strict();
+
+const adminTransactionsQuerySchema = z
+  .object({
+    page: optionalPositiveInt,
+    pageSize: optionalPositiveInt,
+    limit: optionalPositiveInt,
+    status: optionalTrimmedString,
+    paymentStatus: optionalTrimmedString,
+    customer: optionalTrimmedString,
+    shop: optionalTrimmedString,
+    search: optionalTrimmedString,
+  })
+  .strict();
+
+const adminAccountsQuerySchema = z
+  .object({
+    page: optionalPositiveInt,
+    limit: optionalPositiveInt,
+    search: optionalTrimmedString,
+  })
+  .strict();
+
 function isOrderStatus(value: string): value is OrderStatusFilter {
   return ORDER_STATUSES.some((status) => status === value);
 }
@@ -297,14 +344,18 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["view_health"]),
   async (req, res) => {
-    const requestedLimit = parseInt((req.query.limit as string) || "", 10);
-    const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
+    const parsedQuery = adminLogsQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return res.status(400).json(formatValidationError(parsedQuery.error));
+    }
+
+    const requestedLimit = parsedQuery.data.limit;
+    const limit = requestedLimit
       ? Math.min(requestedLimit, 500)
       : LOG_DEFAULT_LIMIT;
-    const levelParam = ((req.query.level as string) || "").toLowerCase();
+    const levelParam = (parsedQuery.data.level ?? "").toLowerCase();
     const filteredLevels = levelNumbersByLabel[levelParam];
-    const rawCategoryParam = req.query.category as string | undefined;
-    const normalizedCategory = normalizeLogCategory(rawCategoryParam);
+    const normalizedCategory = normalizeLogCategory(parsedQuery.data.category);
 
     try {
       const stats = await fs.stat(LOG_FILE_PATH);
@@ -469,19 +520,23 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["view_all_orders"]),
   async (req, res) => {
-    const pageParam = parseInt((req.query.page as string) || "", 10);
-    const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
-    const pageSizeParam = parseInt((req.query.pageSize as string) || (req.query.limit as string) || "", 10);
-    const pageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0
-      ? Math.min(pageSizeParam, TRANSACTIONS_MAX_PAGE_SIZE)
-      : 20;
-    const offset = (page - 1) * pageSize;
+    const parsedQuery = adminTransactionsQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return res.status(400).json(formatValidationError(parsedQuery.error));
+    }
 
-    const statusFilter = (req.query.status as string) || "";
-    const paymentStatusFilter = (req.query.paymentStatus as string) || "";
-    const customerFilter = (req.query.customer as string) || "";
-    const shopFilter = (req.query.shop as string) || "";
-    const searchFilter = (req.query.search as string) || "";
+    const resolvedPage = parsedQuery.data.page ?? 1;
+    const requestedPageSize = parsedQuery.data.pageSize ?? parsedQuery.data.limit;
+    const pageSize = requestedPageSize
+      ? Math.min(requestedPageSize, TRANSACTIONS_MAX_PAGE_SIZE)
+      : 20;
+    const offset = (resolvedPage - 1) * pageSize;
+
+    const statusFilter = (parsedQuery.data.status ?? "").toLowerCase();
+    const paymentStatusFilter = (parsedQuery.data.paymentStatus ?? "").toLowerCase();
+    const customerFilter = parsedQuery.data.customer ?? "";
+    const shopFilter = parsedQuery.data.shop ?? "";
+    const searchFilter = parsedQuery.data.search ?? "";
 
     const customerAlias = alias(users, "customer_users");
     const shopAlias = alias(users, "shop_users");
@@ -567,10 +622,10 @@ router.get(
     }));
 
     return res.json({
-      page,
+      page: resolvedPage,
       pageSize,
       total,
-      hasMore: total > page * pageSize,
+      hasMore: total > resolvedPage * pageSize,
       transactions,
     });
   },
@@ -618,9 +673,13 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["manage_users"]),
   async (req, res) => {
-    const page = parseInt((req.query.page as string) || "1", 10);
-    const limit = parseInt((req.query.limit as string) || "20", 10);
-    const search = (req.query.search as string) || "";
+    const parsedQuery = adminAccountsQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return res.status(400).json(formatValidationError(parsedQuery.error));
+    }
+    const page = parsedQuery.data.page ?? 1;
+    const limit = parsedQuery.data.limit ?? 20;
+    const search = parsedQuery.data.search ?? "";
     const offset = (page - 1) * limit;
     const base = db.select().from(users);
     const like = `%${search}%`;
@@ -641,13 +700,16 @@ router.patch(
   isAdminAuthenticated,
   checkPermissions(["manage_users"]),
   async (req, res) => {
-    const { userId } = req.params;
+    const userId = req.validatedParams?.userId;
+    if (typeof userId !== "number") {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
     const parsedBody = adminSuspendUserSchema.safeParse(req.body);
     if (!parsedBody.success) {
       return res.status(400).json(formatValidationError(parsedBody.error));
     }
     const { isSuspended } = parsedBody.data;
-    await db.update(users).set({ isSuspended }).where(eq(users.id, Number(userId)));
+    await db.update(users).set({ isSuspended }).where(eq(users.id, userId));
     // Audit log (best-effort)
     try {
       await db.insert(adminAuditLogs).values({
@@ -715,8 +777,11 @@ router.delete(
   isAdminAuthenticated,
   checkPermissions(["manage_reviews"]),
   async (req, res) => {
-    const { reviewId } = req.params;
-    await db.delete(reviews).where(eq(reviews.id, Number(reviewId)));
+    const reviewId = req.validatedParams?.reviewId;
+    if (typeof reviewId !== "number") {
+      return res.status(400).json({ message: "Invalid review id" });
+    }
+    await db.delete(reviews).where(eq(reviews.id, reviewId));
     // Audit log (best-effort)
     try {
       await db.insert(adminAuditLogs).values({
@@ -801,7 +866,11 @@ router.put(
   isAdminAuthenticated,
   checkPermissions(["manage_admins"]),
   async (req, res) => {
-    const { roleId } = req.params;
+    const paramsResult = z.object({ roleId: z.string().uuid() }).safeParse(req.params);
+    if (!paramsResult.success) {
+      return res.status(400).json(formatValidationError(paramsResult.error));
+    }
+    const { roleId } = paramsResult.data;
     const parsedBody = adminRolePermissionSchema.safeParse(req.body ?? {});
     if (!parsedBody.success) {
       return res.status(400).json(formatValidationError(parsedBody.error));

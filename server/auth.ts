@@ -2,6 +2,7 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Express, type Request, type Response } from "express";
+import { z } from "zod";
 import session from "express-session";
 import logger from "./logger";
 import { scrypt, randomBytes, timingSafeEqual , createHash} from "crypto";
@@ -40,6 +41,19 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     "Google OAuth credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) are not set. Google Sign-In will not work.",
   );
 }
+
+const googleRoleQuerySchema = z
+  .object({
+    role: z.string().trim().optional(),
+  })
+  .strict();
+
+const verifyEmailQuerySchema = z
+  .object({
+    token: z.string().trim().min(1),
+    userId: z.coerce.number().int().positive(),
+  })
+  .strict();
 
 declare global {
   namespace Express {
@@ -387,7 +401,14 @@ export function setupAuth(app: Express) {
   // Google OAuth Routes
   if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     app.get("/auth/google", googleAuthLimiter, (req, res, next) => {
-      const role = req.query.role as SelectUser["role"];
+      const parsedQuery = googleRoleQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return res.status(400).json({
+          message: "Invalid role selection",
+          errors: parsedQuery.error.flatten(),
+        });
+      }
+      const role = parsedQuery.data.role as SelectUser["role"] | undefined;
       // Basic validation for role. Consider using a predefined list or enum for roles.
       const validRoles: SelectUser["role"][] = ["customer", "provider", "shop"];
       if (role && validRoles.includes(role)) {
@@ -396,7 +417,7 @@ export function setupAuth(app: Express) {
         // Default to 'customer' or handle invalid/missing role as an error
         req.session.signupRole = "customer";
         logger.info(
-          `[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: ${req.query.role}`,
+          `[Google OAuth] Role not provided or invalid, defaulting to 'customer'. Provided: ${role ?? "undefined"}`,
         );
       }
       passport.authenticate("google", { scope: ["profile", "email"] })(
@@ -461,20 +482,20 @@ export function setupAuth(app: Express) {
   });
 }
 export async function verifyEmailHandler(req: Request, res: Response) {
-  const { token, userId } = req.query;
-  if (!token || !userId) {
-    return res.status(400).send("Missing verification token or user ID.");
+  const parsedQuery = verifyEmailQuerySchema.safeParse(req.query);
+  if (!parsedQuery.success) {
+    return res.status(400).send("Missing or invalid verification details.");
   }
+  const { token, userId } = parsedQuery.data;
   try {
-    const id = parseInt(userId as string, 10);
-    const hashedToken = createHash("sha256").update(token as string).digest("hex");
+    const hashedToken = createHash("sha256").update(token).digest("hex");
     const tokenRecords = await db
       .select()
       .from(emailVerificationTokensTable)
       .where(
         and(
           eq(emailVerificationTokensTable.token, hashedToken),
-          eq(emailVerificationTokensTable.userId, id),
+          eq(emailVerificationTokensTable.userId, userId),
         ),
       )
       .limit(1);
@@ -482,7 +503,7 @@ export async function verifyEmailHandler(req: Request, res: Response) {
     if (!tokenEntry || tokenEntry.expiresAt < new Date()) {
       return res.status(400).send("Invalid or expired verification link.");
     }
-    await storage.updateUser(id, { emailVerified: true });
+    await storage.updateUser(userId, { emailVerified: true });
     await db
       .delete(emailVerificationTokensTable)
       .where(eq(emailVerificationTokensTable.token, hashedToken));

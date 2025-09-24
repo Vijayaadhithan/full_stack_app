@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { PerformanceMetric } from "@shared/performance";
+import { apiRequest, getCsrfToken } from "../lib/queryClient";
 
 type MetricName = PerformanceMetric["name"];
 
@@ -19,23 +20,20 @@ function getMetricRating(name: MetricName, value: number): PerformanceMetric["ra
   return "poor";
 }
 
-function postMetric(metric: PerformanceMetric) {
-  const body = JSON.stringify(metric);
+async function postMetric(metric: PerformanceMetric) {
+  const csrfToken = await getCsrfToken();
+  const payload = { ...metric, _csrf: csrfToken };
+  const body = JSON.stringify(payload);
+
   if (navigator.sendBeacon) {
     const blob = new Blob([body], { type: "application/json" });
-    navigator.sendBeacon("/api/admin/performance-metrics", blob);
-    return;
+    const sent = navigator.sendBeacon("/api/admin/performance-metrics", blob);
+    if (sent) {
+      return;
+    }
   }
 
-  fetch("/api/admin/performance-metrics", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-    keepalive: true,
-    credentials: "include",
-  }).catch(() => {
-    // Ignore network errors for fire-and-forget metrics
-  });
+  await apiRequest("POST", "/api/admin/performance-metrics", payload);
 }
 
 export function useAdminPerformanceMetrics() {
@@ -62,6 +60,8 @@ export function useAdminPerformanceMetrics() {
         ...metric,
         page,
         timestamp: Date.now(),
+      }).catch(() => {
+        // ignore metric upload errors
       });
     };
 

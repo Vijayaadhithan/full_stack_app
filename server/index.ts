@@ -6,10 +6,7 @@ import adminRoutes from "./routes/admin";
 import { storage as dbStorage } from "./storage";
 import { config } from "dotenv";
 import logger from "./logger";
-import path from "path";
 import cors from "cors";
-import multer, { MulterError } from "multer";
-import { fileURLToPath } from "url";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./swagger";
 import { randomUUID } from "node:crypto";
@@ -46,9 +43,6 @@ const helmetConfig: HelmetOptions = {
         hsts: false,
       }),
 };
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const MASK_PATTERNS = [
   "password",
@@ -220,6 +214,15 @@ app.use((req, res, next) => {
 });
 // Note: admin routes require session. We mount them AFTER setupAuth (called in registerRoutes).
 
+if (process.env.NODE_ENV === "test" && !process.env.SESSION_SECRET) {
+  process.env.SESSION_SECRET = "test-session-secret";
+}
+
+const registerRoutesPromise = registerRoutes(app).catch((error) => {
+  logger.error({ err: error }, "Failed to register routes");
+  throw error;
+});
+
 /**
  * @openapi
  * /api/health:
@@ -237,110 +240,6 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, "../uploads/"));
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + "-" + file.originalname);
-  },
-});
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
-
-const upload = multer({
-  storage,
-  limits: { fileSize: MAX_FILE_SIZE },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) {
-      cb(null, true);
-    } else {
-      cb(new Error("Invalid file type"));
-    }
-  },
-});
-
-/**
- * @openapi
- * /api/upload:
- *   post:
- *     summary: Upload a file
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               file:
- *                 type: string
- *                 format: binary
- *     responses:
- *       200:
- *         description: Upload successful
- */
-app.post("/api/upload", (req, res) => {
-  upload.single("file")(req, res, (err: any) => {
-    if (err) {
-      const message =
-        err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
-          ? "File too large"
-          : err.message;
-      return res.status(400).json({ message });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-    res.json({
-      filename: req.file.filename,
-      path: `/uploads/${req.file.filename}`,
-    });
-  });
-});
-
-/**
- * @openapi
- * /api/users/upload-qr:
- *   post:
- *     summary: Upload provider QR code
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               qr:
- *                 type: string
- *                 format: binary
- *     responses:
- *       200:
- *         description: Upload successful
- */
-app.post("/api/users/upload-qr", (req, res) => {
-  upload.single("qr")(req, res, (err: any) => {
-    if (err) {
-      const message =
-        err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
-          ? "File too large"
-          : err.message;
-      return res.status(400).json({ message });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-    const url = `/uploads/${req.file.filename}`;
-    res.json({ url });
-  });
-});
-
-// Serve uploaded files
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
-
 // Initialize scheduled jobs
 export async function startServer(port?: number) {
   // Initialize scheduled jobs
@@ -349,7 +248,7 @@ export async function startServer(port?: number) {
     startPaymentReminderJob(dbStorage);
   }
 
-  const server = await registerRoutes(app);
+  const server = await registerRoutesPromise;
 
   // Seed default admin if none exists
   try {
@@ -360,6 +259,25 @@ export async function startServer(port?: number) {
 
   // Mount admin routes after session has been initialized in setupAuth()
   app.use("/api/admin", adminRoutes);
+
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      (err as { code?: string }).code === "EBADCSRFTOKEN"
+    ) {
+      logger.warn(
+        {
+          path: req.originalUrl,
+          method: req.method,
+        },
+        "CSRF token validation failed",
+      );
+      return res.status(403).json({ message: "Invalid or missing CSRF token" });
+    }
+    next(err);
+  });
 
   app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
     const status = extractStatusCode(err);

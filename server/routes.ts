@@ -1,10 +1,14 @@
-import type { Express, Request } from "express";
+import express, { type Express, Request, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import logger, { LogCategory, runWithLogContext } from "./logger";
 import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
 import { sendEmail, getPasswordResetEmailContent } from "./emailService";
 import { storage } from "./storage";
 import { z } from "zod";
+import csrf from "csurf";
+import multer, { MulterError } from "multer";
+import path from "path";
+import { fileURLToPath } from "url";
 import {
   insertServiceSchema,
   insertBookingSchema,
@@ -49,10 +53,45 @@ import {
 
 const PLATFORM_SERVICE_FEE = platformFees.productOrder;
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UPLOADS_DIRECTORY = path.join(__dirname, "../uploads");
+
+const uploadStorage = multer.diskStorage({
+  destination(_req, _file, cb) {
+    cb(null, UPLOADS_DIRECTORY);
+  },
+  filename(_req, file, cb) {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${uniqueSuffix}-${file.originalname}`);
+  },
+});
+
+const uploadMiddleware = multer({
+  storage: uploadStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type"));
+    }
+  },
+});
+
 type RequestWithAuth = Request & {
   user?: { id?: number | string; role?: string; isSuspended?: boolean } | null;
   session?: (Request["session"] & { adminId?: string | null }) | null;
 };
+
+declare global {
+  namespace Express {
+    // Stores sanitized, numeric route parameters for downstream handlers.
+    interface Request {
+      validatedParams?: Record<string, number>;
+    }
+  }
+}
 
 function resolveLogCategory(req: RequestWithAuth): LogCategory {
   const originalUrl = req.originalUrl || req.url || "";
@@ -129,14 +168,6 @@ const requestPasswordResetSchema = z.object({
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
   newPassword: z.string().min(8),
-});
-
-const userIdParamSchema = z.object({
-  id: z.coerce.number().int().positive(),
-});
-
-const productIdParamSchema = z.object({
-  id: z.coerce.number().int().positive(),
 });
 
 const bookingActionSchema = z
@@ -253,6 +284,73 @@ const orderStatusUpdateSchema = z.object({
   trackingInfo: z.string().trim().max(500).optional(),
 });
 
+const shopsQuerySchema = z
+  .object({
+    locationCity: z.string().trim().max(100).optional(),
+    locationState: z.string().trim().max(100).optional(),
+  })
+  .strict();
+
+const servicesQuerySchema = z
+  .object({
+    category: z.string().trim().max(100).optional(),
+    minPrice: z.coerce.number().nonnegative().optional(),
+    maxPrice: z.coerce.number().nonnegative().optional(),
+    searchTerm: z.string().trim().max(200).optional(),
+    providerId: z.coerce.number().int().positive().optional(),
+    locationCity: z.string().trim().max(100).optional(),
+    locationState: z.string().trim().max(100).optional(),
+    locationPostalCode: z.string().trim().max(20).optional(),
+    availabilityDate: dateStringSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.minPrice === undefined ||
+      data.maxPrice === undefined ||
+      data.minPrice <= data.maxPrice,
+    {
+      message: "minPrice cannot be greater than maxPrice",
+      path: ["minPrice"],
+    },
+  );
+
+const statusQuerySchema = z
+  .object({
+    status: z.string().trim().max(50).optional(),
+  })
+  .strict();
+
+const servicesAvailabilityQuerySchema = z
+  .object({
+    date: dateStringSchema,
+  })
+  .strict();
+
+const productsQuerySchema = z
+  .object({
+    category: z.string().trim().max(100).optional(),
+    minPrice: z.coerce.number().nonnegative().optional(),
+    maxPrice: z.coerce.number().nonnegative().optional(),
+    tags: z.string().trim().optional(),
+    searchTerm: z.string().trim().max(200).optional(),
+    shopId: z.coerce.number().int().positive().optional(),
+    attributes: z.string().trim().optional(),
+    locationCity: z.string().trim().max(100).optional(),
+    locationState: z.string().trim().max(100).optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.minPrice === undefined ||
+      data.maxPrice === undefined ||
+      data.minPrice <= data.maxPrice,
+    {
+      message: "minPrice cannot be greater than maxPrice",
+      path: ["minPrice"],
+    },
+  );
+
 const formatValidationError = (error: z.ZodError) => ({
   message: "Invalid input",
   errors: error.flatten(),
@@ -316,6 +414,73 @@ function requireRole(roles: string[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  setupAuth(app);
+
+  const csrfProtection: RequestHandler =
+    process.env.NODE_ENV === "test"
+      ? ((req, _res, next) => {
+          (req as Request & { csrfToken?: () => string }).csrfToken = () =>
+            "test-csrf-token";
+          next();
+        })
+      : csrf({ cookie: false, ignoreMethods: ["GET", "HEAD", "OPTIONS"] });
+
+  app.use(csrfProtection);
+
+  app.get("/api/csrf-token", (req, res) => {
+    res.status(200).json({ csrfToken: req.csrfToken() });
+  });
+
+  app.use((req, _res, next) => {
+    const request = req as RequestWithAuth;
+    const category = resolveLogCategory(request);
+    const initialContext = {
+      category,
+      userId: request.user?.id ?? request.session?.adminId ?? undefined,
+      userRole: request.user?.role ?? undefined,
+      adminId: request.session?.adminId ?? undefined,
+    };
+
+    runWithLogContext(() => next(), initialContext);
+  });
+
+  const numericParamSchemas: Record<string, z.ZodTypeAny> = {
+    id: z.coerce.number().int().positive(),
+    orderId: z.coerce.number().int().positive(),
+    productId: z.coerce.number().int().positive(),
+    serviceId: z.coerce.number().int().positive(),
+    shopId: z.coerce.number().int().positive(),
+    slotId: z.coerce.number().int().positive(),
+    workerUserId: z.coerce.number().int().positive(),
+    userId: z.coerce.number().int().positive(),
+    reviewId: z.coerce.number().int().positive(),
+  };
+
+  for (const [paramName, schema] of Object.entries(numericParamSchemas)) {
+    app.param(paramName, (req, res, next, value) => {
+      const parsed = schema.safeParse(value);
+      if (!parsed.success) {
+        return res.status(400).json(formatValidationError(parsed.error));
+      }
+      if (!req.validatedParams) {
+        req.validatedParams = {};
+      }
+      req.validatedParams[paramName] = parsed.data;
+      next();
+    });
+  }
+
+  const getValidatedParam = (
+    req: Request,
+    name: keyof typeof numericParamSchemas,
+  ): number => {
+    const params = req.validatedParams;
+    if (!params || typeof params[name] !== "number") {
+      throw new Error(`Validated parameter '${String(name)}' is missing`);
+    }
+    return params[name];
+  };
+
   /**
    * @openapi
    * /api:
@@ -332,74 +497,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
         path: r.route.path,
         methods: Object.keys(r.route.methods).join(", ").toUpperCase(),
       }))
-      .filter((r: any) => r.path.startsWith("/api/") && r.path !== "/api"); // Filter for API routes and exclude itself
+      .filter((r: any) => r.path.startsWith("/api/") && r.path !== "/api");
     res.json({ available_endpoints: routes });
   });
 
-  app.post("/api/request-password-reset", requestPasswordResetLimiter, async (req, res) => {
-    const parsedBody = requestPasswordResetSchema.safeParse(req.body);
-    if (!parsedBody.success) {
-      return res.status(400).json(formatValidationError(parsedBody.error));
-    }
+  app.post(
+    "/api/request-password-reset",
+    requestPasswordResetLimiter,
+    async (req, res) => {
+      const parsedBody = requestPasswordResetSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
 
-    const { email } = parsedBody.data;
+      const { email } = parsedBody.data;
 
-    try {
-      const user = await storage.getUserByEmail(email);
-      if (!user) {
-        // Important: Don't reveal if the email exists or not for security reasons
-        logger.info(
-          `Password reset requested for non-existent email: ${email}`,
-        );
-        return res
-          .status(200)
-          .json({
+      try {
+        const user = await storage.getUserByEmail(email);
+        if (!user) {
+          logger.info(
+            `Password reset requested for non-existent email: ${email}`,
+          );
+          return res.status(200).json({
             message:
               "If an account with that email exists, a password reset link has been sent.",
           });
-      }
+        }
 
-      const token = crypto.randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 3600000); // Token expires in 1 hour
+        const token = crypto.randomBytes(32).toString("hex");
+        const expiresAt = new Date(Date.now() + 3600000);
 
-      await db.insert(passwordResetTokensTable).values({
-        userId: user.id,
-        token,
-        expiresAt,
-      });
-
-      const resetLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${token}`;
-      const emailContent = getPasswordResetEmailContent(
-        user.name || user.username,
-        resetLink,
-      );
-
-      if (user.email) {
-        await sendEmail({
-          to: user.email,
-          subject: emailContent.subject,
-          text: emailContent.text,
-          html: emailContent.html,
+        await db.insert(passwordResetTokensTable).values({
+          userId: user.id,
+          token,
+          expiresAt,
         });
-      } else {
-        logger.warn(
-          `Password reset attempted for user ${user.id}, but no email is available.`,
-        );
-      }
 
-      return res
-        .status(200)
-        .json({
+        const resetLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${token}`;
+        const emailContent = getPasswordResetEmailContent(
+          user.name || user.username,
+          resetLink,
+        );
+
+        if (user.email) {
+          await sendEmail({
+            to: user.email,
+            subject: emailContent.subject,
+            text: emailContent.text,
+            html: emailContent.html,
+          });
+        } else {
+          logger.warn(
+            `Password reset attempted for user ${user.id}, but no email is available.`,
+          );
+        }
+
+        return res.status(200).json({
           message:
             "If an account with that email exists, a password reset link has been sent.",
         });
-    } catch (error) {
-      logger.error("Error requesting password reset:", error);
-      return res
-        .status(500)
-        .json({ message: "Error processing password reset request" });
-    }
-  });
+      } catch (error) {
+        logger.error("Error requesting password reset:", error);
+        return res
+          .status(500)
+          .json({ message: "Error processing password reset request" });
+      }
+    },
+  );
 
   app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
     const parsedBody = resetPasswordSchema.safeParse(req.body);
@@ -432,10 +596,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const hashedPassword = await hashPasswordInternal(newPassword); // Use the exported hash function
+      const hashedPassword = await hashPasswordInternal(newPassword);
       await storage.updateUser(tokenEntry.userId, { password: hashedPassword });
 
-      // Invalidate the token after use
       await db
         .delete(passwordResetTokensTable)
         .where(eq(passwordResetTokensTable.token, token));
@@ -449,25 +612,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  setupAuth(app);
-
-  app.use((req, _res, next) => {
-    const request = req as RequestWithAuth;
-    const category = resolveLogCategory(request);
-    const initialContext = {
-      category,
-      userId: request.user?.id ?? request.session?.adminId ?? undefined,
-      userRole: request.user?.role ?? undefined,
-      adminId: request.session?.adminId ?? undefined,
-    };
-
-    runWithLogContext(() => next(), initialContext);
-  });
-
   // Register domain routers
   app.use('/api/bookings', bookingsRouter);
   app.use('/api/orders', ordersRouter);
   registerWorkerRoutes(app);
+
+  const uploadSingleFile = uploadMiddleware.single("file");
+  const uploadSingleQr = uploadMiddleware.single("qr");
+
+  app.post("/api/upload", (req, res) => {
+    uploadSingleFile(req, res, (err) => {
+      if (err) {
+        const message =
+          err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
+            ? "File too large"
+            : err instanceof Error
+              ? err.message
+              : "Upload failed";
+        return res.status(400).json({ message });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      res.json({
+        filename: req.file.filename,
+        path: `/uploads/${req.file.filename}`,
+      });
+    });
+  });
+
+  app.post("/api/users/upload-qr", (req, res) => {
+    uploadSingleQr(req, res, (err) => {
+      if (err) {
+        const message =
+          err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
+            ? "File too large"
+            : err instanceof Error
+              ? err.message
+              : "Upload failed";
+        return res.status(400).json({ message });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const url = `/uploads/${req.file.filename}`;
+      res.json({ url });
+    });
+  });
+
+  app.use("/uploads", express.static(UPLOADS_DIRECTORY));
 
   // Booking Notification System
   // Get pending booking requests for a provider
@@ -546,8 +743,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Accept, reject, or reschedule a booking request
   app.patch("/api/bookings/:id", requireAuth, async (req, res) => {
+    const bookingId = getValidatedParam(req, "id");
     try {
-      const bookingId = parseInt(req.params.id);
       const parsedBody = bookingActionSchema.safeParse(req.body);
       if (!parsedBody.success) {
         return res.status(400).json(formatValidationError(parsedBody.error));
@@ -763,7 +960,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       res.json(finalUpdatedBooking);
     } catch (error) {
-      logger.error(`[API] Error updating booking ${req.params.id}:`, error);
+      logger.error(`[API] Error updating booking ${bookingId}:`, error);
       res
         .status(400)
         .json({
@@ -1058,7 +1255,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     async (req, res) => {
       try {
-        const bookingId = parseInt(req.params.id);
+        const bookingId = getValidatedParam(req, "id");
         const parsedBody = bookingDisputeSchema.safeParse(req.body);
         if (!parsedBody.success) {
           return res.status(400).json(formatValidationError(parsedBody.error));
@@ -1104,7 +1301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["admin"]),
     async (req, res) => {
       try {
-        const bookingId = parseInt(req.params.id);
+        const bookingId = getValidatedParam(req, "id");
         const parsedBody = bookingResolutionSchema.safeParse(req.body);
         if (!parsedBody.success) {
           return res.status(400).json(formatValidationError(parsedBody.error));
@@ -1171,12 +1368,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/users/:id", requireAuth, async (req, res) => {
     try {
-      const paramsResult = userIdParamSchema.safeParse(req.params);
-      if (!paramsResult.success) {
-        return res.status(400).json({ message: "Invalid user ID format" });
-      }
-
-      const userId = paramsResult.data.id;
+      const userId = getValidatedParam(req, "id");
       if (userId !== req.user!.id) {
         return res.status(403).json({ message: "Can only update own profile" });
       }
@@ -1226,10 +1418,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all shops
   app.get("/api/shops", requireAuth, async (req, res) => {
     try {
-      const { locationCity, locationState } = req.query;
-      const filters: any = {};
-      if (locationCity) filters.locationCity = String(locationCity);
-      if (locationState) filters.locationState = String(locationState);
+      const parsedQuery = shopsQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return res.status(400).json(formatValidationError(parsedQuery.error));
+      }
+
+      const filters = Object.fromEntries(
+        Object.entries(parsedQuery.data).filter(([, value]) => value !== undefined),
+      );
 
       const shops = await storage.getShops(filters);
 
@@ -1248,18 +1444,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user by ID
   app.get("/api/users/:id", requireAuth, async (req, res) => {
     try {
-      logger.info("[API] /api/users/:id - Raw ID parameter:", req.params.id);
-
-      const paramsResult = userIdParamSchema.safeParse(req.params);
-      if (!paramsResult.success) {
-        logger.info(
-          "[API] /api/users/:id - Invalid user ID format",
-          paramsResult.error.flatten(),
-        );
-        return res.status(400).json({ message: "Invalid user ID format" });
-      }
-
-      const userId = paramsResult.data.id;
+      const userId = getValidatedParam(req, "id");
       logger.info(
         "[API] /api/users/:id - Received request for user ID:",
         userId,
@@ -1319,7 +1504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/products/shop/:id", requireAuth, async (req, res) => {
     try {
-      const products = await storage.getProductsByShop(parseInt(req.params.id));
+      const products = await storage.getProductsByShop(getValidatedParam(req, "id"));
       logger.info("Shop products:", products);
       res.json(products);
     } catch (error) {
@@ -1339,12 +1524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireShopOrWorkerPermission(["products:write"]),
     async (req, res) => {
       try {
-        const paramsResult = productIdParamSchema.safeParse(req.params);
-        if (!paramsResult.success) {
-          return res.status(400).json({ message: "Invalid product ID format" });
-        }
-
-        const productId = paramsResult.data.id;
+        const productId = getValidatedParam(req, "id");
         const product = await storage.getProduct(productId);
 
         if (!product) {
@@ -1459,7 +1639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/services/provider/:id", requireAuth, async (req, res) => {
     try {
       const services = await storage.getServicesByProvider(
-        parseInt(req.params.id),
+        getValidatedParam(req, "id"),
       );
       logger.info("Provider services:", services); // Debug log
       res.json(services);
@@ -1481,19 +1661,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const serviceId = parseInt(req.params.id);
+        const serviceId = getValidatedParam(req, "id");
         logger.info(
           "[API] /api/services/:id PATCH - Received request for service ID:",
           serviceId,
         );
         logger.info("[API] /api/services/:id PATCH - Request received");
-
-        if (isNaN(serviceId)) {
-          logger.info(
-            "[API] /api/services/:id PATCH - Invalid service ID format",
-          );
-          return res.status(400).json({ message: "Invalid service ID format" });
-        }
 
         const service = await storage.getService(serviceId);
 
@@ -1543,6 +1716,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/services", requireAuth, async (req, res) => {
     try {
+      const parsedQuery = servicesQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return res.status(400).json(formatValidationError(parsedQuery.error));
+      }
+
       const {
         category,
         minPrice,
@@ -1552,20 +1730,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         locationCity,
         locationState,
         locationPostalCode,
-        availabilityDate, // YYYY-MM-DD
-      } = req.query;
+        availabilityDate,
+      } = parsedQuery.data;
 
-      const filters: any = {};
-      if (category) filters.category = String(category).toLowerCase();
-      if (minPrice) filters.minPrice = parseFloat(String(minPrice));
-      if (maxPrice) filters.maxPrice = parseFloat(String(maxPrice));
-      if (searchTerm) filters.searchTerm = String(searchTerm);
-      if (providerId) filters.providerId = parseInt(String(providerId));
-      if (locationCity) filters.locationCity = String(locationCity);
-      if (locationState) filters.locationState = String(locationState);
+      const filters: Record<string, unknown> = {};
+      if (category) filters.category = category.toLowerCase();
+      if (minPrice !== undefined) filters.minPrice = minPrice;
+      if (maxPrice !== undefined) filters.maxPrice = maxPrice;
+      if (searchTerm) filters.searchTerm = searchTerm;
+      if (providerId !== undefined) filters.providerId = providerId;
+      if (locationCity) filters.locationCity = locationCity;
+      if (locationState) filters.locationState = locationState;
       if (locationPostalCode)
-        filters.locationPostalCode = String(locationPostalCode);
-      if (availabilityDate) filters.availabilityDate = String(availabilityDate); // Will be parsed in storage layer
+        filters.locationPostalCode = locationPostalCode;
+      if (availabilityDate) filters.availabilityDate = availabilityDate;
 
       const services = await storage.getServices(filters);
       logger.info("Filtered services:", services); // Debug log
@@ -1618,17 +1796,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/services/:id", requireAuth, async (req, res) => {
     try {
-      const serviceId = parseInt(req.params.id);
+      const serviceId = getValidatedParam(req, "id");
       logger.info(
         "[API] /api/services/:id - Received request for service ID:",
         serviceId,
       );
-      logger.info("[API] /api/services/:id - Raw ID parameter:", req.params.id);
-
-      if (isNaN(serviceId)) {
-        logger.info("[API] /api/services/:id - Invalid service ID format");
-        return res.status(400).json({ message: "Invalid service ID format" });
-      }
 
       const service = await storage.getService(serviceId);
       logger.info("[API] /api/services/:id - Service from storage:", service);
@@ -1698,7 +1870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add these endpoints after the existing service routes
   app.get("/api/services/:id/blocked-slots", requireAuth, async (req, res) => {
     try {
-      const serviceId = parseInt(req.params.id);
+      const serviceId = getValidatedParam(req, "id");
       const service = await storage.getService(serviceId);
 
       if (!service) {
@@ -1726,7 +1898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const serviceId = parseInt(req.params.id);
+        const serviceId = getValidatedParam(req, "id");
         const service = await storage.getService(serviceId);
 
         if (!service) {
@@ -1791,8 +1963,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const serviceId = parseInt(req.params.serviceId);
-        const slotId = parseInt(req.params.slotId);
+        const serviceId = getValidatedParam(req, "serviceId");
+        const slotId = getValidatedParam(req, "slotId");
 
         const service = await storage.getService(serviceId);
         if (!service) {
@@ -1828,18 +2000,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const serviceId = parseInt(req.params.id);
+        const serviceId = getValidatedParam(req, "id");
         logger.info(
           "[API] /api/services/:id DELETE - Received request for service ID:",
           serviceId,
         );
-
-        if (isNaN(serviceId)) {
-          logger.info(
-            "[API] /api/services/:id DELETE - Invalid service ID format",
-          );
-          return res.status(400).json({ message: "Invalid service ID format" });
-        }
 
         const service = await storage.getService(serviceId);
 
@@ -1958,7 +2123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json(formatValidationError(parsedBody.error));
         }
         const { status, rejectionReason } = parsedBody.data;
-        const bookingId = parseInt(req.params.id);
+        const bookingId = getValidatedParam(req, "id");
 
         logger.info(
           `[API DEBUG] Attempting to update booking status. Booking ID: ${bookingId}, Received Status: ${status}, Received Rejection Reason: ${rejectionReason}`,
@@ -2077,7 +2242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const bookingId = parseInt(req.params.id);
+        const bookingId = getValidatedParam(req, "id");
 
         const booking = await storage.getBooking(bookingId);
         if (!booking)
@@ -2126,8 +2291,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["provider"]),
     async (req, res) => {
+      const bookingId = getValidatedParam(req, "id");
       logger.info(
-        `[Bookings] Skipping acceptance email for booking ${req.params.id}; email notifications are disabled.`,
+        `[Bookings] Skipping acceptance email for booking ${bookingId}; email notifications are disabled.`,
       );
       res
         .status(200)
@@ -2141,8 +2307,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["provider"]),
     async (req, res) => {
+      const bookingId = getValidatedParam(req, "id");
       logger.info(
-        `[Bookings] Skipping rejection email for booking ${req.params.id}; email notifications are disabled.`,
+        `[Bookings] Skipping rejection email for booking ${bookingId}; email notifications are disabled.`,
       );
       res
         .status(200)
@@ -2162,7 +2329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json(formatValidationError(parsedBody.error));
         }
         const { paymentReference } = parsedBody.data;
-        const bookingId = parseInt(req.params.id);
+        const bookingId = getValidatedParam(req, "id");
 
         const booking = await storage.getBooking(bookingId);
         if (!booking)
@@ -2215,7 +2382,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json(formatValidationError(parsedBody.error));
         }
         const { paymentReference } = parsedBody.data;
-        const bookingId = parseInt(req.params.id);
+        const bookingId = getValidatedParam(req, "id");
 
         const booking = await storage.getBooking(bookingId);
         if (!booking)
@@ -2265,10 +2432,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "disputed",
         ];
 
-        const rawStatus =
-          typeof req.query.status === "string"
-            ? req.query.status.trim().toLowerCase()
-            : undefined;
+        const parsedQuery = statusQuerySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+          return res.status(400).json(formatValidationError(parsedQuery.error));
+        }
+
+        const rawStatus = parsedQuery.data.status?.toLowerCase();
 
         let statusFilter: Booking["status"] | undefined;
         if (rawStatus && rawStatus !== "all") {
@@ -2514,7 +2683,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         await storage.removeFromCart(
           req.user!.id,
-          parseInt(req.params.productId),
+          getValidatedParam(req, "productId"),
         );
         res.json({ success: true });
       } catch (error) {
@@ -2585,7 +2754,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         await storage.removeFromWishlist(
           req.user!.id,
-          parseInt(req.params.productId),
+          getValidatedParam(req, "productId"),
         );
         res.sendStatus(200);
       } catch (error) {
@@ -2701,7 +2870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const reviewId = parseInt(req.params.id);
+        const reviewId = getValidatedParam(req, "id");
         const parsedBody = reviewUpdateSchema.safeParse(req.body);
         if (!parsedBody.success) {
           return res.status(400).json(formatValidationError(parsedBody.error));
@@ -2746,7 +2915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/reviews/service/:id", requireAuth, async (req, res) => {
     try {
-      const reviews = await storage.getReviewsByService(parseInt(req.params.id));
+      const reviews = await storage.getReviewsByService(getValidatedParam(req, "id"));
       res.json(reviews);
     } catch (error) {
       logger.error("Error fetching service reviews:", error);
@@ -2763,7 +2932,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/reviews/provider/:id", requireAuth, async (req, res) => {
     try {
-      const reviews = await storage.getReviewsByProvider(parseInt(req.params.id));
+      const reviews = await storage.getReviewsByProvider(getValidatedParam(req, "id"));
       res.json(reviews);
     } catch (error) {
       logger.error("Error fetching provider reviews:", error);
@@ -2790,7 +2959,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json(formatValidationError(parsedBody.error));
         }
         const { reply } = parsedBody.data;
-        const reviewId = parseInt(req.params.id);
+        const reviewId = getValidatedParam(req, "id");
 
         // Get the review
         const review = await storage.getReviewById(reviewId);
@@ -2847,7 +3016,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
-      await storage.markNotificationAsRead(parseInt(req.params.id));
+      await storage.markNotificationAsRead(getValidatedParam(req, "id"));
       res.sendStatus(200);
     } catch (error) {
       logger.error("Error marking notification as read:", error);
@@ -2891,7 +3060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteNotification(parseInt(req.params.id));
+      await storage.deleteNotification(getValidatedParam(req, "id"));
       res.sendStatus(200);
     } catch (error) {
       logger.error("Error deleting notification:", error);
@@ -3163,10 +3332,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "returned",
         ];
 
-        const rawStatus =
-          typeof req.query.status === "string"
-            ? req.query.status.trim().toLowerCase()
-            : undefined;
+        const parsedQuery = statusQuerySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+          return res.status(400).json(formatValidationError(parsedQuery.error));
+        }
+
+        const rawStatus = parsedQuery.data.status?.toLowerCase();
 
         let statusFilter: Order["status"] | undefined;
         if (rawStatus && rawStatus !== "all") {
@@ -3317,12 +3488,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireShopOrWorkerPermission(["orders:read"]),
     async (req, res) => {
       try {
-        const { status } = req.query;
+        const parsedQuery = statusQuerySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+          return res.status(400).json(formatValidationError(parsedQuery.error));
+        }
+
+        const allowedOrderStatus: Order["status"][] = [
+          "pending",
+          "cancelled",
+          "confirmed",
+          "processing",
+          "packed",
+          "shipped",
+          "delivered",
+          "returned",
+        ];
+
+        const normalizedStatus = parsedQuery.data.status?.toLowerCase();
+
+        let statusFilter: Order["status"] | undefined;
+        if (normalizedStatus && normalizedStatus !== "all") {
+          if (allowedOrderStatus.includes(normalizedStatus as Order["status"])) {
+            statusFilter = normalizedStatus as Order["status"];
+          } else {
+            return res.status(400).json({ message: "Invalid status filter" });
+          }
+        }
         const shopContextId =
           req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
         const orders = await storage.getOrdersByShop(
           shopContextId,
-          status as string | undefined,
+          statusFilter,
         );
         const detailed = await Promise.all(
           orders.map(async (order) => {
@@ -3376,10 +3572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   app.get("/api/orders/:id", requireAuth, async (req, res) => {
-    const orderId = parseInt(req.params.id);
-    if (isNaN(orderId)) {
-      return res.status(400).json({ message: "Invalid order id" });
-    }
+    const orderId = getValidatedParam(req, "id");
     try {
       const order = await storage.getOrder(orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
@@ -3461,11 +3654,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/orders/:id/submit-payment-reference",
     requireAuth,
     async (req, res) => {
-      const orderId = parseInt(req.params.id);
+      const orderId = getValidatedParam(req, "id");
       const parsedBody = orderPaymentReferenceSchema.safeParse(req.body);
-      if (isNaN(orderId)) {
-        return res.status(400).json({ message: "Invalid request" });
-      }
       if (!parsedBody.success) {
         return res.status(400).json(formatValidationError(parsedBody.error));
       }
@@ -3509,9 +3699,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireShopOrWorkerPermission(["orders:update"]),
     async (req, res) => {
-      const orderId = parseInt(req.params.id);
-      if (isNaN(orderId))
-        return res.status(400).json({ message: "Invalid order id" });
+      const orderId = getValidatedParam(req, "id");
       try {
         const order = await storage.getOrder(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
@@ -3556,8 +3744,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add an endpoint to get service availability
   app.get("/api/services/:id/bookings", requireAuth, async (req, res) => {
-    const { date } = req.query;
-    const serviceId = parseInt(req.params.id);
+    const parsedQuery = servicesAvailabilityQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return res.status(400).json(formatValidationError(parsedQuery.error));
+    }
+
+    const serviceId = getValidatedParam(req, "id");
+    const bookingDate = new Date(parsedQuery.data.date);
+
     try {
       const service = await storage.getService(serviceId);
       if (!service)
@@ -3565,7 +3759,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const bookings = await storage.getBookingsByService(
         serviceId,
-        new Date(date as string),
+        bookingDate,
       );
       res.json(
         bookings.map((booking) => ({
@@ -3596,7 +3790,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const booking = await storage.updateBooking(parseInt(req.params.id), {
+        const booking = await storage.updateBooking(getValidatedParam(req, "id"), {
           status: "accepted",
         });
 
@@ -3645,9 +3839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // If customer, handle directly; otherwise fall through to worker/shop check
     async (req: any, res, next) => {
       if (req.user?.role === "customer") {
-        const orderId = parseInt(req.params.id);
-        if (isNaN(orderId))
-          return res.status(400).json({ message: "Invalid order id" });
+        const orderId = getValidatedParam(req, "id");
         try {
           const order = await storage.getOrder(orderId);
           if (!order) return res.status(404).json({ message: "Order not found" });
@@ -3671,9 +3863,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
     requireShopOrWorkerPermission(["orders:read"]),
     async (req: any, res) => {
-      const orderId = parseInt(req.params.id);
-      if (isNaN(orderId))
-        return res.status(400).json({ message: "Invalid order id" });
+      const orderId = getValidatedParam(req, "id");
       try {
         const order = await storage.getOrder(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
@@ -3708,10 +3898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json(formatValidationError(parsedBody.error));
         }
         const { status, trackingInfo } = parsedBody.data;
-        const orderId = parseInt(req.params.id);
-        if (isNaN(orderId)) {
-          return res.status(400).json({ message: "Invalid order id" });
-        }
+        const orderId = getValidatedParam(req, "id");
         const order = await storage.getOrder(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
         const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
@@ -3771,9 +3958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = insertReturnRequestSchema.safeParse(req.body);
       if (!result.success) return res.status(400).json(result.error);
 
-      const orderId = parseInt(req.params.orderId);
-      if (isNaN(orderId))
-        return res.status(400).json({ message: "Invalid order id" });
+      const orderId = getValidatedParam(req, "orderId");
 
       try {
         const order = await storage.getOrder(orderId);
@@ -3825,7 +4010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const returnRequest = await storage.getReturnRequest(
-          parseInt(req.params.id),
+          getValidatedParam(req, "id"),
         );
         if (!returnRequest)
           return res.status(404).json({ message: "Return request not found" });
@@ -3889,12 +4074,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add this route for user details
   app.get("/api/users/:id", requireAuth, async (req, res) => {
     try {
-      const paramsResult = userIdParamSchema.safeParse(req.params);
-      if (!paramsResult.success) {
-        return res.status(400).json({ message: "Invalid user ID format" });
-      }
-
-      const user = await storage.getUser(paramsResult.data.id);
+      const userId = getValidatedParam(req, "id");
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -3914,39 +4095,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/products", requireAuth, async (req, res) => {
     try {
+      const parsedQuery = productsQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return res.status(400).json(formatValidationError(parsedQuery.error));
+      }
+
       const {
         category,
         minPrice,
         maxPrice,
-        tags, // comma-separated string
+        tags,
         searchTerm,
         shopId,
-        attributes, // JSON string for specific attributes e.g. {"color":"red", "size":"M"}
+        attributes,
         locationCity,
         locationState,
-      } = req.query;
+      } = parsedQuery.data;
 
-      const filters: any = {};
-      if (category) filters.category = String(category).toLowerCase();
-      if (minPrice) filters.minPrice = parseFloat(String(minPrice));
-      if (maxPrice) filters.maxPrice = parseFloat(String(maxPrice));
-      if (tags)
-        filters.tags = String(tags)
+      const filters: Record<string, unknown> = {};
+      if (category) filters.category = category.toLowerCase();
+      if (minPrice !== undefined) filters.minPrice = minPrice;
+      if (maxPrice !== undefined) filters.maxPrice = maxPrice;
+      if (tags) {
+        const parsedTags = tags
           .split(",")
-          .map((tag) => tag.trim())
-          .filter((tag) => tag);
-      if (searchTerm) filters.searchTerm = String(searchTerm);
-      if (shopId) filters.shopId = parseInt(String(shopId));
-      if (attributes) {
-        try {
-          filters.attributes = JSON.parse(String(attributes));
-        } catch (e) {
-          logger.error("Failed to parse product attributes filter", e);
-          // Optionally return a 400 error or ignore the filter
+          .map((tag: string) => tag.trim())
+          .filter((tag: string) => tag.length > 0);
+        if (parsedTags.length > 0) {
+          filters.tags = parsedTags;
         }
       }
-      if (locationCity) filters.locationCity = String(locationCity);
-      if (locationState) filters.locationState = String(locationState);
+      if (searchTerm) filters.searchTerm = searchTerm;
+      if (shopId !== undefined) filters.shopId = shopId;
+      if (attributes) {
+        try {
+          const parsedAttributes = JSON.parse(attributes);
+          if (
+            !parsedAttributes ||
+            typeof parsedAttributes !== "object" ||
+            Array.isArray(parsedAttributes)
+          ) {
+            return res
+              .status(400)
+              .json({ message: "attributes must be a JSON object" });
+          }
+          filters.attributes = parsedAttributes;
+        } catch (error) {
+          logger.error("Failed to parse product attributes filter", error);
+          return res
+            .status(400)
+            .json({ message: "attributes must be valid JSON" });
+        }
+      }
+      if (locationCity) filters.locationCity = locationCity;
+      if (locationState) filters.locationState = locationState;
 
       const products = await storage.getProducts(filters);
       res.json(products);
@@ -3967,8 +4169,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     async (req, res) => {
       try {
-        const shopId = parseInt(req.params.shopId);
-        const productId = parseInt(req.params.productId);
+        const shopId = getValidatedParam(req, "shopId");
+        const productId = getValidatedParam(req, "productId");
         const product = await storage.getProduct(productId);
 
         if (!product || product.shopId !== shopId) {
@@ -3994,7 +4196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get shop details by ID
   app.get("/api/shops/:shopId", requireAuth, async (req, res) => {
     try {
-      const shopId = parseInt(req.params.shopId);
+      const shopId = getValidatedParam(req, "shopId");
       const shop = await storage.getUser(shopId);
 
       if (!shop || shop.role !== "shop") {
@@ -4026,8 +4228,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["shop"]),
     async (req, res) => {
       try {
-        logger.info(`Delete product request received for ID: ${req.params.id}`);
-        const productId = parseInt(req.params.id);
+        const productId = getValidatedParam(req, "id");
+        logger.info(`Delete product request received for ID: ${productId}`);
         const product = await storage.getProduct(productId);
 
         if (!product) {
@@ -4082,7 +4284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Product Reviews
   app.get("/api/reviews/product/:id", requireAuth, async (req, res) => {
     try {
-      const productId = parseInt(req.params.id);
+      const productId = getValidatedParam(req, "id");
       const reviews = await storage.getProductReviewsByProduct(productId);
       res.json(reviews);
     } catch (error) {
@@ -4098,7 +4300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/reviews/shop/:id", requireAuth, async (req, res) => {
     try {
-      const shopId = parseInt(req.params.id);
+      const shopId = getValidatedParam(req, "id");
       const reviews = await storage.getProductReviewsByShop(shopId);
       res.json(reviews);
     } catch (error) {
@@ -4174,7 +4376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const reviewId = parseInt(req.params.id);
+        const reviewId = getValidatedParam(req, "id");
         const parsedBody = reviewUpdateSchema.safeParse(req.body);
         if (!parsedBody.success) {
           return res.status(400).json(formatValidationError(parsedBody.error));
@@ -4224,7 +4426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json(formatValidationError(parsedBody.error));
         }
         const { reply } = parsedBody.data;
-        const reviewId = parseInt(req.params.id);
+        const reviewId = getValidatedParam(req, "id");
         const existingReview = await storage.getProductReviewById(reviewId);
         if (!existingReview) {
           return res.status(404).json({ message: "Review not found" });
@@ -4334,7 +4536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const promotions = await storage.getPromotionsByShop(
-          parseInt(req.params.id),
+          getValidatedParam(req, "id"),
         );
         res.json(promotions);
       } catch (error) {
@@ -4357,7 +4559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["shop"]),
     async (req, res) => {
       try {
-        const promotionId = parseInt(req.params.id);
+        const promotionId = getValidatedParam(req, "id");
 
         // Get the existing promotion to check ownership
         const existingPromotions = await storage.getPromotionsByShop(

@@ -10,25 +10,83 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
+let csrfToken: string | null = null;
+let csrfPromise: Promise<string> | null = null;
+
+async function fetchCsrfToken(): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/csrf-token`, {
+    credentials: "include",
+  });
+  await throwIfResNotOk(res);
+  const payload = (await res.json()) as { csrfToken?: string };
+  if (!payload.csrfToken) {
+    throw new Error("Failed to load CSRF token");
+  }
+  return payload.csrfToken;
+}
+
+export async function getCsrfToken(forceRefresh = false): Promise<string> {
+  if (forceRefresh) {
+    csrfToken = null;
+  }
+
+  if (csrfToken) {
+    return csrfToken;
+  }
+
+  if (!csrfPromise) {
+    csrfPromise = fetchCsrfToken().then((token) => {
+      csrfToken = token;
+      return token;
+    });
+    csrfPromise.finally(() => {
+      csrfPromise = null;
+    });
+  }
+
+  return csrfPromise;
+}
+
+async function performApiRequest(
+  method: string,
+  url: string,
+  data: unknown | undefined,
+  attempt = 0,
+): Promise<Response> {
+  const upperMethod = method.toUpperCase();
+  const isFormData = data instanceof FormData;
+  const headers: Record<string, string> = {};
+
+  if (data && !isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  if (!CSRF_SAFE_METHODS.has(upperMethod)) {
+    headers["x-csrf-token"] = await getCsrfToken(attempt > 0);
+  }
+
+  const res = await fetch(`${API_BASE}${url}`, {
+    method: upperMethod,
+    headers,
+    body: data ? (isFormData ? data : JSON.stringify(data)) : undefined,
+    credentials: "include",
+  });
+
+  if (!CSRF_SAFE_METHODS.has(upperMethod) && res.status === 403 && attempt === 0) {
+    return performApiRequest(method, url, data, attempt + 1);
+  }
+
+  await throwIfResNotOk(res);
+  return res;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  // Check if data is FormData (for file uploads)
-  const isFormData = data instanceof FormData;
-
-  const res = await fetch(`${API_BASE}${url}`, {
-    method,
-    // Don't set Content-Type for FormData (browser will set it with boundary)
-    headers: data && !isFormData ? { "Content-Type": "application/json" } : {},
-    // Don't stringify FormData
-    body: data ? (isFormData ? data : JSON.stringify(data)) : undefined,
-    credentials: "include",
-  });
-
-  await throwIfResNotOk(res);
-  return res;
+  return performApiRequest(method, url, data);
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
