@@ -261,7 +261,27 @@ router.post("/login", adminLoginRateLimiter, async (req, res) => {
     password === process.env.ADMIN_PASSWORD;
   req.session.adminMustChangePassword = needsBootstrapChange;
   req.session.adminId = admin.id;
-  res.json({ id: admin.id, email: admin.email, roleId: admin.roleId, mustChangePassword: !!req.session.adminMustChangePassword });
+
+  let permissions: string[] = [];
+  if (admin.roleId) {
+    const perms = await db
+      .select({ action: adminPermissions.action })
+      .from(adminRolePermissions)
+      .innerJoin(
+        adminPermissions,
+        eq(adminRolePermissions.permissionId, adminPermissions.id),
+      )
+      .where(eq(adminRolePermissions.roleId, admin.roleId));
+    permissions = perms.map((p) => p.action);
+  }
+
+  res.json({
+    id: admin.id,
+    email: admin.email,
+    roleId: admin.roleId,
+    permissions,
+    mustChangePassword: !!req.session.adminMustChangePassword,
+  });
 });
 
 router.post("/logout", (req, res) => {

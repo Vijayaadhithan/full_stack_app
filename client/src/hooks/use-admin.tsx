@@ -34,6 +34,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: (data: Admin) => {
       queryClient.setQueryData(["/api/admin/me"], data);
+      void queryClient.invalidateQueries({ queryKey: ["/api/admin/me"] });
       toast({ title: "Welcome back", description: data.email });
     },
     onError: (e: any) => {
