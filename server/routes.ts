@@ -2,7 +2,11 @@ import express, { type Express, Request, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import logger, { LogCategory, runWithLogContext } from "./logger";
 import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
-import { sendEmail, getPasswordResetEmailContent } from "./emailService";
+import {
+  sendEmail,
+  getPasswordResetEmailContent,
+  getMagicLinkEmailContent,
+} from "./emailService";
 import { storage } from "./storage";
 import { z } from "zod";
 import csrf from "csurf";
@@ -28,6 +32,7 @@ import {
   users, // Import the users table schema
   reviews,
   passwordResetTokens as passwordResetTokensTable,
+  magicLinkTokens as magicLinkTokensTable,
   User,
   Booking,
   Order,
@@ -48,6 +53,10 @@ import { requireShopOrWorkerPermission, getWorkerShopId } from "./workerAuth";
 import {
   requestPasswordResetLimiter,
   resetPasswordLimiter,
+  emailLookupLimiter,
+  magicLinkRequestLimiter,
+  magicLinkLoginLimiter,
+  usernameLookupLimiter,
 } from "./security/rateLimiters";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
@@ -168,6 +177,27 @@ const requestPasswordResetSchema = z.object({
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
   newPassword: z.string().min(8),
+});
+
+const emailLookupSchema = z.object({
+  email: z.string().email(),
+});
+
+const magicLinkLoginSchema = z.object({
+  token: z.string().min(1),
+});
+
+const MAGIC_LINK_EXPIRY_MS = 15 * 60 * 1000;
+
+const usernameLookupSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(3)
+    .max(32)
+    .regex(/^[a-zA-Z0-9._-]+$/, {
+      message: "Username can include letters, numbers, dots, underscores, and dashes",
+    }),
 });
 
 const bookingActionSchema = z
@@ -500,6 +530,199 @@ export async function registerRoutes(app: Express): Promise<Server> {
       .filter((r: any) => r.path.startsWith("/api/") && r.path !== "/api");
     res.json({ available_endpoints: routes });
   });
+
+  app.post(
+    "/api/auth/email-lookup",
+    emailLookupLimiter,
+    async (req, res) => {
+      const parsedBody = emailLookupSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+
+      const { email } = parsedBody.data;
+      try {
+        const user = await storage.getUserByEmail(email);
+        if (!user) {
+          return res.json({ exists: false });
+        }
+
+        return res.json({
+          exists: true,
+          email: user.email,
+          name: user.name,
+          hasPassword: Boolean(user.password),
+          isSuspended: Boolean((user as any)?.isSuspended),
+        });
+      } catch (error) {
+        logger.error("Error performing email lookup:", error);
+        return res.status(500).json({ message: "Unable to process request" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/auth/check-username",
+    usernameLookupLimiter,
+    async (req, res) => {
+      const parsedBody = usernameLookupSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+
+      const { username } = parsedBody.data;
+      const normalized = username.toLowerCase();
+      try {
+        const match = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.username, normalized))
+          .limit(1);
+
+        if (match.length > 0) {
+          return res.json({ available: false });
+        }
+
+        const existing = await storage.getUserByUsername(normalized);
+        return res.json({ available: !existing });
+      } catch (error) {
+        logger.error("Error checking username availability:", error);
+        return res.status(500).json({ message: "Unable to validate username" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/auth/send-magic-link",
+    magicLinkRequestLimiter,
+    async (req, res) => {
+      const parsedBody = emailLookupSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+
+      const { email } = parsedBody.data;
+      try {
+        const user = await storage.getUserByEmail(email);
+        if (!user || !user.email) {
+          return res.json({
+            message:
+              "If an account with that email exists, a magic link has been sent.",
+          });
+        }
+
+        if ((user as any)?.isSuspended) {
+          return res
+            .status(403)
+            .json({ message: "Account suspended. Contact support." });
+        }
+
+        await db
+          .delete(magicLinkTokensTable)
+          .where(eq(magicLinkTokensTable.userId, user.id));
+
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+        const expiresAt = new Date(Date.now() + MAGIC_LINK_EXPIRY_MS);
+
+        await db.insert(magicLinkTokensTable).values({
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+        });
+
+        const magicLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/magic-login?token=${rawToken}`;
+        const emailContent = getMagicLinkEmailContent(
+          user.name || user.username,
+          magicLink,
+        );
+
+        await sendEmail({
+          to: user.email,
+          subject: emailContent.subject,
+          text: emailContent.text,
+          html: emailContent.html,
+        });
+
+        return res.json({
+          message:
+            "If an account with that email exists, a magic link has been sent.",
+        });
+      } catch (error) {
+        logger.error("Error sending magic link:", error);
+        return res
+          .status(500)
+          .json({ message: "Unable to send magic link at the moment" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/auth/magic-login",
+    magicLinkLoginLimiter,
+    async (req, res, next) => {
+      const parsedBody = magicLinkLoginSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(parsedBody.data.token)
+        .digest("hex");
+
+      try {
+        const tokenRows = await db
+          .select()
+          .from(magicLinkTokensTable)
+          .where(eq(magicLinkTokensTable.tokenHash, tokenHash))
+          .limit(1);
+        const tokenRecord = tokenRows[0];
+
+        if (
+          !tokenRecord ||
+          tokenRecord.expiresAt < new Date() ||
+          tokenRecord.consumedAt
+        ) {
+          return res
+            .status(400)
+            .json({ message: "Invalid or expired magic link" });
+        }
+
+        const user = await storage.getUser(tokenRecord.userId);
+        if (!user) {
+          await db
+            .delete(magicLinkTokensTable)
+            .where(eq(magicLinkTokensTable.id, tokenRecord.id));
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        if ((user as any)?.isSuspended) {
+          await db
+            .delete(magicLinkTokensTable)
+            .where(eq(magicLinkTokensTable.id, tokenRecord.id));
+          return res
+            .status(403)
+            .json({ message: "Account suspended. Contact support." });
+        }
+
+        await db
+          .update(magicLinkTokensTable)
+          .set({ consumedAt: new Date() })
+          .where(eq(magicLinkTokensTable.id, tokenRecord.id));
+
+        req.login(user, (err) => {
+          if (err) return next(err);
+          return res.json(user);
+        });
+      } catch (error) {
+        logger.error("Error completing magic link login:", error);
+        return res
+          .status(500)
+          .json({ message: "Unable to complete magic link login" });
+      }
+    },
+  );
 
   app.post(
     "/api/request-password-reset",

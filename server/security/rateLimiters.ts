@@ -59,3 +59,28 @@ export const adminLoginRateLimiter = rateLimit({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 10,
 });
+
+export const emailLookupLimiter = rateLimit({
+  ...defaultSensitiveConfig,
+  windowMs: FIFTEEN_MINUTES_MS,
+  max: 30,
+});
+
+export const magicLinkRequestLimiter = rateLimit({
+  ...defaultSensitiveConfig,
+  windowMs: FIFTEEN_MINUTES_MS,
+  max: 5,
+  message: { message: "Too many magic link requests. Try later." },
+});
+
+export const magicLinkLoginLimiter = rateLimit({
+  ...defaultSensitiveConfig,
+  windowMs: FIFTEEN_MINUTES_MS,
+  max: 20,
+});
+
+export const usernameLookupLimiter = rateLimit({
+  ...defaultSensitiveConfig,
+  windowMs: FIFTEEN_MINUTES_MS,
+  max: 30,
+});

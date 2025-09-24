@@ -74,6 +74,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>; // Added for Google OAuth
+  getUserByPhone(phone: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | undefined>; // Added for Google OAuth
   getAllUsers(): Promise<User[]>;
   getUsersByIds(ids: number[]): Promise<User[]>;
@@ -632,6 +633,19 @@ export class MemStorage implements IStorage {
     return undefined;
   }
 
+  async getUserByPhone(phone: string): Promise<User | undefined> {
+    const normalize = (value: string | undefined | null) =>
+      value ? value.replace(/\D+/g, "") : "";
+    const target = normalize(phone);
+    if (!target) return undefined;
+    for (const user of Array.from(this.users.values())) {
+      if (normalize(user.phone) === target) {
+        return user;
+      }
+    }
+    return undefined;
+  }
+
   async getUserByGoogleId(googleId: string): Promise<User | undefined> {
     for (const user of Array.from(this.users.values())) {
       // Ensure googleId is checked correctly, even if it's null or undefined on some user objects
@@ -643,8 +657,9 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
+    const normalized = username?.toLowerCase?.() ?? "";
     return Array.from(this.users.values()).find(
-      (user) => user.username === username,
+      (user) => user.username?.toLowerCase?.() === normalized,
     );
   }
 
@@ -708,14 +723,24 @@ export class MemStorage implements IStorage {
         insertUser.paymentMethods === undefined
           ? null
           : insertUser.paymentMethods,
-      shopProfile: null,
-      bio: null,
+      shopProfile:
+        insertUser.shopProfile && insertUser.shopProfile !== null
+          ? {
+              ...insertUser.shopProfile,
+              shippingPolicy: insertUser.shopProfile.shippingPolicy ?? undefined,
+              returnPolicy: insertUser.shopProfile.returnPolicy ?? undefined,
+            }
+          : null,
+      bio: insertUser.bio === undefined ? null : insertUser.bio,
       qualifications: null,
-      experience: null,
+      experience:
+        insertUser.experience === undefined ? null : insertUser.experience,
       workingHours: null,
-      languages: null,
+      languages:
+        insertUser.languages === undefined ? null : insertUser.languages,
       googleId: null,
-      emailVerified: null,
+      emailVerified:
+        insertUser.emailVerified === undefined ? null : insertUser.emailVerified,
       verificationStatus: null,
       verificationDocuments: null,
       profileCompleteness: null,
@@ -727,8 +752,10 @@ export class MemStorage implements IStorage {
       socialMediaLinks: null,
       upiId: null,
       upiQrCodeUrl: null,
-      averageRating: null,
-      totalReviews: null,
+      averageRating:
+        insertUser.averageRating === undefined ? null : insertUser.averageRating,
+      totalReviews:
+        insertUser.totalReviews === undefined ? null : insertUser.totalReviews,
       deliveryAvailable: null,
       returnsEnabled: true,
       pickupAvailable: null,

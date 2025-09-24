@@ -109,11 +109,16 @@ export function setupAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
-    new LocalStrategy(async (username, password, done) => {
-      // Support login via username (including worker ID) OR email for convenience
-      let user = await storage.getUserByUsername(username);
+    new LocalStrategy(async (identifier, password, done) => {
+      const trimmed = identifier?.trim?.() ?? "";
+      const lower = trimmed.toLowerCase();
+      // Support login via username, email, or phone number
+      let user = await storage.getUserByUsername(lower);
       if (!user) {
-        user = await storage.getUserByEmail(username);
+        user = await storage.getUserByEmail(lower);
+      }
+      if (!user) {
+        user = await storage.getUserByPhone(trimmed);
       }
       if (!user || !(await comparePasswords(password, user.password))) {
         return done(null, false);
@@ -333,11 +338,22 @@ export function setupAuth(app: Express) {
 
     const validatedData = validationResult.data;
 
-    const existingUser = await storage.getUserByUsername(
-      validatedData.username!,
-    );
-    if (existingUser) {
-      return res.status(400).send("Username already exists");
+    const normalizedUsername = validatedData.username
+      ? validatedData.username.toLowerCase()
+      : undefined;
+
+    if (normalizedUsername) {
+      const existingUser = await storage.getUserByUsername(normalizedUsername);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+    }
+
+    if (validatedData.phone) {
+      const existingByPhone = await storage.getUserByPhone(validatedData.phone);
+      if (existingByPhone) {
+        return res.status(400).json({ message: "Phone number already in use" });
+      }
     }
 
     // if (validatedData.role === 'shop' && !validatedData.shopProfile) {
@@ -346,6 +362,7 @@ export function setupAuth(app: Express) {
 
     const userToCreate = {
       ...validatedData,
+      username: normalizedUsername,
       password: await hashPasswordInternal(validatedData.password!),
       emailVerified: false, // Email not verified yet for local registration
     };

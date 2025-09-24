@@ -169,3 +169,25 @@ The DoorStep Team`;
 <p>Thanks,<br/>The DoorStep Team</p>`;
   return { subject, text, html, to: "" };
 }
+
+export function getMagicLinkEmailContent(
+  name: string,
+  magicLink: string,
+): MailOptions {
+  const subject = "Your DoorStep magic link";
+  const text = `Hi ${name},
+
+Click the link below to securely sign in to DoorStep:
+${magicLink}
+
+This link expires in 15 minutes. If you did not request it, you can safely ignore this email.
+
+Thanks,
+The DoorStep Team`;
+  const html = `<p>Hi ${name},</p>
+<p>Click the link below to securely sign in to DoorStep:</p>
+<p><a href="${magicLink}">${magicLink}</a></p>
+<p>This link expires in 15 minutes. If you did not request it, you can safely ignore this email.</p>
+<p>Thanks,<br/>The DoorStep Team</p>`;
+  return { subject, text, html, to: "" };
+}

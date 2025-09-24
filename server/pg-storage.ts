@@ -558,6 +558,16 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getUserByPhone(phone: string): Promise<User | undefined> {
+    const normalized = phone.trim();
+    if (!normalized) return undefined;
+    const result = await db
+      .select()
+      .from(users)
+      .where(eq(users.phone, normalized));
+    return result[0];
+  }
+
   async getAllUsers(): Promise<User[]> {
     return await db.select().from(users);
   }
