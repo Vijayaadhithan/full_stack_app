@@ -11,12 +11,17 @@ export default function AdminPlatformUserManagement() {
 
   const { data: users } = useQuery({
     queryKey: ["/api/admin/platform-users", { page, limit, search }],
-    queryFn: () =>
-      apiRequest(
-        "GET",
-        `/api/admin/platform-users?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`,
-      ).then((r) => r.json()),
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+      const trimmed = search.trim();
+      if (trimmed.length > 0) params.set("search", trimmed);
+      const qs = params.toString();
+      return apiRequest("GET", `/api/admin/platform-users?${qs}`).then((r) => r.json());
+    },
   });
+
+  const usersCount = (users ?? []).length;
+  const hasNextPage = usersCount >= limit;
 
   const suspendMutation = useMutation({
     mutationFn: ({ id, isSuspended }: { id: number; isSuspended: boolean }) =>
@@ -27,7 +32,10 @@ export default function AdminPlatformUserManagement() {
 
   return (
     <div>
-      <h1 className="text-2xl mb-4">Platform Users</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl">Platform Users</h1>
+        <div className="text-sm text-muted-foreground">{usersCount} {usersCount === 1 ? "user" : "users"}</div>
+      </div>
       <div className="flex items-center gap-2 mb-4">
         <Input
           placeholder="Search username, email, name"
@@ -61,7 +69,14 @@ export default function AdminPlatformUserManagement() {
           </tr>
         </thead>
         <tbody>
-          {users?.map((u: any) => (
+          {usersCount === 0 && (
+            <tr>
+              <td className="p-4 text-center text-muted-foreground" colSpan={4}>
+                No users found
+              </td>
+            </tr>
+          )}
+          {(users ?? []).map((u: any) => (
             <tr key={u.id} className="border-t">
               <td className="p-2">{u.id}</td>
               <td className="p-2">{u.username}</td>
@@ -88,7 +103,13 @@ export default function AdminPlatformUserManagement() {
           Previous
         </Button>
         <span>Page {page}</span>
-        <Button variant="outline" onClick={() => setPage((p) => p + 1)}>Next</Button>
+        <Button
+          variant="outline"
+          disabled={!hasNextPage}
+          onClick={() => setPage((p) => p + 1)}
+        >
+          Next
+        </Button>
       </div>
     </div>
   );

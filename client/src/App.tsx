@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Switch, Route } from "wouter";
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from "@/hooks/use-auth";
+import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AdminProvider } from "@/hooks/use-admin";
 import { LanguageProvider } from "@/contexts/language-context";
 import { ProtectedRoute } from "./lib/protected-route";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/permissions"; // Added imports
 import PermissionRequester from "@/components/PermissionRequester"; // Import the new component
 import React, { useEffect, Suspense, lazy } from "react";
+import { useClientPerformanceMetrics } from "@/hooks/use-client-performance-metrics";
 
 // Import all pages...
 // import HomePage from "@/pages/home-page"; // Removed import for HomePage as it's not used and file doesn't exist
@@ -69,6 +70,13 @@ const AdminMonitoring = lazy(() => import("@/pages/admin/AdminMonitoring"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password-page")); // Import the new page
 const VerifyEmailPage = lazy(() => import("@/pages/verify-email-page"));
+
+function ClientPerformanceMetricsTracker() {
+  const { user } = useAuth();
+  useClientPerformanceMetrics(user?.role);
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
@@ -202,6 +210,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
         <AuthProvider>
+          <ClientPerformanceMetricsTracker />
           <AdminProvider>
             <ErrorBoundary>
               {/* Use the existing Router function component here */}

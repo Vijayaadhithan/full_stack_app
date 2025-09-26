@@ -86,6 +86,8 @@ type LogEntry = {
 };
 
 type LogCategory = "admin" | "service_provider" | "customer" | "shop_owner" | "other";
+// UI restricts to non-admin categories
+type UiLogCategory = Exclude<LogCategory, "admin">;
 
 type LogResponse = {
   logs: LogEntry[];
@@ -252,6 +254,12 @@ function RequestPerformanceSection({ snapshot, isFetching }: SectionProps) {
     ];
   }, [requests]);
 
+  // Exclude admin endpoints from the table to avoid noisy self-admin calls
+  const filteredTopEndpoints = useMemo(() => {
+    const list = requests?.topEndpoints ?? [];
+    return list.filter((endpoint) => !endpoint.path.startsWith("/api/admin"));
+  }, [requests?.topEndpoints]);
+
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
@@ -295,8 +303,8 @@ function RequestPerformanceSection({ snapshot, isFetching }: SectionProps) {
                 </tr>
               </thead>
               <tbody>
-                {requests?.topEndpoints.length ? (
-                  requests.topEndpoints.map((endpoint) => (
+                {filteredTopEndpoints.length ? (
+                  filteredTopEndpoints.map((endpoint) => (
                     <tr key={`${endpoint.method}-${endpoint.path}`} className="border-t">
                       <td className="px-3 py-2">
                         <div className="font-medium">{endpoint.method}</div>
@@ -599,14 +607,9 @@ const LOG_LEVEL_OPTIONS = [
 
 const LOG_CATEGORY_OPTIONS: Array<{
   label: string;
-  value: LogCategory;
+  value: UiLogCategory;
   description: string;
 }> = [
-  {
-    label: "Admin",
-    value: "admin",
-    description: "Authentication, audit events, and monitoring from the admin console.",
-  },
   {
     label: "Service Providers",
     value: "service_provider",
@@ -634,12 +637,13 @@ const CATEGORY_LABELS = LOG_CATEGORY_OPTIONS.reduce(
     acc[option.value] = option.label;
     return acc;
   },
-  {} as Record<LogCategory, string>,
+  {} as Record<UiLogCategory, string>,
 );
 
 function LogViewerSection() {
   const [level, setLevel] = useState("all");
-  const [category, setCategory] = useState<LogCategory>("admin");
+  // Default to a non-admin category; admin category is hidden.
+  const [category, setCategory] = useState<UiLogCategory>("customer");
 
   const logQuery = useQuery<LogResponse>({
     queryKey: ["/api/admin/logs", { level, category }],
@@ -656,13 +660,22 @@ function LogViewerSection() {
   useEffect(() => {
     const categories = logQuery.data?.availableCategories;
     if (!categories || categories.length === 0) return;
-    if (categories.includes(category)) return;
-    setCategory(categories[0]);
+    // Narrow to UI categories (exclude admin)
+    const uiCategories = categories.filter(
+      (c): c is UiLogCategory => c !== "admin",
+    );
+    if (uiCategories.includes(category)) return;
+    setCategory(uiCategories[0] ?? "customer");
   }, [category, logQuery.data?.availableCategories]);
 
   const logData = logQuery.data?.logs ?? [];
-  const availableCategories = new Set(
-    logQuery.data?.availableCategories ?? LOG_CATEGORY_OPTIONS.map((option) => option.value),
+  // Hide admin category from the available set even if server provides it
+  const availableCategories = new Set<UiLogCategory>(
+    (
+      logQuery.data?.availableCategories?.filter(
+        (c): c is UiLogCategory => c !== "admin",
+      ) ?? LOG_CATEGORY_OPTIONS.map((option) => option.value)
+    ),
   );
   const activeCategory = LOG_CATEGORY_OPTIONS.find((option) => option.value === category);
   const activeDescription =
@@ -684,7 +697,7 @@ function LogViewerSection() {
             size="sm"
             variant="outline"
             value={category}
-            onValueChange={(value) => value && setCategory(value as LogCategory)}
+            onValueChange={(value) => value && setCategory(value as UiLogCategory)}
             className="flex flex-wrap gap-2"
           >
             {LOG_CATEGORY_OPTIONS.map((option) => {
@@ -754,7 +767,9 @@ function LogViewerSection() {
                 <td className="px-3 py-2 align-top font-mono text-xs">{log.timestamp}</td>
                 <td className="px-3 py-2 align-top text-xs uppercase">{log.level}</td>
                 <td className="px-3 py-2 align-top text-xs uppercase text-muted-foreground">
-                  {CATEGORY_LABELS[log.category] ?? log.category}
+                  {log.category !== "admin"
+                    ? CATEGORY_LABELS[log.category as UiLogCategory] ?? log.category
+                    : "Admin"}
                 </td>
                 <td className="px-3 py-2 align-top text-sm">{log.message || ""}</td>
                 <td className="px-3 py-2 align-top text-xs">

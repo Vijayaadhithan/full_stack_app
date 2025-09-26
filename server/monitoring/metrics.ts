@@ -25,7 +25,9 @@ type RequestSample = {
   durationMs: number;
 };
 
-type FrontendRecord = PerformanceMetric;
+type FrontendSegment = "admin" | "customer" | "provider" | "shop" | "worker" | "other";
+
+type FrontendRecord = PerformanceMetric & { segment: FrontendSegment };
 
 type EndpointAggregate = {
   method: string;
@@ -190,8 +192,21 @@ export function trackRequestStart(): (details: {
   };
 }
 
-export function recordFrontendMetric(metric: PerformanceMetric) {
-  frontendRecords.push(metric);
+export function recordFrontendMetric(metric: PerformanceMetric, segment: FrontendSegment = "other") {
+  if (segment === "admin") {
+    return;
+  }
+
+  const record: FrontendRecord = {
+    ...metric,
+    details: {
+      ...(metric.details ?? {}),
+      segment,
+    },
+    segment,
+  };
+
+  frontendRecords.push(record);
   if (frontendRecords.length > MAX_FRONTEND_SAMPLES) {
     frontendRecords.shift();
   }
@@ -200,7 +215,9 @@ export function recordFrontendMetric(metric: PerformanceMetric) {
 
 function buildRequestSummary(now: number): RequestSummary {
   pruneRequests(now);
-  const records = requestRecords.slice();
+  const records = requestRecords
+    .slice()
+    .filter((record) => !record.path.startsWith("/api/admin"));
   const durations = records.map((record) => record.durationMs);
   const windowStart = records[0]?.timestamp ?? now;
   const effectiveWindow = Math.max(1000, Math.min(REQUEST_WINDOW_MS, now - windowStart));
@@ -259,10 +276,14 @@ function buildErrorSummary(now: number): ErrorSummary {
   const fiveMinuteCutoff = now - 5 * 60 * 1000;
   const oneHourCutoff = now - 60 * 60 * 1000;
 
+  const relevantErrors = recentErrors.filter(
+    (record) => record.status !== 499 && !record.path.startsWith("/api/admin"),
+  );
+
   let lastFiveMinutes = 0;
   let lastHour = 0;
 
-  for (const record of recentErrors) {
+  for (const record of relevantErrors) {
     if (record.timestamp >= fiveMinuteCutoff) {
       lastFiveMinutes += 1;
     }
@@ -271,11 +292,12 @@ function buildErrorSummary(now: number): ErrorSummary {
     }
   }
 
-  const windowStart = recentErrors[0]?.timestamp ?? now;
+  const windowStart = relevantErrors[0]?.timestamp ?? now;
   const effectiveWindow = Math.max(1000, Math.min(ERROR_WINDOW_MS, now - windowStart));
-  const perMinute = recentErrors.length === 0 ? 0 : (recentErrors.length * 60000) / effectiveWindow;
+  const perMinute =
+    relevantErrors.length === 0 ? 0 : (relevantErrors.length * 60000) / effectiveWindow;
 
-  const recent = recentErrors.slice(-20);
+  const recent = relevantErrors.slice(-20);
 
   return {
     lastFiveMinutes,
@@ -351,7 +373,7 @@ function buildFrontendSummary(now: number): FrontendSummary {
 
   metrics.sort((a, b) => a.name.localeCompare(b.name));
 
-  const recentSamples = records.slice(-20);
+  const recentSamples = records.slice(-20).map(({ segment: _segment, ...rest }) => rest);
 
   return {
     metrics,

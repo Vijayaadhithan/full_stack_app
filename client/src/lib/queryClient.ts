@@ -101,8 +101,6 @@ export const getQueryFn: <T>(options: {
       url = `${url}/${queryKey[1]}`;
     }
 
-    console.log("Making API request to:", `${API_BASE}${url}`);
-
     const res = await fetch(`${API_BASE}${url}`, {
       credentials: "include",
     });

@@ -93,7 +93,7 @@ const adminRolePermissionSchema = z.object({
   permissionIds: z.array(z.string().uuid()).default([]),
 });
 
-const performanceMetricEnvelopeSchema = z.union([
+export const performanceMetricEnvelopeSchema = z.union([
   performanceMetricSchema,
   z.array(performanceMetricSchema),
 ]);
@@ -408,10 +408,17 @@ router.get(
         const filtered = parsed.filter((entry) => {
           if (typeof entry.level !== "number") return false;
           if (normalizedCategory) {
+            // Hide admin category entirely
+            if (normalizedCategory === "admin") return false;
             const entryCategory = normalizeLogCategory((entry as { category?: unknown }).category);
             if ((entryCategory ?? "other") !== normalizedCategory) {
               return false;
             }
+          }
+          // If no category filter supplied, exclude admin logs from default view
+          if (!normalizedCategory) {
+            const entryCategory = normalizeLogCategory((entry as { category?: unknown }).category) ?? "other";
+            if (entryCategory === "admin") return false;
           }
           if (!filteredLevels) return true;
           return filteredLevels.includes(entry.level);
@@ -476,7 +483,7 @@ router.get(
 
         return res.json({
           logs,
-          availableCategories: LOG_CATEGORIES,
+          availableCategories: LOG_CATEGORIES.filter((c) => c !== "admin"),
         });
       } finally {
         await fileHandle?.close();
@@ -519,7 +526,7 @@ router.post(
     );
 
     for (const metric of metrics) {
-      recordFrontendMetric(metric);
+      recordFrontendMetric(metric, "admin");
     }
 
     res.status(204).send();

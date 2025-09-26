@@ -49,6 +49,8 @@ import { registerPromotionRoutes } from "./routes/promotions"; // Import promoti
 import { bookingsRouter } from "./routes/bookings";
 import { ordersRouter } from "./routes/orders";
 import { registerWorkerRoutes } from "./routes/workers";
+import { recordFrontendMetric } from "./monitoring/metrics";
+import { performanceMetricEnvelopeSchema } from "./routes/admin";
 import { requireShopOrWorkerPermission, getWorkerShopId } from "./workerAuth";
 import {
   requestPasswordResetLimiter,
@@ -461,7 +463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(200).json({ csrfToken: req.csrfToken() });
   });
 
-  app.use((req, _res, next) => {
+  app.use((req, res, next) => {
     const request = req as RequestWithAuth;
     const category = resolveLogCategory(request);
     const initialContext = {
@@ -470,8 +472,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       userRole: request.user?.role ?? undefined,
       adminId: request.session?.adminId ?? undefined,
     };
+    const startedAt = process.hrtime.bigint();
 
-    runWithLogContext(() => next(), initialContext);
+    runWithLogContext(() => {
+      if (category !== "admin") {
+        res.on("finish", () => {
+          const durationNs = process.hrtime.bigint() - startedAt;
+          const durationMs = Number(durationNs) / 1_000_000;
+          logger.info(
+            {
+              method: req.method,
+              path: req.originalUrl,
+              status: res.statusCode,
+              durationMs,
+            },
+            "Request completed",
+          );
+        });
+      }
+
+      next();
+    }, initialContext);
   });
 
   const numericParamSchemas: Record<string, z.ZodTypeAny> = {
@@ -4870,6 +4891,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 : "Failed to update promotion",
           });
       }
+    },
+  );
+
+  app.post(
+    "/api/performance-metrics",
+    requireAuth,
+    async (req, res) => {
+      const parsedBody = performanceMetricEnvelopeSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+
+      const metrics = Array.isArray(parsedBody.data)
+        ? parsedBody.data
+        : [parsedBody.data];
+
+      if (metrics.length > 20) {
+        return res
+          .status(400)
+          .json({ message: "Too many metrics submitted at once" });
+      }
+
+      const role = req.user?.role;
+      const segment =
+        role === "customer"
+          ? "customer"
+          : role === "provider"
+            ? "provider"
+            : role === "shop"
+              ? "shop"
+              : role === "worker"
+                ? "provider"
+                : "other";
+
+      for (const metric of metrics) {
+        recordFrontendMetric(metric, segment);
+      }
+
+      res.status(204).send();
     },
   );
 
