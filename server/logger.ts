@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import pino from "pino";
+import type { Logger } from "pino";
 
 type PinoTransportTarget = {
   level: string;
@@ -70,6 +71,11 @@ if (process.env.LOG_TO_STDOUT !== "false") {
 
 const transport = pino.transport({ targets });
 
+// Allow passing arbitrary arguments to log methods without TypeScript complaints.
+type LooseLogMethod = (...args: unknown[]) => void;
+type LooseLogger = Logger &
+  Record<"fatal" | "error" | "warn" | "info" | "debug" | "trace", LooseLogMethod>;
+
 const logger = pino(
   {
     level,
@@ -81,6 +87,8 @@ const logger = pino(
   transport,
 );
 
+const looseLogger = logger as LooseLogger;
+
 export const LOG_FILE_PATH = logFilePath;
 
-export default logger;
+export default looseLogger;
