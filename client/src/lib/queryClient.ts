@@ -125,13 +125,19 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+const DEFAULT_REFETCH_INTERVAL = 30_000;
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      refetchInterval: DEFAULT_REFETCH_INTERVAL,
+      refetchIntervalInBackground: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+      staleTime: DEFAULT_REFETCH_INTERVAL,
+      gcTime: 5 * 60 * 1000,
       retry: false,
     },
     mutations: {

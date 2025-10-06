@@ -1,30 +1,23 @@
 import { ReactNode } from "react";
+import { motion } from "framer-motion";
+
 import { MainNav } from "@/components/navigation/main-nav";
 import { LanguageSelector } from "@/components/language-selector";
-import { useLanguage } from "@/contexts/language-context";
-import { motion } from "framer-motion";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { t } = useLanguage();
-
   return (
-    <div className="min-h-screen bg-background">
-      <div className="flex items-center justify-between px-4 border-b">
-        <MainNav />
-        <div className="flex items-center gap-4">
-          <LanguageSelector />
-        </div>
-      </div>
+    <div className="flex min-h-screen flex-col bg-background">
+      <MainNav rightSlot={<LanguageSelector />} />
       <motion.main
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.3 }}
-        className="container mx-auto p-4 md:p-8 max-w-7xl"
+        className="mx-auto w-full flex-1 px-3 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8 lg:max-w-7xl"
       >
         {children}
       </motion.main>
