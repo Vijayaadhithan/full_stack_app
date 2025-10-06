@@ -89,6 +89,36 @@ The application will be available at:
 - Frontend: http://localhost:5173
 - API: http://localhost:5000/api
 
+### LAN / Device Testing
+
+1. Discover your machine's LAN IP (e.g. `ipconfig` on Windows or `ifconfig`/`ip addr` on macOS/Linux).
+2. Update the following entries in `.env` so mobile devices can resolve your machine:
+   - `HOST=0.0.0.0` to bind the API to every interface.
+   - `DEV_SERVER_HOST=<your-LAN-ip>` so Vite HMR and Capacitor know where to reach the dev server.
+   - `FRONTEND_URL=http://<your-LAN-ip>:5173` and `APP_BASE_URL=http://<your-LAN-ip>:5000` for redirects and cookies.
+   - `ALLOWED_ORIGINS=http://<your-LAN-ip>:5173,http://<your-LAN-ip>:5000` so CORS accepts cross-origin requests.
+3. (Optional) Set `CAPACITOR_SERVER_URL=http://<your-LAN-ip>:5173` when running `npx cap run android` for on-device hot reload.
+4. Restart `npm run dev:server` and `npm run dev:client`. Other devices on the same network can now open `http://<your-LAN-ip>:5173`.
+5. For devices outside your network, tunnel the dev server with a tool such as `ngrok` and add the public URLs to `ALLOWED_ORIGINS`.
+
+#### ngrok walkthrough
+
+1. Install ngrok from https://ngrok.com/download and authenticate (`ngrok config add-authtoken <token>`).
+2. Run a production-style build so both API and UI are served on port 5000:
+   ```bash
+   npm run build
+   npm run start
+   ```
+3. Start the tunnel: `ngrok http 5000` (or `ngrok http --domain your-name.ngrok-free.app 5000` if you have a reserved domain).
+4. Copy the `https://<random>.ngrok-free.app` URL and update `.env`:
+   - `FRONTEND_URL=<copied-url>`
+   - `APP_BASE_URL=<copied-url>`
+   - `ALLOWED_ORIGINS=...,<copied-url>` (wildcards like `https://*.ngrok-free.app` are supported)
+   - (Optional) `VITE_API_URL=<copied-url>` if the React app should call the tunnel directly
+5. Restart the server so new env vars load, then share the ngrok URL with testers on other networks.
+
+> Tip: If you need hot-reload over ngrok, start a second tunnel for `npm run dev:client` and set `DEV_SERVER_HOST`/`VITE_API_URL` to that public hostname.
+
 ## Production Deployment
 
 1. Build both the client and API bundles:

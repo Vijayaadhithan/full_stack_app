@@ -29,9 +29,16 @@ export default defineConfig({
     },
   },
   server: {
+    host: "0.0.0.0",
+    port: 5173,
+    hmr: {
+      host: process.env.DEV_SERVER_HOST || "192.168.1.6",
+      port: Number(process.env.DEV_SERVER_HMR_PORT || 5173),
+      protocol: process.env.DEV_SERVER_HMR_PROTOCOL || "ws",
+    },
     proxy: {
       "/api": {
-        target: "http://localhost:5000",
+        target: process.env.API_PROXY_TARGET || "http://localhost:5000",
         changeOrigin: true,
       },
     },

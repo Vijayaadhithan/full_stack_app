@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { API_BASE_URL, apiRequest, queryClient } from "@/lib/queryClient";
 import type { InsertUser, ShopProfile } from "@shared/schema";
 
 type Translations = (typeof translations)[keyof typeof translations];
@@ -34,8 +34,6 @@ type PasswordStrength = {
   label: string;
   tone: "weak" | "medium" | "strong";
 };
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const translations = {
   en: {
@@ -855,7 +853,7 @@ export default function AuthPage() {
                   type="button"
                   variant="outline"
                   className="w-full"
-                  onClick={() => (window.location.href = `${API_URL}/auth/google`)}
+                  onClick={() => (window.location.href = `${API_BASE_URL}/auth/google`)}
                 >
                   {t.continueWithGoogle}
                 </Button>
@@ -1035,7 +1033,7 @@ export default function AuthPage() {
                         variant="outline"
                         onClick={() => {
                           const role = signupForm.getValues("role") || "customer";
-                          window.location.href = `${API_URL}/auth/google?role=${role}`;
+                          window.location.href = `${API_BASE_URL}/auth/google?role=${role}`;
                         }}
                       >
                         {t.continueWithGoogle}

@@ -1,7 +1,19 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const API_BASE =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
+const resolveApiBase = () => {
+  const envUrl = import.meta.env.VITE_API_URL?.trim();
+  if (envUrl) {
+    return envUrl.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, "");
+  }
+
+  return "http://localhost:5000";
+};
+
+export const API_BASE_URL = resolveApiBase();
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -15,7 +27,7 @@ let csrfToken: string | null = null;
 let csrfPromise: Promise<string> | null = null;
 
 async function fetchCsrfToken(): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/csrf-token`, {
+  const res = await fetch(`${API_BASE_URL}/api/csrf-token`, {
     credentials: "include",
   });
   await throwIfResNotOk(res);
@@ -66,7 +78,7 @@ async function performApiRequest(
     headers["x-csrf-token"] = await getCsrfToken(attempt > 0);
   }
 
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await fetch(`${API_BASE_URL}${url}`, {
     method: upperMethod,
     headers,
     body: data ? (isFormData ? data : JSON.stringify(data)) : undefined,
@@ -101,7 +113,7 @@ export const getQueryFn: <T>(options: {
       url = `${url}/${queryKey[1]}`;
     }
 
-    const res = await fetch(`${API_BASE}${url}`, {
+    const res = await fetch(`${API_BASE_URL}${url}`, {
       credentials: "include",
     });
 

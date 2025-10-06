@@ -10,6 +10,8 @@ import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./swagger";
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 // Import your email service here
 //import { sendEmail } from "./emailService";
 import { startBookingExpirationJob } from "./jobs/bookingExpirationJob";
@@ -21,12 +23,93 @@ import { trackRequestStart } from "./monitoring/metrics";
 config();
 // Read allowed CORS origins from environment variable (comma separated)
 // Allow requests from production frontend and local development
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  "http://localhost:5173",
-].filter(Boolean) as string[];
+const configuredOrigins =
+  process.env.ALLOWED_ORIGINS?.split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0) ?? [];
+
+const defaultOrigins = ["http://localhost:5173"];
+if (process.env.FRONTEND_URL && process.env.FRONTEND_URL.trim().length > 0) {
+  defaultOrigins.push(process.env.FRONTEND_URL.trim());
+}
+
+const allowedOrigins = Array.from(new Set([...configuredOrigins, ...defaultOrigins]));
+const allowAllOrigins = allowedOrigins.includes("*");
+
+type OriginMatcher = {
+  value: string;
+  test: (origin: string) => boolean;
+};
+
+const SPECIAL_CHARS_REGEX = /[-/\\^$*+?.()|[\]{}]/g;
+
+function escapeRegex(input: string): string {
+  return input.replace(SPECIAL_CHARS_REGEX, "\\$&");
+}
+
+const originMatchers: OriginMatcher[] = allowedOrigins
+  .filter((origin) => origin !== "*")
+  .map((origin) => {
+    if (origin.includes("*")) {
+      const pattern = origin
+        .split("*")
+        .map((segment) => escapeRegex(segment))
+        .join(".*");
+      const regex = new RegExp(`^${pattern}$`);
+      return {
+        value: origin,
+        test: (candidate: string) => regex.test(candidate),
+      };
+    }
+
+    return {
+      value: origin,
+      test: (candidate: string) => candidate === origin,
+    };
+  });
 
 const isProduction = process.env.NODE_ENV === "production";
+const staticAssetsDir = process.env.CLIENT_DIST_DIR
+  ? path.resolve(process.env.CLIENT_DIST_DIR)
+  : path.resolve(process.cwd(), "dist", "public");
+let staticAssetsMounted = false;
+
+function mountStaticAssets() {
+  if (staticAssetsMounted) return;
+
+  const indexHtmlPath = path.join(staticAssetsDir, "index.html");
+  const staticDirExists = fs.existsSync(staticAssetsDir);
+  const indexHtmlExists = staticDirExists && fs.existsSync(indexHtmlPath);
+
+  if (!staticDirExists || !indexHtmlExists) {
+    logger.warn(
+      {
+        staticAssetsDir,
+        indexHtmlExists,
+      },
+      "Static client bundle not found; skipping static file serving",
+    );
+    return;
+  }
+
+  logger.info({ staticAssetsDir }, "Serving static client assets");
+
+  app.use(express.static(staticAssetsDir));
+  app.get("*", (req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      return next();
+    }
+
+    const requestPath = req.path || req.originalUrl || "";
+    if (requestPath.startsWith("/api") || requestPath.startsWith("/uploads/")) {
+      return next();
+    }
+
+    res.sendFile(indexHtmlPath);
+  });
+
+  staticAssetsMounted = true;
+}
 
 const helmetConfig: HelmetOptions = {
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -188,7 +271,24 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet(helmetConfig));
 app.use(express.json());
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(
+  cors({
+    origin: allowAllOrigins
+      ? true
+      : (origin, callback) => {
+          if (!origin) {
+            return callback(null, true);
+          }
+          const isAllowed = originMatchers.some((matcher) => matcher.test(origin));
+          if (isAllowed) {
+            return callback(null, true);
+          }
+          logger.warn({ origin, allowedOrigins }, "Blocked CORS origin");
+          return callback(new Error("Not allowed by CORS"));
+        },
+    credentials: true,
+  }),
+);
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use((req, res, next) => {
   const endTimer = trackRequestStart();
@@ -259,6 +359,8 @@ export async function startServer(port?: number) {
 
   // Mount admin routes after session has been initialized in setupAuth()
   app.use("/api/admin", adminRoutes);
+
+  mountStaticAssets();
 
   app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
     if (
@@ -355,10 +457,11 @@ export async function startServer(port?: number) {
   });
 
   const PORT = port ?? parseInt(process.env.PORT || "5000", 10);
+  const HOST = process.env.HOST || process.env.SERVER_HOST || "0.0.0.0";
 
   await new Promise<void>((resolve) => {
-    server.listen(PORT, () => {
-      logger.info(`Server is running on port ${PORT}`);
+    server.listen(PORT, HOST, () => {
+      logger.info(`Server is running on http://${HOST}:${PORT}`);
       resolve();
     });
   });

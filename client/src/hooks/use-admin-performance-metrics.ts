@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { PerformanceMetric } from "@shared/performance";
-import { apiRequest, getCsrfToken } from "../lib/queryClient";
+import { apiRequest, getCsrfToken, API_BASE_URL } from "../lib/queryClient";
 
 type MetricName = PerformanceMetric["name"];
 
@@ -25,9 +25,11 @@ async function postMetric(metric: PerformanceMetric) {
   const payload = { ...metric, _csrf: csrfToken };
   const body = JSON.stringify(payload);
 
+  const metricUrl = new URL("/api/admin/performance-metrics", API_BASE_URL).toString();
+
   if (navigator.sendBeacon) {
     const blob = new Blob([body], { type: "application/json" });
-    const sent = navigator.sendBeacon("/api/admin/performance-metrics", blob);
+    const sent = navigator.sendBeacon(metricUrl, blob);
     if (sent) {
       return;
     }

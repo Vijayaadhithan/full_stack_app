@@ -103,6 +103,30 @@ export function setupAuth(app: Express) {
     },
   };
 
+  const cookieOptions = sessionSettings.cookie!;
+
+  const configuredSameSite = process.env.SESSION_COOKIE_SAMESITE?.toLowerCase();
+  if (configuredSameSite === "false" || configuredSameSite === "disabled") {
+    cookieOptions.sameSite = false;
+  } else if (configuredSameSite === "strict" || configuredSameSite === "lax") {
+    cookieOptions.sameSite = configuredSameSite;
+  } else if (configuredSameSite === "none") {
+    cookieOptions.sameSite = "none";
+    const secureOverride = process.env.SESSION_COOKIE_SECURE;
+    if (secureOverride === "true") {
+      cookieOptions.secure = true;
+    } else if (secureOverride === "false") {
+      cookieOptions.secure = false;
+    } else {
+      cookieOptions.secure = true;
+    }
+  }
+
+  const cookieDomain = process.env.SESSION_COOKIE_DOMAIN;
+  if (cookieDomain) {
+    cookieOptions.domain = cookieDomain;
+  }
+
   app.set("trust proxy", 1);
   app.use(session(sessionSettings));
   app.use(passport.initialize());
