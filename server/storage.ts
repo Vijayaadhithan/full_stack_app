@@ -2,6 +2,10 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import logger from "./logger";
 import {
+  notifyBookingChange,
+  notifyNotificationChange,
+} from "./realtime";
+import {
   User,
   InsertUser,
   Service,
@@ -937,6 +941,16 @@ export class MemStorage implements IStorage {
         booking.disputeReason === undefined ? null : booking.disputeReason,
     };
     this.bookings.set(id, newBooking);
+    const providerId =
+      newBooking.serviceId != null
+        ? this.services.get(newBooking.serviceId)?.providerId ?? null
+        : null;
+
+    notifyBookingChange({
+      customerId: newBooking.customerId ?? null,
+      providerId,
+    });
+
     return newBooking;
   }
 
@@ -983,6 +997,19 @@ export class MemStorage implements IStorage {
     if (!existing) throw new Error("Booking not found");
     const updated = { ...existing, ...booking };
     this.bookings.set(id, updated);
+    const serviceId = updated.serviceId ?? existing.serviceId;
+    const providerId =
+      serviceId != null
+        ? this.services.get(serviceId)?.providerId ?? null
+        : null;
+    const customerId =
+      (updated.customerId ?? existing.customerId) ?? null;
+
+    notifyBookingChange({
+      customerId,
+      providerId,
+    });
+
     return updated;
   }
 
@@ -1656,6 +1683,7 @@ export class MemStorage implements IStorage {
       createdAt: newNotification.createdAt ?? newIndianDate(), // Use newIndianDate() to create dates in IST
       relatedBookingId: null,
     };
+    notifyNotificationChange(newNotification.userId ?? null);
     return finalNotification;
   }
 
@@ -1670,6 +1698,7 @@ export class MemStorage implements IStorage {
     if (notification) {
       notification.isRead = true;
       this.notifications.set(id, notification);
+      notifyNotificationChange(notification.userId ?? null);
     }
   }
 
@@ -1699,10 +1728,14 @@ export class MemStorage implements IStorage {
       notification.isRead = true;
       this.notifications.set(notification.id, notification);
     }
+
+    notifyNotificationChange(userId);
   }
 
   async deleteNotification(id: number): Promise<void> {
+    const notification = this.notifications.get(id);
     this.notifications.delete(id);
+    notifyNotificationChange(notification?.userId ?? null);
   }
 
   // Availability and waitlist operations

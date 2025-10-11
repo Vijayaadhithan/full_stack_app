@@ -241,7 +241,10 @@ export function NotificationsCenter() {
           )}
         </Button>
       </SheetTrigger>
-      <SheetContent>
+      <SheetContent
+        side="right"
+        className="w-full max-w-sm sm:max-w-md flex flex-col gap-4"
+      >
         <SheetHeader>
           <div className="flex justify-between items-center">
             <SheetTitle>{t("notifications")}</SheetTitle>

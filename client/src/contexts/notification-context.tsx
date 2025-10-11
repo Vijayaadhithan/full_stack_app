@@ -1,13 +1,7 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from "react";
+import React, { createContext, useContext, ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Notification } from "@shared/schema";
+import { Booking, Notification } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 
 type NotificationContextType = {
@@ -26,7 +20,6 @@ const NotificationContext = createContext<NotificationContextType | undefined>(
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
 
   // Fetch all notifications
   const { data: allNotifications = [], refetch: refreshNotifications } =
@@ -35,6 +28,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       refetchInterval: 30000, // Refetch every 30 seconds
       enabled: !!user,
     });
+
+  const { data: pendingBookings = [] } = useQuery<Booking[]>({
+    queryKey: ["/api/bookings/provider/pending"],
+    enabled: user?.role === "provider",
+  });
+
+  const pendingBookingsCount =
+    user?.role === "provider" ? pendingBookings.length : 0;
 
   // Filter notifications based on user role
   const notifications = React.useMemo(() => {
@@ -93,28 +94,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     return allNotifications;
   }, [allNotifications, user]);
 
-  // Fetch pending bookings count for providers
-  useEffect(() => {
-    if (user?.role === "provider") {
-      const fetchPendingBookings = async () => {
-        try {
-          const res = await apiRequest("GET", "/api/bookings/provider/pending");
-          if (res.ok) {
-            const data = await res.json();
-            setPendingBookingsCount(data.length);
-          }
-        } catch (error) {
-          console.error("Error fetching pending bookings:", error);
-        }
-      };
-
-      fetchPendingBookings();
-      const interval = setInterval(fetchPendingBookings, 60000); // Check every minute
-
-      return () => clearInterval(interval);
-    }
-  }, [user]);
-
   // Mark notification as read
   const markAsReadMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -148,7 +127,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Mark all notifications as read
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PATCH", "/api/notifications/mark-all-read");
+      const res = await apiRequest("PATCH", "/api/notifications/mark-all-read", {
+        role: user?.role,
+      });
       if (!res.ok) {
         const error = await res.json();
         throw new Error(

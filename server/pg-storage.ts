@@ -6,6 +6,10 @@ import logger from "./logger";
 import { getCache, setCache } from "./cache";
 import { createHash } from "crypto";
 import {
+  notifyBookingChange,
+  notifyNotificationChange,
+} from "./realtime";
+import {
   User,
   InsertUser,
   Service,
@@ -1129,15 +1133,28 @@ export class PostgresStorage implements IStorage {
       .returning();
 
     // Add entry to booking history with IST timestamp
+    const createdBooking = result[0];
+
     await db.insert(bookingHistory).values({
-      bookingId: result[0].id,
-      status: result[0].status,
+      bookingId: createdBooking.id,
+      status: createdBooking.status,
       changedAt: getCurrentISTDate(),
       changedBy: booking.customerId,
       comments: "Booking created",
     });
 
-    return result[0];
+    let providerId: number | null = null;
+    if (createdBooking?.serviceId) {
+      const service = await this.getService(createdBooking.serviceId);
+      providerId = service?.providerId ?? null;
+    }
+
+    notifyBookingChange({
+      customerId: createdBooking?.customerId ?? null,
+      providerId,
+    });
+
+    return createdBooking;
   }
 
   async getBooking(id: number): Promise<Booking | undefined> {
@@ -1260,8 +1277,22 @@ export class PostgresStorage implements IStorage {
       }
     }
 
-    if (!result[0]) throw new Error("Booking not found or update failed");
-    return result[0];
+    const updatedBooking = result[0];
+    if (!updatedBooking) throw new Error("Booking not found or update failed");
+
+    const serviceId = booking.serviceId ?? currentBooking.serviceId;
+    let providerId: number | null = null;
+    if (serviceId) {
+      const service = await this.getService(serviceId);
+      providerId = service?.providerId ?? null;
+    }
+
+    notifyBookingChange({
+      customerId: currentBooking.customerId ?? null,
+      providerId,
+    });
+
+    return updatedBooking;
   }
 
   // ─── PRODUCT OPERATIONS ──────────────────────────────────────────
@@ -1787,6 +1818,8 @@ export class PostgresStorage implements IStorage {
       .returning();
     const newNotification = result[0];
 
+    notifyNotificationChange(newNotification?.userId);
+
     // Define critical notification types that should trigger an email
     return newNotification;
   }
@@ -1812,10 +1845,15 @@ export class PostgresStorage implements IStorage {
   }
 
   async markNotificationAsRead(id: number): Promise<void> {
-    await db
+    const updated = await db
       .update(notifications)
       .set({ isRead: true })
-      .where(eq(notifications.id, id));
+      .where(eq(notifications.id, id))
+      .returning({ userId: notifications.userId });
+
+    if (updated[0]) {
+      notifyNotificationChange(updated[0].userId);
+    }
   }
 
   async markAllNotificationsAsRead(
@@ -1836,10 +1874,19 @@ export class PostgresStorage implements IStorage {
       .where(and(...conditions));
 
     await query;
+
+    notifyNotificationChange(userId);
   }
 
   async deleteNotification(id: number): Promise<void> {
-    await db.delete(notifications).where(eq(notifications.id, id));
+    const deleted = await db
+      .delete(notifications)
+      .where(eq(notifications.id, id))
+      .returning({ userId: notifications.userId });
+
+    if (deleted[0]) {
+      notifyNotificationChange(deleted[0].userId);
+    }
   }
 
   // ─── ADDITIONAL / ENHANCED OPERATIONS ─────────────────────────────

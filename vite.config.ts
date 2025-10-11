@@ -4,6 +4,46 @@ import themePlugin from "@replit/vite-plugin-shadcn-theme-json";
 import path, { dirname } from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { fileURLToPath } from "url";
+import { getNetworkConfig } from "./config/network";
+
+const networkConfig = getNetworkConfig();
+
+const devServerBind = process.env.DEV_SERVER_BIND || "0.0.0.0";
+const devServerPort = Number(
+  process.env.DEV_SERVER_PORT || networkConfig?.devServerPort || 5173,
+);
+const devServerHost =
+  process.env.DEV_SERVER_HOST || networkConfig?.devServerHost;
+const hmrHost =
+  process.env.DEV_SERVER_HMR_HOST ||
+  networkConfig?.devServerHmrHost ||
+  devServerHost ||
+  undefined;
+const hmrPort = process.env.DEV_SERVER_HMR_PORT
+  ? Number(process.env.DEV_SERVER_HMR_PORT)
+  : networkConfig?.devServerHmrPort;
+const hmrProtocol =
+  process.env.DEV_SERVER_HMR_PROTOCOL || networkConfig?.devServerHmrProtocol;
+const apiProxyTarget =
+  process.env.API_PROXY_TARGET ||
+  networkConfig?.apiProxyTarget ||
+  "http://localhost:5000";
+
+const hmrConfig: {
+  host?: string;
+  port?: number;
+  protocol?: string;
+} = {};
+
+if (hmrHost) {
+  hmrConfig.host = hmrHost;
+}
+if (hmrPort) {
+  hmrConfig.port = hmrPort;
+}
+if (hmrProtocol) {
+  hmrConfig.protocol = hmrProtocol;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,16 +69,12 @@ export default defineConfig({
     },
   },
   server: {
-    host: "0.0.0.0",
-    port: 5173,
-    hmr: {
-      host: process.env.DEV_SERVER_HOST || "192.168.1.6",
-      port: Number(process.env.DEV_SERVER_HMR_PORT || 5173),
-      protocol: process.env.DEV_SERVER_HMR_PROTOCOL || "ws",
-    },
+    host: devServerBind,
+    port: devServerPort,
+    hmr: hmrConfig,
     proxy: {
       "/api": {
-        target: process.env.API_PROXY_TARGET || "http://localhost:5000",
+        target: apiProxyTarget,
         changeOrigin: true,
       },
     },

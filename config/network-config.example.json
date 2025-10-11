@@ -1,0 +1,15 @@
+{
+  "//": "Copy this file to config/network-config.json and adjust values per environment.",
+  "frontendUrl": "http://192.168.1.6:5173",
+  "appBaseUrl": "http://192.168.1.6:5000",
+  "allowedOrigins": [
+    "http://192.168.1.6:5173",
+    "http://192.168.1.6:5000"
+  ],
+  "devServerHost": "192.168.1.6",
+  "devServerPort": 5173,
+  "devServerHmrHost": "192.168.1.6",
+  "devServerHmrPort": 5173,
+  "devServerHmrProtocol": "ws",
+  "apiProxyTarget": "http://192.168.1.6:5000"
+}

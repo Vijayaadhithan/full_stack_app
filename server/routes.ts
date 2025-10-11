@@ -60,6 +60,11 @@ import {
   magicLinkLoginLimiter,
   usernameLookupLimiter,
 } from "./security/rateLimiters";
+import {
+  notifyBookingChange,
+  notifyNotificationChange,
+  registerRealtimeClient,
+} from "./realtime";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 
 const PLATFORM_SERVICE_FEE = platformFees.productOrder;
@@ -458,6 +463,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       : csrf({ cookie: false, ignoreMethods: ["GET", "HEAD", "OPTIONS"] });
 
   app.use(csrfProtection);
+
+  app.get("/api/events", requireAuth, (req, res) => {
+    const userId = Number(req.user?.id);
+    if (!Number.isFinite(userId)) {
+      res.status(400).json({ message: "Unable to open realtime channel" });
+      return;
+    }
+    const socket = req.socket;
+    if (socket && typeof socket.setKeepAlive === "function") {
+      socket.setKeepAlive(true, 60_000);
+    }
+    if (socket && typeof socket.setNoDelay === "function") {
+      socket.setNoDelay(true);
+    }
+    registerRealtimeClient(res, userId);
+  });
 
   app.get("/api/csrf-token", (req, res) => {
     res.status(200).json({ csrfToken: req.csrfToken() });
@@ -3261,7 +3282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
       await storage.markNotificationAsRead(getValidatedParam(req, "id"));
-      res.sendStatus(200);
+      res.status(200).json({ success: true });
     } catch (error) {
       logger.error("Error marking notification as read:", error);
       res
@@ -3287,7 +3308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         // Pass both user ID and role to properly filter notifications
         await storage.markAllNotificationsAsRead(req.user!.id, role);
-        res.sendStatus(200);
+        res.status(200).json({ success: true });
       } catch (error) {
         logger.error("Error marking notifications as read:", error);
         res
@@ -3305,7 +3326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
     try {
       await storage.deleteNotification(getValidatedParam(req, "id"));
-      res.sendStatus(200);
+      res.status(200).json({ success: true });
     } catch (error) {
       logger.error("Error deleting notification:", error);
       res

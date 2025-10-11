@@ -11,7 +11,9 @@ import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./swagger";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { getNetworkConfig } from "../config/network";
 // Import your email service here
 //import { sendEmail } from "./emailService";
 import { startBookingExpirationJob } from "./jobs/bookingExpirationJob";
@@ -21,20 +23,74 @@ import { reportError } from "./monitoring/errorReporter";
 import { trackRequestStart } from "./monitoring/metrics";
 
 config();
-// Read allowed CORS origins from environment variable (comma separated)
-// Allow requests from production frontend and local development
-const configuredOrigins =
-  process.env.ALLOWED_ORIGINS?.split(",")
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0) ?? [];
 
-const defaultOrigins = ["http://localhost:5173"];
-if (process.env.FRONTEND_URL && process.env.FRONTEND_URL.trim().length > 0) {
-  defaultOrigins.push(process.env.FRONTEND_URL.trim());
+const networkConfig = getNetworkConfig();
+
+if (networkConfig?.frontendUrl && !process.env.FRONTEND_URL) {
+  process.env.FRONTEND_URL = networkConfig.frontendUrl;
 }
 
-const allowedOrigins = Array.from(new Set([...configuredOrigins, ...defaultOrigins]));
-const allowAllOrigins = allowedOrigins.includes("*");
+if (networkConfig?.appBaseUrl && !process.env.APP_BASE_URL) {
+  process.env.APP_BASE_URL = networkConfig.appBaseUrl;
+}
+
+if (
+  networkConfig?.allowedOrigins?.length &&
+  !process.env.ALLOWED_ORIGINS
+) {
+  process.env.ALLOWED_ORIGINS = networkConfig.allowedOrigins.join(",");
+}
+
+if (networkConfig?.devServerHost && !process.env.DEV_SERVER_HOST) {
+  process.env.DEV_SERVER_HOST = networkConfig.devServerHost;
+}
+
+if (networkConfig?.apiProxyTarget && !process.env.API_PROXY_TARGET) {
+  process.env.API_PROXY_TARGET = networkConfig.apiProxyTarget;
+}
+
+const envConfiguredOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
+  : [];
+
+const configuredOrigins = [
+  ...envConfiguredOrigins,
+  ...(networkConfig?.allowedOrigins ?? []),
+].filter((origin) => origin.length > 0);
+
+const defaultOrigins = ["http://localhost:5173", "http://127.0.0.1:5173"];
+
+const candidateOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.APP_BASE_URL,
+  networkConfig?.frontendUrl,
+  networkConfig?.appBaseUrl,
+];
+
+for (const origin of candidateOrigins) {
+  if (origin && origin.trim().length > 0) {
+    defaultOrigins.push(origin.trim());
+  }
+}
+
+const devServerHosts = [
+  process.env.DEV_SERVER_HOST,
+  networkConfig?.devServerHost,
+].filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+for (const host of devServerHosts) {
+  const trimmed = host.trim();
+  defaultOrigins.push(`http://${trimmed}:5173`);
+  defaultOrigins.push(`http://${trimmed}:5000`);
+}
+
+const allowedOrigins = Array.from(
+  new Set([...configuredOrigins, ...defaultOrigins]),
+);
+const isProduction = process.env.NODE_ENV === "production";
+const allowAllOrigins =
+  allowedOrigins.includes("*") ||
+  (!isProduction && process.env.STRICT_CORS !== "true");
 
 type OriginMatcher = {
   value: string;
@@ -68,7 +124,6 @@ const originMatchers: OriginMatcher[] = allowedOrigins
     };
   });
 
-const isProduction = process.env.NODE_ENV === "production";
 const staticAssetsDir = process.env.CLIENT_DIST_DIR
   ? path.resolve(process.env.CLIENT_DIST_DIR)
   : path.resolve(process.cwd(), "dist", "public");
@@ -109,6 +164,26 @@ function mountStaticAssets() {
   });
 
   staticAssetsMounted = true;
+}
+
+function logAccessibleAddresses(port: number) {
+  const networks = os.networkInterfaces();
+  const urls = new Set<string>();
+
+  for (const entries of Object.values(networks)) {
+    if (!entries) continue;
+    for (const entry of entries) {
+      if (!entry || entry.internal || entry.family !== "IPv4") continue;
+      urls.add(`http://${entry.address}:${port}`);
+    }
+  }
+
+  if (urls.size === 0) {
+    logger.info("No external IPv4 addresses detected for local network access");
+    return;
+  }
+
+  logger.info({ urls: Array.from(urls) }, "Local network URLs for this server");
 }
 
 const helmetConfig: HelmetOptions = {
@@ -462,6 +537,7 @@ export async function startServer(port?: number) {
   await new Promise<void>((resolve) => {
     server.listen(PORT, HOST, () => {
       logger.info(`Server is running on http://${HOST}:${PORT}`);
+      logAccessibleAddresses(PORT);
       resolve();
     });
   });

@@ -9,3 +9,4 @@ vite.config.ts.*
 /coverage
 /logs
 app.log
+config/network-config.json

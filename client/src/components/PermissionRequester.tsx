@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Capacitor } from "@capacitor/core";
 import {
   checkLocationPermission,
   requestLocationPermission,
@@ -6,12 +7,16 @@ import {
 } from "@/lib/permissions";
 
 const PermissionRequester: React.FC = () => {
+  const isNative = Capacitor.isNativePlatform();
   const [locationPermission, setLocationPermission] =
     useState<string>("unknown");
   const [currentCoordinates, setCurrentCoordinates] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
+    if (!isNative) {
+      return;
+    }
     const fetchPermissionStatus = async () => {
       setIsLoading(true);
       const status = await checkLocationPermission();
@@ -19,7 +24,7 @@ const PermissionRequester: React.FC = () => {
       setIsLoading(false);
     };
     fetchPermissionStatus();
-  }, []);
+  }, [isNative]);
 
   const handleRequestLocation = async () => {
     setIsLoading(true);
@@ -31,6 +36,10 @@ const PermissionRequester: React.FC = () => {
     }
     setIsLoading(false);
   };
+
+  if (!isNative) {
+    return null;
+  }
 
   return (
     <div

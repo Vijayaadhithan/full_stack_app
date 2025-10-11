@@ -99,25 +99,15 @@ The application will be available at:
    - `ALLOWED_ORIGINS=http://<your-LAN-ip>:5173,http://<your-LAN-ip>:5000` so CORS accepts cross-origin requests.
 3. (Optional) Set `CAPACITOR_SERVER_URL=http://<your-LAN-ip>:5173` when running `npx cap run android` for on-device hot reload.
 4. Restart `npm run dev:server` and `npm run dev:client`. Other devices on the same network can now open `http://<your-LAN-ip>:5173`.
-5. For devices outside your network, tunnel the dev server with a tool such as `ngrok` and add the public URLs to `ALLOWED_ORIGINS`.
+5. When you need to share the app outside your LAN, expose ports 5000 and 5173 via your router (port forwarding) or deploy the stack to a VPS. In that scenario, point `FRONTEND_URL`, `APP_BASE_URL`, and `VITE_API_URL` at the publicly reachable hostname and list it in `ALLOWED_ORIGINS`. The development server now relaxes CORS by default; set `STRICT_CORS=true` in `.env` if you want to re-enable the allowlist even during local development.
 
-#### ngrok walkthrough
+### Network configuration file (optional)
 
-1. Install ngrok from https://ngrok.com/download and authenticate (`ngrok config add-authtoken <token>`).
-2. Run a production-style build so both API and UI are served on port 5000:
-   ```bash
-   npm run build
-   npm run start
-   ```
-3. Start the tunnel: `ngrok http 5000` (or `ngrok http --domain your-name.ngrok-free.app 5000` if you have a reserved domain).
-4. Copy the `https://<random>.ngrok-free.app` URL and update `.env`:
-   - `FRONTEND_URL=<copied-url>`
-   - `APP_BASE_URL=<copied-url>`
-   - `ALLOWED_ORIGINS=...,<copied-url>` (wildcards like `https://*.ngrok-free.app` are supported)
-   - (Optional) `VITE_API_URL=<copied-url>` if the React app should call the tunnel directly
-5. Restart the server so new env vars load, then share the ngrok URL with testers on other networks.
-
-> Tip: If you need hot-reload over ngrok, start a second tunnel for `npm run dev:client` and set `DEV_SERVER_HOST`/`VITE_API_URL` to that public hostname.
+If you prefer not to touch `.env` for every network change, copy
+`config/network-config.example.json` to `config/network-config.json` and edit
+the hosts/ports. The backend and Vite dev server will read that file on boot
+and merge the values with the environment variables. You can also set
+`NETWORK_CONFIG_PATH` to point to a different JSON file per environment.
 
 ## Production Deployment
 

@@ -16,6 +16,7 @@ import {
 import PermissionRequester from "@/components/PermissionRequester"; // Import the new component
 import React, { useEffect, Suspense, lazy } from "react";
 import { useClientPerformanceMetrics } from "@/hooks/use-client-performance-metrics";
+import { useRealtimeUpdates } from "@/hooks/use-realtime-updates";
 
 // Import all pages...
 // import HomePage from "@/pages/home-page"; // Removed import for HomePage as it's not used and file doesn't exist
@@ -74,6 +75,12 @@ const VerifyEmailPage = lazy(() => import("@/pages/verify-email-page"));
 function ClientPerformanceMetricsTracker() {
   const { user } = useAuth();
   useClientPerformanceMetrics(user?.role);
+  return null;
+}
+
+function RealtimeBridge() {
+  const { user } = useAuth();
+  useRealtimeUpdates(!!user);
   return null;
 }
 
@@ -211,6 +218,8 @@ function App() {
       <LanguageProvider>
         <AuthProvider>
           <ClientPerformanceMetricsTracker />
+          <RealtimeBridge />
+          <PermissionRequester />
           <AdminProvider>
             <ErrorBoundary>
               {/* Use the existing Router function component here */}

@@ -81,7 +81,7 @@ export function MainNav({ rightSlot }: MainNavProps) {
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center gap-2 px-3 sm:px-4 md:px-6">
+      <div className="flex h-auto min-h-16 flex-wrap items-center gap-2 px-3 sm:px-4 md:flex-nowrap md:px-6">
         {navItems.length > 0 && (
           <Sheet>
             <SheetTrigger asChild>
@@ -147,7 +147,7 @@ export function MainNav({ rightSlot }: MainNavProps) {
 
         <Link
           href={navItems[0]?.href ?? "/"}
-          className="text-base font-semibold leading-none tracking-tight"
+          className="text-base sm:text-lg font-semibold leading-none tracking-tight whitespace-nowrap flex-shrink-0"
         >
           DoorStepTN
         </Link>
@@ -170,7 +170,7 @@ export function MainNav({ rightSlot }: MainNavProps) {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:gap-3 md:w-auto md:flex-nowrap">
           {rightSlot && <div className="hidden md:flex">{rightSlot}</div>}
           <NotificationsCenter />
           <div className="hidden items-center gap-2 truncate sm:flex">

@@ -7,9 +7,28 @@
     @apply border-border;
   }
 
+  :root {
+    font-size: clamp(14px, 0.4vw + 14px, 18px);
+  }
+
+  @media (min-width: 1600px) {
+    :root {
+      font-size: 18px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    :root {
+      font-size: 14px;
+    }
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
     position: relative;
+    min-height: 100dvh;
+    min-width: 320px;
+    overflow-x: hidden;
   }
 }
 
