@@ -109,6 +109,9 @@ the hosts/ports. The backend and Vite dev server will read that file on boot
 and merge the values with the environment variables. You can also set
 `NETWORK_CONFIG_PATH` to point to a different JSON file per environment.
 
+> Need to reach the app from outside your LAN? See `docs/remote-access.md`
+> for port-forwarding vs Cloudflare Tunnel steps.
+
 ## Production Deployment
 
 1. Build both the client and API bundles:
