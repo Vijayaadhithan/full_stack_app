@@ -1,13 +1,11 @@
 import { ReactNode, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAdmin } from "@/hooks/use-admin";
-import { useAdminPerformanceMetrics } from "@/hooks/use-admin-performance-metrics";
 import { Button } from "@/components/ui/button";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { admin, isFetching, logoutMutation } = useAdmin();
   const [location, setLocation] = useLocation();
-  useAdminPerformanceMetrics();
 
   useEffect(() => {
     if (!isFetching && !admin) {

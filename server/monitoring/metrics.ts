@@ -112,6 +112,19 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
+function isAdminTelemetry(
+  page: string,
+  segment: FrontendSegment,
+  details?: PerformanceMetric["details"],
+) {
+  if (segment === "admin" || page.startsWith("/admin")) {
+    return true;
+  }
+
+  const detailSegment = details?.segment;
+  return typeof detailSegment === "string" && detailSegment.toLowerCase() === "admin";
+}
+
 function collectCpuUsage(now: number) {
   const usage = process.cpuUsage();
   const elapsedMs = Math.max(1, now - lastCpuTimestamp);
@@ -192,8 +205,11 @@ export function trackRequestStart(): (details: {
   };
 }
 
-export function recordFrontendMetric(metric: PerformanceMetric, segment: FrontendSegment = "other") {
-  if (segment === "admin") {
+export function recordFrontendMetric(
+  metric: PerformanceMetric,
+  segment: FrontendSegment = "other",
+) {
+  if (isAdminTelemetry(metric.page, segment, metric.details)) {
     return;
   }
 
@@ -330,7 +346,11 @@ function buildResourceSnapshot(now: number): ResourceSnapshot {
 
 function buildFrontendSummary(now: number): FrontendSummary {
   pruneFrontend(now);
-  const records = frontendRecords.slice();
+  const records = frontendRecords
+    .slice()
+    .filter(
+      (record) => !isAdminTelemetry(record.page, record.segment, record.details),
+    );
   const grouped = new Map<
     PerformanceMetric["name"],
     {
