@@ -177,35 +177,46 @@ const bookingStatusSchema = z.enum([
   "rescheduled_by_provider",
 ]);
 
-const requestPasswordResetSchema = z.object({
-  email: z.string().email(),
-});
+const requestPasswordResetSchema = z
+  .object({
+    email: z.string().email(),
+  })
+  .strict();
 
-const resetPasswordSchema = z.object({
-  token: z.string().min(1),
-  newPassword: z.string().min(8),
-});
+const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1),
+    newPassword: z.string().min(8),
+  })
+  .strict();
 
-const emailLookupSchema = z.object({
-  email: z.string().email(),
-});
+const emailLookupSchema = z
+  .object({
+    email: z.string().email(),
+  })
+  .strict();
 
-const magicLinkLoginSchema = z.object({
-  token: z.string().min(1),
-});
+const magicLinkLoginSchema = z
+  .object({
+    token: z.string().min(1),
+  })
+  .strict();
 
 const MAGIC_LINK_EXPIRY_MS = 15 * 60 * 1000;
 
-const usernameLookupSchema = z.object({
-  username: z
-    .string()
-    .trim()
-    .min(3)
-    .max(32)
-    .regex(/^[a-zA-Z0-9._-]+$/, {
-      message: "Username can include letters, numbers, dots, underscores, and dashes",
-    }),
-});
+const usernameLookupSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .min(3)
+      .max(32)
+      .regex(/^[a-zA-Z0-9._-]+$/, {
+        message:
+          "Username can include letters, numbers, dots, underscores, and dashes",
+      }),
+  })
+  .strict();
 
 const bookingActionSchema = z
   .object({
@@ -214,6 +225,7 @@ const bookingActionSchema = z
     bookingDate: dateStringSchema.optional(),
     changedBy: z.number().int().optional(),
   })
+  .strict()
   .refine(
     (value) => value.status !== undefined || value.bookingDate !== undefined,
     {
@@ -222,25 +234,32 @@ const bookingActionSchema = z
     },
   );
 
-const bookingDisputeSchema = z.object({
-  reason: z.string().trim().min(5).max(500),
-});
+const bookingDisputeSchema = z
+  .object({
+    reason: z.string().trim().min(5).max(500),
+  })
+  .strict();
 
-const bookingResolutionSchema = z.object({
-  resolutionStatus: z.enum(["completed", "cancelled"]),
-});
+const bookingResolutionSchema = z
+  .object({
+    resolutionStatus: z.enum(["completed", "cancelled"]),
+  })
+  .strict();
 
-const bookingCreateSchema = z.object({
-  serviceId: z.number().int().positive(),
-  bookingDate: dateStringSchema,
-  serviceLocation: z.enum(["customer", "provider"]),
-});
+const bookingCreateSchema = z
+  .object({
+    serviceId: z.number().int().positive(),
+    bookingDate: dateStringSchema,
+    serviceLocation: z.enum(["customer", "provider"]),
+  })
+  .strict();
 
 const bookingStatusUpdateSchema = z
   .object({
     status: z.enum(["accepted", "rejected", "rescheduled"]),
     rejectionReason: z.string().trim().min(1).max(500).optional(),
   })
+  .strict()
   .superRefine((value, ctx) => {
     if (value.status === "rejected" && !value.rejectionReason) {
       ctx.addIssue({
@@ -251,29 +270,38 @@ const bookingStatusUpdateSchema = z
     }
   });
 
-const paymentReferenceSchema = z.object({
-  paymentReference: z.string().trim().min(1).max(100),
-});
+const paymentReferenceSchema = z
+  .object({
+    paymentReference: z.string().trim().min(1).max(100),
+  })
+  .strict();
 
-const waitlistJoinSchema = z.object({
-  serviceId: z.number().int().positive(),
-  preferredDate: dateStringSchema,
-});
+const waitlistJoinSchema = z
+  .object({
+    serviceId: z.number().int().positive(),
+    preferredDate: dateStringSchema,
+  })
+  .strict();
 
-const cartItemSchema = z.object({
-  productId: z.number().int().positive(),
-  quantity: z.number().int().min(1),
-});
+const cartItemSchema = z
+  .object({
+    productId: z.number().int().positive(),
+    quantity: z.number().int().min(1),
+  })
+  .strict();
 
-const wishlistItemSchema = z.object({
-  productId: z.number().int().positive(),
-});
+const wishlistItemSchema = z
+  .object({
+    productId: z.number().int().positive(),
+  })
+  .strict();
 
 const reviewUpdateSchema = z
   .object({
     rating: z.number().int().min(1).max(5).optional(),
     review: z.string().trim().min(1).max(2000).optional(),
   })
+  .strict()
   .refine((value) => value.rating !== undefined || value.review !== undefined, {
     message: "Provide a rating or review to update",
     path: ["rating"],
@@ -281,16 +309,20 @@ const reviewUpdateSchema = z
 
 const reviewReplySchema = z
   .union([
-    z.object({ response: z.string().trim().min(1).max(2000) }),
-    z.object({ reply: z.string().trim().min(1).max(2000) }),
+    z
+      .object({ response: z.string().trim().min(1).max(2000) })
+      .strict(),
+    z.object({ reply: z.string().trim().min(1).max(2000) }).strict(),
   ])
   .transform((value) =>
     "response" in value ? { reply: value.response } : { reply: value.reply },
   );
 
-const notificationsMarkAllSchema = z.object({
-  role: z.enum(["customer", "provider", "shop", "worker", "admin"]).optional(),
-});
+const notificationsMarkAllSchema = z
+  .object({
+    role: z.enum(["customer", "provider", "shop", "worker", "admin"]).optional(),
+  })
+  .strict();
 
 const productUpdateSchema = insertProductSchema.partial();
 
@@ -302,24 +334,28 @@ const serviceUpdateSchema = insertServiceSchema
       .optional(),
   });
 
-const orderPaymentReferenceSchema = z.object({
-  paymentReference: z.string().trim().min(1).max(100),
-});
+const orderPaymentReferenceSchema = z
+  .object({
+    paymentReference: z.string().trim().min(1).max(100),
+  })
+  .strict();
 
-const orderStatusUpdateSchema = z.object({
-  status: z.enum([
-    "pending",
-    "cancelled",
-    "confirmed",
-    "processing",
-    "packed",
-    "dispatched",
-    "shipped",
-    "delivered",
-    "returned",
-  ]),
-  trackingInfo: z.string().trim().max(500).optional(),
-});
+const orderStatusUpdateSchema = z
+  .object({
+    status: z.enum([
+      "pending",
+      "cancelled",
+      "confirmed",
+      "processing",
+      "packed",
+      "dispatched",
+      "shipped",
+      "delivered",
+      "returned",
+    ]),
+    trackingInfo: z.string().trim().max(500).optional(),
+  })
+  .strict();
 
 const shopsQuerySchema = z
   .object({
@@ -3347,21 +3383,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const orderSchema = z.object({
-          items: z.array(
-            z.object({
-              productId: z.number(),
-              quantity: z.number().min(1),
-              price: z.string().or(z.number()),
-            }),
-          ),
-          total: z.string().or(z.number()),
-          subtotal: z.string().or(z.number()).optional(),
-          discount: z.string().or(z.number()).optional(),
-          promotionId: z.number().optional(),
-          deliveryMethod: z.enum(["delivery", "pickup"]),
-          paymentMethod: PaymentMethodType.optional(),
-        });
+        const orderSchema = z
+          .object({
+            items: z.array(
+              z
+                .object({
+                  productId: z.number(),
+                  quantity: z.number().min(1),
+                  price: z.string().or(z.number()),
+                })
+                .strict(),
+            ),
+            total: z.string().or(z.number()),
+            subtotal: z.string().or(z.number()).optional(),
+            discount: z.string().or(z.number()).optional(),
+            promotionId: z.number().optional(),
+            deliveryMethod: z.enum(["delivery", "pickup"]),
+            paymentMethod: PaymentMethodType.optional(),
+          })
+          .strict();
 
         const result = orderSchema.safeParse(req.body);
         if (!result.success) return res.status(400).json(result.error);
@@ -4739,17 +4779,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         // Define a Zod schema for the promotion with expiryDays
-        const promotionWithExpirySchema = z.object({
-          name: z.string().min(1, "Promotion name is required"),
-          description: z.string().optional(),
-          type: z.enum(["percentage", "fixed_amount"]),
-          value: z.coerce.number().min(0, "Discount value must be positive"),
-          code: z.string().optional(),
-          usageLimit: z.coerce.number().min(0).default(0),
-          isActive: z.boolean().default(true),
-          shopId: z.coerce.number().optional(),
-          expiryDays: z.coerce.number().min(0).default(0),
-        });
+        const promotionWithExpirySchema = z
+          .object({
+            name: z.string().min(1, "Promotion name is required"),
+            description: z.string().optional(),
+            type: z.enum(["percentage", "fixed_amount"]),
+            value: z.coerce.number().min(0, "Discount value must be positive"),
+            code: z.string().optional(),
+            usageLimit: z.coerce.number().min(0).default(0),
+            isActive: z.boolean().default(true),
+            shopId: z.coerce.number().optional(),
+            expiryDays: z.coerce.number().min(0).default(0),
+          })
+          .strict();
 
         // Validate the request body
         const result = promotionWithExpirySchema.safeParse(req.body);
@@ -4846,19 +4888,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Define a Zod schema for the promotion update with expiryDays
-        const promotionUpdateSchema = z.object({
-          name: z.string().min(1, "Promotion name is required").optional(),
-          description: z.string().optional(),
-          type: z.enum(["percentage", "fixed_amount"]).optional(),
-          value: z.coerce
-            .number()
-            .min(0, "Discount value must be positive")
-            .optional(),
-          code: z.string().optional(),
-          usageLimit: z.coerce.number().min(0).optional(),
-          isActive: z.boolean().optional(),
-          expiryDays: z.coerce.number().min(0).optional(),
-        });
+        const promotionUpdateSchema = z
+          .object({
+            name: z.string().min(1, "Promotion name is required").optional(),
+            description: z.string().optional(),
+            type: z.enum(["percentage", "fixed_amount"]).optional(),
+            value: z.coerce
+              .number()
+              .min(0, "Discount value must be positive")
+              .optional(),
+            code: z.string().optional(),
+            usageLimit: z.coerce.number().min(0).optional(),
+            isActive: z.boolean().optional(),
+            expiryDays: z.coerce.number().min(0).optional(),
+          })
+          .strict();
 
         // Validate the request body
         const result = promotionUpdateSchema.safeParse(req.body);
