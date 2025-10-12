@@ -9,7 +9,12 @@ import {
   User as SelectUser,
   InsertUser,
 } from "@shared/schema";
-import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
+import {
+  getQueryFn,
+  apiRequest,
+  queryClient,
+  resetCsrfTokenCache,
+} from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 type AuthContextType = {
@@ -46,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return await res.json();
     },
     onSuccess: (user: SelectUser) => {
+      resetCsrfTokenCache();
       queryClient.setQueryData(["/api/user"], user);
     },
     onError: (error: Error) => {
@@ -63,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return await res.json();
     },
     onSuccess: (user: SelectUser) => {
+      resetCsrfTokenCache();
       queryClient.setQueryData(["/api/user"], user);
     },
     onError: (error: Error) => {
@@ -79,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
+      resetCsrfTokenCache();
       queryClient.setQueryData(["/api/user"], null);
     },
     onError: (error: Error) => {

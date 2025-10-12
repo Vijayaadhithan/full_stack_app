@@ -60,6 +60,11 @@ export async function getCsrfToken(forceRefresh = false): Promise<string> {
   return csrfPromise;
 }
 
+export function resetCsrfTokenCache(): void {
+  csrfToken = null;
+  csrfPromise = null;
+}
+
 async function performApiRequest(
   method: string,
   url: string,

@@ -1,6 +1,11 @@
 import { createContext, ReactNode, useContext } from "react";
 import { useQuery, useMutation, UseMutationResult } from "@tanstack/react-query";
-import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
+import {
+  apiRequest,
+  getQueryFn,
+  queryClient,
+  resetCsrfTokenCache,
+} from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 type Admin = {
@@ -33,6 +38,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       return res.json();
     },
     onSuccess: (data: Admin) => {
+      resetCsrfTokenCache();
       queryClient.setQueryData(["/api/admin/me"], data);
       void queryClient.invalidateQueries({ queryKey: ["/api/admin/me"] });
       toast({ title: "Welcome back", description: data.email });
@@ -48,6 +54,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/admin/logout");
     },
     onSuccess: () => {
+      resetCsrfTokenCache();
       queryClient.setQueryData(["/api/admin/me"], null);
       toast({ title: "Signed out" });
     },
