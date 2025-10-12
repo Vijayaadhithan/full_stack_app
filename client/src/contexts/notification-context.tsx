@@ -25,7 +25,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const { data: allNotifications = [], refetch: refreshNotifications } =
     useQuery<Notification[]>({
       queryKey: ["/api/notifications"],
-      refetchInterval: 30000, // Refetch every 30 seconds
       enabled: !!user,
     });
 

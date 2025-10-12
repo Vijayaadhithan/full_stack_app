@@ -26,9 +26,8 @@ export function NotificationsCenter() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
 
-  const { data: notifications, refetch } = useQuery<Notification[]>({
+  const { data: notifications } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
-    refetchInterval: 30000, // Refetch every 30 seconds
   });
 
   const markAsReadMutation = useMutation({

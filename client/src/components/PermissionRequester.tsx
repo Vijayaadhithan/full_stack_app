@@ -8,13 +8,18 @@ import {
 
 const PermissionRequester: React.FC = () => {
   const isNative = Capacitor.isNativePlatform();
+  const showDebugUi =
+    import.meta.env.DEV ||
+    `${import.meta.env.VITE_ENABLE_PERMISSION_DEBUG ?? ""}`.toLowerCase() ===
+      "true";
+  const shouldRender = isNative && showDebugUi;
   const [locationPermission, setLocationPermission] =
     useState<string>("unknown");
   const [currentCoordinates, setCurrentCoordinates] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!isNative) {
+    if (!shouldRender) {
       return;
     }
     const fetchPermissionStatus = async () => {
@@ -24,7 +29,7 @@ const PermissionRequester: React.FC = () => {
       setIsLoading(false);
     };
     fetchPermissionStatus();
-  }, [isNative]);
+  }, [shouldRender]);
 
   const handleRequestLocation = async () => {
     setIsLoading(true);
@@ -37,7 +42,7 @@ const PermissionRequester: React.FC = () => {
     setIsLoading(false);
   };
 
-  if (!isNative) {
+  if (!shouldRender) {
     return null;
   }
 

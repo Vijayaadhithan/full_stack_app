@@ -132,6 +132,16 @@ const PROVIDER_BOOKING_KEYS = [
   "/api/bookings/provider/pending",
   "/api/bookings/provider/history",
 ];
+const CART_KEYS = ["/api/cart"];
+const WISHLIST_KEYS = ["/api/wishlist"];
+const CUSTOMER_ORDER_KEYS = ["/api/orders", "/api/orders/customer"];
+const SHOP_ORDER_KEYS = [
+  "orders",
+  "/api/orders/shop",
+  "/api/orders/shop/recent",
+  "/api/returns/shop",
+  "shopDashboardStats",
+];
 
 export function notifyNotificationChange(userId: number | null | undefined) {
   if (userId == null) return;
@@ -149,5 +159,40 @@ export function notifyBookingChange(params: {
   if (providerId != null) {
     broadcastInvalidation(providerId, PROVIDER_BOOKING_KEYS);
     notifyNotificationChange(providerId);
+  }
+}
+
+export function notifyCartChange(userId: number | null | undefined) {
+  if (userId == null) return;
+  broadcastInvalidation(userId, CART_KEYS);
+}
+
+export function notifyWishlistChange(userId: number | null | undefined) {
+  if (userId == null) return;
+  broadcastInvalidation(userId, WISHLIST_KEYS);
+}
+
+function buildOrderKeys(orderId: number | null | undefined) {
+  const keys: string[] = [];
+  if (orderId != null) {
+    keys.push(`/api/orders/${orderId}`);
+    keys.push(`/api/orders/${orderId}/timeline`);
+  }
+  return keys;
+}
+
+export function notifyOrderChange(params: {
+  customerId?: number | null;
+  shopId?: number | null;
+  orderId?: number | null;
+}) {
+  const { customerId, shopId, orderId } = params;
+  const detailKeys = buildOrderKeys(orderId);
+  if (customerId != null) {
+    broadcastInvalidation(customerId, [...CUSTOMER_ORDER_KEYS, ...detailKeys]);
+  }
+
+  if (shopId != null) {
+    broadcastInvalidation(shopId, [...SHOP_ORDER_KEYS, ...detailKeys]);
   }
 }

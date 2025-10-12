@@ -3,7 +3,10 @@ import createMemoryStore from "memorystore";
 import logger from "./logger";
 import {
   notifyBookingChange,
+  notifyCartChange,
   notifyNotificationChange,
+  notifyOrderChange,
+  notifyWishlistChange,
 } from "./realtime";
 import {
   User,
@@ -1134,6 +1137,7 @@ export class MemStorage implements IStorage {
       // Remove the product if it exists in this customer's cart
       if (customerCart.has(productId)) {
         customerCart.delete(productId);
+        notifyCartChange(customerId);
       }
     }
   }
@@ -1228,12 +1232,14 @@ export class MemStorage implements IStorage {
     logger.info(
       `[MemStorage] Successfully added/updated product ID ${productId} in cart for customer ID ${customerId}`,
     );
+    notifyCartChange(customerId);
   }
 
   async removeFromCart(customerId: number, productId: number): Promise<void> {
     if (this.cart.has(customerId)) {
       this.cart.get(customerId)!.delete(productId);
     }
+    notifyCartChange(customerId);
   }
 
   async getCart(
@@ -1249,6 +1255,7 @@ export class MemStorage implements IStorage {
 
   async clearCart(customerId: number): Promise<void> {
     this.cart.delete(customerId);
+    notifyCartChange(customerId);
   }
 
   // Wishlist operations
@@ -1257,6 +1264,7 @@ export class MemStorage implements IStorage {
       this.wishlist.set(customerId, new Set());
     }
     this.wishlist.get(customerId)!.add(productId);
+    notifyWishlistChange(customerId);
   }
 
   async removeFromWishlist(
@@ -1266,6 +1274,7 @@ export class MemStorage implements IStorage {
     if (this.wishlist.has(customerId)) {
       this.wishlist.get(customerId)!.delete(productId);
     }
+    notifyWishlistChange(customerId);
   }
 
   async getWishlist(customerId: number): Promise<Product[]> {
@@ -1329,6 +1338,11 @@ export class MemStorage implements IStorage {
         timestamp: newOrder.orderDate ?? new Date(),
       },
     ]);
+    notifyOrderChange({
+      customerId: newOrder.customerId ?? null,
+      shopId: newOrder.shopId ?? null,
+      orderId: id,
+    });
     return newOrder;
   }
 
@@ -1407,6 +1421,11 @@ export class MemStorage implements IStorage {
     if (!existing) throw new Error("Order not found");
     const updated = { ...existing, ...order };
     this.orders.set(id, updated);
+    notifyOrderChange({
+      customerId: updated.customerId ?? null,
+      shopId: updated.shopId ?? null,
+      orderId: id,
+    });
     return updated;
   }
 
@@ -1802,6 +1821,16 @@ export class MemStorage implements IStorage {
       refundId: null, // Initially null
     };
     this.returnRequests.set(id, newReturnRequest);
+    if (newReturnRequest.orderId != null) {
+      const order = await this.getOrder(newReturnRequest.orderId);
+      if (order) {
+        notifyOrderChange({
+          customerId: order.customerId ?? null,
+          shopId: order.shopId ?? null,
+          orderId: order.id,
+        });
+      }
+    }
     return newReturnRequest;
   }
 
@@ -1823,11 +1852,32 @@ export class MemStorage implements IStorage {
     if (!existing) throw new Error("Return request not found");
     const updated = { ...existing, ...returnRequest };
     this.returnRequests.set(id, updated);
+    if (updated.orderId != null) {
+      const order = await this.getOrder(updated.orderId);
+      if (order) {
+        notifyOrderChange({
+          customerId: order.customerId ?? null,
+          shopId: order.shopId ?? null,
+          orderId: order.id,
+        });
+      }
+    }
     return updated;
   }
 
   async deleteReturnRequest(id: number): Promise<void> {
+    const existing = this.returnRequests.get(id);
     this.returnRequests.delete(id);
+    if (existing?.orderId != null) {
+      const order = await this.getOrder(existing.orderId);
+      if (order) {
+        notifyOrderChange({
+          customerId: order.customerId ?? null,
+          shopId: order.shopId ?? null,
+          orderId: order.id,
+        });
+      }
+    }
   }
 
   async processRefund(returnRequestId: number): Promise<void> {
@@ -1837,6 +1887,16 @@ export class MemStorage implements IStorage {
     // In a real implementation, this would integrate with a payment provider's refund API
     returnRequest.status = "refunded";
     this.returnRequests.set(returnRequestId, returnRequest);
+    if (returnRequest.orderId != null) {
+      const order = await this.getOrder(returnRequest.orderId);
+      if (order) {
+        notifyOrderChange({
+          customerId: order.customerId ?? null,
+          shopId: order.shopId ?? null,
+          orderId: order.id,
+        });
+      }
+    }
   }
 
   // Enhanced notification operations
@@ -1868,6 +1928,11 @@ export class MemStorage implements IStorage {
 
     order.status = status;
     this.orders.set(orderId, order);
+    notifyOrderChange({
+      customerId: order.customerId ?? null,
+      shopId: order.shopId ?? null,
+      orderId,
+    });
     return order;
   }
 

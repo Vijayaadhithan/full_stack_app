@@ -7,7 +7,10 @@ import { getCache, setCache } from "./cache";
 import { createHash } from "crypto";
 import {
   notifyBookingChange,
+  notifyCartChange,
   notifyNotificationChange,
+  notifyOrderChange,
+  notifyWishlistChange,
 } from "./realtime";
 import {
   User,
@@ -415,6 +418,17 @@ export class PostgresStorage implements IStorage {
       throw new Error(
         "Failed to update return request during refund processing",
       );
+    }
+    const updated = updatedResult[0];
+    if (updated.orderId != null) {
+      const order = await this.getOrder(updated.orderId);
+      if (order) {
+        notifyOrderChange({
+          customerId: order.customerId ?? null,
+          shopId: order.shopId ?? null,
+          orderId: order.id,
+        });
+      }
     }
 
     // Notify the user that the refund has been processed.
@@ -1341,10 +1355,19 @@ export class PostgresStorage implements IStorage {
   async removeProductFromAllCarts(productId: number): Promise<void> {
     logger.info(`Removing product ID ${productId} from all carts`);
     try {
+      const affectedCustomers = await db
+        .select({ customerId: cart.customerId })
+        .from(cart)
+        .where(eq(cart.productId, productId));
       await db.delete(cart).where(eq(cart.productId, productId));
       logger.info(
         `Successfully removed product ID ${productId} from all carts`,
       );
+      for (const row of affectedCustomers) {
+        if (row.customerId != null) {
+          notifyCartChange(row.customerId);
+        }
+      }
     } catch (error) {
       logger.error(`Error removing product ${productId} from carts:`, error);
       throw new Error(
@@ -1356,10 +1379,19 @@ export class PostgresStorage implements IStorage {
   async removeProductFromAllWishlists(productId: number): Promise<void> {
     logger.info(`Removing product ID ${productId} from all wishlists`);
     try {
+      const affectedCustomers = await db
+        .select({ customerId: wishlist.customerId })
+        .from(wishlist)
+        .where(eq(wishlist.productId, productId));
       await db.delete(wishlist).where(eq(wishlist.productId, productId));
       logger.info(
         `Successfully removed product ID ${productId} from all wishlists`,
       );
+      for (const row of affectedCustomers) {
+        if (row.customerId != null) {
+          notifyWishlistChange(row.customerId);
+        }
+      }
     } catch (error) {
       logger.error(
         `Error removing product ${productId} from wishlists:`,
@@ -1495,10 +1527,11 @@ export class PostgresStorage implements IStorage {
           .delete(cart)
           .where(
             and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
-          );
+        );
         logger.info(
           `Successfully removed product ID ${productId} from cart for customer ID ${customerId} due to zero/negative quantity.`,
         );
+        notifyCartChange(customerId);
         return; // Exit after removing
       }
 
@@ -1531,6 +1564,7 @@ export class PostgresStorage implements IStorage {
       logger.info(
         `Successfully added/updated product ID ${productId} with quantity ${quantity} in cart for customer ID ${customerId}`,
       );
+      notifyCartChange(customerId);
     } catch (error) {
       logger.error(
         `Error in addToCart for customer ID ${customerId}, product ID ${productId}:`,
@@ -1555,6 +1589,7 @@ export class PostgresStorage implements IStorage {
       .where(
         and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
       );
+    notifyCartChange(customerId);
   }
 
   async getCart(
@@ -1597,6 +1632,7 @@ export class PostgresStorage implements IStorage {
 
   async clearCart(customerId: number): Promise<void> {
     await db.delete(cart).where(eq(cart.customerId, customerId));
+    notifyCartChange(customerId);
   }
 
   // ─── WISHLIST OPERATIONS ─────────────────────────────────────────
@@ -1613,6 +1649,7 @@ export class PostgresStorage implements IStorage {
     if (existingItem.length === 0) {
       await db.insert(wishlist).values({ customerId, productId });
     }
+    notifyWishlistChange(customerId);
   }
 
   async removeFromWishlist(
@@ -1627,6 +1664,7 @@ export class PostgresStorage implements IStorage {
           eq(wishlist.productId, productId),
         ),
       );
+    notifyWishlistChange(customerId);
   }
 
   async getWishlist(customerId: number): Promise<Product[]> {
@@ -1671,6 +1709,11 @@ export class PostgresStorage implements IStorage {
       status: "pending",
       trackingInfo: created.trackingInfo,
       timestamp: created.orderDate ?? new Date(),
+    });
+    notifyOrderChange({
+      customerId: created.customerId ?? null,
+      shopId: created.shopId ?? null,
+      orderId: created.id,
     });
     return created;
   }
@@ -1761,7 +1804,13 @@ export class PostgresStorage implements IStorage {
       .where(eq(orders.id, id))
       .returning();
     if (!result[0]) throw new Error("Order not found");
-    return result[0];
+    const updated = result[0];
+    notifyOrderChange({
+      customerId: updated.customerId ?? null,
+      shopId: updated.shopId ?? null,
+      orderId: updated.id,
+    });
+    return updated;
   }
 
   async createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
@@ -2385,7 +2434,18 @@ export class PostgresStorage implements IStorage {
           | undefined,
       })
       .returning();
-    return result[0];
+    const created = result[0];
+    if (created?.orderId != null) {
+      const order = await this.getOrder(created.orderId);
+      if (order) {
+        notifyOrderChange({
+          customerId: order.customerId ?? null,
+          shopId: order.shopId ?? null,
+          orderId: order.id,
+        });
+      }
+    }
+    return created;
   }
 
   async getReturnRequest(id: number): Promise<ReturnRequest | undefined> {
@@ -2407,10 +2467,32 @@ export class PostgresStorage implements IStorage {
       .where(eq(returns.id, id))
       .returning();
     if (!result[0]) throw new Error("Return request not found");
-    return result[0];
+    const updated = result[0];
+    if (updated.orderId != null) {
+      const order = await this.getOrder(updated.orderId);
+      if (order) {
+        notifyOrderChange({
+          customerId: order.customerId ?? null,
+          shopId: order.shopId ?? null,
+          orderId: order.id,
+        });
+      }
+    }
+    return updated;
   }
 
   async deleteReturnRequest(id: number): Promise<void> {
+    const existing = await this.getReturnRequest(id);
     await db.delete(returns).where(eq(returns.id, id));
+    if (existing?.orderId != null) {
+      const order = await this.getOrder(existing.orderId);
+      if (order) {
+        notifyOrderChange({
+          customerId: order.customerId ?? null,
+          shopId: order.shopId ?? null,
+          orderId: order.id,
+        });
+      }
+    }
   }
 }
