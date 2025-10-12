@@ -122,6 +122,7 @@ export interface IStorage {
   getProduct(id: number): Promise<Product | undefined>;
   getProductsByShop(shopId: number): Promise<Product[]>;
   getProductsByCategory(category: string): Promise<Product[]>;
+  getProductsByIds(ids: number[]): Promise<Product[]>;
   updateProduct(id: number, product: Partial<Product>): Promise<Product>;
   deleteProduct(id: number): Promise<void>;
   getProducts(filters?: any): Promise<Product[]>; // Added filters parameter
@@ -159,6 +160,7 @@ export interface IStorage {
   // Order items operations
   createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem>;
   getOrderItemsByOrder(orderId: number): Promise<OrderItem[]>;
+  getOrderItemsByOrderIds(orderIds: number[]): Promise<OrderItem[]>;
 
   // Review operations
   createReview(review: InsertReview): Promise<Review>;
@@ -1116,6 +1118,19 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getProductsByIds(ids: number[]): Promise<Product[]> {
+    if (ids.length === 0) return [];
+    const uniqueIds = new Set(ids);
+    const results: Product[] = [];
+    uniqueIds.forEach((id) => {
+      const product = this.products.get(id);
+      if (product) {
+        results.push(product);
+      }
+    });
+    return results;
+  }
+
   async deleteProduct(id: number): Promise<void> {
     const existing = this.products.get(id);
     if (!existing) throw new Error("Product not found");
@@ -1466,6 +1481,14 @@ export class MemStorage implements IStorage {
   async getOrderItemsByOrder(orderId: number): Promise<OrderItem[]> {
     return Array.from(this.orderItems.values()).filter(
       (item) => item.orderId === orderId,
+    );
+  }
+
+  async getOrderItemsByOrderIds(orderIds: number[]): Promise<OrderItem[]> {
+    if (orderIds.length === 0) return [];
+    const orderIdSet = new Set(orderIds);
+    return Array.from(this.orderItems.values()).filter(
+      (item) => item.orderId !== null && orderIdSet.has(item.orderId),
     );
   }
 

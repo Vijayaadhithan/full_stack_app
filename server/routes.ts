@@ -36,6 +36,8 @@ import {
   User,
   Booking,
   Order,
+  type Product,
+  type OrderItem,
   PaymentMethodType,
   PaymentMethodSchema,
   shopWorkers,
@@ -158,6 +160,134 @@ const formatUserAddress = (
   ].filter((part): part is string => Boolean(part && part.trim()));
   return parts.join(", ");
 };
+
+type OrderHydrationOptions = {
+  includeShop?: boolean;
+  includeCustomer?: boolean;
+};
+
+type HydratedOrderItem = {
+  id: number;
+  productId: number | null;
+  name: string;
+  quantity: number;
+  price: string;
+  total: string;
+};
+
+type HydratedOrder = Order & {
+  items: HydratedOrderItem[];
+  shop?: { name: string | null; phone: string | null; email: string | null };
+  customer?: {
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+  };
+};
+
+async function hydrateOrders(
+  orders: Order[],
+  options: OrderHydrationOptions = {},
+): Promise<HydratedOrder[]> {
+  if (orders.length === 0) {
+    return [];
+  }
+
+  const orderIds = orders.map((order) => order.id);
+  const rawItems = await storage.getOrderItemsByOrderIds(orderIds);
+  const itemsByOrderId = new Map<number, OrderItem[]>();
+  for (const item of rawItems) {
+    if (item.orderId == null) continue;
+    if (!itemsByOrderId.has(item.orderId)) {
+      itemsByOrderId.set(item.orderId, []);
+    }
+    itemsByOrderId.get(item.orderId)!.push(item);
+  }
+
+  const productIds = Array.from(
+    new Set(
+      rawItems
+        .map((item) => item.productId)
+        .filter((value): value is number => value !== null),
+    ),
+  );
+  const products =
+    productIds.length > 0
+      ? await storage.getProductsByIds(productIds)
+      : ([] as Product[]);
+  const productMap = new Map<number, Product>(
+    products.map((product) => [product.id, product]),
+  );
+
+  const userIdSet = new Set<number>();
+  if (options.includeShop) {
+    for (const order of orders) {
+      if (order.shopId != null) {
+        userIdSet.add(order.shopId);
+      }
+    }
+  }
+  if (options.includeCustomer) {
+    for (const order of orders) {
+      if (order.customerId != null) {
+        userIdSet.add(order.customerId);
+      }
+    }
+  }
+
+  const relatedUsers =
+    userIdSet.size > 0
+      ? await storage.getUsersByIds(Array.from(userIdSet))
+      : ([] as User[]);
+  const userMap = new Map<number, User>(
+    relatedUsers.map((user) => [user.id, user]),
+  );
+
+  return orders.map((order) => {
+    const orderItems = itemsByOrderId.get(order.id) ?? [];
+    const hydratedItems = orderItems.map<HydratedOrderItem>((item) => {
+      const product =
+        item.productId !== null ? productMap.get(item.productId) : undefined;
+      return {
+        id: item.id,
+        productId: item.productId,
+        name: product?.name ?? "",
+        quantity: item.quantity,
+        price: item.price,
+        total: item.total,
+      };
+    });
+
+    const result: HydratedOrder = {
+      ...(order as Order),
+      items: hydratedItems,
+    };
+
+    if (options.includeShop && order.shopId != null) {
+      const shop = userMap.get(order.shopId);
+      if (shop) {
+        result.shop = {
+          name: shop.name,
+          phone: shop.phone,
+          email: shop.email,
+        };
+      }
+    }
+
+    if (options.includeCustomer && order.customerId != null) {
+      const customer = userMap.get(order.customerId);
+      if (customer) {
+        result.customer = {
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+        };
+      }
+    }
+
+    return result;
+  });
+}
 
 const dateStringSchema = z
   .string()
@@ -3425,37 +3555,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Validate products, stock, and ensure all items are from same shop
+        const productIds = Array.from(new Set(items.map((item) => item.productId)));
+        const products = productIds.length
+          ? await storage.getProductsByIds(productIds)
+          : [];
+        const productMap = new Map(products.map((product) => [product.id, product]));
+
+        const missingProducts = productIds.filter((id) => !productMap.has(id));
+        if (missingProducts.length > 0) {
+          return res.status(400).json({
+            message: `Product with ID ${missingProducts[0]} not found`,
+          });
+        }
+
         let shopId: number | null | undefined;
+        const quantityByProduct = new Map<number, number>();
         for (const item of items) {
-          const product = await storage.getProduct(item.productId);
+          const product = productMap.get(item.productId);
           if (!product) {
-            return res
-              .status(400)
-              .json({ message: `Product with ID ${item.productId} not found` });
+            // Safety net, though missing products handled earlier.
+            return res.status(400).json({
+              message: `Product with ID ${item.productId} not found`,
+            });
           }
-          if (product.stock < item.quantity) {
-            return res
-              .status(400)
-              .json({
-                message: `Insufficient stock for product: ${product.name}`,
-              });
-          }
+
+          const totalQuantity =
+            (quantityByProduct.get(item.productId) ?? 0) + item.quantity;
+          quantityByProduct.set(item.productId, totalQuantity);
+
           const productShopId = product.shopId;
           if (productShopId == null) {
             return res
               .status(400)
               .json({ message: `Product with ID ${item.productId} has no shop` });
           }
+
           if (shopId == null) {
             shopId = productShopId;
           } else if (productShopId !== shopId) {
             return res
               .status(400)
-              .json({
-                message: "All items must be from the same shop",
-              });
+              .json({ message: "All items must be from the same shop" });
           }
         }
+
+        const insufficientEntry = Array.from(quantityByProduct.entries()).find(
+          ([productId, totalQuantity]) => {
+            const product = productMap.get(productId);
+            return product ? product.stock < totalQuantity : true;
+          },
+        );
+        if (insufficientEntry) {
+          const [productId] = insufficientEntry;
+          const product = productMap.get(productId);
+          return res.status(400).json({
+            message: `Insufficient stock for product: ${product?.name ?? productId}`,
+          });
+        }
+
         if (shopId === undefined) {
           return res.status(400).json({ message: "No items provided" });
         }
@@ -3577,20 +3734,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           billingAddress: derivedBillingAddress || "",
         });
         logger.info(`Created order ${newOrder.id}`);
-        // Create order items
-        for (const item of items) {
-          await storage.createOrderItem({
-            orderId: newOrder.id,
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price.toString(),
-            total: (
-              parseFloat(item.price.toString()) * item.quantity
-            ).toString(),
-          });
+        const orderItemPayloads = items.map((item) => ({
+          orderId: newOrder.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.price.toString(),
+          total: (
+            parseFloat(item.price.toString()) * item.quantity
+          ).toString(),
+        }));
+        await Promise.all(
+          orderItemPayloads.map((payload) => storage.createOrderItem(payload)),
+        );
 
-          // Update product stock
-          await storage.updateProductStock(item.productId, item.quantity);
+        const stockUpdates = Array.from(quantityByProduct.entries());
+        for (let i = 0; i < stockUpdates.length; i += 1) {
+          const [productId, totalQuantity] = stockUpdates[i]!;
+          await storage.updateProductStock(productId, totalQuantity);
         }
 
         // Clear cart after order creation
@@ -3657,38 +3817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const orders = await storage.getOrdersByCustomer(req.user!.id, {
           status: statusFilter,
         });
-        const detailed = await Promise.all(
-          orders.map(async (order) => {
-            const itemsRaw = await storage.getOrderItemsByOrder(order.id);
-            const items = await Promise.all(
-              itemsRaw.map(async (item) => {
-                const product =
-                  item.productId !== null
-                    ? await storage.getProduct(item.productId)
-                    : null;
-                return {
-                  id: item.id,
-                  productId: item.productId,
-                  name: product?.name ?? "",
-                  quantity: item.quantity,
-                  price: item.price,
-                  total: item.total,
-                };
-              }),
-            );
-            const shop =
-              order.shopId !== null
-                ? await storage.getUser(order.shopId)
-                : undefined;
-            return {
-              ...order,
-              items,
-              shop: shop
-                ? { name: shop.name, phone: shop.phone, email: shop.email }
-                : undefined,
-            };
-          }),
-        );
+        const detailed = await hydrateOrders(orders, { includeShop: true });
         res.json(detailed);
       } catch (error) {
         logger.error("Error fetching customer orders:", error);
@@ -3737,42 +3866,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const shopContextId =
           req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
         const orders = await storage.getRecentOrdersByShop(shopContextId);
-        const detailed = await Promise.all(
-          orders.map(async (order) => {
-            const itemsRaw = await storage.getOrderItemsByOrder(order.id);
-            const items = await Promise.all(
-              itemsRaw.map(async (item) => {
-                const product =
-                  item.productId !== null
-                    ? await storage.getProduct(item.productId)
-                    : null;
-                return {
-                  id: item.id,
-                  productId: item.productId,
-                  name: product?.name ?? "",
-                  quantity: item.quantity,
-                  price: item.price,
-                  total: item.total,
-                };
-              }),
-            );
-            const customer =
-              order.customerId !== null
-                ? await storage.getUser(order.customerId)
-                : undefined;
-            return {
-              ...order,
-              items,
-              customer: customer
-                ? {
-                    name: customer.name,
-                    phone: customer.phone,
-                    email: customer.email,
-                  }
-                : undefined,
-            };
-          }),
-        );
+        const detailed = await hydrateOrders(orders, {
+          includeCustomer: true,
+        });
         res.json(detailed);
       } catch (error) {
         logger.error("Error fetching recent shop orders:", error);
@@ -3829,42 +3925,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           shopContextId,
           statusFilter,
         );
-        const detailed = await Promise.all(
-          orders.map(async (order) => {
-            const itemsRaw = await storage.getOrderItemsByOrder(order.id);
-            const items = await Promise.all(
-              itemsRaw.map(async (item) => {
-                const product =
-                  item.productId !== null
-                    ? await storage.getProduct(item.productId)
-                    : null;
-                return {
-                  id: item.id,
-                  productId: item.productId,
-                  name: product?.name ?? "",
-                  quantity: item.quantity,
-                  price: item.price,
-                  total: item.total,
-                };
-              }),
-            );
-            const customer =
-              order.customerId !== null
-                ? await storage.getUser(order.customerId)
-                : undefined;
-            return {
-              ...order,
-              items,
-              customer: customer
-                ? {
-                    name: customer.name,
-                    phone: customer.phone,
-                    email: customer.email,
-                  }
-                : undefined,
-            };
-          }),
-        );
+        const detailed = await hydrateOrders(orders, {
+          includeCustomer: true,
+        });
         res.json(detailed);
       } catch (error) {
         logger.error("Error fetching shop orders:", error);

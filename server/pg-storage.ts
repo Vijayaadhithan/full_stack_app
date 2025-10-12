@@ -58,7 +58,7 @@ import {
   UserRole,
 } from "@shared/schema";
 import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
-import { eq, and, lt, ne, sql, desc, count } from "drizzle-orm";
+import { eq, and, lt, ne, sql, desc, count, inArray } from "drizzle-orm";
 import {
   toISTForStorage,
   getCurrentISTDate,
@@ -1342,6 +1342,19 @@ export class PostgresStorage implements IStorage {
     return result;
   }
 
+  async getProductsByIds(ids: number[]): Promise<Product[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const uniqueIds = Array.from(new Set(ids));
+    return await db
+      .select()
+      .from(products)
+      .where(
+        and(inArray(products.id, uniqueIds), eq(products.isDeleted, false)),
+      );
+  }
+
   async updateProduct(id: number, product: Partial<Product>): Promise<Product> {
     const result = await db
       .update(products)
@@ -1851,6 +1864,17 @@ export class PostgresStorage implements IStorage {
       .select()
       .from(orderItems)
       .where(eq(orderItems.orderId, orderId));
+  }
+
+  async getOrderItemsByOrderIds(orderIds: number[]): Promise<OrderItem[]> {
+    if (orderIds.length === 0) {
+      return [];
+    }
+    const unique = Array.from(new Set(orderIds));
+    return await db
+      .select()
+      .from(orderItems)
+      .where(inArray(orderItems.orderId, unique));
   }
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
