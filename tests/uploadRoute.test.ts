@@ -1,20 +1,27 @@
-import { describe, it, afterEach } from "node:test";
+import { describe, it, afterEach, before } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promises as fs } from "node:fs";
 import request from "supertest";
+import express from "express";
 
-process.env.NODE_ENV = "test";
-process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://localhost/test";
+process.env.USE_IN_MEMORY_DB = "true";
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || "test-secret";
+process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://localhost/test";
 
-const { app } = await import("../server/index");
+const { registerRoutes } = await import("../server/routes");
+const { storage } = await import("../server/storage");
+const { hashPasswordInternal } = await import("../server/auth");
+type MemStorage = typeof storage;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsDir = path.resolve(__dirname, "../uploads");
 let createdFiles: string[] = [];
+let app: express.Express;
+let agent: request.SuperAgentTest;
+let memStorage: MemStorage;
 
 afterEach(async () => {
   await Promise.all(
@@ -32,10 +39,33 @@ afterEach(async () => {
 });
 
 describe("/api/upload", () => {
+  before(async () => {
+    app = express();
+    app.use(express.json());
+    await registerRoutes(app);
+    agent = request.agent(app);
+    memStorage = storage;
+
+    const password = await hashPasswordInternal("upload-secret");
+    await (memStorage as any).createUser({
+      username: "uploadtester",
+      password,
+      role: "customer",
+      name: "Upload Tester",
+      phone: "9999999999",
+      email: "upload@test.com",
+      emailVerified: true,
+    });
+
+    await agent
+      .post("/api/login")
+      .send({ username: "uploadtester", password: "upload-secret" });
+  });
+
   it("accepts image uploads and returns file info", async () => {
     await fs.mkdir(uploadsDir, { recursive: true });
 
-    const res = await request(app)
+    const res = await agent
       .post("/api/upload")
       .attach("file", Buffer.from("fake image data"), {
         filename: "test.png",
@@ -53,7 +83,7 @@ describe("/api/upload", () => {
   });
 
   it("rejects unsupported file types", async () => {
-    const res = await request(app)
+    const res = await agent
       .post("/api/upload")
       .attach("file", Buffer.from("not an image"), {
         filename: "test.txt",
@@ -65,7 +95,7 @@ describe("/api/upload", () => {
   });
 
   it("requires a file to be uploaded", async () => {
-    const res = await request(app).post("/api/upload");
+    const res = await agent.post("/api/upload");
     assert.equal(res.status, 400);
     assert.equal(res.body.message, "No file uploaded");
   });

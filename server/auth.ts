@@ -5,15 +5,16 @@ import { Express, type Request, type Response } from "express";
 import { z } from "zod";
 import session from "express-session";
 import logger from "./logger";
-import { scrypt, randomBytes, timingSafeEqual , createHash} from "crypto";
+import { scrypt, randomBytes, timingSafeEqual, createHash } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { sendEmail, getWelcomeEmailContent } from "./emailService";
 import {
   User as SelectUser,
+  type InsertUser,
+  shopProfileSchema,
   emailVerificationTokens as emailVerificationTokensTable,
 } from "@shared/schema";
-import { insertUserSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import dotenv from "dotenv";
@@ -24,6 +25,7 @@ import {
   googleAuthLimiter,
   deleteAccountLimiter,
 } from "./security/rateLimiters";
+import { sanitizeUser } from "./security/sanitizeUser";
 dotenv.config();
 
 declare module "express-session" {
@@ -55,9 +57,61 @@ const verifyEmailQuerySchema = z
   })
   .strict();
 
+const PUBLIC_REGISTRATION_ROLES = ["customer", "provider", "shop"] as const;
+type PublicRegistrationRole = (typeof PUBLIC_REGISTRATION_ROLES)[number];
+
+const usernameRegex = /^[a-z0-9._-]+$/i;
+
+const registrationSchemaBase = z.object({
+    username: z
+      .string()
+      .trim()
+      .min(3, "Username must be at least 3 characters")
+      .max(32, "Username must be at most 32 characters")
+      .regex(
+        usernameRegex,
+        "Username can only contain letters, numbers, dots, underscores, and hyphens",
+      ),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters long")
+      .max(64, "Password must be at most 64 characters long"),
+    role: z
+      .enum(PUBLIC_REGISTRATION_ROLES)
+      .default("customer"),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(100, "Name must be at most 100 characters"),
+    phone: z
+      .string()
+      .trim()
+      .min(8, "Phone number must be at least 8 digits")
+      .max(20, "Phone number must be at most 20 digits")
+      .regex(/^\d+$/, "Phone number must contain digits only"),
+    email: z
+      .string()
+      .trim()
+      .email("Invalid email address"),
+    language: z.string().trim().max(10).optional(),
+    bio: z.string().trim().max(1000).optional(),
+    experience: z.string().trim().max(200).optional(),
+    languages: z.string().trim().max(200).optional(),
+    shopProfile: shopProfileSchema.optional(),
+  });
+
+const registrationSchema = registrationSchemaBase
+  .extend({
+    emailVerified: z.boolean().optional(),
+    averageRating: z.string().optional(),
+    totalReviews: z.number().int().optional(),
+  })
+  .strict();
+
 declare global {
   namespace Express {
-    interface User extends SelectUser {}
+    interface User extends Omit<SelectUser, "password"> {}
   }
 }
 
@@ -70,11 +124,36 @@ export async function hashPasswordInternal(password: string) {
   return `${buf.toString("hex")}.${salt}`;
 }
 
-async function comparePasswords(supplied: string, stored: string) {
-  const [hashed, salt] = stored.split(".");
-  const hashedBuf = Buffer.from(hashed, "hex");
-  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-  return timingSafeEqual(hashedBuf, suppliedBuf);
+async function comparePasswords(
+  supplied: string,
+  stored: string | null | undefined,
+) {
+  if (typeof stored !== "string" || stored.length === 0) {
+    return false;
+  }
+
+  const parts = stored.split(".");
+  if (parts.length !== 2) {
+    logger.warn("Stored password hash has unexpected format");
+    return false;
+  }
+
+  const [hashed, salt] = parts;
+  if (!hashed || !salt) {
+    return false;
+  }
+
+  try {
+    const hashedBuf = Buffer.from(hashed, "hex");
+    const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+    if (hashedBuf.length !== suppliedBuf.length) {
+      return false;
+    }
+    return timingSafeEqual(hashedBuf, suppliedBuf);
+  } catch (error) {
+    logger.warn({ err: error }, "Password comparison failed");
+    return false;
+  }
 }
 
 async function generateEmailVerificationToken(userId: number) {
@@ -90,8 +169,16 @@ async function generateEmailVerificationToken(userId: number) {
 }
 
 export function setupAuth(app: Express) {
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret || sessionSecret.trim().length === 0) {
+    logger.error(
+      "SESSION_SECRET is not configured. Refusing to start authentication without a secret.",
+    );
+    throw new Error("SESSION_SECRET environment variable must be set.");
+  }
+
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET!,
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     store: storage.sessionStore,
@@ -137,21 +224,25 @@ export function setupAuth(app: Express) {
       const trimmed = identifier?.trim?.() ?? "";
       const lower = trimmed.toLowerCase();
       // Support login via username, email, or phone number
-      let user = await storage.getUserByUsername(lower);
-      if (!user) {
-        user = await storage.getUserByEmail(lower);
+      let userRecord = await storage.getUserByUsername(lower);
+      if (!userRecord) {
+        userRecord = await storage.getUserByEmail(lower);
       }
-      if (!user) {
-        user = await storage.getUserByPhone(trimmed);
+      if (!userRecord) {
+        userRecord = await storage.getUserByPhone(trimmed);
       }
-      if (!user || !(await comparePasswords(password, user.password))) {
+      if (
+        !userRecord ||
+        !(await comparePasswords(password, (userRecord as SelectUser).password))
+      ) {
         return done(null, false);
       }
       // Block suspended users from logging in
-      if ((user as any)?.isSuspended) {
+      if ((userRecord as any)?.isSuspended) {
         return done(null, false);
       }
-      return done(null, user);
+      const sanitizedUser = sanitizeUser(userRecord);
+      return done(null, sanitizedUser ?? false);
     }),
   );
 
@@ -206,7 +297,8 @@ export function setupAuth(app: Express) {
               if ((user as any)?.isSuspended) {
                 return done(null, false, { message: "Account suspended" });
               }
-              return done(null, user);
+              const safeUser = sanitizeUser(user);
+              return done(null, safeUser ?? false);
             }
 
             if (profile.emails && profile.emails.length > 0) {
@@ -234,7 +326,8 @@ export function setupAuth(app: Express) {
                 if ((user as any)?.isSuspended) {
                   return done(null, false, { message: "Account suspended" });
                 }
-                return done(null, user);
+                const safeUser = sanitizeUser(user);
+                return done(null, safeUser ?? false);
               }
             }
 
@@ -330,7 +423,8 @@ export function setupAuth(app: Express) {
               );
             }
 
-            return done(null, createdUser);
+            const safeUser = sanitizeUser(createdUser);
+            return done(null, safeUser ?? false);
           } catch (err) {
             logger.error(
               "[Google OAuth] Error during Google authentication:",
@@ -343,89 +437,137 @@ export function setupAuth(app: Express) {
     );
   }
 
-  passport.serializeUser((user, done) => done(null, user.id));
+  passport.serializeUser((user: Express.User, done) => done(null, user.id));
   passport.deserializeUser(async (id: number, done) => {
-    const user = await storage.getUser(id);
-    done(null, user);
+    try {
+      const user = await storage.getUser(id);
+      if (!user) {
+        return done(null, false);
+      }
+      const safeUser = sanitizeUser(user);
+      return done(null, safeUser ?? false);
+    } catch (error) {
+      return done(error as Error);
+    }
   });
 
   app.post("/api/register", registerLimiter, async (req, res, next) => {
-    const validationResult = insertUserSchema.safeParse(req.body);
-    if (!validationResult.success) {
-      return res
-        .status(400)
-        .json({
-          message: "Invalid input",
-          errors: validationResult.error.errors,
-        });
+    const parsedBody = registrationSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({
+        message: "Invalid input",
+        errors: parsedBody.error.errors,
+      });
     }
 
-    const validatedData = validationResult.data;
+    const validatedData = parsedBody.data;
+    const normalizedUsername = validatedData.username.toLowerCase();
+    const normalizedEmail = validatedData.email.toLowerCase();
+    const normalizedPhone = validatedData.phone.replace(/\D+/g, "");
 
-    const normalizedUsername = validatedData.username
-      ? validatedData.username.toLowerCase()
-      : undefined;
-
-    if (normalizedUsername) {
+    try {
       const existingUser = await storage.getUserByUsername(normalizedUsername);
       if (existingUser) {
         return res.status(400).json({ message: "Username already exists" });
       }
-    }
 
-    if (validatedData.phone) {
-      const existingByPhone = await storage.getUserByPhone(validatedData.phone);
-      if (existingByPhone) {
-        return res.status(400).json({ message: "Phone number already in use" });
+      const existingEmail = await storage.getUserByEmail(normalizedEmail);
+      if (existingEmail) {
+        return res.status(400).json({ message: "Email already in use" });
       }
-    }
 
-    // if (validatedData.role === 'shop' && !validatedData.shopProfile) {
-    //   return res.status(400).json({ message: "Shop profile is required for shop role" });
-    // }
+      if (normalizedPhone.length > 0) {
+        const existingByPhone = await storage.getUserByPhone(normalizedPhone);
+        if (existingByPhone) {
+          return res.status(400).json({ message: "Phone number already in use" });
+        }
+      }
 
-    const userToCreate = {
-      ...validatedData,
-      username: normalizedUsername,
-      password: await hashPasswordInternal(validatedData.password!),
-      emailVerified: false, // Email not verified yet for local registration
-    };
+      const userToCreate: InsertUser = {
+        username: normalizedUsername,
+        password: await hashPasswordInternal(validatedData.password),
+        role: validatedData.role,
+        name: validatedData.name.trim(),
+        phone: normalizedPhone,
+        email: normalizedEmail,
+        language: validatedData.language ?? "en",
+        bio:
+          validatedData.role === "provider"
+            ? validatedData.bio?.trim() ?? null
+            : null,
+        experience:
+          validatedData.role === "provider"
+            ? validatedData.experience?.trim() ?? null
+            : null,
+        languages:
+          validatedData.role === "provider"
+            ? validatedData.languages?.trim() ?? null
+            : null,
+        shopProfile:
+          validatedData.role === "shop"
+            ? validatedData.shopProfile ?? null
+            : null,
+        emailVerified: false,
+        averageRating: "0",
+        totalReviews: 0,
+      };
 
-    const user = await storage.createUser(userToCreate);
+      const user = await storage.createUser(userToCreate);
 
-    // Send welcome email with verification link
-    const verificationToken = await generateEmailVerificationToken(user.id);
-    const verificationLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify-email?token=${verificationToken}&userId=${user.id}`;
+      const verificationToken = await generateEmailVerificationToken(user.id);
+      const verificationLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify-email?token=${verificationToken}&userId=${user.id}`;
 
-    const welcomeContent = getWelcomeEmailContent(
-      user.name || user.username,
-      verificationLink,
-    );
-    if (user.email) {
-      await sendEmail({
-        to: user.email,
-        subject: welcomeContent.subject,
-        text: welcomeContent.text,
-        html: welcomeContent.html,
-      });
-    } else {
-      logger.warn(
-        "[Auth] Skipping verification email because registered user has no email address.",
+      const welcomeContent = getWelcomeEmailContent(
+        user.name || user.username,
+        verificationLink,
       );
-    }
+      if (user.email) {
+        await sendEmail({
+          to: user.email,
+          subject: welcomeContent.subject,
+          text: welcomeContent.text,
+          html: welcomeContent.html,
+        });
+      } else {
+        logger.warn(
+          "[Auth] Skipping verification email because registered user has no email address.",
+        );
+      }
 
-    req.login(user, (err) => {
-      if (err) return next(err);
-      return res.status(201).json(user);
-    });
+      const safeUser = sanitizeUser(user);
+      if (!safeUser) {
+        return res
+          .status(500)
+          .json({ message: "Unable to create user. Please try again." });
+      }
+
+      req.login(safeUser as Express.User, (err) => {
+        if (err) return next(err);
+        return res.status(201).json(safeUser);
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Failed to register user");
+      return res.status(500).json({ message: "Failed to register user" });
+    }
   });
 
   // TODO: Add a new route for email verification
   app.get("/api/verify-email", verifyEmailLimiter, verifyEmailHandler);
 
-  app.post("/api/login", loginLimiter, passport.authenticate("local"), (req, res) => {
-    res.status(200).json(req.user);
-  });
+  app.post(
+    "/api/login",
+    loginLimiter,
+    passport.authenticate("local"),
+    (req, res) => {
+      const safeUser = sanitizeUser(req.user as Express.User);
+      if (!safeUser) {
+        return res
+          .status(500)
+          .json({ message: "Unable to complete login. Please try again." });
+      }
+      res.status(200).json(safeUser);
+    },
+  );
 
   app.post("/api/logout", (req, res, next) => {
     req.logout((err) => {
@@ -449,10 +591,9 @@ export function setupAuth(app: Express) {
           errors: parsedQuery.error.flatten(),
         });
       }
-      const role = parsedQuery.data.role as SelectUser["role"] | undefined;
+      const role = parsedQuery.data.role as PublicRegistrationRole | undefined;
       // Basic validation for role. Consider using a predefined list or enum for roles.
-      const validRoles: SelectUser["role"][] = ["customer", "provider", "shop"];
-      if (role && validRoles.includes(role)) {
+      if (role && PUBLIC_REGISTRATION_ROLES.includes(role)) {
         req.session.signupRole = role;
       } else {
         // Default to 'customer' or handle invalid/missing role as an error

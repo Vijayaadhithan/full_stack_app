@@ -5,10 +5,7 @@ import {
   useMutation,
   UseMutationResult,
 } from "@tanstack/react-query";
-import {
-  User as SelectUser,
-  InsertUser,
-} from "@shared/schema";
+import { User as SelectUser, InsertUser } from "@shared/schema";
 import {
   getQueryFn,
   apiRequest,
@@ -17,13 +14,15 @@ import {
 } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+type PublicUser = Omit<SelectUser, "password">;
+
 type AuthContextType = {
-  user: SelectUser | null;
+  user: PublicUser | null;
   isFetching: boolean; // Changed from isLoading
   error: Error | null;
-  loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
+  loginMutation: UseMutationResult<PublicUser, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
+  registerMutation: UseMutationResult<PublicUser, Error, InsertUser>;
 };
 
 type LoginData = Pick<InsertUser, "username" | "password">;
@@ -35,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     data: user,
     error,
     isFetching, // Changed from isLoading
-  } = useQuery<SelectUser | undefined, Error>({
+  } = useQuery<PublicUser | undefined, Error>({
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
     // Increase staleTime to prevent unnecessary refetches that cause login page flash
@@ -45,12 +44,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refetchOnMount: true,
   });
 
-  const loginMutation = useMutation({
+  const loginMutation = useMutation<PublicUser, Error, LoginData>({
     mutationFn: async (credentials: LoginData) => {
       const res = await apiRequest("POST", "/api/login", credentials);
       return await res.json();
     },
-    onSuccess: (user: SelectUser) => {
+    onSuccess: (user: PublicUser) => {
       resetCsrfTokenCache();
       queryClient.setQueryData(["/api/user"], user);
     },
@@ -63,12 +62,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const registerMutation = useMutation({
+  const registerMutation = useMutation<PublicUser, Error, InsertUser>({
     mutationFn: async (credentials: InsertUser) => {
       const res = await apiRequest("POST", "/api/register", credentials);
       return await res.json();
     },
-    onSuccess: (user: SelectUser) => {
+    onSuccess: (user: PublicUser) => {
       resetCsrfTokenCache();
       queryClient.setQueryData(["/api/user"], user);
     },

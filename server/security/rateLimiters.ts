@@ -19,7 +19,7 @@ export const loginLimiter = rateLimit({
 export const registerLimiter = rateLimit({
   ...defaultSensitiveConfig,
   windowMs: ONE_HOUR_MS,
-  max: 5,
+  max: 10,
   message: { message: "Too many signups from this IP. Try later." },
 });
 

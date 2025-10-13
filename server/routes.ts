@@ -8,6 +8,7 @@ import {
   getMagicLinkEmailContent,
 } from "./emailService";
 import { storage } from "./storage";
+import { sanitizeUser, sanitizeUserList } from "./security/sanitizeUser";
 import { z } from "zod";
 import csrf from "csurf";
 import multer, { MulterError } from "multer";
@@ -75,13 +76,33 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const UPLOADS_DIRECTORY = path.join(__dirname, "../uploads");
 
+function sanitizeFilename(originalName: string): string {
+  const base = path.basename(originalName || "");
+  const extension = path.extname(base).slice(0, 10);
+  const nameWithoutExt = base.slice(0, base.length - extension.length);
+  const normalized =
+    nameWithoutExt
+      .replace(/[^a-z0-9._-]/gi, "_")
+      .replace(/_{2,}/g, "_")
+      .slice(0, 80) || "upload";
+  const cleanedExt = extension.replace(/[^a-z0-9.]/gi, "").toLowerCase();
+  if (!cleanedExt) {
+    return normalized;
+  }
+  const ensuredExt = cleanedExt.startsWith(".")
+    ? cleanedExt
+    : `.${cleanedExt}`;
+  return `${normalized}${ensuredExt}`;
+}
+
 const uploadStorage = multer.diskStorage({
   destination(_req, _file, cb) {
     cb(null, UPLOADS_DIRECTORY);
   },
   filename(_req, file, cb) {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${uniqueSuffix}-${file.originalname}`);
+    const uniqueSuffix = `${Date.now()}-${crypto.randomUUID()}`;
+    const safeOriginalName = sanitizeFilename(file.originalname);
+    cb(null, `${uniqueSuffix}-${safeOriginalName}`);
   },
 });
 
@@ -919,9 +940,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .set({ consumedAt: new Date() })
           .where(eq(magicLinkTokensTable.id, tokenRecord.id));
 
-        req.login(user, (err) => {
+        const safeUser = sanitizeUser(user);
+        if (!safeUser) {
+          return res
+            .status(500)
+            .json({ message: "Unable to complete magic link login" });
+        }
+
+        req.login(safeUser as Express.User, (err) => {
           if (err) return next(err);
-          return res.json(user);
+          return res.json(safeUser);
         });
       } catch (error) {
         logger.error("Error completing magic link login:", error);
@@ -1051,7 +1079,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const uploadSingleFile = uploadMiddleware.single("file");
   const uploadSingleQr = uploadMiddleware.single("qr");
 
-  app.post("/api/upload", (req, res) => {
+  app.post("/api/upload", requireAuth, (req, res) => {
     uploadSingleFile(req, res, (err) => {
       if (err) {
         const message =
@@ -1074,7 +1102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.post("/api/users/upload-qr", (req, res) => {
+  app.post("/api/users/upload-qr", requireAuth, (req, res) => {
     uploadSingleQr(req, res, (err) => {
       if (err) {
         const message =
@@ -1832,9 +1860,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       const updatedUser = await storage.updateUser(userId, updateData);
+      const safeUser = sanitizeUser(updatedUser);
 
-      if (req.user) Object.assign(req.user, updatedUser);
-      res.json(updatedUser);
+      if (!safeUser) {
+        return res
+          .status(500)
+          .json({ message: "Failed to update user profile" });
+      }
+
+      if (req.user) Object.assign(req.user, safeUser);
+      res.json(safeUser);
     } catch (error) {
       logger.error("Error updating user:", error);
       res
@@ -1860,7 +1895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const shops = await storage.getShops(filters);
 
-      res.json(shops);
+      res.json(sanitizeUserList(shops));
     } catch (error) {
       logger.error("Error fetching shops:", error);
       res
@@ -1882,14 +1917,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       const user = await storage.getUser(userId);
-      logger.info("[API] /api/users/:id - User from storage:", user);
-
       if (!user) {
         logger.info("[API] /api/users/:id - User not found");
         return res.status(404).json({ message: "User not found" });
       }
 
-      res.json(user);
+      const safeUser = sanitizeUser(user);
+      logger.info("[API] /api/users/:id - User from storage:", safeUser);
+
+      if (!safeUser) {
+        return res.status(500).json({ message: "Failed to fetch user" });
+      }
+
+      res.json(safeUser);
     } catch (error) {
       logger.error("[API] Error in /api/users/:id:", error);
       res
@@ -4451,7 +4491,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      res.json(user);
+      const safeUser = sanitizeUser(user);
+      if (!safeUser) {
+        return res.status(500).json({ message: "Failed to fetch user" });
+      }
+      res.json(safeUser);
     } catch (error) {
       logger.error("Error fetching user:", error);
       res
