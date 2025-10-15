@@ -88,9 +88,19 @@ const allowedOrigins = Array.from(
   new Set([...configuredOrigins, ...defaultOrigins]),
 );
 const isProduction = process.env.NODE_ENV === "production";
+const wildcardRequested = allowedOrigins.includes("*");
+const effectiveOrigins = allowedOrigins.filter((origin) => origin !== "*");
+
+if (isProduction && wildcardRequested) {
+  logger.warn(
+    { allowedOrigins: effectiveOrigins },
+    "Ignoring wildcard CORS origin in production; configure explicit origins instead",
+  );
+}
+
+const corsAllowedOrigins = isProduction ? effectiveOrigins : allowedOrigins;
 const allowAllOrigins =
-  allowedOrigins.includes("*") ||
-  (!isProduction && process.env.STRICT_CORS !== "true");
+  !isProduction && process.env.STRICT_CORS !== "true";
 
 type OriginMatcher = {
   value: string;
@@ -103,7 +113,7 @@ function escapeRegex(input: string): string {
   return input.replace(SPECIAL_CHARS_REGEX, "\\$&");
 }
 
-const originMatchers: OriginMatcher[] = allowedOrigins
+const originMatchers: OriginMatcher[] = corsAllowedOrigins
   .filter((origin) => origin !== "*")
   .map((origin) => {
     if (origin.includes("*")) {
@@ -358,7 +368,7 @@ app.use(
           if (isAllowed) {
             return callback(null, true);
           }
-          logger.warn({ origin, allowedOrigins }, "Blocked CORS origin");
+          logger.warn({ origin, allowedOrigins: corsAllowedOrigins }, "Blocked CORS origin");
           return callback(new Error("Not allowed by CORS"));
         },
     credentials: true,

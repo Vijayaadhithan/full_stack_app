@@ -63,13 +63,25 @@ This section guides you through setting up the project environment.
       ```
 
 4.  **Run Database Migrations:**
-    The project uses Drizzle ORM. Run the migrations to set up the database schema:
+    The project uses Drizzle ORM. Apply the migrations to set up the database schema:
 
     ```bash
-    npx drizzle-kit migrate
+    npm run db:migrate
     ```
 
-    _(Note: Confirm the exact migration command based on `package.json` scripts if available. It might be `npm run migrate` or similar.)_
+    When you modify the schema, generate a new SQL migration first:
+
+    ```bash
+    npm run db:generate
+    ```
+
+    Review the generated file in `migrations/` and then apply it with `npm run db:migrate`.
+
+    If your database already has the production schema (for example, you previously relied on `drizzle-kit push`), run the baseline script once to record the current state before applying new migrations:
+
+    ```bash
+    npm run db:migrate:baseline
+    ```
 
 5.  **Start the Application:**
     - **Development Mode (Client + Server with Hot Reloading):**

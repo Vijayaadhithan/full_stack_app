@@ -64,10 +64,18 @@ SESSION_SECRET=your-session-secret
 npm install
 ```
 
-2. Initialize the database:
+2. Apply the database migrations:
 
 ```bash
-npx drizzle-kit push:pg
+npm run db:migrate
+```
+
+When you make schema changes run `npm run db:generate`, review the generated SQL in `migrations/`, and then apply it with `npm run db:migrate`.
+
+If you're migrating an existing database that already contains the schema, run the baseline command once to record the current state before applying new migrations:
+
+```bash
+npm run db:migrate:baseline
 ```
 
 ### Running the Application
