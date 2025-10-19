@@ -48,6 +48,19 @@ export type OrderStatus =
   | "shipped"
   | "delivered"
   | "returned";
+export type ProductListItem = Pick<
+  Product,
+  | "id"
+  | "name"
+  | "description"
+  | "price"
+  | "mrp"
+  | "category"
+  | "images"
+  | "shopId"
+  | "isAvailable"
+  | "stock"
+>;
 export interface OrderStatusUpdate {
   orderId: number;
   status: OrderStatus;
@@ -125,7 +138,9 @@ export interface IStorage {
   getProductsByIds(ids: number[]): Promise<Product[]>;
   updateProduct(id: number, product: Partial<Product>): Promise<Product>;
   deleteProduct(id: number): Promise<void>;
-  getProducts(filters?: any): Promise<Product[]>; // Added filters parameter
+  getProducts(
+    filters?: any,
+  ): Promise<{ items: ProductListItem[]; hasMore: boolean }>; // Added filters parameter with pagination
   removeProductFromAllCarts(productId: number): Promise<void>;
 
   // Cart operations
@@ -550,13 +565,35 @@ export class MemStorage implements IStorage {
   }
 
   // Add implementation for getProducts
-  async getProducts(filters?: any): Promise<Product[]> {
+  async getProducts(
+    filters?: any,
+  ): Promise<{ items: ProductListItem[]; hasMore: boolean }> {
     let results = Array.from(this.products.values()).filter(
       (p) => !p.isDeleted,
     );
 
+    const page = Math.max(1, Number(filters?.page ?? 1));
+    const pageSize = Math.min(
+      Math.max(1, Number(filters?.pageSize ?? 24)),
+      100,
+    );
+
     if (!filters) {
-      return results;
+      const offset = (page - 1) * pageSize;
+      const sliced = results.slice(offset, offset + pageSize + 1);
+      const items: ProductListItem[] = sliced.slice(0, pageSize).map((product) => ({
+        id: product.id,
+        name: product.name,
+        description: product.description ?? null,
+        price: product.price,
+        mrp: product.mrp ?? null,
+        category: product.category ?? null,
+        images: product.images ?? [],
+        shopId: product.shopId ?? null,
+        isAvailable: product.isAvailable ?? true,
+        stock: product.stock,
+      }));
+      return { items, hasMore: sliced.length > pageSize };
     }
 
     if (filters.category) {
@@ -622,7 +659,21 @@ export class MemStorage implements IStorage {
       }
     }
 
-    return results;
+    const offset = (page - 1) * pageSize;
+    const sliced = results.slice(offset, offset + pageSize + 1);
+    const items: ProductListItem[] = sliced.slice(0, pageSize).map((product) => ({
+      id: product.id,
+      name: product.name,
+      description: product.description ?? null,
+      price: product.price,
+      mrp: product.mrp ?? null,
+      category: product.category ?? null,
+      images: product.images ?? [],
+      shopId: product.shopId ?? null,
+      isAvailable: product.isAvailable ?? true,
+      stock: product.stock,
+    }));
+    return { items, hasMore: sliced.length > pageSize };
   }
 
   // User operations

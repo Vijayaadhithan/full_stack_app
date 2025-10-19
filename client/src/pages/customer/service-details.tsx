@@ -11,26 +11,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Service } from "@shared/schema";
 import { motion } from "framer-motion";
 import { Loader2, MapPin, Star, Clock } from "lucide-react";
 import Meta from "@/components/meta";
-
-type ServiceDetails = Service & {
-  provider: {
-    id: number;
-    name: string;
-    email: string;
-    profilePicture?: string;
-  };
-  rating: number | null;
-  reviews: Array<{
-    id: number;
-    rating: number;
-    review: string;
-    createdAt: string;
-  }>;
-};
+import { ServiceDetail } from "@shared/api-contract";
+import { apiClient } from "@/lib/apiClient";
 
 export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
@@ -42,8 +27,12 @@ export default function ServiceDetails() {
     isError,
     error,
     isSuccess,
-  } = useQuery<ServiceDetails, Error>({
+  } = useQuery<ServiceDetail, Error>({
     queryKey: [`/api/services/${id}`],
+    queryFn: () =>
+      apiClient.get("/api/services/:id", {
+        params: { id: Number(id) },
+      }),
     enabled: !!id,
     retry: false,
   });
@@ -86,11 +75,14 @@ export default function ServiceDetails() {
     );
   }
 
+  const providerName = service.provider?.name ?? "Provider";
+  const providerInitial = providerName.charAt(0).toUpperCase();
+
   return (
     <DashboardLayout>
       <Meta
         title={`${service.name} - Service`}
-        description={`Learn about ${service.name} offered by ${service.provider?.name}.`}
+        description={`Learn about ${service.name} offered by ${providerName}.`}
         schema={{
           "@context": "https://schema.org",
           "@type": "Service",
@@ -98,7 +90,7 @@ export default function ServiceDetails() {
           description: service.description,
           provider: {
             "@type": "Person",
-            name: service.provider?.name,
+            name: providerName,
           },
         }}
       />
@@ -125,17 +117,17 @@ export default function ServiceDetails() {
                   {service.provider?.profilePicture ? (
                     <img
                       src={service.provider.profilePicture}
-                      alt={service.provider.name}
+                      alt={providerName}
                       className="h-full w-full rounded-full object-cover"
                     />
                   ) : (
                     <span className="text-2xl">
-                      {service.provider?.name[0]}
+                      {providerInitial}
                     </span>
                   )}
                 </div>
                 <div>
-                  <p className="font-medium">{service.provider?.name}</p>
+                  <p className="font-medium">{providerName}</p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
                     <span>

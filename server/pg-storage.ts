@@ -57,7 +57,12 @@ import {
   orderStatusUpdates,
   UserRole,
 } from "@shared/schema";
-import { IStorage, OrderStatus, OrderStatusUpdate } from "./storage";
+import {
+  IStorage,
+  OrderStatus,
+  OrderStatusUpdate,
+  ProductListItem,
+} from "./storage";
 import { eq, and, lt, ne, sql, desc, count, inArray } from "drizzle-orm";
 import {
   toISTForStorage,
@@ -146,6 +151,21 @@ function normalizeProductFilters(filters: Record<string, unknown>) {
   }
   if (filters.locationState) {
     normalized.locationState = String(filters.locationState).trim();
+  }
+  if (filters.page !== undefined) {
+    const page = Number(filters.page);
+    if (Number.isFinite(page)) {
+      normalized.page = Math.max(1, Math.trunc(page));
+    }
+  }
+  if (filters.pageSize !== undefined) {
+    const pageSize = Number(filters.pageSize);
+    if (Number.isFinite(pageSize)) {
+      normalized.pageSize = Math.max(
+        1,
+        Math.min(100, Math.trunc(pageSize)),
+      );
+    }
   }
 
   return normalized;
@@ -453,14 +473,22 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getProducts(filters?: any): Promise<Product[]> {
-    const cacheKey = buildProductCacheKey(filters ?? {});
-    const cached = await getCache<Product[]>(cacheKey);
+  async getProducts(filters?: any): Promise<{ items: ProductListItem[]; hasMore: boolean }> {
+    const effectiveFilters = filters ?? {};
+    const cacheKey = buildProductCacheKey(effectiveFilters);
+    const cached = await getCache<{ items: ProductListItem[]; hasMore: boolean }>(
+      cacheKey,
+    );
     if (cached) {
       return cached;
     }
 
-    // Always filter out soft deleted products
+    const { page: rawPage, pageSize: rawPageSize, ...criteria } = effectiveFilters;
+    const page = Math.max(1, Number(rawPage ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(rawPageSize ?? 24)));
+    const offset = (page - 1) * pageSize;
+    const limit = pageSize + 1;
+
     const conditions = [eq(products.isDeleted, false)];
     let query: any = db.select().from(products);
     let joinedUsers = false;
@@ -468,20 +496,20 @@ export class PostgresStorage implements IStorage {
     const escapeLikePattern = (value: string) =>
       value.replace(/[%_]/g, (char) => `\\${char}`);
 
-    if (filters) {
-      if (filters.category) {
+    if (criteria && Object.keys(criteria).length > 0) {
+      if (criteria.category) {
         conditions.push(
-          sql`LOWER(${products.category}) = LOWER(${filters.category})`,
+          sql`LOWER(${products.category}) = LOWER(${criteria.category})`,
         );
       }
-      if (filters.minPrice) {
-        conditions.push(sql`${products.price} >= ${filters.minPrice}`);
+      if (criteria.minPrice !== undefined) {
+        conditions.push(sql`${products.price} >= ${criteria.minPrice}`);
       }
-      if (filters.maxPrice) {
-        conditions.push(sql`${products.price} <= ${filters.maxPrice}`);
+      if (criteria.maxPrice !== undefined) {
+        conditions.push(sql`${products.price} <= ${criteria.maxPrice}`);
       }
-      if (filters.searchTerm) {
-        const normalizedTerm = String(filters.searchTerm).trim();
+      if (criteria.searchTerm) {
+        const normalizedTerm = String(criteria.searchTerm).trim();
         if (normalizedTerm.length > 0) {
           const escapedPhrase = `%${escapeLikePattern(normalizedTerm)}%`;
           const phraseMatch = sql`(${products.name} ILIKE ${escapedPhrase} OR ${products.description} ILIKE ${escapedPhrase})`;
@@ -511,34 +539,34 @@ export class PostgresStorage implements IStorage {
           }
         }
       }
-      if (filters.shopId) {
-        conditions.push(eq(products.shopId, filters.shopId));
+      if (criteria.shopId) {
+        conditions.push(eq(products.shopId, criteria.shopId));
       }
-      if (filters.tags && filters.tags.length > 0) {
-        // Assuming tags is an array field in the DB. If it's text, this needs adjustment.
+      if (criteria.tags && criteria.tags.length > 0) {
         conditions.push(
-          sql`${products.tags} @> ARRAY[${filters.tags.join(",")}]`,
+          sql`${products.tags} @> ARRAY[${criteria.tags.join(",")}]`,
         );
       }
-      if (filters.attributes) {
-        // Assuming attributes are stored in a JSONB column named 'specifications'
-        for (const key in filters.attributes) {
-          if (Object.prototype.hasOwnProperty.call(filters.attributes, key)) {
+      if (criteria.attributes) {
+        for (const key in criteria.attributes) {
+          if (
+            Object.prototype.hasOwnProperty.call(criteria.attributes, key)
+          ) {
             conditions.push(
-              sql`${products.specifications}->>${key} = ${filters.attributes[key]}`,
+              sql`${products.specifications}->>${key} = ${criteria.attributes[key]}`,
             );
           }
         }
       }
 
-      if (filters.locationCity || filters.locationState) {
+      if (criteria.locationCity || criteria.locationState) {
         query = query.leftJoin(users, eq(products.shopId, users.id));
         joinedUsers = true;
-        if (filters.locationCity) {
-          conditions.push(eq(users.addressCity, filters.locationCity));
+        if (criteria.locationCity) {
+          conditions.push(eq(users.addressCity, criteria.locationCity));
         }
-        if (filters.locationState) {
-          conditions.push(eq(users.addressState, filters.locationState));
+        if (criteria.locationState) {
+          conditions.push(eq(users.addressState, criteria.locationState));
         }
       }
     }
@@ -546,13 +574,31 @@ export class PostgresStorage implements IStorage {
       query = query.where(and(...conditions)) as typeof query;
     }
 
+    query = query.limit(limit).offset(offset);
+
     const results = await query;
     const normalizedResults = joinedUsers
       ? (results as any[]).map((r) => r.products as Product)
       : (results as Product[]);
 
-    await setCache(cacheKey, normalizedResults, PRODUCT_CACHE_TTL_MS);
-    return normalizedResults;
+    const hasMore = normalizedResults.length > pageSize;
+    const trimmed = normalizedResults.slice(0, pageSize);
+    const items: ProductListItem[] = trimmed.map((product) => ({
+      id: product.id,
+      name: product.name,
+      description: product.description ?? null,
+      price: product.price,
+      mrp: product.mrp ?? null,
+      category: product.category ?? null,
+      images: product.images ?? [],
+      shopId: product.shopId ?? null,
+      isAvailable: product.isAvailable ?? true,
+      stock: product.stock,
+    }));
+
+    const payload = { items, hasMore };
+    await setCache(cacheKey, payload, PRODUCT_CACHE_TTL_MS);
+    return payload;
   }
 
   async getPromotionsByShop(shopId: number): Promise<Promotion[]> {

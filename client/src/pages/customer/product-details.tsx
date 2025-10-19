@@ -9,12 +9,14 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Product, ProductReview, User } from "@shared/schema";
+import { ProductReview, User } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useParams, Link } from "wouter";
 import { ShoppingCart, Heart, ArrowLeft, Store, Star, Loader2 } from "lucide-react";
 import Meta from "@/components/meta";
+import { ProductDetail } from "@shared/api-contract";
+import { apiClient } from "@/lib/apiClient";
 
 export default function ProductDetails() {
   const { toast } = useToast();
@@ -22,8 +24,19 @@ export default function ProductDetails() {
   const shopId = params.shopId ? parseInt(params.shopId) : undefined;
   const productId = params.productId ? parseInt(params.productId) : undefined;
 
-  const { data: product, isLoading: isLoadingProduct } = useQuery<Product>({
+  const { data: product, isLoading: isLoadingProduct } = useQuery<ProductDetail>({
     queryKey: [`/api/shops/${shopId}/products/${productId}`],
+    queryFn: () => {
+      if (shopId === undefined || productId === undefined) {
+        throw new Error("Missing product context");
+      }
+      return apiClient.get("/api/shops/:shopId/products/:productId", {
+        params: {
+          shopId,
+          productId,
+        },
+      });
+    },
     enabled: !!shopId && !!productId,
   });
 

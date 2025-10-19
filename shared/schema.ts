@@ -10,6 +10,7 @@ import {
   unique,
   uuid,
   primaryKey,
+  index,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import type { SessionData } from "express-session";
@@ -149,7 +150,9 @@ export const WorkerResponsibilities = [
 export type WorkerResponsibility = (typeof WorkerResponsibilities)[number];
 export const WorkerResponsibilityZ = z.enum(WorkerResponsibilities);
 
-export const users = pgTable("users", {
+export const users = pgTable(
+  "users",
+  {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
@@ -195,7 +198,13 @@ export const users = pgTable("users", {
   returnsEnabled: boolean("returns_enabled").default(true),
   averageRating: decimal("average_rating").default("0"),
   totalReviews: integer("total_reviews").default(0),
-});
+  },
+  (table) => ({
+    usersRoleIdx: index("users_role_idx").on(table.role),
+    usersEmailIdx: index("users_email_idx").on(table.email),
+    usersPhoneIdx: index("users_phone_idx").on(table.phone),
+  }),
+);
 
 // Link table for shop workers and their responsibilities
 export const shopWorkers = pgTable(
@@ -219,7 +228,9 @@ export type ShopWorker = typeof shopWorkers.$inferSelect;
 export type InsertShopWorker = typeof shopWorkers.$inferInsert;
 
 // Update services table with new availability fields and soft deletion
-export const services = pgTable("services", {
+export const services = pgTable(
+  "services",
+  {
   id: serial("id").primaryKey(),
   providerId: integer("provider_id").references(() => users.id),
   name: text("name").notNull(),
@@ -244,7 +255,12 @@ export const services = pgTable("services", {
     .$type<"customer_location" | "provider_location">()
     .notNull()
     .default("provider_location"), // New field: where the service takes place
-});
+  },
+  (table) => ({
+    servicesProviderIdx: index("services_provider_id_idx").on(table.providerId),
+    servicesCategoryIdx: index("services_category_idx").on(table.category),
+  }),
+);
 
 export const serviceAvailability = pgTable("service_availability", {
   id: serial("id").primaryKey(),
@@ -257,7 +273,9 @@ export const serviceAvailability = pgTable("service_availability", {
 });
 
 // Update the bookings table
-export const bookings = pgTable("bookings", {
+export const bookings = pgTable(
+  "bookings",
+  {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => users.id),
   serviceId: integer("service_id").references(() => services.id),
@@ -295,7 +313,14 @@ export const bookings = pgTable("bookings", {
   expiresAt: timestamp("expires_at"),
   serviceLocation: text("service_location").$type<"customer" | "provider">(), // Added service location type
   providerAddress: text("provider_address"), // Added provider address (nullable)
-});
+  },
+  (table) => ({
+    bookingsCustomerIdx: index("bookings_customer_id_idx").on(table.customerId),
+    bookingsServiceIdx: index("bookings_service_id_idx").on(table.serviceId),
+    bookingsStatusIdx: index("bookings_status_idx").on(table.status),
+    bookingsDateIdx: index("bookings_booking_date_idx").on(table.bookingDate),
+  }),
+);
 
 // Booking history table to track status changes
 export const bookingHistory = pgTable("booking_history", {
@@ -396,7 +421,9 @@ export const waitlist = pgTable("waitlist", {
   notificationSent: boolean("notification_sent").default(false),
 });
 
-export const products = pgTable("products", {
+export const products = pgTable(
+  "products",
+  {
   id: serial("id").primaryKey(),
   shopId: integer("shop_id").references(() => users.id),
   name: text("name").notNull(),
@@ -423,7 +450,12 @@ export const products = pgTable("products", {
   lowStockThreshold: integer("low_stock_threshold"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+  },
+  (table) => ({
+    productsShopIdx: index("products_shop_id_idx").on(table.shopId),
+    productsCategoryIdx: index("products_category_idx").on(table.category),
+  }),
+);
 
 export const cart = pgTable("cart", {
   id: serial("id").primaryKey(),
@@ -438,7 +470,9 @@ export const wishlist = pgTable("wishlist", {
   productId: integer("product_id").references(() => products.id),
 });
 
-export const orders = pgTable("orders", {
+export const orders = pgTable(
+  "orders",
+  {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => users.id),
   shopId: integer("shop_id").references(() => users.id),
@@ -473,7 +507,14 @@ export const orders = pgTable("orders", {
   paymentReference: text("payment_reference"),
   orderDate: timestamp("order_date").defaultNow(),
   returnRequested: boolean("return_requested").default(false), // Add this line
-});
+  },
+  (table) => ({
+    ordersCustomerIdx: index("orders_customer_id_idx").on(table.customerId),
+    ordersShopIdx: index("orders_shop_id_idx").on(table.shopId),
+    ordersStatusIdx: index("orders_status_idx").on(table.status),
+    ordersOrderDateIdx: index("orders_order_date_idx").on(table.orderDate),
+  }),
+);
 
 export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),

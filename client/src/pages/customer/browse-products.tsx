@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Product } from "@shared/schema";
 import { productFilterConfig } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -86,11 +85,31 @@ export default function BrowseProducts() {
     }));
   };
 
+  type ProductListItem = {
+    id: number;
+    name: string;
+    description: string | null;
+    price: string;
+    mrp: string | null;
+    category: string | null;
+    images: string[];
+    shopId: number | null;
+    isAvailable: boolean;
+    stock: number;
+  };
+
+  type ProductListResponse = {
+    page: number;
+    pageSize: number;
+    hasMore: boolean;
+    items: ProductListItem[];
+  };
+
   const {
-    data: products,
+    data: productsResponse,
     isLoading,
     error,
-  } = useQuery<Product[]>({
+  } = useQuery<ProductListResponse>({
     queryKey: ["/api/products", filters],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -191,7 +210,7 @@ export default function BrowseProducts() {
   });
 
   // Client-side filtering is no longer needed as it's done server-side
-  const filteredProducts = products;
+  const filteredProducts = productsResponse?.items ?? [];
 
   return (
     <DashboardLayout>
@@ -327,67 +346,76 @@ export default function BrowseProducts() {
             <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
           </div>
         ) : (
-          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredProducts?.map((product) => (
-              <motion.div key={product.id} variants={item}>
-                <Link
-                  href={`/customer/shops/${product.shopId}/products/${product.id}`}
-                >
-                  <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
-                    <div className="aspect-square relative overflow-hidden">
-                      <img
-                        src={
-                          product.images?.[0] ||
-                          "https://via.placeholder.com/400"
-                        }
-                        alt={product.name}
-                        className="object-cover w-full h-full"
-                      />
-                      {/* Discount display removed as 'discount' property doesn't exist on Product type */}
-                    </div>
-                    <CardContent className="flex-1 p-4">
-                      <h3 className="font-semibold truncate">{product.name}</h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                        {product.description}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <p className="font-semibold">₹{product.price}</p>
-                        <div className="flex gap-2">
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              addToWishlistMutation.mutate(product.id);
-                            }}
-                            disabled={addToWishlistMutation.isPending}
-                          >
-                            <Heart className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              addToCartMutation.mutate(product.id);
-                            }}
-                            disabled={
-                              !product.isAvailable ||
-                              product.stock <= 0 ||
-                              addToCartMutation.isPending
-                            }
-                          >
-                            <ShoppingCart className="h-4 w-4" />
-                          </Button>
-                        </div>
+          <>
+            <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filteredProducts.map((product) => (
+                <motion.div key={product.id} variants={item}>
+                  <Link
+                    href={`/customer/shops/${product.shopId}/products/${product.id}`}
+                  >
+                    <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
+                      <div className="aspect-square relative overflow-hidden">
+                        <img
+                          src={
+                            product.images?.[0] ||
+                            "https://via.placeholder.com/400"
+                          }
+                          alt={product.name}
+                          className="object-cover w-full h-full"
+                        />
                       </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              </motion.div>
-            ))}
-          </div>
+                      <CardContent className="flex-1 p-4">
+                        <h3 className="font-semibold truncate">
+                          {product.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                          {product.description}
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold">₹{product.price}</p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                addToWishlistMutation.mutate(product.id);
+                              }}
+                              disabled={addToWishlistMutation.isPending}
+                            >
+                              <Heart className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                addToCartMutation.mutate(product.id);
+                              }}
+                              disabled={
+                                !product.isAvailable ||
+                                product.stock <= 0 ||
+                                addToCartMutation.isPending
+                              }
+                            >
+                              <ShoppingCart className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+            {productsResponse?.hasMore ? (
+              <p className="text-sm text-muted-foreground mt-6">
+                Showing the first {productsResponse.pageSize} matches. Refine
+                your filters to narrow the results further.
+              </p>
+            ) : null}
+          </>
         )}
       </motion.div>
     </DashboardLayout>

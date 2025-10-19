@@ -22,7 +22,7 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
+export const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
 let csrfToken: string | null = null;
 let csrfPromise: Promise<string> | null = null;
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,17 +11,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useParams } from "wouter";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Order, ReturnRequest } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -35,46 +28,16 @@ import {
   AlertCircle,
   ArrowLeft,
   RefreshCw,
-  Star,
 } from "lucide-react";
 import { z } from "zod";
 import { formatIndianDisplay } from "@shared/date-utils";
+import {
+  OrderDetail,
+  OrderTimelineEntry,
+} from "@shared/api-contract";
+import { apiClient } from "@/lib/apiClient";
+const ProductReviewDialogLazy = lazy(() => import("./components/ProductReviewDialog"));
 // Define the type for timeline updates
-interface TimelineUpdate {
-  status:
-    | "pending"
-    | "confirmed"
-    | "packed"
-    | "dispatched"
-    | "shipped"
-    | "delivered";
-  trackingInfo?: string;
-  timestamp: string | Date;
-}
-interface DetailedOrder extends Order {
-  shop?: {
-    upiId?: string | null;
-    phone?: string | null;
-    name?: string | null;
-    email?: string | null;
-    returnsEnabled?: boolean;
-    address?: string | null;
-  };
-  customer?: {
-    name?: string | null;
-    phone?: string | null;
-    email?: string | null;
-    address?: string | null;
-  };
-  items?: {
-    id: number;
-    productId: number | null;
-    name: string;
-    quantity: number;
-    price: string;
-    total: string;
-  }[];
-}
 const returnRequestSchema = z.object({
   reason: z.string().min(10, "Please provide a detailed reason"),
   items: z.array(
@@ -88,16 +51,26 @@ const returnRequestSchema = z.object({
 type ReturnRequestForm = z.infer<typeof returnRequestSchema>;
 
 export default function OrderDetails() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
+  const numericId = id ? Number(id) : NaN;
 
-  const { data: order, isLoading: orderLoading } = useQuery<DetailedOrder>({
+  const { data: order, isLoading: orderLoading } = useQuery<OrderDetail>({
     queryKey: [`/api/orders/${id}`],
+    queryFn: () =>
+      apiClient.get("/api/orders/:id", {
+        params: { id: numericId },
+      }),
+    enabled: Number.isFinite(numericId),
   });
 
-  const { data: timeline } = useQuery<TimelineUpdate[]>({
+  const { data: timeline } = useQuery<OrderTimelineEntry[]>({
     queryKey: [`/api/orders/${id}/timeline`],
-    enabled: !!order,
+    queryFn: () =>
+      apiClient.get("/api/orders/:id/timeline", {
+        params: { id: numericId },
+      }),
+    enabled: !!order && Number.isFinite(numericId),
   });
 
   const form = useForm<ReturnRequestForm>({
@@ -187,16 +160,19 @@ export default function OrderDetails() {
     );
   }
 
-  const statusIcon: Record<TimelineUpdate["status"], React.ReactElement> = {
+  const statusIcon: Record<OrderTimelineEntry["status"], React.ReactElement> = {
     pending: <AlertCircle className="h-5 w-5 text-yellow-500" />,
+    processing: <RefreshCw className="h-5 w-5 text-blue-500" />,
     confirmed: <CheckCircle className="h-5 w-5 text-green-500" />,
     packed: <Package className="h-5 w-5 text-blue-500" />,
     dispatched: <Truck className="h-5 w-5 text-blue-500" />,
     shipped: <Truck className="h-5 w-5 text-blue-500" />,
     delivered: <Package className="h-5 w-5 text-green-500" />,
+    cancelled: <AlertCircle className="h-5 w-5 text-red-500" />,
+    returned: <Package className="h-5 w-5 text-purple-500" />,
   };
 
-  const getStatusLabel = (status: TimelineUpdate["status"]) => {
+  const getStatusLabel = (status: OrderTimelineEntry["status"]) => {
     if (order?.deliveryMethod === "pickup") {
       if (status === "shipped") return "Ready to Collect";
       if (status === "dispatched") return "Ready to Collect";
@@ -335,33 +311,31 @@ export default function OrderDetails() {
             <CardTitle>Items</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {order?.items?.map(
-              (item: NonNullable<DetailedOrder["items"]>[number]) => (
-                <div
-                  key={item.id}
-                  className="flex justify-between items-center"
-                >
-                  <p>
-                    {item.name} × {item.quantity}
-                  </p>
-                  {order?.status === "delivered" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        item.productId &&
-                        setSelectedProduct({
-                          id: item.productId,
-                          name: item.name,
-                        })
-                      }
-                    >
-                      Leave Review
-                    </Button>
-                  )}
-                </div>
-              ),
-            )}
+            {order?.items?.map((item) => (
+              <div
+                key={item.id}
+                className="flex justify-between items-center"
+              >
+                <p>
+                  {item.name} × {item.quantity}
+                </p>
+                {order?.status === "delivered" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      item.productId &&
+                      setSelectedProduct({
+                        id: item.productId,
+                        name: item.name,
+                      })
+                    }
+                  >
+                    Leave Review
+                  </Button>
+                )}
+              </div>
+            ))}
           </CardContent>
         </Card>
         <Card>
@@ -370,7 +344,7 @@ export default function OrderDetails() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {timeline?.map((update: TimelineUpdate, index: number) => (
+              {timeline?.map((update, index) => (
                 <div
                   key={index}
                   className="flex items-start gap-4 border-l-2 border-border pl-4 pb-4 last:pb-0"
@@ -458,49 +432,27 @@ export default function OrderDetails() {
             if (!o) setSelectedProduct(null);
           }}
         >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                Leave a Review for {selectedProduct?.name}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div>
-                <Label>Rating</Label>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((v) => (
-                    <Button
-                      key={v}
-                      variant="ghost"
-                      size="sm"
-                      className={`p-0 ${v <= rating ? "text-yellow-500" : "text-gray-300"}`}
-                      onClick={() => setRating(v)}
-                    >
-                      <Star className="h-6 w-6 fill-current" />
-                    </Button>
-                  ))}
+          <Suspense
+            fallback={
+              <DialogContent>
+                <div className="flex items-center justify-center py-10">
+                  <RefreshCw className="h-6 w-6 animate-spin" />
                 </div>
-              </div>
-              <div>
-                <Label>Review</Label>
-                <Textarea
-                  value={reviewText}
-                  onChange={(e) => setReviewText(e.target.value)}
-                  placeholder="Share your experience..."
-                />
-              </div>
-              <Button
-                className="w-full"
-                onClick={() => reviewMutation.mutate()}
-                disabled={reviewMutation.isPending || !reviewText}
-              >
-                {reviewMutation.isPending ? (
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                Submit Review
-              </Button>
-            </div>
-          </DialogContent>
+              </DialogContent>
+            }
+          >
+            {selectedProduct ? (
+              <ProductReviewDialogLazy
+                productName={selectedProduct.name}
+                rating={rating}
+                onRatingChange={setRating}
+                reviewText={reviewText}
+                onReviewTextChange={setReviewText}
+                onSubmit={() => reviewMutation.mutate()}
+                submitting={reviewMutation.isPending}
+              />
+            ) : null}
+          </Suspense>
         </Dialog>
       </motion.div>
     </DashboardLayout>

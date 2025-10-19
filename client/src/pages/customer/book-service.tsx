@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Service, User } from "@shared/schema";
 import { platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +34,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 // Remove Input import if no longer needed elsewhere
 // import { Input } from "@/components/ui/input";
+import { ServiceDetail } from "@shared/api-contract";
+import { apiClient } from "@/lib/apiClient";
 
 const timeZone = "Asia/Kolkata"; // Define IST timezone
 
@@ -468,30 +469,28 @@ export default function BookService() {
     "customer" | "provider"
   >("provider"); // Default to provider location
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  type BookingService = ServiceDetail & {
+    breakTimes?: Array<{ start: string; end: string }>;
+  };
   // Fetch service with provider info
-  const { data: service, isLoading: serviceLoading } = useQuery<
-    Service & {
-      provider: User;
-      reviews: any[];
-      workingHours: any;
-      breakTime: any[];
-      breakTimes: any[];
-      bookings: any[];
-    }
-  >({
+  const { data: service, isLoading: serviceLoading } = useQuery<BookingService>({
     queryKey: [`/api/services/${id}`],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/services/${id}`);
-      if (!res.ok) throw new Error("Failed to fetch service details");
-      const data = await res.json();
+      const data = await apiClient.get("/api/services/:id", {
+        params: { id: Number(id) },
+      });
       console.log("Raw service data from API:", data);
-      // Handle potential naming inconsistency between breakTime and breakTimes
-      if (data.breakTime && !data.breakTimes) {
-        data.breakTimes = data.breakTime;
-      } else if (data.breakTimes && !data.breakTime) {
-        data.breakTime = data.breakTimes;
-      }
-      return data;
+      const providedBreakTimes = (data as { breakTimes?: Array<{ start: string; end: string }> }).breakTimes;
+      const breakTimes = Array.isArray(providedBreakTimes) && providedBreakTimes.length > 0
+        ? providedBreakTimes
+        : Array.isArray(data.breakTime)
+          ? data.breakTime
+          : [];
+      return {
+        ...data,
+        breakTimes,
+      } as BookingService;
     },
     enabled: !!id,
   });
@@ -503,8 +502,9 @@ export default function BookService() {
         id: service.id,
         name: service.name,
         hasWorkingHours: !!service.workingHours,
-        breakTimeLength: service.breakTime?.length || 0,
-        breakTimesLength: service.breakTimes?.length || 0,
+        breakTimeLength: Array.isArray(service.breakTime)
+          ? service.breakTime.length
+          : 0,
       });
     }
   }, [service]);
@@ -566,13 +566,14 @@ export default function BookService() {
 
   // Memoize the break time array to ensure consistency
   const breakTimeArray = useMemo(() => {
-    if (!service) return [];
+    const currentService = service as BookingService | undefined;
+    if (!currentService) return [];
     // Prefer breakTimes if it exists and is an array, otherwise use breakTime if it's an array, fallback to empty
     const breaks =
-      Array.isArray(service.breakTimes) && service.breakTimes.length > 0
-        ? service.breakTimes
-        : Array.isArray(service.breakTime)
-          ? service.breakTime
+      Array.isArray(currentService.breakTimes) && currentService.breakTimes.length > 0
+        ? currentService.breakTimes
+        : Array.isArray(currentService.breakTime)
+          ? currentService.breakTime
           : [];
     console.log("Memoized breakTimeArray:", breaks);
     return breaks;
@@ -701,14 +702,22 @@ export default function BookService() {
   const disabledDays = [
     { before: addDays(today, 1) }, // Disable past dates and today
     (date: Date) => {
-      // Disable days where the provider is unavailable
-      if (!service?.workingHours) return true; // Disable if working hours not loaded
+      const workingHours = service?.workingHours;
+      if (!workingHours) return true; // Disable if working hours not loaded
       const zonedDate = toZonedTime(date, timeZone);
-      const dayOfWeek = formatBase(zonedDate, "EEEE").toLowerCase();
-      const schedule = service.workingHours[dayOfWeek];
+      const dayKey = formatBase(zonedDate, "EEEE").toLowerCase();
+      const schedule = (workingHours as any)[dayKey];
       return !schedule || !schedule.isAvailable;
     },
   ];
+
+  const selectedDayKey = formatBase(
+    toZonedTime(selectedDate, timeZone),
+    "EEEE",
+  ).toLowerCase();
+  const selectedDaySchedule = service?.workingHours
+    ? (service.workingHours as any)[selectedDayKey]
+    : undefined;
   // --- End Calendar disabling logic ---
 
   if (serviceLoading) {
@@ -739,6 +748,7 @@ export default function BookService() {
   }
 
   // Format provider address
+  const providerName = service.provider.name ?? "Provider";
   const providerFullAddress = [
     service.provider.addressStreet,
     service.provider.addressCity,
@@ -784,10 +794,10 @@ export default function BookService() {
               <div className="flex items-center space-x-3">
                 {/* Add provider avatar/icon if available */}
                 <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-lg font-semibold">
-                  {service.provider.name.charAt(0).toUpperCase()}
+                  {providerName.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-medium">{service.provider.name}</p>
+                  <p className="font-medium">{providerName}</p>
                   {/* Add link to provider profile if needed */}
                 </div>
               </div>
@@ -872,12 +882,7 @@ export default function BookService() {
                     )}
                     {/* Optional: Add more detailed reason based on working hours check */}
                     {!service?.workingHours ||
-                    !service.workingHours[
-                      formatBase(
-                        toZonedTime(selectedDate, timeZone),
-                        "EEEE",
-                      ).toLowerCase()
-                    ]?.isAvailable ? (
+                    !selectedDaySchedule?.isAvailable ? (
                       <p className="text-xs text-muted-foreground mt-1">
                         Provider is marked as unavailable on this day.
                       </p>
@@ -1040,7 +1045,7 @@ export default function BookService() {
                       {review.createdAt
                         ? format(new Date(review.createdAt), "PP")
                         : ""}{" "}
-                      - By {review.customerName || "Anonymous"}
+                      - By {review.customerId ? `Customer #${review.customerId}` : "Customer"}
                     </p>
                     <p className="text-sm">{review.review}</p>
                   </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { ShopLayout } from "@/components/layout/shop-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,23 +20,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Form,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormMessage,
-} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/use-auth";
 import { useLanguage } from "@/contexts/language-context";
@@ -45,18 +30,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Loader2,
-  Plus,
-  Edit2,
-  ImagePlus,
-  AlertCircle,
-  Trash2,
-} from "lucide-react";
+import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
 import { Product } from "@shared/schema";
 import { productFilterConfig } from "@shared/config";
 import { z } from "zod";
 import { useState } from "react";
+
+const ProductFormDialogLazy = lazy(() => import("./components/ProductFormDialog"));
 
 const productFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -446,513 +426,35 @@ export default function ShopProducts() {
                 {t("add_product")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingProduct ? t("edit_product") : t("add_product")}
-                </DialogTitle>
-              </DialogHeader>
-              <Form {...form}>
-                <form
-                  id="product-form"
-                  onSubmit={form.handleSubmit(onSubmit)}
-                  className="space-y-4"
-                >
-                  <div className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("product_name")}</FormLabel>
-                          <FormControl>
-                            <Input {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("product_description")}</FormLabel>
-                          <FormControl>
-                            <Textarea {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <FormField
-                        control={form.control}
-                        name="price"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("selling_price")} (₹)</FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="mrp"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("mrp")} (₹)</FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="category"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("category")}</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue
-                                    placeholder={t("select_category")}
-                                  />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {productFilterConfig.categories.map(
-                                  (category) => (
-                                    <SelectItem
-                                      key={category.value}
-                                      value={category.value}
-                                    >
-                                      {category.translationKey
-                                        ? t(category.translationKey)
-                                        : category.label}
-                                    </SelectItem>
-                                  ),
-                                )}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="space-y-4">
-                      <FormLabel>{t("product_images")}</FormLabel>
-                      <div className="grid grid-cols-4 gap-4">
-                        {form.watch("images")?.map((image, index) => (
-                          <div key={index} className="relative">
-                            <img
-                              src={image}
-                              alt=""
-                              className="w-full h-24 object-cover rounded"
-                            />
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              className="absolute top-1 right-1"
-                              onClick={() => handleRemoveImage(index)}
-                            >
-                              <AlertCircle className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                        <label className="border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer">
-                          <ImagePlus className="h-8 w-8 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground mt-2">
-                            {t("add_image")}
-                          </span>
-                          <input
-                            type="file"
-                            className="hidden"
-                            onChange={handleImageUpload}
-                            accept="image/*"
-                          />
-                        </label>
-                      </div>
-                      {imageUploadError && (
-                        <p className="text-sm text-destructive">
-                          {imageUploadError}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="stock"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("stock_quantity")}</FormLabel>
-                            <FormControl>
-                              <Input {...field} type="number" min="0" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      {/* Advanced Options Section */}
-                      <div className="space-y-4">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() =>
-                            setShowAdvancedOptions(!showAdvancedOptions)
-                          }
-                          className="w-full justify-start px-0"
-                        >
-                          {showAdvancedOptions ? "Hide" : "Show"} Advanced
-                          Options
-                        </Button>
-
-                        {showAdvancedOptions && (
-                          <div className="space-y-4">
-                            <FormField
-                              control={form.control}
-                              name="sku"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>SKU</FormLabel>
-                                  <FormControl>
-                                    <Input {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            <FormField
-                              control={form.control}
-                              name="barcode"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Barcode</FormLabel>
-                                  <FormControl>
-                                    <Input {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            <FormField
-                              control={form.control}
-                              name="weight"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Weight (kg)</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      {...field}
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            {/* Dimensions Section */}
-                            <div className="space-y-2">
-                              <FormLabel>Dimensions (cm)</FormLabel>
-                              <div className="grid gap-4 md:grid-cols-3">
-                                <FormField
-                                  control={form.control}
-                                  name="dimensions.length"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Length</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          {...field}
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                        />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={form.control}
-                                  name="dimensions.width"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Width</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          {...field}
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                        />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={form.control}
-                                  name="dimensions.height"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Height</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          {...field}
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                        />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>
-                            </div>
-
-                            {/* Specifications Section */}
-                            <div className="space-y-2">
-                              <FormLabel>Specifications</FormLabel>
-                              <div className="flex gap-2">
-                                <Input
-                                  placeholder="Key"
-                                  value={specKey}
-                                  onChange={(e) => setSpecKey(e.target.value)}
-                                  className="flex-1"
-                                />
-                                <Input
-                                  placeholder="Value"
-                                  value={specValue}
-                                  onChange={(e) => setSpecValue(e.target.value)}
-                                  className="flex-1"
-                                />
-                                <Button
-                                  type="button"
-                                  onClick={() => {
-                                    if (specKey && specValue) {
-                                      const currentSpecs =
-                                        form.getValues("specifications") || {};
-                                      form.setValue("specifications", {
-                                        ...currentSpecs,
-                                        [specKey]: specValue,
-                                      });
-                                      setSpecKey("");
-                                      setSpecValue("");
-                                    }
-                                  }}
-                                >
-                                  Add Spec
-                                </Button>
-                              </div>
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {Object.entries(
-                                  form.watch("specifications") || {},
-                                ).map(([key, value]) => (
-                                  <div
-                                    key={key}
-                                    className="bg-secondary text-secondary-foreground px-3 py-1 rounded-full flex items-center gap-1"
-                                  >
-                                    <span>
-                                      {key}: {value}
-                                    </span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-4 w-4 rounded-full"
-                                      onClick={() => {
-                                        const currentSpecs =
-                                          form.getValues("specifications") ||
-                                          {};
-                                        const newSpecs = { ...currentSpecs };
-                                        delete newSpecs[key];
-                                        form.setValue(
-                                          "specifications",
-                                          newSpecs,
-                                        );
-                                      }}
-                                    >
-                                      <AlertCircle className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Tags Section */}
-                            <div className="space-y-2">
-                              <FormLabel>Tags</FormLabel>
-                              <div className="flex gap-2">
-                                <Input
-                                  placeholder="Add a tag"
-                                  value={tagInput}
-                                  onChange={(e) => setTagInput(e.target.value)}
-                                  onKeyPress={(e) => {
-                                    if (e.key === "Enter" && tagInput) {
-                                      e.preventDefault();
-                                      const currentTags =
-                                        form.getValues("tags") || [];
-                                      if (!currentTags.includes(tagInput)) {
-                                        form.setValue("tags", [
-                                          ...currentTags,
-                                          tagInput,
-                                        ]);
-                                        setTagInput("");
-                                      }
-                                    }
-                                  }}
-                                  className="flex-1"
-                                />
-                                <Button
-                                  type="button"
-                                  onClick={() => {
-                                    if (tagInput) {
-                                      const currentTags =
-                                        form.getValues("tags") || [];
-                                      if (!currentTags.includes(tagInput)) {
-                                        form.setValue("tags", [
-                                          ...currentTags,
-                                          tagInput,
-                                        ]);
-                                      }
-                                    }
-                                  }}
-                                >
-                                  Add Tag
-                                </Button>
-                              </div>
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {form.watch("tags")?.map((tag, index) => (
-                                  <div
-                                    key={index}
-                                    className="bg-secondary text-secondary-foreground px-3 py-1 rounded-full flex items-center gap-1"
-                                  >
-                                    <span>{tag}</span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-4 w-4 rounded-full"
-                                      onClick={() => {
-                                        const currentTags =
-                                          form.getValues("tags") || [];
-                                        form.setValue(
-                                          "tags",
-                                          currentTags.filter(
-                                            (_, i) => i !== index,
-                                          ),
-                                        );
-                                      }}
-                                    >
-                                      <AlertCircle className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="grid gap-4 md:grid-cols-3">
-                              <FormField
-                                control={form.control}
-                                name="minOrderQuantity"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Min Order Quantity</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} type="number" min="1" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
-                                name="maxOrderQuantity"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Max Order Quantity</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} type="number" min="1" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
-                                name="lowStockThreshold"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Low Stock Threshold</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} type="number" min="0" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex justify-end mt-4">
-                        <Button
-                          type="submit"
-                          id="update_product"
-                          disabled={
-                            form.formState.isSubmitting ||
-                            updateProductMutation.isPending ||
-                            createProductMutation.isPending
-                          }
-                        >
-                          {(form.formState.isSubmitting ||
-                            updateProductMutation.isPending ||
-                            createProductMutation.isPending) && (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          )}
-                          {editingProduct
-                            ? t("update_product")
-                            : t("create_product")}
-                        </Button>
-                      </div>
-                    </div>
+            <Suspense
+              fallback={
+                <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
+                  <div className="flex items-center justify-center py-16">
+                    <Loader2 className="h-6 w-6 animate-spin" />
                   </div>
-                </form>
-              </Form>
-            </DialogContent>
+                </DialogContent>
+              }
+            >
+              <ProductFormDialogLazy
+                t={t}
+                editingProduct={editingProduct}
+                form={form}
+                showAdvancedOptions={showAdvancedOptions}
+                setShowAdvancedOptions={setShowAdvancedOptions}
+                handleImageUpload={handleImageUpload}
+                handleRemoveImage={handleRemoveImage}
+                imageUploadError={imageUploadError}
+                specKey={specKey}
+                specValue={specValue}
+                setSpecKey={setSpecKey}
+                setSpecValue={setSpecValue}
+                tagInput={tagInput}
+                setTagInput={setTagInput}
+                onSubmit={onSubmit}
+                createPending={createProductMutation.isPending}
+                updatePending={updateProductMutation.isPending}
+              />
+            </Suspense>
           </Dialog>
         </div>
 

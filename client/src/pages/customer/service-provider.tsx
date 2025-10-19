@@ -4,14 +4,16 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import { Service, User, Review } from "@shared/schema";
+import { Review } from "@shared/schema";
 import { Loader2, MapPin, Clock, Star, Phone } from "lucide-react";
 import { motion } from "framer-motion";
 import { useParams, Link } from "wouter";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
+import { ServiceDetail } from "@shared/api-contract";
+import { apiClient } from "@/lib/apiClient";
 
 // Helper function to format address
-const formatAddress = (user: User | undefined): string => {
+const formatAddress = (user: ServiceDetail["provider"] | undefined): string => {
   if (!user) return "Address not available";
   const parts = [
     user.addressStreet,
@@ -34,8 +36,12 @@ export default function ServiceProvider() {
     isError: serviceIsError,
     error: serviceError,
     isSuccess: serviceIsSuccess,
-  } = useQuery<Service & { provider: User }, Error>({
+  } = useQuery<ServiceDetail, Error>({
     queryKey: [`/api/services/${id}`],
+    queryFn: () =>
+      apiClient.get("/api/services/:id", {
+        params: { id: Number(id) },
+      }),
     enabled: !!id,
     retry: false, // Optional: prevent retries on error if desired
   });
@@ -111,6 +117,7 @@ export default function ServiceProvider() {
     ? validReviews.reduce((acc, review) => acc + review.rating, 0) /
       validReviews.length
     : 0;
+  const providerName = service.provider?.name ?? "Provider";
 
   return (
     <DashboardLayout>
@@ -130,12 +137,10 @@ export default function ServiceProvider() {
                       service.provider?.profilePicture ||
                       "https://via.placeholder.com/128"
                     }
-                    alt={service.provider?.name}
+                    alt={providerName}
                     className="h-32 w-32 rounded-full object-cover mb-4"
                   />
-                  <h2 className="text-2xl font-bold">
-                    {service.provider?.name}
-                  </h2>
+                  <h2 className="text-2xl font-bold">{providerName}</h2>
                   <div className="flex items-center gap-1 text-yellow-500">
                     <Star className="h-4 w-4 fill-current" />
                     <span>

@@ -1,4 +1,10 @@
-import express, { type Express, Request, RequestHandler } from "express";
+import express, {
+  type Express,
+  Request,
+  RequestHandler,
+  Response,
+  NextFunction,
+} from "express";
 import { createServer, type Server } from "http";
 import logger, { LogCategory, runWithLogContext } from "./logger";
 import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
@@ -14,6 +20,7 @@ import csrf from "csurf";
 import multer, { MulterError } from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
+import { getCache, setCache, invalidateCache } from "./cache";
 import {
   insertServiceSchema,
   insertBookingSchema,
@@ -41,6 +48,7 @@ import {
   type OrderItem,
   PaymentMethodType,
   PaymentMethodSchema,
+  ShopProfile,
   shopWorkers,
 } from "@shared/schema";
 import { platformFees } from "@shared/config";
@@ -69,8 +77,20 @@ import {
   registerRealtimeClient,
 } from "./realtime";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
+import {
+  appApi,
+  serviceDetailSchema,
+  productDetailSchema,
+  orderDetailSchema,
+  orderTimelineEntrySchema,
+  ServiceDetail,
+  ProductDetail,
+} from "@shared/api-contract";
 
 const PLATFORM_SERVICE_FEE = platformFees.productOrder;
+const SERVICE_DETAIL_CACHE_TTL_MS = 60_000;
+const PRODUCT_DETAIL_CACHE_TTL_MS = 60_000;
+const SHOP_DETAIL_CACHE_TTL_MS = 120_000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -562,6 +582,8 @@ const productsQuerySchema = z
     attributes: z.string().trim().optional(),
     locationCity: z.string().trim().max(100).optional(),
     locationState: z.string().trim().max(100).optional(),
+    page: z.coerce.number().int().positive().optional(),
+    pageSize: z.coerce.number().int().positive().max(100).optional(),
   })
   .strict()
   .refine(
@@ -1869,6 +1891,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (req.user) Object.assign(req.user, safeUser);
+      if (req.user?.role === "shop") {
+        await invalidateCache(`shop_detail_${userId}`);
+      }
       res.json(safeUser);
     } catch (error) {
       logger.error("Error updating user:", error);
@@ -2046,6 +2071,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "[API] /api/products/:id PATCH - Updated product:",
           updatedProduct,
         );
+        await invalidateCache(`product_detail_${shopContextId}_${productId}`);
         res.json(updatedProduct);
       } catch (error) {
         logger.error("[API] Error in /api/products/:id PATCH:", error);
@@ -2170,6 +2196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "[API] /api/services/:id PATCH - Updated service:",
           updatedService,
         );
+        await invalidateCache(`service_detail_${serviceId}`);
         res.json(updatedService);
       } catch (error) {
         logger.error("[API] Error updating service:", error);
@@ -2265,78 +2292,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/services/:id", requireAuth, async (req, res) => {
-    try {
-      const serviceId = getValidatedParam(req, "id");
-      logger.info(
-        "[API] /api/services/:id - Received request for service ID:",
-        serviceId,
-      );
+  app.get(
+    "/api/services/:id",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const serviceId = Number(req.params.id);
+        logger.info(
+          "[API] /api/services/:id - Received request for service ID: %d",
+          serviceId,
+        );
 
-      const service = await storage.getService(serviceId);
-      logger.info("[API] /api/services/:id - Service from storage:", service);
+        const cacheKey = `service_detail_${serviceId}`;
+        const cached = await getCache<ServiceDetail>(cacheKey);
+        if (cached) {
+          logger.debug("[API] /api/services/:id - returning cached response");
+          return res.json(cached);
+        }
 
-      if (!service) {
-        logger.info("[API] /api/services/:id - Service not found in storage");
-        return res.status(404).json({ message: "Service not found" });
-      }
+        const service = await storage.getService(serviceId);
+        logger.info("[API] /api/services/:id - Service from storage:", service);
 
-      // Get the provider details
-      const provider =
-        service.providerId !== null
-          ? await storage.getUser(service.providerId)
+        if (!service) {
+          logger.info("[API] /api/services/:id - Service not found in storage");
+          return res.status(404).json({ message: "Service not found" });
+        }
+
+        const provider =
+          service.providerId !== null
+            ? await storage.getUser(service.providerId)
+            : null;
+        if (!provider) {
+          logger.info("[API] /api/services/:id - Provider not found");
+          return res
+            .status(404)
+            .json({ message: "Service provider not found" });
+        }
+
+        const reviews = await storage.getReviewsByService(serviceId);
+        const rating = reviews?.length
+          ? reviews.reduce((acc, review) => acc + review.rating, 0) /
+            reviews.length
           : null;
-      logger.info("[API] /api/services/:id - Provider details:", provider);
 
-      if (!provider) {
-        logger.info("[API] /api/services/:id - Provider not found");
-        return res.status(404).json({ message: "Service provider not found" });
-      }
+        const rawWorkingHours = (service as any).workingHours;
+        let workingHours = rawWorkingHours ?? null;
+        if (typeof rawWorkingHours === "string") {
+          try {
+            workingHours = JSON.parse(rawWorkingHours);
+          } catch (parseError) {
+            logger.warn(
+              { err: parseError },
+              "Failed to parse working hours JSON for service %d",
+              serviceId,
+            );
+            workingHours = null;
+          }
+        }
 
-      // Get reviews and calculate rating
-      const reviews = await storage.getReviewsByService(serviceId);
-      const rating = reviews?.length
-        ? reviews.reduce((acc, review) => acc + review.rating, 0) /
-          reviews.length
-        : null;
+        const breakSlots =
+          (service as any).breakTime ??
+          (service as any).breakTimes ??
+          null;
 
-      const responseData = {
-        ...service,
-        rating,
-        provider: {
-          id: provider.id,
-          name: provider.name,
-          email: provider.email,
-          phone: provider.phone,
-          profilePicture: provider.profilePicture,
-          // Include address fields
-          addressStreet: provider.addressStreet,
-          addressCity: provider.addressCity,
-          addressState: provider.addressState,
-          addressPostalCode: provider.addressPostalCode,
-          addressCountry: provider.addressCountry,
-        },
-        // Include availability details
-        workingHours: service.workingHours,
-        breakTime: service.breakTime, // Corrected field name
-        reviews: reviews || [],
-      };
-
-      logger.info(
-        "[API] /api/services/:id - Sending response data:",
-        responseData,
-      );
-      res.json(responseData);
-    } catch (error) {
-      logger.error("[API] Error in /api/services/:id:", error);
-      res
-        .status(500)
-        .json({
-          message:
-            error instanceof Error ? error.message : "Failed to fetch service",
+        const payload = serviceDetailSchema.parse({
+          ...service,
+          workingHours,
+          breakTime: breakSlots,
+          rating,
+          provider: {
+            id: provider.id,
+            name: provider.name ?? null,
+            email: provider.email ?? null,
+            phone: provider.phone ?? null,
+            profilePicture: provider.profilePicture ?? null,
+            addressStreet: provider.addressStreet ?? null,
+            addressCity: provider.addressCity ?? null,
+            addressState: provider.addressState ?? null,
+            addressPostalCode: provider.addressPostalCode ?? null,
+            addressCountry: provider.addressCountry ?? null,
+          },
+          reviews: (reviews ?? []).map((review) => ({
+            id: review.id,
+            customerId: review.customerId ?? null,
+            serviceId: review.serviceId ?? null,
+            bookingId: review.bookingId ?? null,
+            rating: review.rating,
+            review: review.review ?? null,
+            createdAt:
+              review.createdAt instanceof Date
+                ? review.createdAt.toISOString()
+                : review.createdAt
+                  ? new Date(
+                      review.createdAt as unknown as string,
+                    ).toISOString()
+                  : null,
+            providerReply: review.providerReply ?? null,
+            isVerifiedService: review.isVerifiedService ?? undefined,
+          })),
         });
-    }
-  });
+
+        logger.info(
+          "[API] /api/services/:id - Sending typed response",
+          payload,
+        );
+        await setCache(cacheKey, payload, SERVICE_DETAIL_CACHE_TTL_MS);
+        res.json(payload);
+      } catch (error) {
+        logger.error("[API] Error in /api/services/:id:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch service",
+          });
+      }
+    },
+  );
 
   // Add these endpoints after the existing service routes
   app.get("/api/services/:id/blocked-slots", requireAuth, async (req, res) => {
@@ -2496,6 +2570,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           logger.info(
             "[API] /api/services/:id DELETE - Service marked as deleted successfully",
           );
+          await invalidateCache(`service_detail_${serviceId}`);
           res.status(200).json({ message: "Service deleted successfully" });
         } catch (error) {
           logger.error("[API] Error deleting service:", error);
@@ -3984,12 +4059,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   app.get("/api/orders/:id", requireAuth, async (req, res) => {
-    const orderId = getValidatedParam(req, "id");
+    const orderId = Number(req.params.id);
     try {
       const order = await storage.getOrder(orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
       if (order.customerId !== req.user!.id) {
-        // Allow shop owners or their workers if the order belongs to their shop
         if (req.user!.role === "shop") {
           if (order.shopId !== req.user!.id) {
             return res.status(403).json({ message: "Not authorized" });
@@ -4015,39 +4089,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
             productId: item.productId,
             name: product?.name ?? "",
             quantity: item.quantity,
-            price: item.price,
-            total: item.total,
+            price: String(item.price),
+            total: String(item.total),
           };
         }),
       );
+
       const customer =
         order.customerId !== null
           ? await storage.getUser(order.customerId)
           : undefined;
       const shop =
         order.shopId !== null ? await storage.getUser(order.shopId) : undefined;
-      res.json({
+
+      const payload = orderDetailSchema.parse({
         ...order,
+        orderDate:
+          order.orderDate instanceof Date
+            ? order.orderDate.toISOString()
+            : order.orderDate ?? null,
+        eReceiptGeneratedAt:
+          order.eReceiptGeneratedAt instanceof Date
+            ? order.eReceiptGeneratedAt.toISOString()
+            : order.eReceiptGeneratedAt ?? null,
+        paymentReference: order.paymentReference ?? null,
+        billingAddress: order.billingAddress ?? null,
+        trackingInfo: order.trackingInfo ?? null,
+        notes: order.notes ?? null,
+        eReceiptId: order.eReceiptId ?? null,
+        eReceiptUrl: order.eReceiptUrl ?? null,
         items,
         customer: customer
           ? {
-              name: customer.name,
-              phone: customer.phone,
-              email: customer.email,
-              address: formatUserAddress(customer),
+              name: customer.name ?? null,
+              phone: customer.phone ?? null,
+              email: customer.email ?? null,
+              address: formatUserAddress(customer) ?? null,
             }
           : undefined,
         shop: shop
           ? {
-              name: shop.name,
-              phone: shop.phone,
-              email: shop.email,
-              address: formatUserAddress(shop),
-              upiId: (shop as any).upiId,
-              returnsEnabled: (shop as any).returnsEnabled,
+              name: shop.name ?? null,
+              phone: shop.phone ?? null,
+              email: shop.email ?? null,
+              address: formatUserAddress(shop) ?? null,
+              upiId: (shop as any).upiId ?? null,
+              returnsEnabled:
+                (shop as any).returnsEnabled === undefined
+                  ? null
+                  : Boolean((shop as any).returnsEnabled),
             }
           : undefined,
       });
+
+      res.json(payload);
     } catch (error) {
       logger.error("Error fetching order details:", error);
       res
@@ -4249,16 +4344,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/orders/:id/timeline",
     requireAuth,
     // If customer, handle directly; otherwise fall through to worker/shop check
-    async (req: any, res, next) => {
+    async (req: any, res: Response, next: NextFunction) => {
+      if (!req.user) {
+        return res.status(401).json({ message: "Not authorized" });
+      }
       if (req.user?.role === "customer") {
-        const orderId = getValidatedParam(req, "id");
+        const orderId = Number(req.params.id);
         try {
           const order = await storage.getOrder(orderId);
           if (!order) return res.status(404).json({ message: "Order not found" });
           if (order.customerId !== req.user.id)
             return res.status(403).json({ message: "Not authorized" });
           const timeline = await storage.getOrderTimeline(orderId);
-          return res.json(timeline);
+          return res.json(
+            orderTimelineEntrySchema
+              .array()
+              .parse(
+                timeline.map((entry) => ({
+                  ...entry,
+                  trackingInfo: entry.trackingInfo ?? null,
+                  timestamp:
+                    entry.timestamp instanceof Date
+                      ? entry.timestamp.toISOString()
+                      : new Date(entry.timestamp).toISOString(),
+                })),
+              ),
+          );
         } catch (error) {
           logger.error("Error fetching customer order timeline:", error);
           return res
@@ -4274,17 +4385,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next();
     },
     requireShopOrWorkerPermission(["orders:read"]),
-    async (req: any, res) => {
-      const orderId = getValidatedParam(req, "id");
+    async (req: any, res: Response) => {
+      if (!req.user) {
+        return res.status(401).json({ message: "Not authorized" });
+      }
+      const orderId = Number(req.params.id);
       try {
         const order = await storage.getOrder(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
         const shopContextId =
-          req.user.role === "shop" ? req.user.id : req.workerShopId;
+          req.user && req.user.role === "shop"
+            ? req.user.id
+            : (req.workerShopId ?? null);
         if (order.shopId !== shopContextId)
           return res.status(403).json({ message: "Not authorized" });
         const timeline = await storage.getOrderTimeline(orderId);
-        res.json(timeline);
+        res.json(
+          orderTimelineEntrySchema
+            .array()
+            .parse(
+              timeline.map((entry) => ({
+                ...entry,
+                trackingInfo: entry.trackingInfo ?? null,
+                timestamp:
+                  entry.timestamp instanceof Date
+                    ? entry.timestamp.toISOString()
+                    : new Date(entry.timestamp).toISOString(),
+              })),
+            ),
+        );
       } catch (error) {
         logger.error("Error fetching order timeline for shop/worker:", error);
         res
@@ -4526,9 +4655,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         attributes,
         locationCity,
         locationState,
+        page = 1,
+        pageSize = 24,
       } = parsedQuery.data;
 
-      const filters: Record<string, unknown> = {};
+      const normalizedPage = Math.max(1, Number(page));
+      const normalizedPageSize = Math.min(100, Math.max(1, Number(pageSize)));
+
+      const filters: Record<string, unknown> = {
+        page: normalizedPage,
+        pageSize: normalizedPageSize,
+      };
       if (category) filters.category = category.toLowerCase();
       if (minPrice !== undefined) filters.minPrice = minPrice;
       if (maxPrice !== undefined) filters.maxPrice = maxPrice;
@@ -4566,8 +4703,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (locationCity) filters.locationCity = locationCity;
       if (locationState) filters.locationState = locationState;
 
-      const products = await storage.getProducts(filters);
-      res.json(products);
+      const { items, hasMore } = await storage.getProducts(filters);
+      const list = items.map((product) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        mrp: product.mrp,
+        category: product.category,
+        images: product.images ?? [],
+        shopId: product.shopId,
+        isAvailable: product.isAvailable ?? true,
+        stock: product.stock,
+      }));
+
+      res.json({
+        page: normalizedPage,
+        pageSize: normalizedPageSize,
+        hasMore,
+        items: list,
+      });
     } catch (error) {
       logger.error("Error fetching products:", error);
       res
@@ -4585,8 +4739,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     async (req, res) => {
       try {
-        const shopId = getValidatedParam(req, "shopId");
-        const productId = getValidatedParam(req, "productId");
+        const shopId = Number(req.params.shopId);
+        const productId = Number(req.params.productId);
+        const cacheKey = `product_detail_${shopId}_${productId}`;
+        const cached = await getCache<ProductDetail>(cacheKey);
+        if (cached) {
+          logger.debug("[API] /api/shops/:shopId/products/:productId - cache hit");
+          return res.json(cached);
+        }
         const product = await storage.getProduct(productId);
 
         if (!product || product.shopId !== shopId) {
@@ -4594,7 +4754,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .status(404)
             .json({ message: "Product not found in this shop" });
         }
-        res.json(product);
+
+        const payload = productDetailSchema.parse({
+          ...product,
+          images: product.images ?? null,
+          specifications: product.specifications ?? null,
+          tags: product.tags ?? null,
+          weight: product.weight ?? null,
+          dimensions: product.dimensions ?? null,
+          mrp: product.mrp ?? null,
+          createdAt:
+            product.createdAt instanceof Date
+              ? product.createdAt.toISOString()
+              : product.createdAt ?? null,
+          updatedAt:
+            product.updatedAt instanceof Date
+              ? product.updatedAt.toISOString()
+              : product.updatedAt ?? null,
+        });
+
+        await setCache(cacheKey, payload, PRODUCT_DETAIL_CACHE_TTL_MS);
+        res.json(payload);
       } catch (error) {
         logger.error("Error fetching product:", error);
         res
@@ -4613,18 +4793,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/shops/:shopId", requireAuth, async (req, res) => {
     try {
       const shopId = getValidatedParam(req, "shopId");
+      const cacheKey = `shop_detail_${shopId}`;
+      const cached = await getCache<{ id: number; name: string | null; shopProfile: ShopProfile | null }>(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
       const shop = await storage.getUser(shopId);
 
       if (!shop || shop.role !== "shop") {
         return res.status(404).json({ message: "Shop not found" });
       }
       // Return only necessary public shop info
-      res.json({
+      const payload = {
         id: shop.id,
         name: shop.name,
         shopProfile: shop.shopProfile,
-        // Add other relevant public fields if needed
-      });
+      } as const;
+      await setCache(cacheKey, payload, SHOP_DETAIL_CACHE_TTL_MS);
+      res.json(payload);
     } catch (error) {
       logger.error("Error fetching shop details:", error);
       res
@@ -4672,6 +4858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Then delete the product
           logger.info(`Deleting product with ID: ${productId}`);
           await storage.deleteProduct(productId);
+          await invalidateCache(`product_detail_${product.shopId}_${productId}`);
           logger.info(`Product ${productId} deleted successfully`);
           res.status(200).json({ message: "Product deleted successfully" });
         } catch (deleteError) {
