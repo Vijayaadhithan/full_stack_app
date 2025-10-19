@@ -2387,8 +2387,36 @@ export class MemStorage implements IStorage {
 // Import the PostgreSQL storage implementation
 import { PostgresStorage } from "./pg-storage";
 
-// Use in-memory storage for tests when USE_IN_MEMORY_DB or NODE_ENV=test is set
-export const storage =
-  process.env.USE_IN_MEMORY_DB === "true" || process.env.NODE_ENV === "test"
-    ? new MemStorage()
-    : new PostgresStorage();
+const isTestEnv = process.env.NODE_ENV === "test";
+const requestedInMemory = process.env.USE_IN_MEMORY_DB === "true";
+const runningUnderPm2 =
+  typeof process.env.PM2_HOME === "string" ||
+  typeof process.env.pm_id === "string" ||
+  typeof process.env.PM2_ID === "string";
+
+const shouldUseInMemory = isTestEnv || (!runningUnderPm2 && requestedInMemory);
+
+if (!isTestEnv && runningUnderPm2 && requestedInMemory) {
+  logger.warn(
+    "Detected PM2 cluster mode. Ignoring USE_IN_MEMORY_DB and using the PostgreSQL session store instead.",
+  );
+}
+
+export const storage = shouldUseInMemory ? new MemStorage() : new PostgresStorage();
+
+if (shouldUseInMemory) {
+  const message =
+    "Using in-memory storage for application data and sessions. This configuration is not shared across processes.";
+  if (isTestEnv) {
+    logger.info({ testEnv: true }, message);
+  } else {
+    logger.warn(message);
+  }
+} else {
+  logger.info(
+    {
+      pm2: runningUnderPm2,
+    },
+    "Using PostgreSQL-backed storage for application data and sessions.",
+  );
+}

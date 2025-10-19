@@ -12,6 +12,7 @@ let redisReady = false;
 let redisInitPromise: Promise<void> | null = null;
 let redisNextRetry = 0;
 let loggedMissingUrl = false;
+let loggedDisabled = false;
 
 async function initRedis() {
   if (redisClient || redisInitPromise) {
@@ -24,7 +25,26 @@ async function initRedis() {
     return;
   }
 
-  const redisUrl = process.env.REDIS_URL;
+  const disableEnv = process.env.DISABLE_REDIS;
+  const disableFlag = disableEnv ? disableEnv.trim().toLowerCase() : undefined;
+  const redisDisabled =
+    disableFlag === "true" ||
+    disableFlag === "1" ||
+    disableFlag === "yes" ||
+    disableFlag === "on";
+
+  if (redisDisabled) {
+    if (!loggedDisabled) {
+      logger.info(
+        "Redis cache disabled via DISABLE_REDIS flag. Using in-memory cache for this instance.",
+      );
+      loggedDisabled = true;
+    }
+    redisNextRetry = Number.POSITIVE_INFINITY;
+    return;
+  }
+
+  const redisUrl = process.env.REDIS_URL?.trim();
   if (!redisUrl) {
     if (!loggedMissingUrl) {
       logger.info(

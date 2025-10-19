@@ -16,7 +16,6 @@ import {
 import { storage } from "./storage";
 import { sanitizeUser, sanitizeUserList } from "./security/sanitizeUser";
 import { z } from "zod";
-import csrf from "csurf";
 import multer, { MulterError } from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -76,6 +75,7 @@ import {
   notifyNotificationChange,
   registerRealtimeClient,
 } from "./realtime";
+import { createCsrfProtection } from "./security/csrfProtection";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 import {
   appApi,
@@ -669,7 +669,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             "test-csrf-token";
           next();
         })
-      : csrf({ cookie: false, ignoreMethods: ["GET", "HEAD", "OPTIONS"] });
+      : createCsrfProtection({ ignoreMethods: ["GET", "HEAD", "OPTIONS"] });
 
   app.use(csrfProtection);
 

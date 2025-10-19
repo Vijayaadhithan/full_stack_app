@@ -191,11 +191,62 @@ export class PostgresStorage implements IStorage {
 
   constructor() {
     const PgStore = pgSession(session);
-    this.sessionStore = new PgStore({
-      conString: process.env.DATABASE_URL,
-      tableName: "sessions",
-      createTableIfMissing: true,
-    });
+    const connectionString = process.env.DATABASE_URL?.trim();
+    if (!connectionString) {
+      throw new Error(
+        "DATABASE_URL must be configured to use the PostgreSQL-backed session store.",
+      );
+    }
+
+    const pruneIntervalCandidate = Number.parseInt(
+      process.env.SESSION_PRUNE_INTERVAL_SECONDS ?? "",
+      10,
+    );
+    const ttlCandidate = Number.parseInt(
+      process.env.SESSION_TTL_SECONDS ?? "",
+      10,
+    );
+    const tableName =
+      process.env.SESSION_TABLE_NAME?.trim() ?? "sessions";
+    const schemaName = process.env.SESSION_SCHEMA_NAME?.trim();
+    const createTableIfMissing =
+      process.env.SESSION_AUTO_CREATE_TABLE !== "false";
+
+    const storeOptions: ConstructorParameters<typeof PgStore>[0] = {
+      conString: connectionString,
+      tableName,
+      createTableIfMissing,
+      pruneSessionInterval:
+        Number.isInteger(pruneIntervalCandidate) && pruneIntervalCandidate > 0
+          ? pruneIntervalCandidate
+          : 60,
+      errorLog: (...args: unknown[]) => {
+        logger.error(
+          { args },
+          "connect-pg-simple emitted an error",
+        );
+      },
+    };
+
+    if (Number.isInteger(ttlCandidate) && ttlCandidate > 0) {
+      storeOptions.ttl = ttlCandidate;
+    }
+
+    if (schemaName) {
+      storeOptions.schemaName = schemaName;
+    }
+
+    this.sessionStore = new PgStore(storeOptions);
+
+    logger.info(
+      {
+        tableName,
+        schemaName: schemaName ?? "public",
+        pruneSessionInterval: storeOptions.pruneSessionInterval,
+        ttlSeconds: storeOptions.ttl ?? null,
+      },
+      "Initialized PostgreSQL session store",
+    );
   }
   async getUserByEmail(email: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.email, email));
