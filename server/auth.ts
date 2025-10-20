@@ -31,6 +31,7 @@ import {
   normalizeEmail,
   normalizePhone,
 } from "./utils/identity";
+import { sanitizeAndValidateSecret } from "./security/secretValidators";
 dotenv.config();
 
 declare module "express-session" {
@@ -174,13 +175,19 @@ async function generateEmailVerificationToken(userId: number) {
 }
 
 export function initializeAuth(app: Express) {
-  const sessionSecret = process.env.SESSION_SECRET;
-  if (!sessionSecret || sessionSecret.trim().length === 0) {
-    logger.error(
-      "SESSION_SECRET is not configured. Refusing to start authentication without a secret.",
-    );
-    throw new Error("SESSION_SECRET environment variable must be set.");
-  }
+  const sessionSecret = sanitizeAndValidateSecret(
+    "SESSION_SECRET",
+    process.env.SESSION_SECRET,
+    {
+      minLength: 32,
+      requireUppercase: true,
+      requireLowercase: true,
+      requireNumber: true,
+      requireSymbol: true,
+      disallowedPatterns: [/secret/i, /password/i, /changeme/i, /admin/i],
+      environment: process.env.NODE_ENV ?? "development",
+    },
+  );
 
   const sessionSettings: session.SessionOptions = {
     secret: sessionSecret,

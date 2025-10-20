@@ -8,6 +8,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import logger from "./logger";
 import { hashPasswordInternal } from "./auth";
+import { sanitizeAndValidateSecret } from "./security/secretValidators";
 
 /**
  * Ensure at least one admin account exists along with a Super Admin role
@@ -25,24 +26,29 @@ export async function ensureDefaultAdmin() {
   }
 
   const envEmail = rawEmail.trim().toLowerCase();
-  const envPassword = rawPassword.trim();
+  const envPassword = sanitizeAndValidateSecret(
+    "ADMIN_PASSWORD",
+    rawPassword,
+    {
+      minLength: 12,
+      requireUppercase: true,
+      requireLowercase: true,
+      requireNumber: true,
+      requireSymbol: true,
+      disallowedPatterns: [/^admin12345$/i, /^password/i, /^changeme/i],
+      environment: process.env.NODE_ENV ?? "development",
+    },
+  );
 
   if (
     envEmail.length === 0 ||
     envPassword.length === 0 ||
-    envEmail === "admin@example.com" ||
-    envPassword === "admin12345"
+    envEmail === "admin@example.com"
   ) {
     const message =
       "Refusing to bootstrap admin with insecure default credentials. Provide strong ADMIN_EMAIL and ADMIN_PASSWORD values.";
     logger.error(message);
     throw new Error(message);
-  }
-
-  if (envPassword.length < 12) {
-    logger.warn(
-      "ADMIN_PASSWORD is shorter than 12 characters. Consider using a stronger secret.",
-    );
   }
 
   // 1) Seed permissions (idempotent)

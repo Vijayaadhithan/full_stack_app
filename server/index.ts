@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Server as HttpsServer } from "https";
 import { getNetworkConfig } from "../config/network";
 // Import your email service here
 //import { sendEmail } from "./emailService";
@@ -92,6 +93,12 @@ const wildcardRequested = allowedOrigins.includes("*");
 const effectiveOrigins = allowedOrigins.filter((origin) => origin !== "*");
 
 if (isProduction && wildcardRequested) {
+  if (effectiveOrigins.length === 0) {
+    const message =
+      "Wildcard CORS origin is not permitted in production. Configure explicit origins.";
+    logger.error({ allowedOrigins }, message);
+    throw new Error(message);
+  }
   logger.warn(
     { allowedOrigins: effectiveOrigins },
     "Ignoring wildcard CORS origin in production; configure explicit origins instead",
@@ -101,6 +108,13 @@ if (isProduction && wildcardRequested) {
 const corsAllowedOrigins = isProduction ? effectiveOrigins : allowedOrigins;
 const allowAllOrigins =
   !isProduction && process.env.STRICT_CORS !== "true";
+
+if (isProduction && corsAllowedOrigins.length === 0) {
+  const message =
+    "No CORS origins configured for production. Set ALLOWED_ORIGINS or network config.";
+  logger.error(message);
+  throw new Error(message);
+}
 
 type OriginMatcher = {
   value: string;
@@ -176,7 +190,7 @@ function mountStaticAssets() {
   staticAssetsMounted = true;
 }
 
-function logAccessibleAddresses(port: number) {
+function logAccessibleAddresses(port: number, scheme: "http" | "https") {
   const networks = os.networkInterfaces();
   const urls = new Set<string>();
 
@@ -184,7 +198,7 @@ function logAccessibleAddresses(port: number) {
     if (!entries) continue;
     for (const entry of entries) {
       if (!entry || entry.internal || entry.family !== "IPv4") continue;
-      urls.add(`http://${entry.address}:${port}`);
+      urls.add(`${scheme}://${entry.address}:${port}`);
     }
   }
 
@@ -544,10 +558,12 @@ export async function startServer(port?: number) {
   const PORT = port ?? parseInt(process.env.PORT || "5000", 10);
   const HOST = process.env.HOST || process.env.SERVER_HOST || "0.0.0.0";
 
+  const scheme: "http" | "https" = server instanceof HttpsServer ? "https" : "http";
+
   await new Promise<void>((resolve) => {
     server.listen(PORT, HOST, () => {
-      logger.info(`Server is running on http://${HOST}:${PORT}`);
-      logAccessibleAddresses(PORT);
+      logger.info(`Server is running on ${scheme}://${HOST}:${PORT}`);
+      logAccessibleAddresses(PORT, scheme);
       resolve();
     });
   });

@@ -15,6 +15,13 @@
       "when": 1760858564269,
       "tag": "0001_dashing_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1760974777829,
+      "tag": "0002_milky_metal_master",
+      "breakpoints": true
     }
   ]
 }

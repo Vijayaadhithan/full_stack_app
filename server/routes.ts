@@ -5,7 +5,11 @@ import express, {
   Response,
   NextFunction,
 } from "express";
-import { createServer, type Server } from "http";
+import { createServer as createHttpServer, type Server } from "http";
+import {
+  createServer as createHttpsServer,
+  type ServerOptions as HttpsServerOptions,
+} from "https";
 import logger, { LogCategory, runWithLogContext } from "./logger";
 import {
   initializeAuth,
@@ -22,6 +26,7 @@ import { sanitizeUser, sanitizeUserList } from "./security/sanitizeUser";
 import { z } from "zod";
 import multer, { MulterError } from "multer";
 import path from "path";
+import fs from "node:fs";
 import { fileURLToPath } from "url";
 import { getCache, setCache, invalidateCache } from "./cache";
 import {
@@ -67,7 +72,12 @@ import { ordersRouter } from "./routes/orders";
 import { registerWorkerRoutes } from "./routes/workers";
 import { recordFrontendMetric } from "./monitoring/metrics";
 import { performanceMetricEnvelopeSchema } from "./routes/admin";
-import { requireShopOrWorkerPermission, getWorkerShopId } from "./workerAuth";
+import {
+  requireShopOrWorkerPermission,
+  resolveShopContextId,
+  coerceNumericId,
+  type RequestWithContext,
+} from "./workerAuth";
 import {
   requestPasswordResetLimiter,
   resetPasswordLimiter,
@@ -82,6 +92,7 @@ import {
   registerRealtimeClient,
 } from "./realtime";
 import { createCsrfProtection } from "./security/csrfProtection";
+import { formatValidationError } from "./utils/zod";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 import {
   appApi,
@@ -154,6 +165,8 @@ declare global {
     // Stores sanitized, numeric route parameters for downstream handlers.
     interface Request {
       validatedParams?: Record<string, number>;
+      workerShopId?: number;
+      shopContextId?: number;
     }
   }
 }
@@ -760,11 +773,6 @@ const productsQuerySchema = z
       path: ["minPrice"],
     },
   );
-
-const formatValidationError = (error: z.ZodError) => ({
-  message: "Invalid input",
-  errors: error.flatten(),
-});
 
 // Helper function to validate and parse date and time
 function validateAndParseDateTime(
@@ -1870,7 +1878,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     pickupAvailable: z.boolean().optional(),
     deliveryAvailable: z.boolean().optional(),
     returnsEnabled: z.boolean().optional(),
-  });
+  }).strict();
 
   app.patch("/api/users/:id", requireAuth, async (req, res) => {
     try {
@@ -1880,7 +1888,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = profileUpdateSchema.safeParse(req.body);
-      if (!result.success) return res.status(400).json(result.error);
+      if (!result.success) {
+        return res.status(400).json(formatValidationError(result.error));
+      }
 
       // Allow both providers and shops to update UPI fields
       if (!["provider", "shop"].includes(req.user!.role)) {
@@ -1991,9 +2001,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const result = insertProductSchema.safeParse(req.body);
-        if (!result.success) return res.status(400).json(result.error);
+        if (!result.success) {
+          return res.status(400).json(formatValidationError(result.error));
+        }
 
-        const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
         const product = await storage.createProduct({
           ...result.data,
           shopId: shopContextId,
@@ -2045,11 +2060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const shopContextId =
-          req.user!.role === "shop"
-            ? req.user!.id
-            : req.user!.role === "worker"
-              ? (req as any).workerShopId
-              : null;
+          typeof req.shopContextId === "number" ? req.shopContextId : null;
 
         if (!shopContextId || product.shopId !== shopContextId) {
           return res.status(403).json({ message: "Not authorized to update this product" });
@@ -2124,7 +2135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             "[API] /api/services POST - Validation error:",
             result.error.flatten(),
           );
-          return res.status(400).json(result.error.flatten());
+          return res.status(400).json(formatValidationError(result.error));
         }
 
         const serviceData = {
@@ -2314,7 +2325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     async (req, res) => {
       try {
-        const serviceId = Number(req.params.id);
+        const serviceId = getValidatedParam(req, "id");
         logger.info(
           "[API] /api/services/:id - Received request for service ID: %d",
           serviceId,
@@ -2479,7 +2490,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         if (!result.success) {
-          return res.status(400).json(result.error);
+          return res
+            .status(400)
+            .json(formatValidationError(result.error));
         }
 
         // Ensure serviceId is a number by overriding the value from the schema if necessary
@@ -3364,7 +3377,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const result = insertReviewSchema.safeParse(req.body);
-        if (!result.success) return res.status(400).json(result.error);
+        if (!result.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(result.error));
+        }
 
         const { serviceId, bookingId, rating, review } = result.data;
 
@@ -3666,7 +3683,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .strict();
 
         const result = orderSchema.safeParse(req.body);
-        if (!result.success) return res.status(400).json(result.error);
+        if (!result.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(result.error));
+        }
 
         const {
           items,
@@ -3983,8 +4004,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireShopOrWorkerPermission(["analytics:view"]),
     async (req, res) => {
       try {
-        const shopContextId =
-          req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
         const stats = await storage.getShopDashboardStats(shopContextId);
         res.json(stats);
       } catch (error) {
@@ -4007,8 +4030,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireShopOrWorkerPermission(["orders:read"]),
     async (req, res) => {
       try {
-        const shopContextId =
-          req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
         const start = performance.now();
         const orders = await storage.getRecentOrdersByShop(shopContextId);
         const prepElapsed = performance.now();
@@ -4077,8 +4102,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(400).json({ message: "Invalid status filter" });
           }
         }
-        const shopContextId =
-          req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
         const start = performance.now();
         const orders = await storage.getOrdersByShop(
           shopContextId,
@@ -4117,22 +4144,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   app.get("/api/orders/:id", requireAuth, async (req, res) => {
-    const orderId = Number(req.params.id);
+    const orderId = getValidatedParam(req, "id");
     const timingStart = performance.now();
     try {
       const order = await storage.getOrder(orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
-      if (order.customerId !== req.user!.id) {
-        if (req.user!.role === "shop") {
-          if (order.shopId !== req.user!.id) {
-            return res.status(403).json({ message: "Not authorized" });
-          }
-        } else if (req.user!.role === "worker") {
-          const workerShopId = await getWorkerShopId(req.user!.id);
-          if (!workerShopId || order.shopId !== workerShopId) {
-            return res.status(403).json({ message: "Not authorized" });
-          }
-        } else {
+      const requesterId = coerceNumericId(req.user?.id);
+      const isCustomer =
+        requesterId !== null && order.customerId === requesterId;
+      if (!isCustomer) {
+        const shopContextId = await resolveShopContextId(
+          req as RequestWithContext,
+        );
+        if (!shopContextId || order.shopId !== shopContextId) {
           return res.status(403).json({ message: "Not authorized" });
         }
       }
@@ -4279,12 +4303,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       const orderId = getValidatedParam(req, "id");
       try {
-        const order = await storage.getOrder(orderId);
-        if (!order) return res.status(404).json({ message: "Order not found" });
-        const shopContextId =
-          req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
-        if (order.shopId !== shopContextId)
-          return res.status(403).json({ message: "Not authorized" });
+      const order = await storage.getOrder(orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      const shopContextId = req.shopContextId;
+      if (typeof shopContextId !== "number") {
+        return res.status(403).json({ message: "Unable to resolve shop context" });
+      }
+      if (order.shopId !== shopContextId)
+        return res.status(403).json({ message: "Not authorized" });
         if (
           (order.paymentMethod === "upi" && order.paymentStatus !== "verifying") ||
           (order.paymentMethod === "cash" && order.paymentStatus !== "pending")
@@ -4420,7 +4446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Not authorized" });
       }
       if (req.user?.role === "customer") {
-        const orderId = Number(req.params.id);
+        const orderId = getValidatedParam(req, "id");
         try {
           const order = await storage.getOrder(orderId);
           if (!order) return res.status(404).json({ message: "Order not found" });
@@ -4460,14 +4486,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.user) {
         return res.status(401).json({ message: "Not authorized" });
       }
-      const orderId = Number(req.params.id);
+      const orderId = getValidatedParam(req, "id");
       try {
         const order = await storage.getOrder(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
         const shopContextId =
-          req.user && req.user.role === "shop"
-            ? req.user.id
-            : (req.workerShopId ?? null);
+          typeof req.shopContextId === "number" ? req.shopContextId : null;
         if (order.shopId !== shopContextId)
           return res.status(403).json({ message: "Not authorized" });
         const timeline = await storage.getOrderTimeline(orderId);
@@ -4513,7 +4537,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const orderId = getValidatedParam(req, "id");
         const order = await storage.getOrder(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
-        const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
         if (order.shopId !== shopContextId) {
           return res.status(403).json({ message: "Not authorized" });
         }
@@ -4568,7 +4595,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       const result = insertReturnRequestSchema.safeParse(req.body);
-      if (!result.success) return res.status(400).json(result.error);
+      if (!result.success) {
+        return res.status(400).json(formatValidationError(result.error));
+      }
 
       const orderId = getValidatedParam(req, "orderId");
 
@@ -4629,7 +4658,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Ensure this return belongs to the caller's shop
         const order = returnRequest.orderId ? await storage.getOrder(returnRequest.orderId) : null;
-        const shopContextId = req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
         if (!order || order.shopId !== shopContextId) {
           return res.status(403).json({ message: "Not authorized" });
         }
@@ -4784,8 +4816,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     async (req, res) => {
       try {
-        const shopId = Number(req.params.shopId);
-        const productId = Number(req.params.productId);
+        const shopId = getValidatedParam(req, "shopId");
+        const productId = getValidatedParam(req, "productId");
         const cacheKey = `product_detail_${shopId}_${productId}`;
         const cached = await getCache<ProductDetail>(cacheKey);
         if (cached) {
@@ -4990,7 +5022,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       const result = insertProductReviewSchema.safeParse(req.body);
-      if (!result.success) return res.status(400).json(result.error);
+      if (!result.success) {
+        return res.status(400).json(formatValidationError(result.error));
+      }
 
       if (!result.data.orderId) {
         return res.status(400).json({ message: "Order id required" });
@@ -5110,194 +5144,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  // Promotions Management
-  app.post(
-    "/api/promotions",
-    requireAuth,
-    requireRole(["shop"]),
-    async (req, res) => {
-      try {
-        // Define a Zod schema for the promotion with expiryDays
-        const promotionWithExpirySchema = z
-          .object({
-            name: z.string().min(1, "Promotion name is required"),
-            description: z.string().optional(),
-            type: z.enum(["percentage", "fixed_amount"]),
-            value: z.coerce.number().min(0, "Discount value must be positive"),
-            code: z.string().optional(),
-            usageLimit: z.coerce.number().min(0).default(0),
-            isActive: z.boolean().default(true),
-            shopId: z.coerce.number().optional(),
-            expiryDays: z.coerce.number().min(0).default(0),
-          })
-          .strict();
-
-        // Validate the request body
-        const result = promotionWithExpirySchema.safeParse(req.body);
-        if (!result.success) return res.status(400).json(result.error);
-
-        // Extract validated data
-        const { expiryDays, ...promotionData } = result.data;
-
-        // Set startDate to current time
-        const startDate = new Date();
-
-        // Calculate endDate based on expiryDays
-        let endDate = null;
-        if (expiryDays > 0) {
-          const calculatedEndDate = new Date();
-          calculatedEndDate.setDate(calculatedEndDate.getDate() + expiryDays);
-          endDate = calculatedEndDate;
-        }
-
-        logger.info("Creating promotion with calculated dates:", {
-          startDate,
-          endDate,
-          expiryDays,
-        });
-
-        const promotion = await storage.createPromotion({
-          ...promotionData,
-          value: promotionData.value.toString(),
-          shopId: req.user!.id,
-          startDate,
-          endDate,
-        });
-
-        res.status(201).json(promotion);
-      } catch (error) {
-        logger.error("Error creating promotion:", error);
-        res
-          .status(400)
-          .json({
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to create promotion",
-          });
-      }
-    },
-  );
-
-  app.get(
-    "/api/promotions/shop/:id",
-    requireAuth,
-    requireRole(["shop"]),
-    async (req, res) => {
-      try {
-        const promotions = await storage.getPromotionsByShop(
-          getValidatedParam(req, "id"),
-        );
-        res.json(promotions);
-      } catch (error) {
-        logger.error("Error fetching promotions:", error);
-        res
-          .status(400)
-          .json({
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to fetch promotions",
-          });
-      }
-    },
-  );
-
-  app.patch(
-    "/api/promotions/:id",
-    requireAuth,
-    requireRole(["shop"]),
-    async (req, res) => {
-      try {
-        const promotionId = getValidatedParam(req, "id");
-
-        // Get the existing promotion to check ownership
-        const existingPromotions = await storage.getPromotionsByShop(
-          req.user!.id,
-        );
-        const promotion = existingPromotions.find((p) => p.id === promotionId);
-
-        if (!promotion) {
-          return res
-            .status(404)
-            .json({
-              message:
-                "Promotion not found or you don't have permission to update it",
-            });
-        }
-
-        // Define a Zod schema for the promotion update with expiryDays
-        const promotionUpdateSchema = z
-          .object({
-            name: z.string().min(1, "Promotion name is required").optional(),
-            description: z.string().optional(),
-            type: z.enum(["percentage", "fixed_amount"]).optional(),
-            value: z.coerce
-              .number()
-              .min(0, "Discount value must be positive")
-              .optional(),
-            code: z.string().optional(),
-            usageLimit: z.coerce.number().min(0).optional(),
-            isActive: z.boolean().optional(),
-            expiryDays: z.coerce.number().min(0).optional(),
-          })
-          .strict();
-
-        // Validate the request body
-        const result = promotionUpdateSchema.safeParse(req.body);
-        if (!result.success) return res.status(400).json(result.error);
-
-        // Extract validated data
-        const { expiryDays, ...updateData } = result.data;
-
-        // Always set startDate to current time for updates
-        (updateData as any).startDate = new Date();
-
-        // Calculate endDate based on expiryDays
-        if (expiryDays !== undefined) {
-          if (expiryDays === 0) {
-            (updateData as any).endDate = null;
-          } else {
-            const calculatedEndDate = new Date();
-            calculatedEndDate.setDate(calculatedEndDate.getDate() + expiryDays);
-            (updateData as any).endDate = calculatedEndDate;
-          }
-        }
-
-        // Update the promotion using the same storage method as other entities
-        const updatedResult = await db
-          .update(promotions)
-          .set({
-            ...updateData,
-            value:
-              updateData.value !== undefined
-                ? updateData.value.toString()
-                : updateData.value,
-          })
-          .where(eq(promotions.id, promotionId))
-          .returning();
-
-        if (!updatedResult[0]) {
-          return res
-            .status(404)
-            .json({ message: "Failed to update promotion" });
-        }
-
-        res.json(updatedResult[0]);
-      } catch (error) {
-        logger.error("Error updating promotion:", error);
-        res
-          .status(400)
-          .json({
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to update promotion",
-          });
-      }
-    },
-  );
-
   app.post(
     "/api/performance-metrics",
     requireAuth,
@@ -5340,6 +5186,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register promotion routes
   registerPromotionRoutes(app);
 
-  const httpServer = createServer(app);
+  const httpsEnabled = process.env.HTTPS_ENABLED === "true";
+  if (httpsEnabled) {
+    const keyPath = process.env.HTTPS_KEY_PATH;
+    const certPath = process.env.HTTPS_CERT_PATH;
+    if (!keyPath || !certPath) {
+      throw new Error(
+        "HTTPS_ENABLED is true but HTTPS_KEY_PATH or HTTPS_CERT_PATH is missing.",
+      );
+    }
+
+    const resolvePath = (input: string) =>
+      path.isAbsolute(input) ? input : path.resolve(process.cwd(), input);
+    const resolvedKeyPath = resolvePath(keyPath);
+    const resolvedCertPath = resolvePath(certPath);
+
+    const tlsOptions: HttpsServerOptions = {
+      key: fs.readFileSync(resolvedKeyPath),
+      cert: fs.readFileSync(resolvedCertPath),
+    };
+
+    const caPath = process.env.HTTPS_CA_PATH;
+    let resolvedCaPath: string | undefined;
+    if (caPath && caPath.trim().length > 0) {
+      resolvedCaPath = resolvePath(caPath.trim());
+      tlsOptions.ca = fs.readFileSync(resolvedCaPath);
+    }
+
+    const passphrase = process.env.HTTPS_PASSPHRASE;
+    if (passphrase && passphrase.trim().length > 0) {
+      tlsOptions.passphrase = passphrase;
+    }
+
+    logger.info(
+      {
+        keyPath: resolvedKeyPath,
+        certPath: resolvedCertPath,
+        caPath: resolvedCaPath,
+      },
+      "HTTPS enabled; starting secure server",
+    );
+
+    const httpsServer = createHttpsServer(tlsOptions, app);
+    return httpsServer;
+  }
+
+  const httpServer = createHttpServer(app);
   return httpServer;
 }

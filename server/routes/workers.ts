@@ -16,6 +16,7 @@ import {
   normalizePhone,
   normalizeUsername,
 } from "../utils/identity";
+import { formatValidationError } from "../utils/zod";
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -105,14 +106,18 @@ export function registerWorkerRoutes(app: Express) {
   );
 
   // Create a worker under the authenticated shop
-  const createWorkerSchema = z.object({
-    workerId: z.string().min(3), // The ID given by shop owner; stored as username
-    name: z.string().min(1),
-    email: z.string().email().optional().nullable(),
-    phone: z.string().optional().nullable(),
-    password: z.string().min(6), // Plain password provided by shop owner
-    responsibilities: z.array(WorkerResponsibilityZ).default(["orders:read", "products:read"]),
-  });
+  const createWorkerSchema = z
+    .object({
+      workerId: z.string().min(3), // The ID given by shop owner; stored as username
+      name: z.string().min(1),
+      email: z.string().email().optional().nullable(),
+      phone: z.string().optional().nullable(),
+      password: z.string().min(6), // Plain password provided by shop owner
+      responsibilities: z
+        .array(WorkerResponsibilityZ)
+        .default(["orders:read", "products:read"]),
+    })
+    .strict();
 
   app.post(
     "/api/shops/workers",
@@ -122,7 +127,7 @@ export function registerWorkerRoutes(app: Express) {
       await ensureShopWorkersTable();
       const parsed = createWorkerSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json(parsed.error.flatten());
+        return res.status(400).json(formatValidationError(parsed.error));
       }
       const { workerId, name, email, phone, password, responsibilities } = parsed.data;
       try {
@@ -269,14 +274,16 @@ export function registerWorkerRoutes(app: Express) {
     .strict();
 
   // Update worker details/responsibilities or reset password
-  const updateWorkerSchema = z.object({
-    name: z.string().optional(),
-    email: z.string().email().optional(),
-    phone: z.string().optional(),
-    responsibilities: z.array(WorkerResponsibilityZ).optional(),
-    password: z.string().min(6).optional(),
-    active: z.boolean().optional(),
-  });
+  const updateWorkerSchema = z
+    .object({
+      name: z.string().optional(),
+      email: z.string().email().optional(),
+      phone: z.string().optional(),
+      responsibilities: z.array(WorkerResponsibilityZ).optional(),
+      password: z.string().min(6).optional(),
+      active: z.boolean().optional(),
+    })
+    .strict();
 
   app.patch(
     "/api/shops/workers/:workerUserId",
@@ -290,7 +297,9 @@ export function registerWorkerRoutes(app: Express) {
       }
 
       const parsed = updateWorkerSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json(parsed.error.flatten());
+      if (!parsed.success) {
+        return res.status(400).json(formatValidationError(parsed.error));
+      }
       const { name, email, phone, responsibilities, password, active } = parsed.data;
 
       try {

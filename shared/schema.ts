@@ -780,7 +780,7 @@ export const insertServiceSchema = createInsertSchema(services, {
     }),
   ),
   maxDailyBookings: z.number().min(1, "Must accept at least 1 booking per day"),
-});
+}).strict();
 
 export type Service = typeof services.$inferSelect;
 export type InsertService = z.infer<typeof insertServiceSchema>;
@@ -789,68 +789,68 @@ export const insertBookingSchema = createInsertSchema(bookings, {
   // Add specific validation if needed
   serviceLocation: z.enum(["customer", "provider"]).optional(),
   providerAddress: z.string().optional().nullable(), // Allow null
-});
+}).strict();
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
-export const insertProductSchema = createInsertSchema(products);
+export const insertProductSchema = createInsertSchema(products).strict();
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 
 export const insertOrderSchema = createInsertSchema(orders, {
   paymentMethod: PaymentMethodType.nullable().optional(),
-});
+}).strict();
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 
-export const insertOrderItemSchema = createInsertSchema(orderItems);
+export const insertOrderItemSchema = createInsertSchema(orderItems).strict();
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 
-export const insertReviewSchema = createInsertSchema(reviews);
+export const insertReviewSchema = createInsertSchema(reviews).strict();
 export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
 
-export const insertNotificationSchema = createInsertSchema(notifications);
+export const insertNotificationSchema = createInsertSchema(notifications).strict();
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 
-export const insertReturnRequestSchema = createInsertSchema(returns);
+export const insertReturnRequestSchema = createInsertSchema(returns).strict();
 export type ReturnRequest = typeof returns.$inferSelect;
 export type InsertReturnRequest = z.infer<typeof insertReturnRequestSchema>;
 
-export const insertPromotionSchema = createInsertSchema(promotions);
+export const insertPromotionSchema = createInsertSchema(promotions).strict();
 export type Promotion = typeof promotions.$inferSelect;
 export type InsertPromotion = z.infer<typeof insertPromotionSchema>;
 
-export const insertProductReviewSchema = createInsertSchema(productReviews);
+export const insertProductReviewSchema = createInsertSchema(productReviews).strict();
 export type ProductReview = typeof productReviews.$inferSelect;
 export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
 
-export const insertBlockedTimeSlotSchema = createInsertSchema(blockedTimeSlots);
+export const insertBlockedTimeSlotSchema = createInsertSchema(blockedTimeSlots).strict();
 export type InsertBlockedTimeSlot = z.infer<typeof insertBlockedTimeSlotSchema>;
 export type BlockedTimeSlotSelect = typeof blockedTimeSlots.$inferSelect;
 
 export const insertOrderStatusUpdateSchema =
-  createInsertSchema(orderStatusUpdates);
+  createInsertSchema(orderStatusUpdates).strict();
 export type OrderStatusUpdateRecord = typeof orderStatusUpdates.$inferSelect;
 export type InsertOrderStatusUpdate = z.infer<
   typeof insertOrderStatusUpdateSchema
 >;
 export const insertPasswordResetTokenSchema =
-  createInsertSchema(passwordResetTokens);
+  createInsertSchema(passwordResetTokens).strict();
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = z.infer<
   typeof insertPasswordResetTokenSchema
 >;
 export const insertMagicLinkTokenSchema =
-  createInsertSchema(magicLinkTokens);
+  createInsertSchema(magicLinkTokens).strict();
 export type MagicLinkToken = typeof magicLinkTokens.$inferSelect;
 export type InsertMagicLinkToken = z.infer<
   typeof insertMagicLinkTokenSchema
 >;
 export const insertEmailVerificationTokenSchema =
-  createInsertSchema(emailVerificationTokens);
+  createInsertSchema(emailVerificationTokens).strict();
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 export type InsertEmailVerificationToken = z.infer<
   typeof insertEmailVerificationTokenSchema

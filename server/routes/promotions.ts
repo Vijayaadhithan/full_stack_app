@@ -1,11 +1,16 @@
-import { Express } from "express";
+import { Express, type Request } from "express";
 import { z } from "zod";
 import { eq, and, gte, lte, isNull, or } from "drizzle-orm"; // Added 'or'
 import { db } from "../db";
 import { promotions, products } from "@shared/schema";
 import logger from "../logger";
-import { requireShopOrWorkerPermission } from "../workerAuth";
-import { getWorkerShopId } from "../workerAuth";
+import {
+  requireShopOrWorkerPermission,
+  resolveShopContextId,
+  coerceNumericId,
+  type RequestWithContext,
+} from "../workerAuth";
+import { formatValidationError } from "../utils/zod";
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -21,6 +26,116 @@ function requireRole(roles: string[]) {
     }
     next();
   };
+}
+
+const promotionIdParamsSchema = z
+  .object({
+    id: z.coerce.number().int().positive(),
+  })
+  .strict();
+
+const promotionLookupByShopSchema = z
+  .object({
+    id: z.coerce.number().int().positive(),
+  })
+  .strict();
+
+const promotionShopIdParamsSchema = z
+  .object({
+    shopId: z.coerce.number().int().positive(),
+  })
+  .strict();
+
+const promotionCreateSchema = z
+  .object({
+    name: z.string().trim().min(1, "Promotion name is required"),
+    description: z.string().trim().max(2000).optional(),
+    type: z.enum(["percentage", "fixed_amount"]),
+    value: z.coerce.number().min(0, "Discount value must be positive"),
+    code: z.string().trim().min(1).max(100).optional(),
+    usageLimit: z.coerce.number().int().min(0).optional(),
+    isActive: z.boolean().optional().default(true),
+    shopId: z.coerce.number().int().positive("Invalid Shop ID"),
+    expiryDays: z.coerce.number().int().min(0).default(0),
+    applicableProducts: z.array(z.coerce.number().int().positive()).optional(),
+    excludedProducts: z.array(z.coerce.number().int().positive()).optional(),
+    minPurchase: z.coerce.number().min(0).optional(),
+    maxDiscount: z.coerce.number().min(0).optional(),
+  })
+  .strict();
+
+const promotionUpdateSchema = promotionCreateSchema
+  .omit({ shopId: true })
+  .partial()
+  .extend({
+    expiryDays: z.coerce.number().int().min(0).optional(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.name !== undefined && data.name.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Promotion name is required",
+        path: ["name"],
+      });
+    }
+    if (Object.keys(data).length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one field must be provided for update",
+      });
+    }
+  });
+
+const promotionStatusBodySchema = z
+  .object({
+    isActive: z.boolean(),
+  })
+  .strict();
+
+const promotionValidationSchema = z
+  .object({
+    code: z.string().trim().min(1, "Promotion code is required"),
+    shopId: z.coerce.number().int().positive("Shop ID is required"),
+    cartItems: z
+      .array(
+        z
+          .object({
+            productId: z.coerce.number().int().positive(),
+            quantity: z.coerce.number().int().positive(),
+            price: z
+              .coerce.number()
+              .refine((val) => Number.isFinite(val) && val >= 0, {
+                message: "Invalid price",
+              }),
+          })
+          .strict(),
+      )
+      .nonempty(),
+    subtotal: z
+      .coerce.number()
+      .refine((val) => Number.isFinite(val) && val >= 0, {
+        message: "Invalid subtotal",
+      }),
+  })
+  .strict();
+
+const promotionRedeemSchema = z
+  .object({
+    orderId: z.coerce.number().int().positive(),
+  })
+  .strict();
+
+async function resolveAuthorizedShopId(
+  req: Request,
+): Promise<number | null> {
+  if (typeof req.shopContextId === "number") {
+    return req.shopContextId;
+  }
+  if (typeof req.user?.id === "number" || typeof req.user?.id === "string") {
+    return resolveShopContextId(req as RequestWithContext);
+  }
+  return null;
 }
 
 export function registerPromotionRoutes(app: Express) {
@@ -80,38 +195,30 @@ export function registerPromotionRoutes(app: Express) {
     requireShopOrWorkerPermission(["promotions:manage"]),
     async (req, res) => {
       try {
-        // Define a Zod schema for the promotion with expiryDays
-        const promotionWithExpirySchema = z.object({
-          name: z.string().min(1, "Promotion name is required"),
-          description: z.string().optional(),
-          type: z.enum(["percentage", "fixed_amount"]),
-          value: z.coerce.number().min(0, "Discount value must be positive"),
-          code: z.string().optional(),
-          usageLimit: z.coerce.number().min(0).optional(),
-          isActive: z.boolean().default(true),
-          shopId: z.coerce.number().positive("Invalid Shop ID"),
-          expiryDays: z.coerce.number().min(0).default(0),
-          applicableProducts: z.array(z.number()).optional(),
-          excludedProducts: z.array(z.number()).optional(),
-          minPurchase: z.coerce.number().min(0).optional(),
-          maxDiscount: z.coerce.number().min(0).optional(),
-        });
+        const parsedBody = promotionCreateSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(parsedBody.error));
+        }
 
-        const result = promotionWithExpirySchema.safeParse(req.body);
-        if (!result.success) return res.status(400).json(result.error);
-
-        const { expiryDays, ...promotionData } = result.data;
-        const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
-        if (!shopContextId || promotionData.shopId !== shopContextId) {
+        const {
+          expiryDays,
+          shopId,
+          value,
+          minPurchase,
+          maxDiscount,
+          ...promotionData
+        } = parsedBody.data;
+        const shopContextId = await resolveAuthorizedShopId(req);
+        if (!shopContextId || shopContextId !== shopId) {
           return res.status(403).json({ message: "Invalid shop context for promotion creation" });
         }
 
-        // Calculate start and end dates
         const startDate = new Date();
-        let endDate = null;
-
+        let endDate: Date | null = null;
         if (expiryDays > 0) {
-          endDate = new Date();
+          endDate = new Date(startDate);
           endDate.setDate(endDate.getDate() + expiryDays);
         }
 
@@ -121,18 +228,18 @@ export function registerPromotionRoutes(app: Express) {
           expiryDays,
         });
 
-        // Convert numeric fields expected as strings by the schema
-        const dbValues: any = {
+        const dbValues = {
           ...promotionData,
+          shopId: shopContextId,
           startDate,
           endDate,
-          value: promotionData.value.toString(), // Convert to string
-          ...(promotionData.minPurchase !== undefined && {
-            minPurchase: promotionData.minPurchase.toString(),
-          }), // Convert to string if exists
-          ...(promotionData.maxDiscount !== undefined && {
-            maxDiscount: promotionData.maxDiscount.toString(),
-          }), // Convert to string if exists
+          value: value.toString(),
+          ...(minPurchase !== undefined && {
+            minPurchase: minPurchase.toString(),
+          }),
+          ...(maxDiscount !== undefined && {
+            maxDiscount: maxDiscount.toString(),
+          }),
         };
 
         const promotion = await db
@@ -172,42 +279,43 @@ export function registerPromotionRoutes(app: Express) {
      *       400:
      *         description: Invalid shop id
      */
-    app.get(
-      "/api/promotions/shop/:id",
-      requireAuth,
-      requireShopOrWorkerPermission(["promotions:manage"]),
-      async (req, res) => {
-        try {
-          const paramsSchema = z.object({
-            id: z.coerce.number().int().positive(),
-          });
-          const parsedParams = paramsSchema.safeParse(req.params);
-          if (!parsedParams.success)
-            return res.status(400).json(parsedParams.error);
-
-          const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
-          const shopId = parsedParams.data.id;
-          if (!shopContextId || shopId !== shopContextId) {
-            return res.status(403).json({ message: "Invalid shop context" });
-          }
-          const allPromotions = await db
-            .select()
-            .from(promotions)
-            .where(eq(promotions.shopId, shopId));
-          res.json(allPromotions);
-        } catch (error) {
-          logger.error("Error fetching promotions:", error);
-          res
+  app.get(
+    "/api/promotions/shop/:id",
+    requireAuth,
+    requireShopOrWorkerPermission(["promotions:manage"]),
+    async (req, res) => {
+      try {
+        const parsedParams = promotionLookupByShopSchema.safeParse(req.params);
+        if (!parsedParams.success) {
+          return res
             .status(400)
-            .json({
-              message:
-               error instanceof Error
-                  ? error.message
-                  : "Failed to fetch promotions",
-            });
+            .json(formatValidationError(parsedParams.error));
         }
-        },
-    );
+
+        const requestedShopId = parsedParams.data.id;
+        const shopContextId = await resolveAuthorizedShopId(req);
+        if (!shopContextId || requestedShopId !== shopContextId) {
+          return res.status(403).json({ message: "Invalid shop context" });
+        }
+
+        const allPromotions = await db
+          .select()
+          .from(promotions)
+          .where(eq(promotions.shopId, shopContextId));
+        res.json(allPromotions);
+      } catch (error) {
+        logger.error("Error fetching promotions:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch promotions",
+          });
+      }
+    },
+  );
 
     /**
      * @openapi
@@ -262,124 +370,107 @@ export function registerPromotionRoutes(app: Express) {
      *       400:
      *         description: Invalid input
      */
-    app.patch(
-      "/api/promotions/:id",
-      requireAuth,
-      requireShopOrWorkerPermission(["promotions:manage"]),
-      async (req, res) => {
-        try {
-          const paramsSchema = z.object({
-            id: z.coerce.number().int().positive(),
+  app.patch(
+    "/api/promotions/:id",
+    requireAuth,
+    requireShopOrWorkerPermission(["promotions:manage"]),
+    async (req, res) => {
+      try {
+        const parsedParams = promotionIdParamsSchema.safeParse(req.params);
+        if (!parsedParams.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(parsedParams.error));
+        }
+
+        const shopContextId = await resolveAuthorizedShopId(req);
+        if (!shopContextId) {
+          return res.status(403).json({ message: "Invalid shop context" });
+        }
+
+        const promotionId = parsedParams.data.id;
+        const [existingPromotion] = await db
+          .select()
+          .from(promotions)
+          .where(
+            and(
+              eq(promotions.id, promotionId),
+              eq(promotions.shopId, shopContextId),
+            ),
+          );
+
+        if (!existingPromotion) {
+          return res.status(404).json({
+            message:
+              "Promotion not found or you don't have permission to update it",
           });
-          const parsedParams = paramsSchema.safeParse(req.params);
-          if (!parsedParams.success)
-            return res.status(400).json(parsedParams.error);
+        }
 
-          const promotionId = parsedParams.data.id;
+        const parsedBody = promotionUpdateSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(parsedBody.error));
+        }
 
-          // Get the existing promotion to check ownership
-          const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
-          const existingPromotions = await db
-            .select()
-            .from(promotions)
-            .where(eq(promotions.shopId, shopContextId));
-          const promotion = existingPromotions.find((p) => p.id === promotionId);
+        const {
+          expiryDays,
+          value,
+          minPurchase,
+          maxDiscount,
+          ...rest
+        } = parsedBody.data;
 
-          if (!promotion) {
-            return res
-              .status(404)
-              .json({
-                message:
-                  "Promotion not found or you don't have permission to update it",
-              });
-            }
-            // Define a Zod schema for the promotion update with expiryDays
-          const promotionUpdateSchema = z
-            .object({
-              name: z.string().min(1, "Promotion name is required").optional(),
-              description: z.string().optional(),
-              type: z.enum(["percentage", "fixed_amount"]).optional(),
-              value: z.coerce
-                .number()
-                .min(0, "Discount value must be positive")
-                .optional(),
-              code: z.string().optional(),
-              usageLimit: z.coerce.number().min(0).optional(),
-              isActive: z.boolean().optional(),
-              expiryDays: z.coerce.number().min(0).optional(),
-              applicableProducts: z.array(z.number()).optional(),
-              excludedProducts: z.array(z.number()).optional(),
-              minPurchase: z.coerce.number().min(0).optional(),
-              maxDiscount: z.coerce.number().min(0).optional(),
-            })
-            // Only validate name if it's being updated and not just toggling isActive
-            .superRefine((data, ctx) => {
-              // If we're updating name, validate it
-              if (data.name !== undefined && data.name.trim() === "") {
-                ctx.addIssue({
-                  code: z.ZodIssueCode.custom,
-                  message: "Promotion name is required",
-                  path: ["name"],
-                });
-              }
-            })
-            .refine(
-              (data) => {
-                // Ensure at least one field is provided for the update
-                return Object.keys(data).length > 0;
-              },
-              {
-                message: "At least one field must be provided for update",
-              },
-            );
+        const updateData: Record<string, unknown> = { ...rest };
 
-          const result = promotionUpdateSchema.safeParse(req.body);
-          if (!result.success) return res.status(400).json(result.error);
-
-          const updateData: any = { ...result.data };
-          delete updateData.expiryDays;
-        // Handle expiry days update if provided
-        if (result.data.expiryDays !== undefined) {
-          const startDate = promotion.startDate;
-          let endDate = null;
-
-          if (result.data.expiryDays > 0) {
-            endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + result.data.expiryDays);
+        if (value !== undefined) {
+          updateData.value = value.toString();
+        }
+        if (minPurchase !== undefined) {
+          updateData.minPurchase = minPurchase.toString();
+        }
+        if (maxDiscount !== undefined) {
+          updateData.maxDiscount = maxDiscount.toString();
+        }
+        if (expiryDays !== undefined) {
+          if (expiryDays > 0) {
+            const baseStart =
+              existingPromotion.startDate instanceof Date
+                ? existingPromotion.startDate
+                : existingPromotion.startDate
+                  ? new Date(existingPromotion.startDate)
+                  : new Date();
+            const endDate = new Date(baseStart);
+            endDate.setDate(endDate.getDate() + expiryDays);
+            updateData.endDate = endDate;
+          } else {
+            updateData.endDate = null;
           }
-
-          updateData.endDate = endDate;
         }
 
-        // Convert numeric fields expected as strings by the schema before updating
-        if (updateData.value !== undefined) {
-          updateData.value = updateData.value.toString();
-        }
-        if (updateData.minPurchase !== undefined) {
-          updateData.minPurchase = updateData.minPurchase.toString();
-        }
-        if (updateData.maxDiscount !== undefined) {
-          updateData.maxDiscount = updateData.maxDiscount.toString();
+        if (Object.keys(updateData).length === 0) {
+          return res
+            .status(400)
+            .json({ message: "No promotion fields provided" });
         }
 
-        // Update the promotion using the same storage method as other entities
-        const updatedResult = await db
+        const [updatedPromotion] = await db
           .update(promotions)
           .set(updateData)
           .where(eq(promotions.id, promotionId))
           .returning();
 
-        if (!updatedResult.length) {
+        if (!updatedPromotion) {
           return res
             .status(404)
             .json({ message: "Failed to update promotion" });
         }
 
-        res.json(updatedResult[0]);
+        res.json(updatedPromotion);
       } catch (error) {
         logger.error("Error updating promotion:", error);
         res
-          .status(400)
+          .status(500)
           .json({
             message:
               error instanceof Error
@@ -417,60 +508,66 @@ export function registerPromotionRoutes(app: Express) {
      *       400:
      *         description: Invalid input
      */
-    app.patch(
-      "/api/promotions/:id/status",
-      requireAuth,
-      requireShopOrWorkerPermission(["promotions:manage"]),
-      async (req, res) => {
-        try {
-          const paramsSchema = z.object({
-            id: z.coerce.number().int().positive(),
-          });
-          const parsedParams = paramsSchema.safeParse(req.params);
-          if (!parsedParams.success)
-            return res.status(400).json(parsedParams.error);
-          const promotionId = parsedParams.data.id;
-
-          const bodySchema = z.object({ isActive: z.boolean() });
-          const bodyResult = bodySchema.safeParse(req.body);
-          if (!bodyResult.success) return res.status(400).json(bodyResult.error);
-          const { isActive } = bodyResult.data;
-
-        // Get the existing promotion to check ownership
-        const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
-        const existingPromotions = await db
-          .select()
-          .from(promotions)
-          .where(eq(promotions.shopId, shopContextId));
-        const promotion = existingPromotions.find((p) => p.id === promotionId);
-
-        if (!promotion) {
+  app.patch(
+    "/api/promotions/:id/status",
+    requireAuth,
+    requireShopOrWorkerPermission(["promotions:manage"]),
+    async (req, res) => {
+      try {
+        const parsedParams = promotionIdParamsSchema.safeParse(req.params);
+        if (!parsedParams.success) {
           return res
-            .status(404)
-            .json({
-              message:
-                "Promotion not found or you don't have permission to update it",
-            });
+            .status(400)
+            .json(formatValidationError(parsedParams.error));
         }
 
-        // Update only the isActive status
-        const updatedResult = await db
+        const parsedBody = promotionStatusBodySchema.safeParse(req.body);
+        if (!parsedBody.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(parsedBody.error));
+        }
+
+        const shopContextId = await resolveAuthorizedShopId(req);
+        if (!shopContextId) {
+          return res.status(403).json({ message: "Invalid shop context" });
+        }
+
+        const promotionId = parsedParams.data.id;
+        const [promotion] = await db
+          .select()
+          .from(promotions)
+          .where(
+            and(
+              eq(promotions.id, promotionId),
+              eq(promotions.shopId, shopContextId),
+            ),
+          );
+
+        if (!promotion) {
+          return res.status(404).json({
+            message:
+              "Promotion not found or you don't have permission to update it",
+          });
+        }
+
+        const [updatedPromotion] = await db
           .update(promotions)
-          .set({ isActive })
+          .set({ isActive: parsedBody.data.isActive })
           .where(eq(promotions.id, promotionId))
           .returning();
 
-        if (!updatedResult.length) {
+        if (!updatedPromotion) {
           return res
             .status(404)
             .json({ message: "Failed to update promotion status" });
         }
 
-        res.json(updatedResult[0]);
+        res.json(updatedPromotion);
       } catch (error) {
         logger.error("Error updating promotion status:", error);
         res
-          .status(400)
+          .status(500)
           .json({
             message:
               error instanceof Error
@@ -498,54 +595,56 @@ export function registerPromotionRoutes(app: Express) {
      *       400:
      *         description: Invalid promotion id
      */
-    app.delete(
-      "/api/promotions/:id",
-      requireAuth,
-      requireShopOrWorkerPermission(["promotions:manage"]),
-      async (req, res) => {
-        try {
-          const paramsSchema = z.object({
-            id: z.coerce.number().int().positive(),
+  app.delete(
+    "/api/promotions/:id",
+    requireAuth,
+    requireShopOrWorkerPermission(["promotions:manage"]),
+    async (req, res) => {
+      try {
+        const parsedParams = promotionIdParamsSchema.safeParse(req.params);
+        if (!parsedParams.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(parsedParams.error));
+        }
+
+        const shopContextId = await resolveAuthorizedShopId(req);
+        if (!shopContextId) {
+          return res.status(403).json({ message: "Invalid shop context" });
+        }
+
+        const promotionId = parsedParams.data.id;
+        const deleted = await db
+          .delete(promotions)
+          .where(
+            and(
+              eq(promotions.id, promotionId),
+              eq(promotions.shopId, shopContextId),
+            ),
+          )
+          .returning();
+
+        if (!deleted.length) {
+          return res.status(404).json({
+            message:
+              "Promotion not found or you don't have permission to delete it",
           });
-          const parsedParams = paramsSchema.safeParse(req.params);
-          if (!parsedParams.success)
-            return res.status(400).json(parsedParams.error);
-          const promotionId = parsedParams.data.id;
-
-          // Get the existing promotion to check ownership
-          const shopContextId = (req.user as any).role === "shop" ? (req.user as any).id : (req as any).workerShopId;
-          const existingPromotions = await db
-            .select()
-            .from(promotions)
-            .where(eq(promotions.shopId, shopContextId));
-          const promotion = existingPromotions.find((p) => p.id === promotionId);
-
-          if (!promotion) {
-            return res
-              .status(404)
-              .json({
-                message:
-                  "Promotion not found or you don't have permission to delete it",
-              });
-          }
-
-        // Delete the promotion
-          await db.delete(promotions).where(eq(promotions.id, promotionId));
+        }
 
         res.status(200).json({ message: "Promotion deleted successfully" });
-        } catch (error) {
-          logger.error("Error deleting promotion:", error);
-          res
-            .status(400)
-            .json({
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to delete promotion",
-            });
-        }
-        },
-    );
+      } catch (error) {
+        logger.error("Error deleting promotion:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to delete promotion",
+          });
+      }
+    },
+  );
 
   /**
    * @openapi
@@ -570,20 +669,23 @@ export function registerPromotionRoutes(app: Express) {
     requireAuth,
     async (req: any, res) => {
       try {
-        const paramsSchema = z.object({
-          shopId: z.coerce.number().int().positive(),
-        });
-        const parsedParams = paramsSchema.safeParse(req.params);
-        if (!parsedParams.success)
-          return res.status(400).json(parsedParams.error);
+        const parsedParams = promotionShopIdParamsSchema.safeParse(req.params);
+        if (!parsedParams.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(parsedParams.error));
+        }
         const requestedShopId = parsedParams.data.shopId;
         // Role-based access: customers can view any shop; workers can view only their shop; shops can view only their own
         if (req.user?.role === "shop") {
-          if (requestedShopId !== req.user.id) {
+          const shopContextId = coerceNumericId(req.user.id);
+          if (!shopContextId || requestedShopId !== shopContextId) {
             return res.status(403).json({ message: "Invalid shop context" });
           }
         } else if (req.user?.role === "worker") {
-          const workerShopId = await getWorkerShopId(req.user.id);
+          const workerShopId = await resolveShopContextId(
+            req as RequestWithContext,
+          );
           if (!workerShopId || requestedShopId !== workerShopId) {
             return res.status(403).json({ message: "Invalid shop context" });
           }
@@ -616,7 +718,7 @@ export function registerPromotionRoutes(app: Express) {
       } catch (error) {
         logger.error("Error fetching active promotions:", error);
         res
-          .status(400)
+          .status(500)
           .json({
             message:
               error instanceof Error
@@ -669,33 +771,20 @@ export function registerPromotionRoutes(app: Express) {
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const validationSchema = z.object({
-          code: z.string().min(1, "Promotion code is required"),
-          shopId: z.number().positive("Shop ID is required"),
-          cartItems: z.array(
-            z.object({
-              productId: z.number().positive(),
-              quantity: z.number().positive(),
-              price: z
-                .number()
-                .or(z.string())
-                .transform((val) =>
-                  typeof val === "string" ? parseFloat(val) : val,
-                ),
-            }),
-          ),
-          subtotal: z
-            .number()
-            .or(z.string())
-            .transform((val) =>
-              typeof val === "string" ? parseFloat(val) : val,
-            ),
-        });
+        const result = promotionValidationSchema.safeParse(req.body);
+        if (!result.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(result.error));
+        }
 
-        const result = validationSchema.safeParse(req.body);
-        if (!result.success) return res.status(400).json(result.error);
-
-        const { code, shopId, cartItems, subtotal } = result.data;
+        const {
+          code,
+          shopId,
+          cartItems: rawCartItems,
+          subtotal,
+        } = result.data;
+        const cartItems = [...rawCartItems];
 
         // Find the promotion by code and shop
         const promotion = await db
@@ -852,17 +941,20 @@ export function registerPromotionRoutes(app: Express) {
     requireRole(["customer"]),
     async (req, res) => {
       try {
-        const paramsSchema = z.object({
-          id: z.coerce.number().int().positive(),
-        });
-        const parsedParams = paramsSchema.safeParse(req.params);
-        if (!parsedParams.success)
-          return res.status(400).json(parsedParams.error);
+        const parsedParams = promotionIdParamsSchema.safeParse(req.params);
+        if (!parsedParams.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(parsedParams.error));
+        }
         const promotionId = parsedParams.data.id;
 
-        const bodySchema = z.object({ orderId: z.coerce.number().int().positive() });
-        const bodyResult = bodySchema.safeParse(req.body);
-        if (!bodyResult.success) return res.status(400).json(bodyResult.error);
+        const bodyResult = promotionRedeemSchema.safeParse(req.body);
+        if (!bodyResult.success) {
+          return res
+            .status(400)
+            .json(formatValidationError(bodyResult.error));
+        }
         const { orderId } = bodyResult.data;
 
         // Get the promotion
@@ -908,7 +1000,7 @@ export function registerPromotionRoutes(app: Express) {
       } catch (error) {
         logger.error("Error applying promotion:", error);
         res
-          .status(400)
+          .status(500)
           .json({
             message:
               error instanceof Error

@@ -30,6 +30,7 @@ import {
   getMonitoringSnapshot,
   recordFrontendMetric,
 } from "../monitoring/metrics";
+import { formatValidationError } from "../utils/zod";
 
 const router = Router();
 const scryptAsync = promisify(scrypt);
@@ -64,44 +65,51 @@ function normalizeLogCategory(value: unknown): LogCategory | undefined {
   return LOG_CATEGORY_ALIASES[normalized];
 }
 
-const adminLoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
+const adminLoginSchema = z
+  .object({
+    email: z.string().email(),
+    password: z.string().min(8),
+  })
+  .strict();
 
-const adminPasswordChangeSchema = z.object({
-  currentPassword: z.string().min(8),
-  newPassword: z.string().min(8),
-});
+const adminPasswordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(8),
+    newPassword: z.string().min(8),
+  })
+  .strict();
 
-const adminSuspendUserSchema = z.object({
-  isSuspended: z.boolean(),
-});
+const adminSuspendUserSchema = z
+  .object({
+    isSuspended: z.boolean(),
+  })
+  .strict();
 
-const adminAccountCreateSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  roleId: z.string().uuid(),
-});
+const adminAccountCreateSchema = z
+  .object({
+    email: z.string().email(),
+    password: z.string().min(8),
+    roleId: z.string().uuid(),
+  })
+  .strict();
 
-const adminRoleCreateSchema = z.object({
-  name: z.string().trim().min(1),
-  description: z.string().trim().max(500).optional(),
-});
+const adminRoleCreateSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    description: z.string().trim().max(500).optional(),
+  })
+  .strict();
 
-const adminRolePermissionSchema = z.object({
-  permissionIds: z.array(z.string().uuid()).default([]),
-});
+const adminRolePermissionSchema = z
+  .object({
+    permissionIds: z.array(z.string().uuid()).default([]),
+  })
+  .strict();
 
 export const performanceMetricEnvelopeSchema = z.union([
   performanceMetricSchema,
   z.array(performanceMetricSchema),
 ]);
-
-const formatValidationError = (error: z.ZodError) => ({
-  message: "Invalid input",
-  errors: error.flatten(),
-});
 
 const ORDER_STATUSES = [
   "pending",
@@ -893,7 +901,10 @@ router.put(
   isAdminAuthenticated,
   checkPermissions(["manage_admins"]),
   async (req, res) => {
-    const paramsResult = z.object({ roleId: z.string().uuid() }).safeParse(req.params);
+    const paramsResult = z
+      .object({ roleId: z.string().uuid() })
+      .strict()
+      .safeParse(req.params);
     if (!paramsResult.success) {
       return res.status(400).json(formatValidationError(paramsResult.error));
     }
