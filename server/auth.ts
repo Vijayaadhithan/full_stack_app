@@ -26,6 +26,11 @@ import {
   deleteAccountLimiter,
 } from "./security/rateLimiters";
 import { sanitizeUser } from "./security/sanitizeUser";
+import {
+  normalizeUsername,
+  normalizeEmail,
+  normalizePhone,
+} from "./utils/identity";
 dotenv.config();
 
 declare module "express-session" {
@@ -168,7 +173,7 @@ async function generateEmailVerificationToken(userId: number) {
   return token;
 }
 
-export function setupAuth(app: Express) {
+export function initializeAuth(app: Express) {
   const sessionSecret = process.env.SESSION_SECRET;
   if (!sessionSecret || sessionSecret.trim().length === 0) {
     logger.error(
@@ -221,15 +226,19 @@ export function setupAuth(app: Express) {
 
   passport.use(
     new LocalStrategy(async (identifier, password, done) => {
-      const trimmed = identifier?.trim?.() ?? "";
-      const lower = trimmed.toLowerCase();
-      // Support login via username, email, or phone number
-      let userRecord = await storage.getUserByUsername(lower);
-      if (!userRecord) {
-        userRecord = await storage.getUserByEmail(lower);
+      const normalizedUsername = normalizeUsername(identifier);
+      const normalizedEmail = normalizeEmail(identifier);
+      const normalizedPhone = normalizePhone(identifier);
+
+      let userRecord =
+        normalizedUsername !== null
+          ? await storage.getUserByUsername(normalizedUsername)
+          : undefined;
+      if (!userRecord && normalizedEmail) {
+        userRecord = await storage.getUserByEmail(normalizedEmail);
       }
-      if (!userRecord) {
-        userRecord = await storage.getUserByPhone(trimmed);
+      if (!userRecord && normalizedPhone) {
+        userRecord = await storage.getUserByPhone(normalizedPhone);
       }
       if (
         !userRecord ||
@@ -355,17 +364,23 @@ export function setupAuth(app: Express) {
             );
 
             // Check if username already exists, if so, append a random string or handle differently
-            let existingUserWithUsername = await storage.getUserByUsername(
-              newUser.username,
-            );
+            let normalizedGoogleUsername =
+              normalizeUsername(newUser.username) ??
+              normalizeUsername(profile.id) ??
+              profile.id.toLowerCase();
+            let existingUserWithUsername = normalizedGoogleUsername
+              ? await storage.getUserByUsername(normalizedGoogleUsername)
+              : undefined;
             let attempt = 0;
             while (existingUserWithUsername && attempt < 5) {
               logger.info(
                 `[Google OAuth] Username ${newUser.username} already exists. Attempting to generate a new one.`,
               );
-              newUser.username = `${profile.displayName || profile.id}_${randomBytes(3).toString("hex")}`;
+              const generated = `${profile.displayName || profile.id}_${randomBytes(3).toString("hex")}`;
+              normalizedGoogleUsername =
+                normalizeUsername(generated) ?? `${profile.id}_${attempt}`;
               existingUserWithUsername = await storage.getUserByUsername(
-                newUser.username,
+                normalizedGoogleUsername,
               );
               attempt++;
             }
@@ -378,6 +393,15 @@ export function setupAuth(app: Express) {
                   "Failed to generate a unique username after several attempts.",
                 ),
               );
+            }
+            const finalNormalizedUsername =
+              normalizedGoogleUsername ??
+              normalizeUsername(profile.id) ??
+              profile.id.toLowerCase();
+            newUser.username = finalNormalizedUsername;
+            const normalizedGoogleEmail = normalizeEmail(newUser.email);
+            if (normalizedGoogleEmail) {
+              newUser.email = normalizedGoogleEmail;
             }
             logger.info(
               `[Google OAuth] Final username for new user: ${newUser.username}`,
@@ -450,7 +474,9 @@ export function setupAuth(app: Express) {
       return done(error as Error);
     }
   });
+}
 
+export function registerAuthRoutes(app: Express) {
   app.post("/api/register", registerLimiter, async (req, res, next) => {
     const parsedBody = registrationSchema.safeParse(req.body);
     if (!parsedBody.success) {
@@ -461,9 +487,19 @@ export function setupAuth(app: Express) {
     }
 
     const validatedData = parsedBody.data;
-    const normalizedUsername = validatedData.username.toLowerCase();
-    const normalizedEmail = validatedData.email.toLowerCase();
-    const normalizedPhone = validatedData.phone.replace(/\D+/g, "");
+    const normalizedUsername = normalizeUsername(validatedData.username);
+    const normalizedEmail = normalizeEmail(validatedData.email);
+    const normalizedPhone = normalizePhone(validatedData.phone);
+
+    if (!normalizedUsername) {
+      return res.status(400).json({ message: "Username is invalid" });
+    }
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is invalid" });
+    }
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Phone number is invalid" });
+    }
 
     try {
       const existingUser = await storage.getUserByUsername(normalizedUsername);
@@ -662,6 +698,11 @@ export function setupAuth(app: Express) {
       res.status(500).json({ message: "Failed to delete account." });
     }
   });
+}
+
+export function setupAuth(app: Express) {
+  initializeAuth(app);
+  registerAuthRoutes(app);
 }
 export async function verifyEmailHandler(req: Request, res: Response) {
   const parsedQuery = verifyEmailQuerySchema.safeParse(req.query);

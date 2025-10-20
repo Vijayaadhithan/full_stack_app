@@ -1,13 +1,16 @@
 import { useAuth } from "@/hooks/use-auth";
+import type { UserRole } from "@shared/schema";
 import { Loader2 } from "lucide-react";
 import { Redirect, Route } from "wouter";
 
 export function ProtectedRoute({
   path,
   component: Component,
+  roles,
 }: {
   path: string;
   component: React.ComponentType<any>;
+  roles?: UserRole[];
 }) {
   const { user, isFetching } = useAuth();
 
@@ -25,6 +28,15 @@ export function ProtectedRoute({
     return (
       <Route path={path}>
         <Redirect to="/auth" />
+      </Route>
+    );
+  }
+
+  if (roles && !roles.includes(user.role)) {
+    const fallback = user.role ? `/${user.role}` : "/auth";
+    return (
+      <Route path={path}>
+        <Redirect to={fallback} />
       </Route>
     );
   }

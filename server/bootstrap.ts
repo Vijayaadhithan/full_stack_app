@@ -14,8 +14,36 @@ import { hashPasswordInternal } from "./auth";
  * and the base permission set used throughout the admin UI.
  */
 export async function ensureDefaultAdmin() {
-  const envEmail = process.env.ADMIN_EMAIL || "admin@example.com";
-  const envPassword = process.env.ADMIN_PASSWORD || "admin12345";
+  const rawEmail = process.env.ADMIN_EMAIL;
+  const rawPassword = process.env.ADMIN_PASSWORD;
+
+  if (!rawEmail || !rawPassword) {
+    const message =
+      "ADMIN_EMAIL and ADMIN_PASSWORD must be configured before bootstrapping an admin account.";
+    logger.error(message);
+    throw new Error(message);
+  }
+
+  const envEmail = rawEmail.trim().toLowerCase();
+  const envPassword = rawPassword.trim();
+
+  if (
+    envEmail.length === 0 ||
+    envPassword.length === 0 ||
+    envEmail === "admin@example.com" ||
+    envPassword === "admin12345"
+  ) {
+    const message =
+      "Refusing to bootstrap admin with insecure default credentials. Provide strong ADMIN_EMAIL and ADMIN_PASSWORD values.";
+    logger.error(message);
+    throw new Error(message);
+  }
+
+  if (envPassword.length < 12) {
+    logger.warn(
+      "ADMIN_PASSWORD is shorter than 12 characters. Consider using a stronger secret.",
+    );
+  }
 
   // 1) Seed permissions (idempotent)
   const requiredPermissions = [
@@ -78,13 +106,15 @@ export async function ensureDefaultAdmin() {
       .update(adminUsers)
       .set({ hashedPassword, roleId: existing.roleId ?? role.id })
       .where(eq(adminUsers.id, existing.id));
-    logger.info(`Admin bootstrap: ensured ${envEmail} exists and has Super Admin role.`);
+    logger.info(
+      `Admin bootstrap: ensured ${envEmail} exists and has Super Admin role.`,
+    );
   } else {
     await db
       .insert(adminUsers)
       .values({ email: envEmail, hashedPassword, roleId: role.id });
-    logger.warn(
-      `Admin bootstrap: created default admin ${envEmail}. Change the password via the UI or set ADMIN_EMAIL/ADMIN_PASSWORD env vars.`,
+    logger.info(
+      `Admin bootstrap: created admin ${envEmail}. Rotate credentials if this was an initial setup secret.`,
     );
   }
 }

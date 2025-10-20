@@ -9,6 +9,11 @@ import {
   notifyWishlistChange,
 } from "./realtime";
 import {
+  normalizeEmail,
+  normalizePhone,
+  normalizeUsername,
+} from "./utils/identity";
+import {
   User,
   InsertUser,
   Service,
@@ -89,6 +94,13 @@ interface InsertBlockedTimeSlot {
   endTime: string;
 }
 
+export type OrderItemInput = {
+  productId: number;
+  quantity: number;
+  price: string;
+  total: string;
+};
+
 export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
@@ -162,6 +174,7 @@ export interface IStorage {
 
   // Order operations
   createOrder(order: InsertOrder): Promise<Order>;
+  createOrderWithItems(order: InsertOrder, items: OrderItemInput[]): Promise<Order>;
   getOrder(id: number): Promise<Order | undefined>;
   getOrdersByCustomer(
     customerId: number,
@@ -685,25 +698,19 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    for (const user of Array.from(this.users.values())) {
-      if (user.email === email) {
-        return user;
-      }
-    }
-    return undefined;
+    const normalized = normalizeEmail(email);
+    if (!normalized) return undefined;
+    return Array.from(this.users.values()).find(
+      (user) => normalizeEmail(user.email) === normalized,
+    );
   }
 
   async getUserByPhone(phone: string): Promise<User | undefined> {
-    const normalize = (value: string | undefined | null) =>
-      value ? value.replace(/\D+/g, "") : "";
-    const target = normalize(phone);
-    if (!target) return undefined;
-    for (const user of Array.from(this.users.values())) {
-      if (normalize(user.phone) === target) {
-        return user;
-      }
-    }
-    return undefined;
+    const normalized = normalizePhone(phone);
+    if (!normalized) return undefined;
+    return Array.from(this.users.values()).find(
+      (user) => normalizePhone(user.phone) === normalized,
+    );
   }
 
   async getUserByGoogleId(googleId: string): Promise<User | undefined> {
@@ -717,9 +724,10 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const normalized = username?.toLowerCase?.() ?? "";
+    const normalized = normalizeUsername(username);
+    if (!normalized) return undefined;
     return Array.from(this.users.values()).find(
-      (user) => user.username?.toLowerCase?.() === normalized,
+      (user) => normalizeUsername(user.username) === normalized,
     );
   }
 
@@ -749,15 +757,26 @@ export class MemStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
+    const normalizedUsername = normalizeUsername(insertUser.username);
+    const normalizedEmail = normalizeEmail(insertUser.email);
+    const normalizedPhone = normalizePhone(insertUser.phone);
+
+    if (!normalizedUsername) {
+      throw new Error("Invalid username");
+    }
+    if (!normalizedEmail) {
+      throw new Error("Invalid email");
+    }
+
     const id = this.currentId++;
     const user: User = {
       id,
-      username: insertUser.username ?? "",
+      username: normalizedUsername,
       password: insertUser.password!,
       role: insertUser.role as UserRole,
       name: insertUser.name,
-      phone: insertUser.phone,
-      email: insertUser.email,
+      phone: normalizedPhone ?? "",
+      email: normalizedEmail,
       addressStreet:
         insertUser.addressStreet === undefined
           ? null
@@ -826,13 +845,34 @@ export class MemStorage implements IStorage {
   }
 
   async updateUser(id: number, updateData: Partial<User>): Promise<User> {
-    // Modified to accept Partial<User> to include googleId
     const existing = this.users.get(id);
     if (!existing) throw new Error("User not found");
 
-    // Ensure password is not accidentally overwritten with undefined if not provided in data
     const { password, ...restOfData } = updateData;
-    const updatedUserData = { ...existing, ...restOfData };
+    const normalizedUpdate: Partial<User> = { ...restOfData };
+
+    if (restOfData.username !== undefined) {
+      const normalized = normalizeUsername(restOfData.username);
+      if (!normalized) {
+        throw new Error("Invalid username");
+      }
+      normalizedUpdate.username = normalized;
+    }
+
+    if (restOfData.email !== undefined) {
+      const normalized = normalizeEmail(restOfData.email);
+      if (!normalized) {
+        throw new Error("Invalid email");
+      }
+      normalizedUpdate.email = normalized;
+    }
+
+    if (restOfData.phone !== undefined) {
+      const normalized = normalizePhone(restOfData.phone);
+      normalizedUpdate.phone = normalized ?? "";
+    }
+
+    const updatedUserData = { ...existing, ...normalizedUpdate };
 
     if (password !== undefined) {
       // If a new password is provided, it should be handled (e.g., re-hashed if necessary)
@@ -1410,6 +1450,51 @@ export class MemStorage implements IStorage {
       orderId: id,
     });
     return newOrder;
+  }
+
+  async createOrderWithItems(
+    order: InsertOrder,
+    items: OrderItemInput[],
+  ): Promise<Order> {
+    if (items.length === 0) {
+      throw new Error("Cannot create an order without items");
+    }
+
+    const quantityByProduct = new Map<number, number>();
+    for (const item of items) {
+      const product = this.products.get(item.productId);
+      if (!product) {
+        throw new Error(`Product with ID ${item.productId} not found`);
+      }
+      const totalQuantity = (quantityByProduct.get(item.productId) ?? 0) + item.quantity;
+      if (product.stock < totalQuantity) {
+        throw new Error(`Insufficient stock for product ID ${item.productId}`);
+      }
+      quantityByProduct.set(item.productId, totalQuantity);
+    }
+
+    quantityByProduct.forEach((totalQuantity, productId) => {
+      const product = this.products.get(productId);
+      if (!product) {
+        return;
+      }
+      product.stock -= totalQuantity;
+      this.products.set(productId, product);
+    });
+
+    const createdOrder = await this.createOrder(order);
+
+    for (const item of items) {
+      await this.createOrderItem({
+        orderId: createdOrder.id,
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.total,
+      });
+    }
+
+    return createdOrder;
   }
 
   async getOrder(id: number): Promise<Order | undefined> {

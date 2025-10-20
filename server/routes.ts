@@ -7,7 +7,11 @@ import express, {
 } from "express";
 import { createServer, type Server } from "http";
 import logger, { LogCategory, runWithLogContext } from "./logger";
-import { setupAuth, hashPasswordInternal } from "./auth"; // Added hashPasswordInternal
+import {
+  initializeAuth,
+  registerAuthRoutes,
+  hashPasswordInternal,
+} from "./auth"; // Added hashPasswordInternal
 import {
   sendEmail,
   getPasswordResetEmailContent,
@@ -43,6 +47,7 @@ import {
   User,
   Booking,
   Order,
+  type Service,
   type Product,
   type OrderItem,
   PaymentMethodType,
@@ -54,6 +59,7 @@ import { platformFees } from "@shared/config";
 import { eq, and } from "drizzle-orm";
 import { db } from "./db";
 import crypto from "crypto";
+import { performance } from "node:perf_hooks";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 import { bookingsRouter } from "./routes/bookings";
@@ -201,6 +207,164 @@ const formatUserAddress = (
   ].filter((part): part is string => Boolean(part && part.trim()));
   return parts.join(", ");
 };
+
+function pickAddressFields(
+  user: User | null | undefined,
+): Record<string, string | null> | null {
+  if (!user) return null;
+  const address = {
+    addressStreet: user.addressStreet ?? null,
+    addressCity: user.addressCity ?? null,
+    addressState: user.addressState ?? null,
+    addressPostalCode: user.addressPostalCode ?? null,
+    addressCountry: user.addressCountry ?? null,
+  };
+  return Object.values(address).some((value) => value && String(value).trim())
+    ? address
+    : null;
+}
+
+function buildUserResponse(
+  req: RequestWithAuth,
+  user: User,
+): Record<string, unknown> | null {
+  const sanitized = sanitizeUser(user);
+  if (!sanitized) {
+    return null;
+  }
+
+  const requesterId =
+    typeof req.user?.id === "number"
+      ? req.user.id
+      : typeof req.user?.id === "string"
+        ? Number.parseInt(req.user.id, 10)
+        : null;
+  const isSelf = requesterId === sanitized.id;
+  const isAdminSession = Boolean(req.session?.adminId);
+  const isAdminUser = req.user?.role === "admin";
+
+  if (isSelf || isAdminSession || isAdminUser) {
+    return sanitized;
+  }
+
+  const minimal: Record<string, unknown> = {
+    id: sanitized.id,
+    name: sanitized.name,
+    role: sanitized.role,
+    profilePicture: sanitized.profilePicture ?? null,
+    averageRating: sanitized.averageRating ?? null,
+    totalReviews: sanitized.totalReviews ?? 0,
+  };
+
+  if (sanitized.role === "shop" && sanitized.shopProfile) {
+    minimal.shopProfile = {
+      shopName: sanitized.shopProfile.shopName,
+      description: sanitized.shopProfile.description,
+      businessType: sanitized.shopProfile.businessType,
+    };
+    minimal.pickupAvailable = sanitized.pickupAvailable ?? null;
+    minimal.deliveryAvailable = sanitized.deliveryAvailable ?? null;
+    minimal.returnsEnabled = sanitized.returnsEnabled ?? null;
+  }
+
+  if (sanitized.role === "provider") {
+    minimal.bio = sanitized.bio ?? null;
+    minimal.specializations = sanitized.specializations ?? [];
+  }
+
+  return minimal;
+}
+
+type CustomerBookingHydrated = Booking & {
+  service?: Service | null;
+  customer?: { id: number; name: string | null; phone: string | null } | null;
+  provider?: { id: number; name: string | null; phone: string | null } | null;
+  relevantAddress?: Record<string, string | null> | null;
+};
+
+async function hydrateCustomerBookings(
+  bookings: Booking[],
+): Promise<CustomerBookingHydrated[]> {
+  if (bookings.length === 0) {
+    return [];
+  }
+
+  const serviceIds = Array.from(
+    new Set(
+      bookings
+        .map((booking) => booking.serviceId)
+        .filter((id): id is number => typeof id === "number"),
+    ),
+  );
+  const services =
+    serviceIds.length > 0
+      ? await storage.getServicesByIds(serviceIds)
+      : ([] as Service[]);
+  const serviceMap = new Map<number, Service>(
+    services.map((service) => [service.id, service]),
+  );
+
+  const userIds = new Set<number>();
+  for (const booking of bookings) {
+    if (typeof booking.customerId === "number") {
+      userIds.add(booking.customerId);
+    }
+    const service = booking.serviceId ? serviceMap.get(booking.serviceId) : null;
+    if (service?.providerId) {
+      userIds.add(service.providerId);
+    }
+  }
+
+  const relatedUsers =
+    userIds.size > 0
+      ? await storage.getUsersByIds(Array.from(userIds))
+      : ([] as User[]);
+  const userMap = new Map<number, User>(
+    relatedUsers.map((user) => [user.id, user]),
+  );
+
+  return bookings.map((booking) => {
+    const service =
+      typeof booking.serviceId === "number"
+        ? serviceMap.get(booking.serviceId) ?? null
+        : null;
+    const customer =
+      typeof booking.customerId === "number"
+        ? userMap.get(booking.customerId) ?? null
+        : null;
+    const provider =
+      service && typeof service.providerId === "number"
+        ? userMap.get(service.providerId) ?? null
+        : null;
+
+    let relevantAddress: Record<string, string | null> | null = null;
+    if (service?.serviceLocationType === "provider_location") {
+      relevantAddress = pickAddressFields(provider);
+    } else if (service?.serviceLocationType === "customer_location") {
+      relevantAddress = pickAddressFields(customer);
+    }
+
+    return {
+      ...booking,
+      service,
+      customer: customer
+        ? {
+            id: customer.id,
+            name: customer.name,
+            phone: customer.phone,
+          }
+        : null,
+      provider: provider
+        ? {
+            id: provider.id,
+            name: provider.name,
+            phone: provider.phone,
+          }
+        : null,
+      relevantAddress,
+    };
+  });
+}
 
 type OrderHydrationOptions = {
   includeShop?: boolean;
@@ -660,7 +824,7 @@ function requireRole(roles: string[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  setupAuth(app);
+  initializeAuth(app);
 
   const csrfProtection: RequestHandler =
     process.env.NODE_ENV === "test"
@@ -672,6 +836,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       : createCsrfProtection({ ignoreMethods: ["GET", "HEAD", "OPTIONS"] });
 
   app.use(csrfProtection);
+  registerAuthRoutes(app);
 
   app.get("/api/events", requireAuth, (req, res) => {
     const userId = Number(req.user?.id);
@@ -1005,16 +1170,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        const token = crypto.randomBytes(32).toString("hex");
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
         const expiresAt = new Date(Date.now() + 3600000);
 
         await db.insert(passwordResetTokensTable).values({
           userId: user.id,
-          token,
+          token: tokenHash,
           expiresAt,
         });
 
-        const resetLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${token}`;
+        const resetLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${rawToken}`;
         const emailContent = getPasswordResetEmailContent(
           user.name || user.username,
           resetLink,
@@ -1052,18 +1218,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json(formatValidationError(parsedBody.error));
     }
 
-    const { token, newPassword } = parsedBody.data;
-    if (!token || !newPassword) {
+    const { token: rawToken, newPassword } = parsedBody.data;
+    if (!rawToken || !newPassword) {
       return res
         .status(400)
         .json({ message: "Token and new password are required" });
     }
 
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
     try {
       const tokenRecords = await db
         .select()
         .from(passwordResetTokensTable)
-        .where(eq(passwordResetTokensTable.token, token))
+        .where(eq(passwordResetTokensTable.token, tokenHash))
         .limit(1);
       const tokenEntry = tokenRecords[0];
       if (!tokenEntry || tokenEntry.expiresAt < new Date()) {
@@ -1082,7 +1250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await db
         .delete(passwordResetTokensTable)
-        .where(eq(passwordResetTokensTable.token, token));
+        .where(eq(passwordResetTokensTable.token, tokenHash));
 
       return res
         .status(200)
@@ -1459,70 +1627,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const customerId = req.user!.id;
+        const start = performance.now();
         const bookingRequests =
           await storage.getBookingRequestsWithStatusForCustomer(customerId);
+        const prepElapsed = performance.now();
 
-        // Fetch details for each booking
-        const bookingsWithDetails = await Promise.all(
-          bookingRequests.map(async (booking: Booking) => {
-            const service = await storage.getService(booking.serviceId!);
-            const customer =
-              booking.customerId !== null
-                ? await storage.getUser(booking.customerId)
-                : null; // Fetch customer (self)
-            const provider =
-              service && service.providerId !== null
-                ? await storage.getUser(service.providerId)
-                : null; // Fetch provider
+        const bookingsWithDetails =
+          await hydrateCustomerBookings(bookingRequests);
+        const hydrateElapsed = performance.now();
 
-            let relevantAddress = {};
-            // If service is at provider's location, show provider address
-            if (
-              service?.serviceLocationType === "provider_location" &&
-              provider
-            ) {
-              relevantAddress = {
-                addressStreet: provider.addressStreet,
-                addressCity: provider.addressCity,
-                addressState: provider.addressState,
-                addressPostalCode: provider.addressPostalCode,
-                addressCountry: provider.addressCountry,
-              };
-            }
-            // If service is at customer's location, show customer address
-            else if (
-              service?.serviceLocationType === "customer_location" &&
-              customer
-            ) {
-              relevantAddress = {
-                addressStreet: customer.addressStreet,
-                addressCity: customer.addressCity,
-                addressState: customer.addressState,
-                addressPostalCode: customer.addressPostalCode,
-                addressCountry: customer.addressCountry,
-              };
-            }
-
-            return {
-              ...booking,
-              service,
-              customer: customer
-                ? {
-                    id: customer.id,
-                    name: customer.name,
-                    phone: customer.phone,
-                  }
-                : null,
-              provider: provider
-                ? {
-                    id: provider.id,
-                    name: provider.name,
-                    phone: provider.phone,
-                  }
-                : null,
-              relevantAddress, // Add the conditionally determined address
-            };
-          }),
+        logger.debug(
+          {
+            customerId,
+            prepMs: (prepElapsed - start).toFixed(2),
+            hydrateMs: (hydrateElapsed - prepElapsed).toFixed(2),
+            totalMs: (hydrateElapsed - start).toFixed(2),
+            bookingCount: bookingRequests.length,
+          },
+          "Fetched customer booking requests",
         );
 
         res.json(bookingsWithDetails); // Send the response back
@@ -1548,72 +1670,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const customerId = req.user!.id;
+        const start = performance.now();
         const bookingHistory =
           await storage.getBookingHistoryForCustomer(customerId);
+        const prepElapsed = performance.now();
 
-        // Fetch details for each booking
-        const bookingsWithDetails = await Promise.all(
-          bookingHistory.map(async (booking) => {
-            const service = await storage.getService(booking.serviceId!);
-            const customer =
-              booking.customerId !== null
-                ? await storage.getUser(booking.customerId)
-                : null; // Fetch customer (self)
-            const provider =
-              service && service.providerId !== null
-                ? await storage.getUser(service.providerId)
-                : null; // Fetch provider
+        const bookingsWithDetails =
+          await hydrateCustomerBookings(bookingHistory);
+        const hydrateElapsed = performance.now();
 
-            let relevantAddress = {};
-            // If service is at provider's location, show provider address
-            if (
-              service?.serviceLocationType === "provider_location" &&
-              provider
-            ) {
-              relevantAddress = {
-                addressStreet: provider.addressStreet,
-                addressCity: provider.addressCity,
-                addressState: provider.addressState,
-                addressPostalCode: provider.addressPostalCode,
-                addressCountry: provider.addressCountry,
-              };
-            }
-            // If service is at customer's location, show customer address
-            else if (
-              service?.serviceLocationType === "customer_location" &&
-              customer
-            ) {
-              relevantAddress = {
-                addressStreet: customer.addressStreet,
-                addressCity: customer.addressCity,
-                addressState: customer.addressState,
-                addressPostalCode: customer.addressPostalCode,
-                addressCountry: customer.addressCountry,
-              };
-            }
-
-            return {
-              ...booking,
-              service,
-              customer: customer
-                ? {
-                    id: customer.id,
-                    name: customer.name,
-                    phone: customer.phone,
-                  }
-                : null,
-              provider: provider
-                ? {
-                    id: provider.id,
-                    name: provider.name,
-                    phone: provider.phone,
-                  }
-                : null,
-              relevantAddress, // Add the conditionally determined address
-            };
-          }),
+        logger.debug(
+          {
+            customerId,
+            prepMs: (prepElapsed - start).toFixed(2),
+            hydrateMs: (hydrateElapsed - prepElapsed).toFixed(2),
+            totalMs: (hydrateElapsed - start).toFixed(2),
+            bookingCount: bookingHistory.length,
+          },
+          "Fetched customer booking history",
         );
-        res.json(bookingsWithDetails); // Send details back
+        res.json(bookingsWithDetails);
       } catch (error) {
         logger.error("Error fetching booking history:", error);
         res
@@ -1639,60 +1715,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const bookingHistory =
           await storage.getBookingHistoryForProvider(providerId);
 
-        // Fetch details for each booking
-        const bookingsWithDetails = await Promise.all(
-          bookingHistory.map(async (booking) => {
-            const service = await storage.getService(booking.serviceId!);
-            const customer =
-              booking.customerId !== null
-                ? await storage.getUser(booking.customerId)
-                : null; // Fetch customer details
-            const provider =
-              service && service.providerId !== null
-                ? await storage.getUser(service.providerId)
-                : null; // Fetch provider (self)
-
-            let relevantAddress = {};
-            // If service is at provider's location, show provider address (implicitly known)
-            // If service is at customer's location, show customer address
-            if (
-              service?.serviceLocationType === "customer_location" &&
-              customer
-            ) {
-              relevantAddress = {
-                addressStreet: customer.addressStreet,
-                addressCity: customer.addressCity,
-                addressState: customer.addressState,
-                addressPostalCode: customer.addressPostalCode,
-                addressCountry: customer.addressCountry,
-              };
-            }
-            // Provider address is implicitly known by the provider, so no need to explicitly add it here
-            // unless the service location is 'provider_location' and you *want* to show it redundantly.
-            // For clarity, we only show the *other* party's address when relevant.
-
-            return {
-              ...booking,
-              service,
-              customer: customer
-                ? {
-                    id: customer.id,
-                    name: customer.name,
-                    phone: customer.phone,
-                  }
-                : null,
-              provider: provider
-                ? {
-                    id: provider.id,
-                    name: provider.name,
-                    phone: provider.phone,
-                  }
-                : null,
-              relevantAddress, // Add the conditionally determined address
-            };
-          }),
-        );
-        res.json(bookingsWithDetails); // Send details back
+        const bookingsWithDetails =
+          await hydrateCustomerBookings(bookingHistory);
+        res.json(bookingsWithDetails);
       } catch (error) {
         logger.error("Error fetching booking history:", error);
         res
@@ -1936,20 +1961,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users/:id", requireAuth, async (req, res) => {
     try {
       const userId = getValidatedParam(req, "id");
-      logger.info(
-        "[API] /api/users/:id - Received request for user ID:",
-        userId,
-      );
-
       const user = await storage.getUser(userId);
       if (!user) {
-        logger.info("[API] /api/users/:id - User not found");
         return res.status(404).json({ message: "User not found" });
       }
 
-      const safeUser = sanitizeUser(user);
-      logger.info("[API] /api/users/:id - User from storage:", safeUser);
-
+      const safeUser = buildUserResponse(req as RequestWithAuth, user);
       if (!safeUser) {
         return res.status(500).json({ message: "Failed to fetch user" });
       }
@@ -3836,37 +3853,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const derivedBillingAddress =
           deliveryMethod === "delivery" ? customerAddress : shopAddress;
 
-        const newOrder = await storage.createOrder({
-          customerId: customer.id,
-          shopId,
-          status: "pending",
-          paymentStatus: "pending",
-          deliveryMethod,
-          paymentMethod,
-          total: totalAsString,
-          orderDate: new Date(),
-          shippingAddress,
-          billingAddress: derivedBillingAddress || "",
+        const orderItemsPayload = items.map((item) => {
+          const numericPrice = toNumber(item.price);
+          const price = Number.isFinite(numericPrice) ? numericPrice : 0;
+          const itemTotal = Number((price * item.quantity).toFixed(2));
+          return {
+            productId: item.productId,
+            quantity: item.quantity,
+            price: price.toFixed(2),
+            total: itemTotal.toFixed(2),
+          };
         });
-        logger.info(`Created order ${newOrder.id}`);
-        const orderItemPayloads = items.map((item) => ({
-          orderId: newOrder.id,
-          productId: item.productId,
-          quantity: item.quantity,
-          price: item.price.toString(),
-          total: (
-            parseFloat(item.price.toString()) * item.quantity
-          ).toString(),
-        }));
-        await Promise.all(
-          orderItemPayloads.map((payload) => storage.createOrderItem(payload)),
-        );
 
-        const stockUpdates = Array.from(quantityByProduct.entries());
-        for (let i = 0; i < stockUpdates.length; i += 1) {
-          const [productId, totalQuantity] = stockUpdates[i]!;
-          await storage.updateProductStock(productId, totalQuantity);
-        }
+        const newOrder = await storage.createOrderWithItems(
+          {
+            customerId: customer.id,
+            shopId,
+            status: "pending",
+            paymentStatus: "pending",
+            deliveryMethod,
+            paymentMethod,
+            total: totalAsString,
+            orderDate: new Date(),
+            shippingAddress,
+            billingAddress: derivedBillingAddress || "",
+          },
+          orderItemsPayload,
+        );
+        logger.info(`Created order ${newOrder.id}`);
 
         // Clear cart after order creation
         await storage.clearCart(req.user!.id);
@@ -3929,10 +3943,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
+        const start = performance.now();
         const orders = await storage.getOrdersByCustomer(req.user!.id, {
           status: statusFilter,
         });
+        const prepElapsed = performance.now();
+
         const detailed = await hydrateOrders(orders, { includeShop: true });
+        const hydrateElapsed = performance.now();
+
+        logger.debug(
+          {
+            customerId: req.user!.id,
+            prepMs: (prepElapsed - start).toFixed(2),
+            hydrateMs: (hydrateElapsed - prepElapsed).toFixed(2),
+            totalMs: (hydrateElapsed - start).toFixed(2),
+            orderCount: orders.length,
+          },
+          "Fetched customer orders",
+        );
         res.json(detailed);
       } catch (error) {
         logger.error("Error fetching customer orders:", error);
@@ -3980,10 +4009,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const shopContextId =
           req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const start = performance.now();
         const orders = await storage.getRecentOrdersByShop(shopContextId);
+        const prepElapsed = performance.now();
         const detailed = await hydrateOrders(orders, {
           includeCustomer: true,
         });
+        const hydrateElapsed = performance.now();
+
+        logger.debug(
+          {
+            shopId: shopContextId,
+            prepMs: (prepElapsed - start).toFixed(2),
+            hydrateMs: (hydrateElapsed - prepElapsed).toFixed(2),
+            totalMs: (hydrateElapsed - start).toFixed(2),
+            orderCount: orders.length,
+          },
+          "Fetched recent shop orders",
+        );
         res.json(detailed);
       } catch (error) {
         logger.error("Error fetching recent shop orders:", error);
@@ -4036,13 +4079,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const shopContextId =
           req.user!.role === "shop" ? req.user!.id : (req as any).workerShopId;
+        const start = performance.now();
         const orders = await storage.getOrdersByShop(
           shopContextId,
           statusFilter,
         );
+        const prepElapsed = performance.now();
         const detailed = await hydrateOrders(orders, {
           includeCustomer: true,
         });
+        const hydrateElapsed = performance.now();
+
+        logger.debug(
+          {
+            shopId: shopContextId,
+            prepMs: (prepElapsed - start).toFixed(2),
+            hydrateMs: (hydrateElapsed - prepElapsed).toFixed(2),
+            totalMs: (hydrateElapsed - start).toFixed(2),
+            orderCount: orders.length,
+            filteredStatus: statusFilter ?? "all",
+          },
+          "Fetched shop orders",
+        );
         res.json(detailed);
       } catch (error) {
         logger.error("Error fetching shop orders:", error);
@@ -4060,6 +4118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/orders/:id", requireAuth, async (req, res) => {
     const orderId = Number(req.params.id);
+    const timingStart = performance.now();
     try {
       const order = await storage.getOrder(orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
@@ -4078,6 +4137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+      const afterItemsFetch = performance.now();
       const items = await Promise.all(
         itemsRaw.map(async (item) => {
           const product =
@@ -4101,6 +4161,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : undefined;
       const shop =
         order.shopId !== null ? await storage.getUser(order.shopId) : undefined;
+      const afterHydrate = performance.now();
 
       const payload = orderDetailSchema.parse({
         ...order,
@@ -4143,6 +4204,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       res.json(payload);
+      const timingEnd = performance.now();
+      logger.debug(
+        {
+          orderId,
+          fetchMs: (afterItemsFetch - timingStart).toFixed(2),
+          hydrateMs: (afterHydrate - afterItemsFetch).toFixed(2),
+          totalMs: (timingEnd - timingStart).toFixed(2),
+        },
+        "Fetched order detail",
+      );
     } catch (error) {
       logger.error("Error fetching order details:", error);
       res
@@ -4611,32 +4682,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     },
   );
-
-  // Add this route for user details
-  app.get("/api/users/:id", requireAuth, async (req, res) => {
-    try {
-      const userId = getValidatedParam(req, "id");
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      const safeUser = sanitizeUser(user);
-      if (!safeUser) {
-        return res.status(500).json({ message: "Failed to fetch user" });
-      }
-      res.json(safeUser);
-    } catch (error) {
-      logger.error("Error fetching user:", error);
-      res
-        .status(500)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to fetch user",
-        });
-    }
-  });
 
   app.get("/api/products", requireAuth, async (req, res) => {
     try {

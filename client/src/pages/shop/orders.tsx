@@ -56,6 +56,9 @@ type OrderWithDetails = Order & {
     price: number;
     total: number;
   }[];
+  deliveryMethod?: "delivery" | "pickup" | null;
+  shippingAddress?: string | null;
+  billingAddress?: string | null;
 };
 
 const orderStatusSchema = z.object({
@@ -318,6 +321,31 @@ export default function ShopOrders() {
                           <p className="text-sm text-muted-foreground">
                             {order.customer?.email ?? "N/A"}
                           </p>
+                        </div>
+
+                        <div>
+                          <h4 className="font-medium mb-2">
+                            Delivery Details
+                          </h4>
+                          <p className="text-sm">
+                            {order.deliveryMethod === "delivery"
+                              ? "Home Delivery"
+                              : order.deliveryMethod === "pickup"
+                                ? "In-Store Pickup"
+                                : "Not specified"}
+                          </p>
+                          {order.deliveryMethod === "delivery" ? (
+                            <p className="text-sm text-muted-foreground whitespace-pre-line">
+                              {order.shippingAddress?.trim().length
+                                ? order.shippingAddress
+                                : "No shipping address provided"}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              Provide the order at your shop counter when the
+                              customer arrives.
+                            </p>
+                          )}
                         </div>
 
                         <div>

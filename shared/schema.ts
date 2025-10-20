@@ -516,46 +516,61 @@ export const orders = pgTable(
   }),
 );
 
-export const orderItems = pgTable("order_items", {
-  id: serial("id").primaryKey(),
-  orderId: integer("order_id").references(() => orders.id),
-  productId: integer("product_id").references(() => products.id),
-  quantity: integer("quantity").notNull(),
-  price: decimal("price").notNull(),
-  total: decimal("total").notNull(),
-  discount: decimal("discount"),
-  status: text("status")
-    .$type<"ordered" | "cancelled" | "returned">()
-    .default("ordered"),
-});
+export const orderItems = pgTable(
+  "order_items",
+  {
+    id: serial("id").primaryKey(),
+    orderId: integer("order_id").references(() => orders.id),
+    productId: integer("product_id").references(() => products.id),
+    quantity: integer("quantity").notNull(),
+    price: decimal("price").notNull(),
+    total: decimal("total").notNull(),
+    discount: decimal("discount"),
+    status: text("status")
+      .$type<"ordered" | "cancelled" | "returned">()
+      .default("ordered"),
+  },
+  (table) => ({
+    orderItemsOrderIdx: index("order_items_order_id_idx").on(table.orderId),
+    orderItemsProductIdx: index("order_items_product_id_idx").on(table.productId),
+  }),
+);
 
-export const returns = pgTable("returns", {
-  id: serial("id").primaryKey(),
-  orderId: integer("order_id").references(() => orders.id),
-  orderItemId: integer("order_item_id").references(() => orderItems.id),
-  customerId: integer("customer_id").references(() => users.id),
-  reason: text("reason").notNull(),
-  description: text("description"),
-  status: text("status")
-    .$type<
-      | "requested"
-      | "approved"
-      | "rejected"
-      | "received"
-      | "refunded"
-      | "completed"
-    >()
-    .notNull(),
-  refundAmount: decimal("refund_amount"),
-  refundStatus: text("refund_status").$type<
-    "pending" | "processed" | "failed"
-  >(),
-  refundId: text("refund_id"),
-  images: text("images").array(),
-  createdAt: timestamp("created_at").defaultNow(),
-  resolvedAt: timestamp("resolved_at"),
-  resolvedBy: integer("resolved_by").references(() => users.id),
-});
+export const returns = pgTable(
+  "returns",
+  {
+    id: serial("id").primaryKey(),
+    orderId: integer("order_id").references(() => orders.id),
+    orderItemId: integer("order_item_id").references(() => orderItems.id),
+    customerId: integer("customer_id").references(() => users.id),
+    reason: text("reason").notNull(),
+    description: text("description"),
+    status: text("status")
+      .$type<
+        | "requested"
+        | "approved"
+        | "rejected"
+        | "received"
+        | "refunded"
+        | "completed"
+      >()
+      .notNull(),
+    refundAmount: decimal("refund_amount"),
+    refundStatus: text("refund_status").$type<
+      "pending" | "processed" | "failed"
+    >(),
+    refundId: text("refund_id"),
+    images: text("images").array(),
+    createdAt: timestamp("created_at").defaultNow(),
+    resolvedAt: timestamp("resolved_at"),
+    resolvedBy: integer("resolved_by").references(() => users.id),
+  },
+  (table) => ({
+    returnsOrderIdx: index("returns_order_id_idx").on(table.orderId),
+    returnsOrderItemIdx: index("returns_order_item_id_idx").on(table.orderItemId),
+    returnsCustomerIdx: index("returns_customer_id_idx").on(table.customerId),
+  }),
+);
 
 export const productReviews = pgTable("product_reviews", {
   id: serial("id").primaryKey(),

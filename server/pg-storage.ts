@@ -62,8 +62,9 @@ import {
   OrderStatus,
   OrderStatusUpdate,
   ProductListItem,
+  OrderItemInput,
 } from "./storage";
-import { eq, and, lt, ne, sql, desc, count, inArray } from "drizzle-orm";
+import { eq, and, lt, ne, sql, desc, count, inArray, gte } from "drizzle-orm";
 import {
   toISTForStorage,
   getCurrentISTDate,
@@ -71,6 +72,11 @@ import {
   getExpirationDate,
   convertArrayDatesToIST,
 } from "./ist-utils";
+import {
+  normalizeEmail,
+  normalizePhone,
+  normalizeUsername,
+} from "./utils/identity";
 // Import date utilities for IST handling
 
 interface BlockedTimeSlot {
@@ -249,7 +255,9 @@ export class PostgresStorage implements IStorage {
     );
   }
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.email, email));
+    const normalized = normalizeEmail(email);
+    if (!normalized) return undefined;
+    const result = await db.select().from(users).where(eq(users.email, normalized));
     return result[0];
   }
 
@@ -666,15 +674,17 @@ export class PostgresStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
+    const normalized = normalizeUsername(username);
+    if (!normalized) return undefined;
     const result = await db
       .select()
       .from(users)
-      .where(eq(users.username, username));
+      .where(eq(users.username, normalized));
     return result[0];
   }
 
   async getUserByPhone(phone: string): Promise<User | undefined> {
-    const normalized = phone.trim();
+    const normalized = normalizePhone(phone);
     if (!normalized) return undefined;
     const result = await db
       .select()
@@ -707,14 +717,24 @@ export class PostgresStorage implements IStorage {
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    // Explicitly construct the object for insertion
+    const normalizedUsername = normalizeUsername(user.username);
+    const normalizedEmail = normalizeEmail(user.email);
+    const normalizedPhone = normalizePhone(user.phone);
+
+    if (!normalizedUsername) {
+      throw new Error("Invalid username");
+    }
+    if (!normalizedEmail) {
+      throw new Error("Invalid email");
+    }
+
     const insertData = {
-      username: user.username,
+      username: normalizedUsername,
       password: user.password,
-      role: user.role as UserRole, // Ensure role is correctly typed
+      role: user.role as UserRole,
       name: user.name,
-      phone: user.phone,
-      email: user.email,
+      phone: normalizedPhone ?? "",
+      email: normalizedEmail,
       addressStreet: user.addressStreet,
       addressCity: user.addressCity,
       addressState: user.addressState,
@@ -728,8 +748,8 @@ export class PostgresStorage implements IStorage {
       experience: user.experience,
       workingHours: user.workingHours,
       languages: user.languages,
-      googleId: user.googleId, // Added to ensure Google ID is saved
-      emailVerified: user.emailVerified, // Added to ensure email verification status is saved
+      googleId: user.googleId,
+      emailVerified: user.emailVerified,
       upiId: user.upiId,
       upiQrCodeUrl: user.upiQrCodeUrl,
       pickupAvailable: user.pickupAvailable ?? true,
@@ -740,17 +760,40 @@ export class PostgresStorage implements IStorage {
     const result = await db
       .insert(users)
       .values(insertData as any)
-      .returning(); // Used 'as any' to simplify if InsertUser and table schema have slight mismatches handled by DB defaults/nulls for unlisted fields.
+      .returning();
     return result[0];
   }
 
   async updateUser(id: number, updateData: Partial<User>): Promise<User> {
+    const normalizedUpdate: Partial<User> = { ...updateData };
+
+    if (updateData.username !== undefined) {
+      const normalized = normalizeUsername(updateData.username);
+      if (!normalized) {
+        throw new Error("Invalid username");
+      }
+      normalizedUpdate.username = normalized;
+    }
+
+    if (updateData.email !== undefined) {
+      const normalized = normalizeEmail(updateData.email);
+      if (!normalized) {
+        throw new Error("Invalid email");
+      }
+      normalizedUpdate.email = normalized;
+    }
+
+    if (updateData.phone !== undefined) {
+      const normalized = normalizePhone(updateData.phone);
+      normalizedUpdate.phone = normalized ?? "";
+    }
+
     // Calculate profile completeness if relevant fields are updated
-    let profileCompleteness = updateData.profileCompleteness;
+    let profileCompleteness = normalizedUpdate.profileCompleteness;
     if (profileCompleteness === undefined) {
       const currentUser = await this.getUser(id);
       if (currentUser) {
-        const combinedData = { ...currentUser, ...updateData };
+        const combinedData = { ...currentUser, ...normalizedUpdate };
         let completedFields = 0;
         let totalProfileFields = 0;
         // Diagnostic logging to inspect calculation inputs
@@ -851,7 +894,7 @@ export class PostgresStorage implements IStorage {
       }
     }
 
-    const dataToSet: Partial<User> = { ...updateData };
+    const dataToSet: Partial<User> = { ...normalizedUpdate };
     if (profileCompleteness !== undefined) {
       dataToSet.profileCompleteness = profileCompleteness;
       // If profile is 100% complete and current status is unverified, set to verified
@@ -1826,6 +1869,119 @@ export class PostgresStorage implements IStorage {
       orderId: created.id,
     });
     return created;
+  }
+
+  async createOrderWithItems(
+    order: InsertOrder,
+    items: OrderItemInput[],
+  ): Promise<Order> {
+    if (items.length === 0) {
+      throw new Error("Cannot create an order without items");
+    }
+
+    const createdOrder = await db.transaction(async (tx) => {
+      const productIds = Array.from(
+        new Set(items.map((item) => item.productId)),
+      );
+
+      const productsForUpdate = await tx
+        .select({
+          id: products.id,
+          shopId: products.shopId,
+        })
+        .from(products)
+        .where(inArray(products.id, productIds));
+
+      if (productsForUpdate.length !== productIds.length) {
+        throw new Error("One or more products were not found during checkout");
+      }
+
+      for (const row of productsForUpdate) {
+        if (row.shopId !== order.shopId) {
+          throw new Error("Product does not belong to the specified shop");
+        }
+      }
+
+      const quantityByProduct = new Map<number, number>();
+      for (const item of items) {
+        const existing = quantityByProduct.get(item.productId) ?? 0;
+        quantityByProduct.set(item.productId, existing + item.quantity);
+      }
+
+      for (const [productId, quantity] of Array.from(
+        quantityByProduct.entries(),
+      )) {
+        const updateResult = await tx
+          .update(products)
+          .set({ stock: sql`${products.stock} - ${quantity}` })
+          .where(and(eq(products.id, productId), gte(products.stock, quantity)))
+          .returning({ id: products.id });
+
+        if (updateResult.length === 0) {
+          throw new Error(`Insufficient stock for product ID ${productId}`);
+        }
+      }
+
+      const orderToInsert = {
+        ...order,
+        status: order.status as
+          | "pending"
+          | "cancelled"
+          | "confirmed"
+          | "processing"
+          | "packed"
+          | "shipped"
+          | "delivered"
+          | "returned",
+        paymentStatus: order.paymentStatus as
+          | "pending"
+          | "verifying"
+          | "paid"
+          | "failed",
+      };
+
+      const insertedOrders = await tx
+        .insert(orders)
+        .values(orderToInsert)
+        .returning();
+      const createdOrderRow = insertedOrders[0];
+      if (!createdOrderRow) {
+        throw new Error("Failed to create order");
+      }
+
+      const orderId = createdOrderRow.id;
+      const orderItemsToInsert = items.map((item) => ({
+        orderId,
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.total,
+      }));
+
+      if (orderItemsToInsert.length > 0) {
+        await tx.insert(orderItems).values(orderItemsToInsert);
+      }
+
+      await tx.insert(orderStatusUpdates).values({
+        orderId,
+        status: "pending",
+        trackingInfo: createdOrderRow.trackingInfo,
+        timestamp: createdOrderRow.orderDate ?? new Date(),
+      });
+      return createdOrderRow;
+    });
+
+    if (!createdOrder) {
+      throw new Error("Failed to create order");
+    }
+
+    notifyOrderChange({
+      customerId: createdOrder.customerId ?? null,
+      shopId: createdOrder.shopId ?? null,
+      orderId: createdOrder.id,
+    });
+
+    return createdOrder;
   }
 
   async getOrder(id: number): Promise<Order | undefined> {

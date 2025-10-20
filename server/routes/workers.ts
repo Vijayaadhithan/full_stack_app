@@ -11,6 +11,11 @@ import {
   WorkerResponsibilityZ,
   type WorkerResponsibility,
 } from "@shared/schema";
+import {
+  normalizeEmail,
+  normalizePhone,
+  normalizeUsername,
+} from "../utils/identity";
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -121,22 +126,53 @@ export function registerWorkerRoutes(app: Express) {
       }
       const { workerId, name, email, phone, password, responsibilities } = parsed.data;
       try {
+        const normalizedWorkerId = normalizeUsername(workerId);
+        if (!normalizedWorkerId) {
+          return res.status(400).json({ message: "Invalid worker ID" });
+        }
+        const normalizedEmail = normalizeEmail(email);
+        const normalizedPhone = normalizePhone(phone);
+
         // Ensure workerId (username) is unique
-        const existing = await db.select().from(users).where(eq(users.username, workerId));
+        const existing = await db
+          .select()
+          .from(users)
+          .where(eq(users.username, normalizedWorkerId));
         if (existing[0]) {
           return res.status(400).json({ message: "Worker ID already exists" });
         }
 
+        if (normalizedEmail) {
+          const emailConflict = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.email, normalizedEmail));
+          if (emailConflict[0]) {
+            return res.status(400).json({ message: "Email already in use" });
+          }
+        }
+
+        if (normalizedPhone) {
+          const phoneConflict = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.phone, normalizedPhone));
+          if (phoneConflict[0]) {
+            return res.status(400).json({ message: "Phone number already in use" });
+          }
+        }
+
         const hashedPassword = await hashPasswordInternal(password);
+        const fallbackEmail = normalizedEmail ?? `${normalizedWorkerId}@workers.local`;
         const [createdUser] = await db
           .insert(users)
           .values({
-            username: workerId,
+            username: normalizedWorkerId,
             password: hashedPassword,
             role: "worker",
             name,
-            phone: phone ?? "",
-            email: email ?? "",
+            phone: normalizedPhone ?? "",
+            email: fallbackEmail,
           } as any)
           .returning();
 
@@ -209,9 +245,16 @@ export function registerWorkerRoutes(app: Express) {
           });
         }
         const { workerId } = parsedQuery.data;
-        const existing = await db.select().from(users).where(eq(users.username, workerId));
+        const normalizedWorkerId = normalizeUsername(workerId);
+        if (!normalizedWorkerId) {
+          return res.status(400).json({ message: "Invalid workerId" });
+        }
+        const existing = await db
+          .select()
+          .from(users)
+          .where(eq(users.username, normalizedWorkerId));
         const available = !existing[0];
-        return res.json({ workerId, available });
+        return res.json({ workerId: normalizedWorkerId, available });
       } catch (error) {
         logger.error("Error checking worker ID availability:", error);
         return res.status(500).json({ message: "Failed to check availability" });

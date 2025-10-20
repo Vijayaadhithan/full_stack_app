@@ -131,61 +131,84 @@ function Router() {
       </Route>
       <Route path="/auth" component={AuthPage} />
       {/* Customer Routes */}
-      <ProtectedRoute path="/customer" component={CustomerDashboard} />
+      <ProtectedRoute
+        path="/customer"
+        component={CustomerDashboard}
+        roles={["customer"]}
+      />
       <ProtectedRoute
         path="/customer/browse-services"
         component={BrowseServices}
+        roles={["customer"]}
       />
       <ProtectedRoute
         path="/customer/service-details/:id"
         component={ServiceDetails}
+        roles={["customer"]}
       />
       <ProtectedRoute
         path="/customer/service-provider/:id"
         component={ServiceProvider}
+        roles={["customer"]}
       />
       <ProtectedRoute
         path="/customer/book-service/:id"
         component={BookService}
+        roles={["customer"]}
       />
       <ProtectedRoute
         path="/customer/browse-products"
         component={BrowseProducts}
+        roles={["customer"]}
       />
-      <ProtectedRoute path="/customer/browse-shops" component={BrowseShops} />
-      <ProtectedRoute path="/customer/shops/:id" component={ShopDetails} />
+      <ProtectedRoute
+        path="/customer/browse-shops"
+        component={BrowseShops}
+        roles={["customer"]}
+      />
+      <ProtectedRoute
+        path="/customer/shops/:id"
+        component={ShopDetails}
+        roles={["customer"]}
+      />
       <ProtectedRoute
         path="/customer/shops/:shopId/products/:productId"
         component={ProductDetails}
+        roles={["customer"]}
       />{" "}
       {/* Add route for product details */}
-      <ProtectedRoute path="/customer/cart" component={Cart} />
-      <ProtectedRoute path="/customer/wishlist" component={Wishlist} />
-      <ProtectedRoute path="/customer/bookings" component={Bookings} />
-      <ProtectedRoute path="/customer/order/:id" component={OrderDetails} />
-      <ProtectedRoute path="/customer/orders" component={Orders} />
+      <ProtectedRoute path="/customer/cart" component={Cart} roles={["customer"]} />
+      <ProtectedRoute path="/customer/wishlist" component={Wishlist} roles={["customer"]} />
+      <ProtectedRoute path="/customer/bookings" component={Bookings} roles={["customer"]} />
+      <ProtectedRoute path="/customer/order/:id" component={OrderDetails} roles={["customer"]} />
+      <ProtectedRoute path="/customer/orders" component={Orders} roles={["customer"]} />
       <ProtectedRoute
         path="/customer/profile"
         component={CustomerProfile}
+        roles={["customer"]}
       />{" "}
       {/* Add this route */}
-      <ProtectedRoute path="/customer/my-reviews" component={MyReviews} />{" "}
+      <ProtectedRoute
+        path="/customer/my-reviews"
+        component={MyReviews}
+        roles={["customer"]}
+      />{" "}
       {/* Add route for My Reviews page */}
       {/* Provider Routes */}
-      <ProtectedRoute path="/provider" component={ProviderDashboard} />
-      <ProtectedRoute path="/provider/profile" component={ProviderProfile} />
-      <ProtectedRoute path="/provider/services" component={ProviderServices} />
-      <ProtectedRoute path="/provider/bookings" component={ProviderBookings} />
-      <ProtectedRoute path="/provider/reviews" component={ProviderReviews} />
+      <ProtectedRoute path="/provider" component={ProviderDashboard} roles={["provider"]} />
+      <ProtectedRoute path="/provider/profile" component={ProviderProfile} roles={["provider"]} />
+      <ProtectedRoute path="/provider/services" component={ProviderServices} roles={["provider"]} />
+      <ProtectedRoute path="/provider/bookings" component={ProviderBookings} roles={["provider"]} />
+      <ProtectedRoute path="/provider/reviews" component={ProviderReviews} roles={["provider"]} />
       {/* Shop Routes */}
-      <ProtectedRoute path="/shop" component={ShopDashboard} />
-      <ProtectedRoute path="/shop/profile" component={ShopProfile} />
-      <ProtectedRoute path="/shop/products" component={ShopProducts} />
-      <ProtectedRoute path="/shop/orders" component={ShopOrders} />
-      <ProtectedRoute path="/shop/inventory" component={ShopInventory} />
-      <ProtectedRoute path="/shop/promotions" component={ShopPromotions} />
-      <ProtectedRoute path="/shop/reviews" component={ShopReviews} />
-      <ProtectedRoute path="/shop/workers" component={ShopWorkers} />
+      <ProtectedRoute path="/shop" component={ShopDashboard} roles={["shop", "worker"]} />
+      <ProtectedRoute path="/shop/profile" component={ShopProfile} roles={["shop", "worker"]} />
+      <ProtectedRoute path="/shop/products" component={ShopProducts} roles={["shop", "worker"]} />
+      <ProtectedRoute path="/shop/orders" component={ShopOrders} roles={["shop", "worker"]} />
+      <ProtectedRoute path="/shop/inventory" component={ShopInventory} roles={["shop", "worker"]} />
+      <ProtectedRoute path="/shop/promotions" component={ShopPromotions} roles={["shop", "worker"]} />
+      <ProtectedRoute path="/shop/reviews" component={ShopReviews} roles={["shop", "worker"]} />
+      <ProtectedRoute path="/shop/workers" component={ShopWorkers} roles={["shop"]} />
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/verify-email" component={VerifyEmailPage} />
       <Route path="/" component={AuthPage} />
