@@ -1,5 +1,24 @@
 # Indian E-commerce and Service Booking Platform
 
+All-in-one marketplace where customers can shop for products, book service providers, manage orders, and interact with shops or workers in real time. The repository bundles:
+
+- **Customer web app** (React + TanStack Query + Vite)
+- **Shop / Provider dashboards** with role-based access control
+- **Express/Node API** backed by PostgreSQL & Drizzle ORM
+- **Real-time notifications + background jobs** (bookings, orders, returns)
+
+Use this README to get up and running quickly, understand the environment variables, and learn where to find production health information. For mobile and Firebase/Android specifics, see the companion guide: [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md).
+
+## Table of contents
+
+1. [Local development setup](#local-development-setup)
+2. [Running & testing](#running-the-application)
+3. [Observability & troubleshooting](#observability--troubleshooting)
+4. [Environment variables](#environment-variables)
+5. [Production deployment](#production-deployment)
+6. [Role overview](#role-overview)
+7. [Useful scripts](#available-scripts)
+
 ## Local Development Setup
 
 ### Prerequisites
@@ -38,7 +57,7 @@ cd <project-directory>
 cp .env.example .env
 ```
 
-3. Update the `.env` file with your configuration:
+3. Update the `.env` file with your configuration (see [Environment variables](#environment-variables) for full list):
 
 ```env
 # Database Configuration
@@ -120,8 +139,46 @@ and merge the values with the environment variables. You can also set
 > Need to reach the app from outside your LAN? See `docs/remote-access.md`
 > for port-forwarding vs Cloudflare Tunnel steps.
 
-## Production Deployment
+## Running tests
 
+```bash
+npm run check   # type check / lint
+npm run test    # run the Node test suite (uses in-memory storage by default)
+```
+
+`npm run test` now logs per-route timings (see below) which helps correlate failing tests or slow suites with specific API calls.
+
+## Observability & Troubleshooting
+
+- **Structured logs** go to `logs/app.log` (via Pino). Look for entries such as `Fetched customer orders` or `Fetched shop orders` to inspect query vs hydration time.
+- **Slow requests**: debug entries include `prepMs`, `hydrateMs`, and `totalMs`. If `prepMs` spikes, investigate DB/index usage; if `hydrateMs` spikes, optimize batching in `hydrateOrders` / `hydrateCustomerBookings`.
+- **Performance metrics**: `/api/performance-metrics` accepts browser-reported timings; review logs for outliers.
+- **Live metrics**: when deployed with PM2, use `pm2 status`, `pm2 logs server`, or the built-in monitoring dashboard to watch request/minute, latency, and error rate. A persistent 5%+ error rate usually signals misconfigured OAuth or SMTP credentials.
+- **Common symptoms**
+  - Long tail latencies (> 5 s) with low CPU → likely waiting on the database or external email/OAuth providers (enable `DEBUG_TIMING=true` if you add custom timers).
+  - 400 errors on `/api/upload` → ensure the request uses `multipart/form-data` and is under the 5 MB image limit.
+  - OAuth failures → confirm Google Cloud credentials match the origins listed in `.env`.
+
+## Environment variables
+
+Add these to `.env` (prefix with `VITE_` for client-side usage when noted):
+
+| Variable | Description |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SESSION_SECRET` | Session encryption secret for Express |
+| `PORT`, `HOST` | API bind port/host |
+| `FRONTEND_URL`, `APP_BASE_URL` | URLs used for redirects/session cookies |
+| `ALLOWED_ORIGINS` | Comma-separated list for CORS (set `STRICT_CORS=true` to enforce even in dev) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth credentials |
+| `FRONTEND_URL` / `APP_BASE_URL` | Must be HTTPS in production for secure cookies |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` | Nodemailer SMTP configuration for transactional email |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Bootstrap admin account (required in production) |
+| `CAPACITOR_*` | Mobile bridge options; see [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md) |
+
+Refer to `config/network-config.json` if you prefer JSON-based overrides for local/LAN testing.
+
+## Production Deployment
 1. Build both the client and API bundles:
 
    ```bash
@@ -176,6 +233,16 @@ Email: admin@example.com
 Password: admin12345
 To customize in .env: set ADMIN_EMAIL and ADMIN_PASSWORD before starting the server.
 
+## Role overview
+
+| Role | Capabilities |
+| --- | --- |
+| **Customer** | Browse/order products, book services, manage cart & wishlist, track bookings/orders |
+| **Shop owner** | Manage inventory, workers, orders, returns, promotions |
+| **Worker** | Scoped to assigned shop with permission-based access (orders, inventory, analytics) |
+| **Service provider** | Manage services/bookings, respond to customer requests |
+| **Admin** | Platform-wide controls; seeded via `ensureDefaultAdmin` on boot |
+
 ### Development Guidelines
 
 1. The frontend React application is in the `client/` directory
@@ -198,6 +265,14 @@ To customize in .env: set ADMIN_EMAIL and ADMIN_PASSWORD before starting the ser
    - Verify PostgreSQL is running
    - Check database credentials in `.env`
    - Ensure the database exists
+
+2. Orders fail with "insufficient stock"
+   - The transactional order flow decrements stock atomically. Verify products have enough inventory and no other order depleted stock concurrently.
+
+3. Google login fails locally
+   - Make sure `GOOGLE_CLIENT_ID/SECRET` match your Google Cloud project and that `http://localhost:5000/auth/google/callback` is in the redirect list.
+
+Need focused instructions for Android builds, Firebase push notifications, or email/OAuth? See [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md).
 
 2. If the server won't start:
    - Check if port 5000 is available
