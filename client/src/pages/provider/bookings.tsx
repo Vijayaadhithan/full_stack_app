@@ -147,7 +147,14 @@ export default function ProviderBookings() {
           payload.rejectionReason = data.comments;
         }
         if (data.status === "rescheduled" && data.rescheduleDate) {
-          payload.rescheduleDate = data.rescheduleDate;
+          const rescheduleDate = new Date(data.rescheduleDate);
+          if (Number.isNaN(rescheduleDate.getTime())) {
+            throw new Error("Please provide a valid reschedule date and time.");
+          }
+          payload.rescheduleDate = rescheduleDate.toISOString();
+          if (data.comments) {
+            payload.rescheduleReason = data.comments;
+          }
         }
       }
 

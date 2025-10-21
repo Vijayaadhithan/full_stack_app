@@ -606,6 +606,8 @@ const bookingStatusUpdateSchema = z
   .object({
     status: z.enum(["accepted", "rejected", "rescheduled"]),
     rejectionReason: z.string().trim().min(1).max(500).optional(),
+    rescheduleDate: dateStringSchema.optional(),
+    rescheduleReason: z.string().trim().min(1).max(500).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -615,6 +617,21 @@ const bookingStatusUpdateSchema = z
         message: "Rejection reason is required when rejecting a booking",
         path: ["rejectionReason"],
       });
+    }
+    if (value.status === "rescheduled") {
+      if (!value.rescheduleDate) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Reschedule date is required when rescheduling a booking",
+          path: ["rescheduleDate"],
+        });
+      } else if (Number.isNaN(new Date(value.rescheduleDate).getTime())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Reschedule date must be a valid date",
+          path: ["rescheduleDate"],
+        });
+      }
     }
   });
 
@@ -2698,7 +2715,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!parsedBody.success) {
           return res.status(400).json(formatValidationError(parsedBody.error));
         }
-        const { status, rejectionReason } = parsedBody.data;
+        const {
+          status,
+          rejectionReason,
+          rescheduleDate,
+          rescheduleReason,
+        } = parsedBody.data;
         const bookingId = getValidatedParam(req, "id");
 
         logger.info(
@@ -2737,29 +2759,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Not authorized to update this booking" });
         }
 
+        const serviceName = service?.name ?? "your booking";
+
         logger.info(
           `[API DEBUG] All pre-update checks passed for booking ID ${bookingId}. Proceeding to update booking status.`,
         );
         // Update booking status
-        const updatedBooking = await storage.updateBooking(bookingId, {
-          status,
-          rejectionReason: status === "rejected" ? rejectionReason : null,
-        });
+        const updateData: Partial<Booking> = {};
+        let notificationTitle = "";
+        let notificationMessage = "";
+        let responseMessage = "";
+
+        if (status === "rescheduled") {
+          const rescheduleDateObj = new Date(rescheduleDate!);
+          if (rescheduleDateObj.getTime() <= Date.now()) {
+            return res.status(400).json({
+              message: "Reschedule date must be in the future",
+            });
+          }
+
+          updateData.status = "rescheduled";
+          updateData.rescheduleDate = rescheduleDateObj;
+          updateData.bookingDate = rescheduleDateObj;
+          updateData.comments = rescheduleReason ?? null;
+          updateData.rejectionReason = null;
+
+          const formattedDate = formatIndianDisplay(
+            rescheduleDateObj,
+            "datetime",
+          );
+          notificationTitle = "Booking Rescheduled";
+          notificationMessage = `Your booking for ${serviceName} has been rescheduled to ${formattedDate}.`;
+          if (rescheduleReason) {
+            notificationMessage += ` Reason: ${rescheduleReason}`;
+          }
+          responseMessage =
+            "Booking rescheduled successfully. Customer has been notified.";
+        } else if (status === "rejected") {
+          updateData.status = "rejected";
+          updateData.rejectionReason = rejectionReason ?? null;
+          updateData.comments = rejectionReason ?? null;
+          updateData.rescheduleDate = null;
+
+          notificationTitle = "Booking Rejected";
+          notificationMessage = `Your booking for ${serviceName} was rejected.${
+            rejectionReason ? ` Reason: ${rejectionReason}` : ""
+          }`;
+          responseMessage =
+            "Booking rejected. Customer has been notified with the reason.";
+        } else {
+          // status === "accepted"
+          updateData.status = "accepted";
+          updateData.rejectionReason = null;
+          updateData.rescheduleDate = null;
+          updateData.comments = null;
+
+          notificationTitle = "Booking Accepted";
+          notificationMessage = `Your booking for ${serviceName} has been accepted. The service provider will meet you at the scheduled time.`;
+          responseMessage =
+            "Booking accepted successfully. Customer has been notified.";
+        }
+
+        const updatedBooking = await storage.updateBooking(
+          bookingId,
+          updateData,
+        );
 
         logger.info(
           `[API PATCH /api/bookings/:id/status] Booking ID: ${bookingId}. Status updated to ${updatedBooking.status}. Email notifications are disabled for booking updates.`,
         );
 
         // Create notification for customer
-        const serviceName = service?.name ?? "your booking";
-        const notificationMessage =
-          status === "rejected"
-            ? `Your booking for ${serviceName} was rejected. Reason: ${rejectionReason}`
-            : `Your booking for ${serviceName} has been accepted. The service provider will meet you at the scheduled time.`;
-
-        const notificationTitle =
-          status === "rejected" ? "Booking Rejected" : "Booking Accepted";
-
         await storage.createNotification({
           userId: booking.customerId,
           type: "booking_update",
@@ -2776,10 +2846,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.json({
           booking: updatedBooking,
-          message:
-            status === "accepted"
-              ? "Booking accepted successfully. Customer has been notified."
-              : "Booking rejected. Customer has been notified with the reason.",
+          message: responseMessage,
         });
       } catch (error) {
         logger.error("Error updating booking status:", error);
