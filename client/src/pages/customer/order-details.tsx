@@ -83,6 +83,63 @@ export default function OrderDetails() {
 
   const [reference, setReference] = useState("");
 
+  const copyUpiIdToClipboard = () => {
+    const upiId = order?.shop?.upiId;
+    if (!upiId) {
+      return;
+    }
+
+    const notifySuccess = () => toast({ title: "UPI ID copied to clipboard" });
+    const notifyFailure = () =>
+      toast({
+        title: "Unable to copy UPI ID",
+        description: "Please copy it manually.",
+        variant: "destructive",
+      });
+
+    const fallbackCopy = () => {
+      const textarea = document.createElement("textarea");
+      textarea.value = upiId;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      textarea.setAttribute("readonly", "");
+      document.body.appendChild(textarea);
+      textarea.select();
+      const successful = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      if (!successful) {
+        throw new Error("Fallback copy failed");
+      }
+    };
+
+    // Clipboard API requires a secure context (https or localhost). Fall back for other cases.
+    if (
+      typeof navigator !== "undefined" &&
+      typeof window !== "undefined" &&
+      window.isSecureContext &&
+      navigator.clipboard
+    ) {
+      navigator.clipboard
+        .writeText(upiId)
+        .then(notifySuccess)
+        .catch(() => {
+          try {
+            fallbackCopy();
+            notifySuccess();
+          } catch {
+            notifyFailure();
+          }
+        });
+    } else {
+      try {
+        fallbackCopy();
+        notifySuccess();
+      } catch {
+        notifyFailure();
+      }
+    }
+  };
+
   const submitPaymentMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest(
@@ -215,9 +272,7 @@ export default function OrderDetails() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        navigator.clipboard.writeText(order.shop!.upiId!)
-                      }
+                      onClick={copyUpiIdToClipboard}
                     >
                       Copy UPI ID
                     </Button>
