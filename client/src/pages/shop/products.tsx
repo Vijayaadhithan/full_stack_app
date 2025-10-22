@@ -35,6 +35,9 @@ import { Product } from "@shared/schema";
 import { productFilterConfig } from "@shared/config";
 import { z } from "zod";
 import { useState } from "react";
+import { ToastAction } from "@/components/ui/toast";
+import { useLocation } from "wouter";
+import { getVerificationError, parseApiError } from "@/lib/api-error";
 
 const ProductFormDialogLazy = lazy(() => import("./components/ProductFormDialog"));
 
@@ -72,6 +75,7 @@ export default function ShopProducts() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
@@ -243,9 +247,29 @@ export default function ShopProducts() {
       setDialogOpen(false);
     },
     onError: (error: Error) => {
+      const verificationError = getVerificationError(error);
+      if (verificationError) {
+        toast({
+          title: t("error"),
+          description: verificationError.message,
+          variant: "destructive",
+          action: (
+            <ToastAction
+              altText="Go to profile"
+              onClick={() => navigate("/shop/profile")}
+            >
+              Go to profile
+            </ToastAction>
+          ),
+        });
+        setDialogOpen(false);
+        return;
+      }
+
+      const parsed = parseApiError(error);
       toast({
         title: t("error"),
-        description: error.message,
+        description: parsed.message,
         variant: "destructive",
       });
     },

@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -36,6 +36,8 @@ import { Label } from "@/components/ui/label";
 // import { Input } from "@/components/ui/input";
 import { ServiceDetail } from "@shared/api-contract";
 import { apiClient } from "@/lib/apiClient";
+import { ToastAction } from "@/components/ui/toast";
+import { getVerificationError, parseApiError } from "@/lib/api-error";
 
 const timeZone = "Asia/Kolkata"; // Define IST timezone
 
@@ -658,13 +660,35 @@ export default function BookService() {
       setDialogOpen(false); // Close the confirmation dialog
     },
     onError: (error: Error) => {
+      const verificationError = getVerificationError(error);
+      if (verificationError) {
+        toast({
+          title: "Verification required",
+          description: verificationError.message,
+          variant: "destructive",
+          action: (
+            <ToastAction
+              altText="Go to profile"
+              onClick={() => navigate("/customer/profile")}
+            >
+              Go to profile
+            </ToastAction>
+          ),
+        });
+        setDialogOpen(false);
+        return;
+      }
+
+      const parsed = parseApiError(error);
       toast({
         title: "Booking Failed",
-        description: error.message,
+        description: parsed.message,
         variant: "destructive",
       });
     },
   });
+
+  const [, navigate] = useLocation();
 
   const handleBookingRequest = () => {
     if (!selectedTime) {

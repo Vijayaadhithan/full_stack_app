@@ -44,7 +44,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Loader2,
   Plus,
@@ -68,6 +68,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import { getVerificationError, parseApiError } from "@/lib/api-error";
 import { z } from "zod";
 import { useLanguage } from "@/contexts/language-context";
 
@@ -435,6 +437,7 @@ export default function ProviderDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { t } = useLanguage();
+  const [, navigate] = useLocation();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
@@ -541,9 +544,29 @@ export default function ProviderDashboard() {
       setDialogOpen(false);
     },
     onError: (error: Error) => {
+      const verificationError = getVerificationError(error);
+      if (verificationError) {
+        toast({
+          title: "Verification required",
+          description: verificationError.message,
+          variant: "destructive",
+          action: (
+            <ToastAction
+              altText="Open profile"
+              onClick={() => navigate("/provider/profile")}
+            >
+              Go to profile
+            </ToastAction>
+          ),
+        });
+        setDialogOpen(false);
+        return;
+      }
+
+      const parsed = parseApiError(error);
       toast({
         title: "Error",
-        description: error.message,
+        description: parsed.message,
         variant: "destructive",
       });
     },

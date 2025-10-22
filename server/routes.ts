@@ -156,7 +156,14 @@ const uploadMiddleware = multer({
 });
 
 type RequestWithAuth = Request & {
-  user?: { id?: number | string; role?: string; isSuspended?: boolean } | null;
+  user?:
+    | {
+        id?: number | string;
+        role?: string;
+        isSuspended?: boolean;
+        verificationStatus?: string | null;
+      }
+    | null;
   session?: (Request["session"] & { adminId?: string | null }) | null;
 };
 
@@ -846,6 +853,21 @@ function requireRole(roles: string[]) {
     }
     next();
   };
+}
+
+function ensureProfileVerified(
+  req: RequestWithAuth,
+  res: Response,
+  actionDescription: string,
+): boolean {
+  const status = req.user?.verificationStatus;
+  if (status !== "verified") {
+    res.status(403).json({
+      message: `Profile verification required to ${actionDescription}. Please complete verification from your profile settings.`,
+    });
+    return false;
+  }
+  return true;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -2017,6 +2039,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireShopOrWorkerPermission(["products:write"]),
     async (req, res) => {
       try {
+        const requestWithAuth = req as RequestWithAuth;
+        if (requestWithAuth.user?.role === "shop") {
+          if (
+            !ensureProfileVerified(
+              requestWithAuth,
+              res,
+              "manage your shop listings",
+            )
+          ) {
+            return;
+          }
+        } else if (requestWithAuth.user?.role === "worker") {
+          const shopContextId = req.shopContextId;
+          if (typeof shopContextId !== "number") {
+            return res
+              .status(403)
+              .json({ message: "Unable to resolve shop context" });
+          }
+          const shopOwner = await storage.getUser(shopContextId);
+          if (!shopOwner) {
+            return res.status(404).json({ message: "Shop not found" });
+          }
+          if (shopOwner.verificationStatus !== "verified") {
+            return res.status(403).json({
+              message:
+                "The shop must complete profile verification before products can be managed.",
+            });
+          }
+        }
         const result = insertProductSchema.safeParse(req.body);
         if (!result.success) {
           return res.status(400).json(formatValidationError(result.error));
@@ -2138,6 +2189,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["provider"]),
     async (req, res) => {
+      if (
+        !ensureProfileVerified(
+          req as RequestWithAuth,
+          res,
+          "publish services",
+        )
+      ) {
+        return;
+      }
       try {
         // Add serviceLocationType to the validation
         const serviceSchemaWithLocation = insertServiceSchema.extend({
@@ -2648,6 +2708,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
+      if (
+        !ensureProfileVerified(
+          req as RequestWithAuth,
+          res,
+          "book services",
+        )
+      ) {
+        return;
+      }
       try {
         const parsedBody = bookingCreateSchema.safeParse(req.body);
         if (!parsedBody.success) {
@@ -3728,6 +3797,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole(["customer"]),
     async (req, res) => {
+      if (
+        !ensureProfileVerified(
+          req as RequestWithAuth,
+          res,
+          "place orders",
+        )
+      ) {
+        return;
+      }
       try {
         const orderSchema = z
           .object({

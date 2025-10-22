@@ -30,6 +30,9 @@ const customer = await memStorage.createUser({
   phone: "",
   email: "vjaadhi2799@gmail.com",
 });
+await memStorage.updateUser(customer.id, {
+  verificationStatus: "verified",
+});
 const provider = await memStorage.createUser({
   username: "provider",
   password: providerPassword,
@@ -38,6 +41,9 @@ const provider = await memStorage.createUser({
   phone: "",
   email: "vijaythriller11@gmail.com",
 });
+await memStorage.updateUser(provider.id, {
+  verificationStatus: "verified",
+});
 const shop = await memStorage.createUser({
   username: "shop",
   password: shopPassword,
@@ -45,6 +51,9 @@ const shop = await memStorage.createUser({
   name: "Shop",
   phone: "",
   email: "vijaythrillera@gmail.com",
+});
+await memStorage.updateUser(shop.id, {
+  verificationStatus: "verified",
 });
 const service = await memStorage.createService({
   name: "Svc",

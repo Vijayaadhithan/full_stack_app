@@ -21,6 +21,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ToastAction } from "@/components/ui/toast";
+import { useLocation } from "wouter";
+import { getVerificationError, parseApiError } from "@/lib/api-error";
 
 const container = {
   hidden: { opacity: 0 },
@@ -44,6 +47,7 @@ type CartItem = {
 
 export default function Cart() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(
     null,
@@ -279,12 +283,31 @@ export default function Cart() {
       setIsCheckingOut(false);
     },
     onError: (error: Error) => {
+      setIsCheckingOut(false);
+      const verificationError = getVerificationError(error);
+      if (verificationError) {
+        toast({
+          title: "Verification required",
+          description: verificationError.message,
+          variant: "destructive",
+          action: (
+            <ToastAction
+              altText="Open profile settings"
+              onClick={() => navigate("/customer/profile")}
+            >
+              Go to profile
+            </ToastAction>
+          ),
+        });
+        return;
+      }
+
+      const parsed = parseApiError(error);
       toast({
         title: "Checkout failed",
-        description: error.message,
+        description: parsed.message,
         variant: "destructive",
       });
-      setIsCheckingOut(false);
     },
   });
 

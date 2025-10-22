@@ -26,6 +26,9 @@ const customer = await memStorage.createUser({
   phone: "",
   email: "vjaadhi2799@gmail.com",
 });
+await memStorage.updateUser(customer.id, {
+  verificationStatus: "verified",
+});
 const shop = await memStorage.createUser({
   username: "shop",
   password: "",
@@ -33,6 +36,17 @@ const shop = await memStorage.createUser({
   name: "Shop",
   phone: "",
   email: "vijaythrillera@gmail.com",
+});
+await memStorage.updateUser(shop.id, {
+  verificationStatus: "verified",
+});
+const unverifiedCustomer = await memStorage.createUser({
+  username: "customer_unverified",
+  password: customerPassword,
+  role: "customer",
+  name: "Cust Unverified",
+  phone: "",
+  email: "unverified_order_customer@example.com",
 });
 const product = await memStorage.createProduct({
   name: "Item",
@@ -58,5 +72,24 @@ describe("Orders API", () => {
     });
     assert.equal(res.status, 201);
     assert.equal(res.body.order.shopId, shop.id);
+  });
+
+  it("rejects an order when the customer profile is not verified", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/login")
+      .send({ username: unverifiedCustomer.username, password: "pass" });
+
+    const res = await agent.post("/api/orders").send({
+      items: [{ productId: product.id, quantity: 1, price: product.price }],
+      total: product.price,
+      deliveryMethod: "delivery",
+    });
+
+    assert.equal(res.status, 403);
+    assert.ok(
+      typeof res.body.message === "string" &&
+        res.body.message.includes("Profile verification required"),
+    );
   });
 });
