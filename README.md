@@ -91,11 +91,18 @@ npm run db:migrate
 
 When you make schema changes run `npm run db:generate`, review the generated SQL in `migrations/`, and then apply it with `npm run db:migrate`.
 
-If you're migrating an existing database that already contains the schema, run the baseline command once to record the current state before applying new migrations:
+Hit a `relation "<table>" already exists` error because the database was provisioned separately? Baseline the migration history so Drizzle records the existing schema instead of re-running the bootstrap scripts:
 
 ```bash
+# 1. Ensure the target database already matches the schema described by migrations/meta/*_snapshot.json
+# 2. Record those migrations in drizzle.__drizzle_migrations
 npm run db:migrate:baseline
+
+# 3. Re-run migrations to pick up any new changes generated afterwards
+npm run db:migrate
 ```
+
+The baseline script validates that every table in the latest snapshot already exists; it aborts early (without writing anything) if something is missing so you never mark partial schemas as applied by accident.
 
 ### Running the Application
 
