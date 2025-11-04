@@ -3952,6 +3952,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           logger.warn(
             `Order total mismatch for user ${req.user!.id}: requested ${requestedTotalValue}, computed ${computedTotal}`,
           );
+          return res.status(400).json({
+            message: "Order total mismatch. Please review your cart and try again.",
+            expectedTotal: totalAsString,
+          });
         }
 
         // If a promotion is applied, verify it's valid

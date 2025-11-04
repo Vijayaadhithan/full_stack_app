@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import request from "supertest";
 import type { MemStorage } from "../server/storage";
+import { platformFees } from "../shared/config";
 
 process.env.USE_IN_MEMORY_DB = "true";
 process.env.SESSION_SECRET = "test";
@@ -124,9 +125,13 @@ describe("Payment APIs", () => {
       .post("/api/login")
       .send({ username: customer.username, password: "pass" });
 
+    const productPrice = Number(product.price);
+    const totalWithFee = productPrice + platformFees.productOrder;
     const orderRes = await customerAgent.post("/api/orders").send({
       items: [{ productId: product.id, quantity: 1, price: product.price }],
-      total: product.price,
+      total: totalWithFee.toString(),
+      subtotal: productPrice.toString(),
+      discount: "0",
       deliveryMethod: "delivery",
     });
     assert.equal(orderRes.status, 201);
@@ -157,9 +162,13 @@ describe("Payment APIs", () => {
       .post("/api/login")
       .send({ username: customer.username, password: "pass" });
 
+    const productPrice = Number(product.price);
+    const totalWithFee = productPrice + platformFees.productOrder;
     const orderRes = await customerAgent.post("/api/orders").send({
       items: [{ productId: product.id, quantity: 1, price: product.price }],
-      total: product.price,
+      total: totalWithFee.toString(),
+      subtotal: productPrice.toString(),
+      discount: "0",
       deliveryMethod: "pickup",
       paymentMethod: "cash",
     });

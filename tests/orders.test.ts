@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import request from "supertest";
 import type { MemStorage } from "../server/storage";
+import { platformFees } from "../shared/config";
 
 process.env.USE_IN_MEMORY_DB = "true";
 process.env.SESSION_SECRET = "test";
@@ -65,9 +66,13 @@ describe("Orders API", () => {
     await agent
       .post("/api/login")
       .send({ username: customer.username, password: "pass" });
+    const productPrice = Number(product.price);
+    const totalWithFee = productPrice + platformFees.productOrder;
     const res = await agent.post("/api/orders").send({
       items: [{ productId: product.id, quantity: 1, price: product.price }],
-      total: product.price,
+      total: totalWithFee.toString(),
+      subtotal: productPrice.toString(),
+      discount: "0",
       deliveryMethod: "delivery",
     });
     assert.equal(res.status, 201);
@@ -80,9 +85,13 @@ describe("Orders API", () => {
       .post("/api/login")
       .send({ username: unverifiedCustomer.username, password: "pass" });
 
+    const productPrice = Number(product.price);
+    const totalWithFee = productPrice + platformFees.productOrder;
     const res = await agent.post("/api/orders").send({
       items: [{ productId: product.id, quantity: 1, price: product.price }],
-      total: product.price,
+      total: totalWithFee.toString(),
+      subtotal: productPrice.toString(),
+      discount: "0",
       deliveryMethod: "delivery",
     });
 
@@ -90,6 +99,31 @@ describe("Orders API", () => {
     assert.ok(
       typeof res.body.message === "string" &&
         res.body.message.includes("Profile verification required"),
+    );
+  });
+  it("rejects orders when totals do not match the server calculation", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const productPrice = Number(product.price);
+    const res = await agent.post("/api/orders").send({
+      items: [{ productId: product.id, quantity: 1, price: product.price }],
+      total: "1", // Intentionally incorrect total
+      subtotal: productPrice.toString(),
+      discount: "0",
+      deliveryMethod: "delivery",
+    });
+
+    const expectedTotal = (
+      productPrice + platformFees.productOrder
+    ).toFixed(2);
+    assert.equal(res.status, 400);
+    assert.equal(res.body.expectedTotal, expectedTotal);
+    assert.equal(
+      res.body.message,
+      "Order total mismatch. Please review your cart and try again.",
     );
   });
 });
