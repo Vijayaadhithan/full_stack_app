@@ -11,6 +11,7 @@ import {
   apiRequest,
   queryClient,
   resetCsrfTokenCache,
+  getCsrfToken,
 } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -30,6 +31,27 @@ type LoginData = Pick<InsertUser, "username" | "password">;
 export const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  React.useEffect(() => {
+    let isMounted = true;
+    void getCsrfToken().catch((error: unknown) => {
+      if (!isMounted) {
+        return;
+      }
+      console.error("Failed to prefetch CSRF token:", error);
+      toast({
+        title: "Security error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to initialize secure session. Please refresh and try again.",
+        variant: "destructive",
+      });
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [toast]);
   const {
     data: user,
     error,
