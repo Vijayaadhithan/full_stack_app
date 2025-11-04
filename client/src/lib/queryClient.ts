@@ -1,16 +1,27 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+const normalizeUrl = (value: string) => value.replace(/\/$/, "");
+
 const resolveApiBase = () => {
   const envUrl = import.meta.env.VITE_API_URL?.trim();
   if (envUrl) {
-    return envUrl.replace(/\/$/, "");
+    return normalizeUrl(envUrl);
+  }
+
+  const fallbackEnv =
+    import.meta.env.VITE_APP_BASE_URL?.trim() ??
+    import.meta.env.VITE_FALLBACK_API_URL?.trim();
+  if (fallbackEnv) {
+    return normalizeUrl(fallbackEnv);
   }
 
   if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin.replace(/\/$/, "");
+    return normalizeUrl(window.location.origin);
   }
 
-  return "http://localhost:5000";
+  throw new Error(
+    "Unable to resolve API base URL. Set VITE_API_URL (or VITE_APP_BASE_URL) in your environment.",
+  );
 };
 
 export const API_BASE_URL = resolveApiBase();

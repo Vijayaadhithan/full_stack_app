@@ -28,22 +28,32 @@ function getMetricRating(name: MetricName, value: number): PerformanceMetric["ra
   return "poor";
 }
 
+function isSameOrigin(targetUrl: URL): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return targetUrl.origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 async function postMetric(metric: PerformanceMetric) {
-  const csrfToken = await getCsrfToken();
-  const payload = { ...metric, _csrf: csrfToken } as Record<string, unknown>;
-  const body = JSON.stringify(payload);
+  const metricUrl = new URL("/api/performance-metrics", API_BASE_URL);
 
-  const metricUrl = new URL("/api/performance-metrics", API_BASE_URL).toString();
-
-  if (navigator.sendBeacon) {
+  if (typeof navigator !== "undefined" && navigator.sendBeacon && isSameOrigin(metricUrl)) {
+    const csrfToken = await getCsrfToken();
+    const payload = { ...metric, _csrf: csrfToken } as Record<string, unknown>;
+    const body = JSON.stringify(payload);
     const blob = new Blob([body], { type: "application/json" });
-    const sent = navigator.sendBeacon(metricUrl, blob);
+    const sent = navigator.sendBeacon(metricUrl.toString(), blob);
     if (sent) {
       return;
     }
   }
 
-  await apiRequest("POST", "/api/performance-metrics", payload);
+  await apiRequest("POST", "/api/performance-metrics", metric);
 }
 
 export function useClientPerformanceMetrics(role: UserRole) {

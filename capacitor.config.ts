@@ -3,9 +3,18 @@ import { config as loadEnv } from "dotenv";
 
 loadEnv();
 
-const liveReloadHost = process.env.DEV_SERVER_HOST ?? "192.168.1.6";
-const liveReloadPort = process.env.DEV_SERVER_HMR_PORT ?? "5173";
-const serverUrl = process.env.CAPACITOR_SERVER_URL ?? `http://${liveReloadHost}:${liveReloadPort}`;
+const liveReloadHost =
+  process.env.DEV_SERVER_HOST?.trim() && process.env.DEV_SERVER_HOST.trim().length > 0
+    ? process.env.DEV_SERVER_HOST.trim()
+    : "localhost";
+const liveReloadPort =
+  process.env.DEV_SERVER_HMR_PORT?.trim() && process.env.DEV_SERVER_HMR_PORT.trim().length > 0
+    ? process.env.DEV_SERVER_HMR_PORT.trim()
+    : "5173";
+const serverUrl =
+  process.env.CAPACITOR_SERVER_URL?.trim() && process.env.CAPACITOR_SERVER_URL.trim().length > 0
+    ? process.env.CAPACITOR_SERVER_URL.trim()
+    : `http://${liveReloadHost}:${liveReloadPort}`;
 
 const config: CapacitorConfig = {
   appId: "com.example.app",

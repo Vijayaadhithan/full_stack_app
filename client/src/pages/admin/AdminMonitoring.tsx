@@ -13,7 +13,17 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { MonitoringSnapshot } from "@shared/monitoring";
 
-const OVERVIEW_REFRESH_INTERVAL = 15000;
+const OVERVIEW_REFRESH_INTERVAL = 60000;
+const LOGS_REFRESH_INTERVAL = 60000;
+const HEALTH_REFRESH_INTERVAL = 60000;
+
+const getVisibilityAwareInterval =
+  (intervalMs: number) => () => {
+    if (typeof document === "undefined") {
+      return intervalMs;
+    }
+    return document.visibilityState === "visible" ? intervalMs : false;
+  };
 
 const integerFormatter = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 0,
@@ -115,7 +125,7 @@ export default function AdminMonitoring() {
   const monitoringQuery = useQuery<MonitoringSnapshot>({
     queryKey: ["/api/admin/monitoring/summary"],
     queryFn: () => apiRequest("GET", "/api/admin/monitoring/summary").then((r) => r.json()),
-    refetchInterval: OVERVIEW_REFRESH_INTERVAL,
+    refetchInterval: getVisibilityAwareInterval(OVERVIEW_REFRESH_INTERVAL),
   });
 
   const snapshot = monitoringQuery.data;
@@ -577,7 +587,7 @@ function ApiStatusSection() {
   const { data, isFetching, refetch } = useQuery<HealthResponse>({
     queryKey: ["/api/health"],
     queryFn: () => apiRequest("GET", "/api/health").then((r) => r.json()),
-    refetchInterval: 15000,
+    refetchInterval: getVisibilityAwareInterval(HEALTH_REFRESH_INTERVAL),
   });
 
   return (
@@ -654,7 +664,7 @@ function LogViewerSection() {
       const query = params.toString();
       return apiRequest("GET", `/api/admin/logs${query ? `?${query}` : ""}`).then((r) => r.json());
     },
-    refetchInterval: 15000,
+    refetchInterval: getVisibilityAwareInterval(LOGS_REFRESH_INTERVAL),
   });
 
   useEffect(() => {
@@ -686,7 +696,7 @@ function LogViewerSection() {
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">Log Viewer</h2>
         <p className="text-sm text-muted-foreground">
-          Segment platform logs by audience. Automatically refreshes every 15 seconds. Use
+          Segment platform logs by audience. Automatically refreshes every {LOGS_REFRESH_INTERVAL / 1000}s. Use
           the level filter to adjust verbosity.
         </p>
       </div>

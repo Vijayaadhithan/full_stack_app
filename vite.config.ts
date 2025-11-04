@@ -24,9 +24,14 @@ const hmrPort = process.env.DEV_SERVER_HMR_PORT
   : networkConfig?.devServerHmrPort;
 const hmrProtocol =
   process.env.DEV_SERVER_HMR_PROTOCOL || networkConfig?.devServerHmrProtocol;
+const normalizedAppBaseUrl = process.env.APP_BASE_URL
+  ? process.env.APP_BASE_URL.replace(/\/$/, "")
+  : undefined;
+
 const apiProxyTarget =
   process.env.API_PROXY_TARGET ||
   networkConfig?.apiProxyTarget ||
+  normalizedAppBaseUrl ||
   "http://localhost:5000";
 
 const hmrConfig: {

@@ -44,9 +44,22 @@ declare module "express-session" {
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const GOOGLE_CALLBACK_BASE_URL =
+  process.env.GOOGLE_CALLBACK_BASE_URL?.trim() ||
+  process.env.APP_BASE_URL?.trim() ||
+  null;
+
+const normalizedGoogleCallbackBaseUrl = GOOGLE_CALLBACK_BASE_URL
+  ? GOOGLE_CALLBACK_BASE_URL.replace(/\/$/, "")
+  : null;
+
 if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
   logger.warn(
     "Google OAuth credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) are not set. Google Sign-In will not work.",
+  );
+} else if (!normalizedGoogleCallbackBaseUrl) {
+  logger.warn(
+    "APP_BASE_URL (or GOOGLE_CALLBACK_BASE_URL) is not set. Google OAuth callback URL cannot be determined.",
   );
 }
 
@@ -262,14 +275,14 @@ export function initializeAuth(app: Express) {
     }),
   );
 
-  if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+  if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && normalizedGoogleCallbackBaseUrl) {
     passport.use(
       new GoogleStrategy(
         {
           passReqToCallback: true, // Added to access req in callback for role selection
           clientID: GOOGLE_CLIENT_ID,
           clientSecret: GOOGLE_CLIENT_SECRET,
-          callbackURL: `${process.env.APP_BASE_URL || "http://localhost:5000"}/auth/google/callback`,
+          callbackURL: `${normalizedGoogleCallbackBaseUrl}/auth/google/callback`,
           scope: ["profile", "email"],
           proxy: true,
         },
