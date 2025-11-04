@@ -1011,6 +1011,17 @@ export class PostgresStorage implements IStorage {
       .where(eq(reviews.serviceId, serviceId));
   }
 
+  async getReviewsByServiceIds(serviceIds: number[]): Promise<Review[]> {
+    if (serviceIds.length === 0) {
+      return [];
+    }
+    const uniqueIds = Array.from(new Set(serviceIds));
+    return await db
+      .select()
+      .from(reviews)
+      .where(inArray(reviews.serviceId, uniqueIds));
+  }
+
   async getReviewsByProvider(providerId: number): Promise<Review[]> {
     // This requires joining reviews with services to get the providerId
     const providerServices = await db

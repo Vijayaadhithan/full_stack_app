@@ -2351,39 +2351,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const services = await storage.getServices(filters);
       logger.info("Filtered services:", services); // Debug log
 
-      // Map through services to include provider info and rating
-      const servicesWithDetails = await Promise.all(
-        services.map(async (service) => {
-          const provider =
-            service.providerId !== null
-              ? await storage.getUser(service.providerId)
-              : null;
-          const reviews = await storage.getReviewsByService(service.id);
-          const rating = reviews?.length
-            ? reviews.reduce((acc, review) => acc + review.rating, 0) /
-              reviews.length
-            : null;
-
-          return {
-            ...service,
-            rating,
-            provider: provider
-              ? {
-                  // Include full provider details needed for address logic
-                  id: provider.id,
-                  name: provider.name,
-                  phone: provider.phone,
-                  profilePicture: provider.profilePicture,
-                  addressStreet: provider.addressStreet,
-                  addressCity: provider.addressCity,
-                  addressState: provider.addressState,
-                  addressPostalCode: provider.addressPostalCode,
-                  addressCountry: provider.addressCountry,
-                }
-              : null,
-          };
-        }),
+      const serviceIds = services.map((service) => service.id);
+      const providerIds = new Set(
+        services
+          .map((service) => service.providerId)
+          .filter((id): id is number => id !== null),
       );
+
+      const [providers, reviews] = await Promise.all([
+        providerIds.size > 0
+          ? storage.getUsersByIds(Array.from(providerIds))
+          : Promise.resolve([]),
+        serviceIds.length > 0
+          ? storage.getReviewsByServiceIds(serviceIds)
+          : Promise.resolve([]),
+      ]);
+
+      const providerMap = new Map(
+        providers.map((provider) => [provider.id, provider]),
+      );
+
+      const ratingStats = new Map<
+        number,
+        { total: number; count: number }
+      >();
+      for (const review of reviews) {
+        if (review.serviceId == null) {
+          continue;
+        }
+        const ratingValue =
+          typeof review.rating === "number"
+            ? review.rating
+            : Number.parseFloat(String(review.rating));
+        if (!Number.isFinite(ratingValue)) {
+          continue;
+        }
+        const current = ratingStats.get(review.serviceId) ?? {
+          total: 0,
+          count: 0,
+        };
+        current.total += ratingValue;
+        current.count += 1;
+        ratingStats.set(review.serviceId, current);
+      }
+
+      const servicesWithDetails = services.map((service) => {
+        const provider =
+          service.providerId !== null
+            ? providerMap.get(service.providerId) ?? null
+            : null;
+        const stat = ratingStats.get(service.id);
+        const rating =
+          stat && stat.count > 0 ? stat.total / stat.count : null;
+
+        return {
+          ...service,
+          rating,
+          provider: provider
+            ? {
+                // Include full provider details needed for address logic
+                id: provider.id,
+                name: provider.name,
+                phone: provider.phone,
+                profilePicture: provider.profilePicture,
+                addressStreet: provider.addressStreet,
+                addressCity: provider.addressCity,
+                addressState: provider.addressState,
+                addressPostalCode: provider.addressPostalCode,
+                addressCountry: provider.addressCountry,
+              }
+            : null,
+        };
+      });
 
       res.json(servicesWithDetails);
     } catch (error) {
@@ -3164,53 +3203,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: statusFilter,
         });
 
-        // Enrich bookings with service details
-        const enrichedBookings = await Promise.all(
-          bookings.map(async (booking) => {
-            const service = await storage.getService(booking.serviceId!);
-            const provider =
-              service && service.providerId !== null
-                ? await storage.getUser(service.providerId)
-                : null; // Fetch provider details
-
-            // Determine which address to show the customer
-            let displayAddress = null;
-            if (booking.serviceLocation === "provider") {
-              displayAddress =
-                booking.providerAddress ||
-                (provider
-                  ? `${provider.addressStreet || ""}, ${provider.addressCity || ""}, ${provider.addressState || ""}`
-                      .trim()
-                      .replace(/^, |, $/g, "")
-                  : "Provider address not available");
-            } else if (booking.serviceLocation === "customer") {
-              // Customer already knows their own address, no need to display it here
-              displayAddress = "Service at your location";
-            }
-            return {
-              ...booking,
-              status: booking.status,
-              rejectionReason: booking.rejectionReason ?? null,
-              service: service || { name: "Unknown Service" },
-              providerName: provider?.name || "Unknown Provider",
-              displayAddress: displayAddress,
-              provider: provider
-                ? {
-                    id: provider.id,
-                    name: provider.name,
-                    phone: provider.phone,
-                    upiId: (provider as any).upiId ?? null,
-                    upiQrCodeUrl: (provider as any).upiQrCodeUrl ?? null,
-                    addressStreet: provider.addressStreet,
-                    addressCity: provider.addressCity,
-                    addressState: provider.addressState,
-                    addressPostalCode: provider.addressPostalCode,
-                    addressCountry: provider.addressCountry,
-                  }
-                : null,
-            };
-          }),
+        const serviceIds = Array.from(
+          new Set(
+            bookings
+              .map((booking) => booking.serviceId)
+              .filter((id): id is number => typeof id === "number"),
+          ),
         );
+        const services =
+          serviceIds.length > 0
+            ? await storage.getServicesByIds(serviceIds)
+            : [];
+        const serviceMap = new Map(
+          services.map((service) => [service.id, service]),
+        );
+        const providerIds = new Set<number>();
+        for (const service of services) {
+          if (typeof service.providerId === "number") {
+            providerIds.add(service.providerId);
+          }
+        }
+        const providers =
+          providerIds.size > 0
+            ? await storage.getUsersByIds(Array.from(providerIds))
+            : [];
+        const providerMap = new Map(
+          providers.map((provider) => [provider.id, provider]),
+        );
+
+        const enrichedBookings = bookings.map((booking) => {
+          const service =
+            typeof booking.serviceId === "number"
+              ? serviceMap.get(booking.serviceId) ?? null
+              : null;
+          const provider =
+            service && typeof service.providerId === "number"
+              ? providerMap.get(service.providerId) ?? null
+              : null;
+
+          let displayAddress: string | null = null;
+          if (booking.serviceLocation === "provider") {
+            const providerAddressParts =
+              provider !== null
+                ? [
+                    provider.addressStreet,
+                    provider.addressCity,
+                    provider.addressState,
+                  ]
+                    .map((part) =>
+                      typeof part === "string" ? part.trim() : "",
+                    )
+                    .filter((part) => part.length > 0)
+                : [];
+            const providerAddress = providerAddressParts.join(", ");
+            displayAddress =
+              booking.providerAddress ||
+              (providerAddress.length > 0
+                ? providerAddress
+                : "Provider address not available");
+          } else if (booking.serviceLocation === "customer") {
+            displayAddress = "Service at your location";
+          }
+
+          return {
+            ...booking,
+            status: booking.status,
+            rejectionReason: booking.rejectionReason ?? null,
+            service: service || { name: "Unknown Service" },
+            providerName: provider?.name || "Unknown Provider",
+            displayAddress,
+            provider: provider
+              ? {
+                  id: provider.id,
+                  name: provider.name,
+                  phone: provider.phone,
+                  upiId: (provider as any).upiId ?? null,
+                  upiQrCodeUrl: (provider as any).upiQrCodeUrl ?? null,
+                  addressStreet: provider.addressStreet,
+                  addressCity: provider.addressCity,
+                  addressState: provider.addressState,
+                  addressPostalCode: provider.addressPostalCode,
+                  addressCountry: provider.addressCountry,
+                }
+              : null,
+          };
+        });
 
         res.json(enrichedBookings);
       } catch (error) {
@@ -3236,43 +3313,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const bookings = await storage.getBookingsByProvider(req.user!.id);
 
-        // Enrich bookings with service details
-        const enrichedBookings = await Promise.all(
-          bookings.map(async (booking) => {
-            const service = await storage.getService(booking.serviceId!);
-            const provider =
-              service && service.providerId !== null
-                ? await storage.getUser(service.providerId)
-                : null; // Fetch provider details
-
-            // Determine which address to show the customer
-            let displayAddress = null;
-            if (booking.serviceLocation === "provider") {
-              displayAddress =
-                booking.providerAddress ||
-                (provider
-                  ? `${provider.addressStreet || ""}, ${provider.addressCity || ""}, ${provider.addressState || ""}`
-                      .trim()
-                      .replace(/^, |, $/g, "")
-                  : "Provider address not available");
-            } else if (booking.serviceLocation === "customer") {
-              // Customer already knows their own address, no need to display it here
-              displayAddress = "Service at your location";
-            }
-            const customer =
-              booking.customerId !== null
-                ? await storage.getUser(booking.customerId)
-                : null;
-
-            // No need for customerContact object anymore, just return the full customer object
-
-            return {
-              ...booking,
-              service: service || { name: "Unknown Service" },
-              customer: customer, // Return the full customer object
-            };
-          }),
+        const serviceIds = Array.from(
+          new Set(
+            bookings
+              .map((booking) => booking.serviceId)
+              .filter((id): id is number => typeof id === "number"),
+          ),
         );
+        const services =
+          serviceIds.length > 0
+            ? await storage.getServicesByIds(serviceIds)
+            : [];
+        const serviceMap = new Map(
+          services.map((service) => [service.id, service]),
+        );
+
+        const customerIds = Array.from(
+          new Set(
+            bookings
+              .map((booking) => booking.customerId)
+              .filter((id): id is number => typeof id === "number"),
+          ),
+        );
+        const customers =
+          customerIds.length > 0
+            ? await storage.getUsersByIds(customerIds)
+            : [];
+        const customerMap = new Map(
+          customers.map((customer) => [customer.id, customer]),
+        );
+
+        const enrichedBookings = bookings.map((booking) => {
+          const service =
+            typeof booking.serviceId === "number"
+              ? serviceMap.get(booking.serviceId) ?? null
+              : null;
+          const customer =
+            typeof booking.customerId === "number"
+              ? customerMap.get(booking.customerId) ?? null
+              : null;
+
+          return {
+            ...booking,
+            service: service || { name: "Unknown Service" },
+            customer,
+          };
+        });
 
         res.json(enrichedBookings);
       } catch (error) {
@@ -4309,31 +4395,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ message: "Not authorized" });
         }
       }
-      const itemsRaw = await storage.getOrderItemsByOrder(order.id);
+      const orderItems = await storage.getOrderItemsByOrder(order.id);
       const afterItemsFetch = performance.now();
-      const items = await Promise.all(
-        itemsRaw.map(async (item) => {
-          const product =
-            item.productId !== null
-              ? await storage.getProduct(item.productId)
-              : null;
-          return {
-            id: item.id,
-            productId: item.productId,
-            name: product?.name ?? "",
-            quantity: item.quantity,
-            price: String(item.price),
-            total: String(item.total),
-          };
-        }),
-      );
 
+      const productIds = Array.from(
+        new Set(
+          orderItems
+            .map((item) => item.productId)
+            .filter((id): id is number => typeof id === "number"),
+        ),
+      );
+      const products =
+        productIds.length > 0
+          ? await storage.getProductsByIds(productIds)
+          : [];
+      const productMap = new Map(
+        products.map((product) => [product.id, product]),
+      );
+      const items = orderItems.map((item) => {
+        const product =
+          item.productId !== null
+            ? productMap.get(item.productId) ?? null
+            : null;
+        return {
+          id: item.id,
+          productId: item.productId,
+          name: product?.name ?? "",
+          quantity: item.quantity,
+          price: String(item.price),
+          total: String(item.total),
+        };
+      });
+
+      const relatedUserIds = Array.from(
+        new Set(
+          [order.customerId, order.shopId].filter(
+            (id): id is number => typeof id === "number",
+          ),
+        ),
+      );
+      const relatedUsers =
+        relatedUserIds.length > 0
+          ? await storage.getUsersByIds(relatedUserIds)
+          : [];
+      const userMap = new Map(
+        relatedUsers.map((user) => [user.id, user]),
+      );
       const customer =
-        order.customerId !== null
-          ? await storage.getUser(order.customerId)
+        typeof order.customerId === "number"
+          ? userMap.get(order.customerId)
           : undefined;
       const shop =
-        order.shopId !== null ? await storage.getUser(order.shopId) : undefined;
+        typeof order.shopId === "number"
+          ? userMap.get(order.shopId)
+          : undefined;
       const afterHydrate = performance.now();
 
       const payload = orderDetailSchema.parse({
