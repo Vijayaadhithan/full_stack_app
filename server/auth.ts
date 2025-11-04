@@ -620,8 +620,16 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    res.json(req.user);
+    if (!req.isAuthenticated?.() || !req.user) {
+      return res.json(null);
+    }
+
+    const safeUser = sanitizeUser(req.user as Express.User);
+    if (!safeUser) {
+      return res.json(null);
+    }
+
+    res.json(safeUser);
   });
 
   // Google OAuth Routes

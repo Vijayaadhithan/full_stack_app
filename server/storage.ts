@@ -241,6 +241,7 @@ export interface IStorage {
   ): Promise<ReturnRequest>;
   getReturnRequest(id: number): Promise<ReturnRequest | undefined>;
   getReturnRequestsByOrder(orderId: number): Promise<ReturnRequest[]>;
+  getReturnRequestsForShop(shopId: number): Promise<ReturnRequest[]>;
   updateReturnRequest(
     id: number,
     returnRequest: Partial<ReturnRequest>,
@@ -1354,10 +1355,24 @@ export class MemStorage implements IStorage {
   ): Promise<{ product: Product; quantity: number }[]> {
     if (!this.cart.has(customerId)) return [];
     const cartItems = this.cart.get(customerId)!;
-    return Array.from(cartItems.entries()).map(([productId, quantity]) => ({
-      product: this.products.get(productId)!,
-      quantity,
-    }));
+    const result: { product: Product; quantity: number }[] = [];
+    let removedStaleEntry = false;
+
+    for (const [productId, quantity] of Array.from(cartItems.entries())) {
+      const product = this.products.get(productId);
+      if (!product) {
+        cartItems.delete(productId);
+        removedStaleEntry = true;
+        continue;
+      }
+      result.push({ product, quantity });
+    }
+
+    if (removedStaleEntry) {
+      notifyCartChange(customerId);
+    }
+
+    return result;
   }
 
   async clearCart(customerId: number): Promise<void> {
@@ -1387,7 +1402,21 @@ export class MemStorage implements IStorage {
   async getWishlist(customerId: number): Promise<Product[]> {
     if (!this.wishlist.has(customerId)) return [];
     const wishlistIds = this.wishlist.get(customerId)!;
-    return Array.from(wishlistIds).map((id) => this.products.get(id)!);
+    const result: Product[] = [];
+    let removedStaleEntry = false;
+    for (const productId of Array.from(wishlistIds)) {
+      const product = this.products.get(productId);
+      if (!product) {
+        wishlistIds.delete(productId);
+        removedStaleEntry = true;
+        continue;
+      }
+      result.push(product);
+    }
+    if (removedStaleEntry) {
+      notifyWishlistChange(customerId);
+    }
+    return result;
   }
 
   // Order operations
@@ -2012,6 +2041,16 @@ export class MemStorage implements IStorage {
     return Array.from(this.returnRequests.values()).filter(
       (request) => request.orderId === orderId,
     );
+  }
+
+  async getReturnRequestsForShop(shopId: number): Promise<ReturnRequest[]> {
+    return Array.from(this.returnRequests.values()).filter((request) => {
+      if (request.orderId == null) {
+        return false;
+      }
+      const order = this.orders.get(request.orderId);
+      return order?.shopId === shopId;
+    });
   }
 
   async updateReturnRequest(

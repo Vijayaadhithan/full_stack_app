@@ -1769,24 +1769,55 @@ export class PostgresStorage implements IStorage {
         `Found ${cartItems.length} cart items for customer ID: ${customerId}`,
       );
 
-      const result = [];
-      for (const item of cartItems) {
-        const productResult = await db
-          .select()
-          .from(products)
-          .where(eq(products.id, item.productId!));
-        if (productResult.length > 0 && !productResult[0].isDeleted) {
-          result.push({ product: productResult[0], quantity: item.quantity });
-        } else {
-          // If product doesn't exist or is deleted, remove it from cart if productId is not null
-          logger.info(
-            `Removing non-existent or deleted product ID ${item.productId} from cart`,
-          );
-          if (item.productId !== null) {
-            await this.removeFromCart(customerId, item.productId);
-          }
-        }
+      if (cartItems.length === 0) {
+        return [];
       }
+
+      const productIds = Array.from(
+        new Set(
+          cartItems
+            .map((item) => item.productId)
+            .filter((id): id is number => typeof id === "number"),
+        ),
+      );
+
+      const productsList =
+        productIds.length > 0
+          ? await db
+              .select()
+              .from(products)
+              .where(inArray(products.id, productIds))
+          : [];
+      const productMap = new Map(productsList.map((product) => [product.id, product]));
+
+      const missingProductIds: number[] = [];
+      const result: { product: Product; quantity: number }[] = [];
+
+      for (const item of cartItems) {
+        const productId = item.productId;
+        if (typeof productId !== "number") {
+          continue;
+        }
+        const product = productMap.get(productId);
+        if (!product || product.isDeleted) {
+          missingProductIds.push(productId);
+          continue;
+        }
+        result.push({ product, quantity: item.quantity });
+      }
+
+      if (missingProductIds.length > 0) {
+        await db
+          .delete(cart)
+          .where(
+            and(
+              eq(cart.customerId, customerId),
+              inArray(cart.productId, missingProductIds),
+            ),
+          );
+        notifyCartChange(customerId);
+      }
+
       return result;
     } catch (error) {
       logger.error(`Error getting cart for customer ID ${customerId}:`, error);
@@ -1836,14 +1867,55 @@ export class PostgresStorage implements IStorage {
       .select()
       .from(wishlist)
       .where(eq(wishlist.customerId, customerId));
+
+    if (wishlistItems.length === 0) {
+      return [];
+    }
+
+    const productIds = Array.from(
+      new Set(
+        wishlistItems
+          .map((item) => item.productId)
+          .filter((id): id is number => typeof id === "number"),
+      ),
+    );
+
+    const productsList =
+      productIds.length > 0
+        ? await db
+            .select()
+            .from(products)
+            .where(inArray(products.id, productIds))
+        : [];
+    const productMap = new Map(productsList.map((product) => [product.id, product]));
+
+    const staleProductIds: number[] = [];
     const result: Product[] = [];
     for (const item of wishlistItems) {
-      const productResult = await db
-        .select()
-        .from(products)
-        .where(eq(products.id, item.productId!));
-      if (productResult.length > 0) result.push(productResult[0]);
+      const productId = item.productId;
+      if (typeof productId !== "number") {
+        continue;
+      }
+      const product = productMap.get(productId);
+      if (!product || product.isDeleted) {
+        staleProductIds.push(productId);
+        continue;
+      }
+      result.push(product);
     }
+
+    if (staleProductIds.length > 0) {
+      await db
+        .delete(wishlist)
+        .where(
+          and(
+            eq(wishlist.customerId, customerId),
+            inArray(wishlist.productId, staleProductIds),
+          ),
+        );
+      notifyWishlistChange(customerId);
+    }
+
     return result;
   }
 
@@ -2338,35 +2410,57 @@ export class PostgresStorage implements IStorage {
     const serviceIds = providerServices.map((service) => service.id);
     if (serviceIds.length === 0) return [];
 
-    let bookingHistoryArr: Booking[] = [];
-    for (const serviceId of serviceIds) {
-      const serviceBookings = await db
-        .select()
-        .from(bookings)
-        .where(
-          and(
-            eq(bookings.serviceId, serviceId),
-            ne(bookings.status, "pending"),
-          ),
-        );
-      bookingHistoryArr = [...bookingHistoryArr, ...serviceBookings];
+    const providerBookings = await db
+      .select()
+      .from(bookings)
+      .where(
+        and(
+          inArray(bookings.serviceId, serviceIds),
+          ne(bookings.status, "pending"),
+        ),
+      );
+
+    if (providerBookings.length === 0) {
+      return [];
     }
 
-    const bookingsWithLastUpdate = await Promise.all(
-      bookingHistoryArr.map(async (booking) => {
-        const history = await this.getBookingHistory(booking.id);
-        const lastUpdate =
-          history.length > 0
-            ? new Date(history[history.length - 1].changedAt).getTime()
-            : booking.createdAt
-              ? new Date(booking.createdAt).getTime()
-              : new Date().getTime();
-        return { ...booking, lastUpdate };
-      }),
-    );
+    const bookingIds = providerBookings.map((booking) => booking.id);
+    const historyRows = await db
+      .select()
+      .from(bookingHistory)
+      .where(inArray(bookingHistory.bookingId, bookingIds))
+      .orderBy(bookingHistory.changedAt);
 
-    bookingsWithLastUpdate.sort((a, b) => b.lastUpdate - a.lastUpdate);
-    return bookingsWithLastUpdate;
+    const historyByBookingId = new Map<
+      number,
+      Array<(typeof historyRows)[number]>
+    >();
+    for (const history of historyRows) {
+      const bookingId = history.bookingId ?? undefined;
+      if (bookingId === undefined) {
+        continue;
+      }
+      const bucket = historyByBookingId.get(bookingId);
+      if (bucket) {
+        bucket.push(history);
+      } else {
+        historyByBookingId.set(bookingId, [history]);
+      }
+    }
+
+    const enhanced = providerBookings.map((booking) => {
+      const history = historyByBookingId.get(booking.id) ?? [];
+      const lastUpdateMs =
+        history.length > 0
+          ? new Date(history[history.length - 1].changedAt ?? new Date()).getTime()
+          : booking.createdAt
+            ? new Date(booking.createdAt).getTime()
+            : new Date().getTime();
+      return { ...booking, lastUpdate: lastUpdateMs };
+    });
+
+    enhanced.sort((a, b) => (b.lastUpdate ?? 0) - (a.lastUpdate ?? 0));
+    return enhanced;
   }
 
   async updateBookingStatus(
@@ -2743,6 +2837,15 @@ export class PostgresStorage implements IStorage {
 
   async getReturnRequestsByOrder(orderId: number): Promise<ReturnRequest[]> {
     return await db.select().from(returns).where(eq(returns.orderId, orderId));
+  }
+
+  async getReturnRequestsForShop(shopId: number): Promise<ReturnRequest[]> {
+    const rows = await db
+      .select()
+      .from(returns)
+      .innerJoin(orders, eq(returns.orderId, orders.id))
+      .where(eq(orders.shopId, shopId));
+    return rows.map((row) => row.returns);
   }
 
   async updateReturnRequest(

@@ -386,6 +386,70 @@ async function hydrateCustomerBookings(
   });
 }
 
+type ProviderBookingHydrated = Booking & {
+  service: Service | { name: string };
+  customer?: { id: number; name: string | null; phone: string | null } | null;
+};
+
+async function hydrateProviderBookings(
+  bookings: Booking[],
+): Promise<ProviderBookingHydrated[]> {
+  if (bookings.length === 0) {
+    return [];
+  }
+
+  const serviceIds = Array.from(
+    new Set(
+      bookings
+        .map((booking) => booking.serviceId)
+        .filter((id): id is number => typeof id === "number"),
+    ),
+  );
+  const services =
+    serviceIds.length > 0
+      ? await storage.getServicesByIds(serviceIds)
+      : ([] as Service[]);
+  const serviceMap = new Map(services.map((service) => [service.id, service]));
+
+  const customerIds = Array.from(
+    new Set(
+      bookings
+        .map((booking) => booking.customerId)
+        .filter((id): id is number => typeof id === "number"),
+    ),
+  );
+  const customers =
+    customerIds.length > 0
+      ? await storage.getUsersByIds(customerIds)
+      : ([] as User[]);
+  const customerMap = new Map(
+    customers.map((customer) => [customer.id, customer]),
+  );
+
+  return bookings.map((booking) => {
+    const service =
+      typeof booking.serviceId === "number"
+        ? serviceMap.get(booking.serviceId) ?? null
+        : null;
+    const customer =
+      typeof booking.customerId === "number"
+        ? customerMap.get(booking.customerId) ?? null
+        : null;
+
+    return {
+      ...booking,
+      service: service || { name: "Unknown Service" },
+      customer: customer
+        ? {
+            id: customer.id,
+            name: customer.name,
+            phone: customer.phone,
+          }
+        : null,
+    };
+  });
+}
+
 type OrderHydrationOptions = {
   includeShop?: boolean;
   includeCustomer?: boolean;
@@ -608,6 +672,45 @@ const bookingCreateSchema = z
     serviceLocation: z.enum(["customer", "provider"]),
   })
   .strict();
+
+type ServiceBookingSlot = {
+  start: Date;
+  end: Date;
+};
+
+async function fetchServiceBookingSlots(
+  serviceId: number,
+  bookingDate: Date,
+): Promise<ServiceBookingSlot[] | null> {
+  const service = await storage.getService(serviceId);
+  if (!service) {
+    return null;
+  }
+
+  const bookings = await storage.getBookingsByService(serviceId, bookingDate);
+  const durationMinutesRaw =
+    typeof service.duration === "number" && !Number.isNaN(service.duration)
+      ? service.duration
+      : 0;
+  const bufferMinutesRaw =
+    typeof service.bufferTime === "number" && !Number.isNaN(service.bufferTime)
+      ? service.bufferTime
+      : 0;
+
+  const combinedMinutes = durationMinutesRaw + bufferMinutesRaw;
+  const slotMinutes =
+    combinedMinutes > 0
+      ? combinedMinutes
+      : durationMinutesRaw > 0
+        ? durationMinutesRaw
+        : 60;
+  const slotDurationMs = slotMinutes * 60_000;
+
+  return bookings.map((booking) => ({
+    start: booking.bookingDate,
+    end: new Date(booking.bookingDate.getTime() + slotDurationMs),
+  }));
+}
 
 const bookingStatusUpdateSchema = z
   .object({
@@ -895,9 +998,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (socket && typeof socket.setKeepAlive === "function") {
       socket.setKeepAlive(true, 60_000);
     }
+    if (socket && typeof socket.setTimeout === "function") {
+      socket.setTimeout(0);
+    }
     if (socket && typeof socket.setNoDelay === "function") {
       socket.setNoDelay(true);
     }
+    res.locals.skipRequestLog = true;
     registerRealtimeClient(res, userId);
   });
 
@@ -919,6 +1026,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     runWithLogContext(() => {
       if (category !== "admin") {
         res.on("finish", () => {
+          if ((res.locals as any)?.skipRequestLog) {
+            return;
+          }
           const durationNs = process.hrtime.bigint() - startedAt;
           const durationMs = Number(durationNs) / 1_000_000;
           logger.info(
@@ -3312,54 +3422,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const bookings = await storage.getBookingsByProvider(req.user!.id);
+        const enrichedBookings = await hydrateProviderBookings(bookings);
 
-        const serviceIds = Array.from(
-          new Set(
-            bookings
-              .map((booking) => booking.serviceId)
-              .filter((id): id is number => typeof id === "number"),
-          ),
-        );
-        const services =
-          serviceIds.length > 0
-            ? await storage.getServicesByIds(serviceIds)
-            : [];
-        const serviceMap = new Map(
-          services.map((service) => [service.id, service]),
-        );
-
-        const customerIds = Array.from(
-          new Set(
-            bookings
-              .map((booking) => booking.customerId)
-              .filter((id): id is number => typeof id === "number"),
-          ),
-        );
-        const customers =
-          customerIds.length > 0
-            ? await storage.getUsersByIds(customerIds)
-            : [];
-        const customerMap = new Map(
-          customers.map((customer) => [customer.id, customer]),
-        );
-
-        const enrichedBookings = bookings.map((booking) => {
-          const service =
-            typeof booking.serviceId === "number"
-              ? serviceMap.get(booking.serviceId) ?? null
-              : null;
-          const customer =
-            typeof booking.customerId === "number"
-              ? customerMap.get(booking.customerId) ?? null
-              : null;
-
-          return {
-            ...booking,
-            service: service || { name: "Unknown Service" },
-            customer,
-          };
+        res.json(enrichedBookings);
+      } catch (error) {
+        logger.error("Error fetching provider bookings:", error);
+        res
+          .status(400)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch bookings",
         });
+      }
+    },
+  );
 
+  app.get(
+    "/api/bookings/provider/:id",
+    requireAuth,
+    requireRole(["provider"]),
+    async (req, res) => {
+      const providerId = getValidatedParam(req, "id");
+      const requesterId =
+        typeof req.user?.id === "number"
+          ? req.user.id
+          : Number.parseInt(String(req.user?.id ?? NaN), 10);
+      if (!Number.isFinite(requesterId) || providerId !== requesterId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      try {
+        const bookings = await storage.getBookingsByProvider(providerId);
+        const enrichedBookings = await hydrateProviderBookings(bookings);
         res.json(enrichedBookings);
       } catch (error) {
         logger.error("Error fetching provider bookings:", error);
@@ -4621,23 +4716,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const bookingDate = new Date(parsedQuery.data.date);
 
     try {
-      const service = await storage.getService(serviceId);
-      if (!service)
+      const slots = await fetchServiceBookingSlots(serviceId, bookingDate);
+      if (!slots) {
         return res.status(404).json({ message: "Service not found" });
-
-      const bookings = await storage.getBookingsByService(
-        serviceId,
-        bookingDate,
-      );
-      res.json(
-        bookings.map((booking) => ({
-          start: booking.bookingDate,
-          end: new Date(
-            booking.bookingDate.getTime() +
-              (service.duration + (service.bufferTime || 0)) * 60000,
-          ),
-        })),
-      );
+      }
+      res.json(slots);
     } catch (error) {
       logger.error("Error fetching service bookings:", error);
       res
@@ -4650,6 +4733,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
     }
   });
+
+  app.get(
+    "/api/bookings/service/:id",
+    requireAuth,
+    async (req, res) => {
+      const parsedQuery = servicesAvailabilityQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return res.status(400).json(formatValidationError(parsedQuery.error));
+      }
+      const serviceId = getValidatedParam(req, "id");
+      const bookingDate = new Date(parsedQuery.data.date);
+      try {
+        const slots = await fetchServiceBookingSlots(serviceId, bookingDate);
+        if (!slots) {
+          return res.status(404).json({ message: "Service not found" });
+        }
+        res.json(slots);
+      } catch (error) {
+        logger.error("Error fetching legacy service bookings route:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch bookings",
+          });
+      }
+    },
+  );
 
   // Enhanced booking routes with notifications
   app.post(
@@ -4853,6 +4966,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Return and refund routes
+  app.get(
+    "/api/returns/shop",
+    requireAuth,
+    requireShopOrWorkerPermission(["returns:manage"]),
+    async (req, res) => {
+      try {
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res
+            .status(403)
+            .json({ message: "Unable to resolve shop context" });
+        }
+        const returnRequests =
+          await storage.getReturnRequestsForShop(shopContextId);
+        res.json(returnRequests);
+      } catch (error) {
+        logger.error("Error fetching shop return requests:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch returns",
+          });
+      }
+    },
+  );
+
   app.post(
     "/api/orders/:orderId/return",
     requireAuth,
