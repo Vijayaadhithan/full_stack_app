@@ -388,7 +388,17 @@ async function hydrateCustomerBookings(
 
 type ProviderBookingHydrated = Booking & {
   service: Service | { name: string };
-  customer?: { id: number; name: string | null; phone: string | null } | null;
+  customer?: {
+    id: number;
+    name: string | null;
+    phone: string | null;
+    addressStreet?: string | null;
+    addressCity?: string | null;
+    addressState?: string | null;
+    addressPostalCode?: string | null;
+    addressCountry?: string | null;
+  } | null;
+  relevantAddress?: Record<string, string | null> | null;
 };
 
 async function hydrateProviderBookings(
@@ -436,6 +446,8 @@ async function hydrateProviderBookings(
         ? customerMap.get(booking.customerId) ?? null
         : null;
 
+    const relevantAddress = pickAddressFields(customer);
+
     return {
       ...booking,
       service: service || { name: "Unknown Service" },
@@ -444,8 +456,14 @@ async function hydrateProviderBookings(
             id: customer.id,
             name: customer.name,
             phone: customer.phone,
+            addressStreet: customer.addressStreet,
+            addressCity: customer.addressCity,
+            addressState: customer.addressState,
+            addressPostalCode: customer.addressPostalCode,
+            addressCountry: customer.addressCountry,
           }
         : null,
+      relevantAddress,
     };
   });
 }
