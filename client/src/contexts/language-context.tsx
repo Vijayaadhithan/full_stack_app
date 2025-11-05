@@ -29,7 +29,6 @@ export function readLanguageFromStorage(storage: StorageReader, fallback: Langua
     const stored = storage.getItem("language");
     return coerceLanguage(stored, fallback);
   } catch (error) {
-    console.error("Error loading language from storage:", error);
     return fallback;
   }
 }
@@ -39,7 +38,7 @@ export function persistLanguageToStorage(storage: StorageWriter, language: Langu
   try {
     storage.setItem("language", language);
   } catch (error) {
-    console.error("Error saving language to storage:", error);
+    //
   }
 }
 
