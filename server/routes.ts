@@ -69,8 +69,6 @@ import { performance } from "node:perf_hooks";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 import {
   normalizeCoordinate,
-  toNumericCoordinate,
-  haversineDistanceKm,
   DEFAULT_NEARBY_RADIUS_KM,
   MIN_NEARBY_RADIUS_KM,
   MAX_NEARBY_RADIUS_KM,
@@ -1055,32 +1053,6 @@ function ensureProfileVerified(
 
 type NearbyRole = (typeof NEARBY_USER_ROLES)[number];
 
-async function fallbackNearbySearch(
-  latitude: number,
-  longitude: number,
-  radiusKm: number,
-) {
-  const candidates = await storage.getAllUsers();
-  const results: Array<{ user: User; distance: number }> = [];
-
-  for (const user of candidates) {
-    if (!NEARBY_USER_ROLES.includes(user.role as NearbyRole)) {
-      continue;
-    }
-    const userLat = toNumericCoordinate(user.latitude);
-    const userLng = toNumericCoordinate(user.longitude);
-    if (userLat === null || userLng === null) {
-      continue;
-    }
-    const distance = haversineDistanceKm(latitude, longitude, userLat, userLng);
-    if (distance <= radiusKm) {
-      results.push({ user, distance });
-    }
-  }
-
-  results.sort((a, b) => a.distance - b.distance);
-  return results.slice(0, NEARBY_SEARCH_LIMIT).map((entry) => entry.user);
-}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   initializeAuth(app);
@@ -2180,54 +2152,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     const { lat, lng, radius } = parsed.data;
-    const radiusInMeters = radius * 1000;
-    const distanceOrder = sql`
-      ST_Distance(
-        ST_MakePoint(${users.longitude}, ${users.latitude})::geography,
-        ST_MakePoint(${lng}, ${lat})::geography
+
+    const distanceExpr = sql`
+      6371 * 2 * asin(
+        sqrt(
+          power(sin((radians(${users.latitude}) - radians(${lat})) / 2), 2) +
+          cos(radians(${lat})) * cos(radians(${users.latitude})) *
+          power(sin((radians(${users.longitude}) - radians(${lng})) / 2), 2)
+        )
       )
     `;
 
-    try {
-      const result = await db
-        .select()
-        .from(users)
-        .where(
-          and(
-            inArray(users.role, NEARBY_USER_ROLES),
-            sql`${users.latitude} IS NOT NULL`,
-            sql`${users.longitude} IS NOT NULL`,
-            sql`ST_DWithin(
-              ST_MakePoint(${users.longitude}, ${users.latitude})::geography,
-              ST_MakePoint(${lng}, ${lat})::geography,
-              ${radiusInMeters}
-            )`,
-          ),
-        )
-        .orderBy(distanceOrder)
-        .limit(NEARBY_SEARCH_LIMIT);
+    const result = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          inArray(users.role, NEARBY_USER_ROLES),
+          sql`${users.latitude} IS NOT NULL`,
+          sql`${users.longitude} IS NOT NULL`,
+          sql`${distanceExpr} <= ${radius}`,
+        ),
+      )
+      .orderBy(distanceExpr)
+      .limit(NEARBY_SEARCH_LIMIT);
 
-      res.json(sanitizeUserList(result));
-    } catch (error) {
-      logger.warn(
-        { err: error },
-        "PostGIS nearby search failed; falling back to in-memory distance check",
-      );
-      try {
-        const fallbackResults = await fallbackNearbySearch(lat, lng, radius);
-        res.json(sanitizeUserList(fallbackResults));
-      } catch (fallbackError) {
-        logger.error("Fallback nearby search failed", fallbackError);
-        res
-          .status(500)
-          .json({
-            message:
-              fallbackError instanceof Error
-                ? fallbackError.message
-                : "Failed to perform nearby search",
-          });
-      }
-    }
+    res.json(sanitizeUserList(result));
   });
 
   const profileUpdateSchema = insertUserSchema.partial().extend({
