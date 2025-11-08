@@ -165,6 +165,8 @@ export const users = pgTable(
   addressState: text("address_state"),
   addressPostalCode: text("address_postal_code"),
   addressCountry: text("address_country"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
   language: text("language").default("en"),
   profilePicture: text("profile_picture"),
   paymentMethods: jsonb("payment_methods").$type<PaymentMethod[]>(),

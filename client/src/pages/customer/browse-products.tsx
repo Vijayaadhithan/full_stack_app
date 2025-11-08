@@ -24,6 +24,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useLocationFilter } from "@/hooks/use-location-filter";
+import { LocationFilterPopover } from "@/components/location/location-filter-popover";
 
 const container = {
   hidden: { opacity: 0 },
@@ -42,6 +44,14 @@ const item = {
 
 export default function BrowseProducts() {
   const { toast } = useToast();
+  const locationFilter = useLocationFilter({ storageKey: "products-radius" });
+  const locationQuery = locationFilter.location
+    ? {
+        lat: locationFilter.location.latitude,
+        lng: locationFilter.location.longitude,
+        radius: locationFilter.radius,
+      }
+    : null;
 
   type ProductFilters = {
     searchTerm: string;
@@ -110,7 +120,13 @@ export default function BrowseProducts() {
     isLoading,
     error,
   } = useQuery<ProductListResponse>({
-    queryKey: ["/api/products", filters],
+    queryKey: [
+      "/api/products",
+      filters,
+      locationQuery?.lat,
+      locationQuery?.lng,
+      locationQuery?.radius,
+    ],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.searchTerm) params.append("searchTerm", filters.searchTerm);
@@ -122,6 +138,11 @@ export default function BrowseProducts() {
         params.append("locationCity", filters.locationCity);
       if (filters.locationState)
         params.append("locationState", filters.locationState);
+      if (locationQuery) {
+        params.append("lat", locationQuery.lat.toString());
+        params.append("lng", locationQuery.lng.toString());
+        params.append("radius", locationQuery.radius.toString());
+      }
       const attributeEntries = Object.entries(filters.attributes).filter(
         ([, value]) => value,
       );
@@ -250,11 +271,11 @@ export default function BrowseProducts() {
                 ))}
               </SelectContent>
             </Select>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full sm:w-auto">
-                  <Filter className="mr-2 h-4 w-4" /> More Filters
-                </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto">
+                <Filter className="mr-2 h-4 w-4" /> More Filters
+              </Button>
               </PopoverTrigger>
               <PopoverContent className="w-80 p-4 space-y-4">
                 <div className="space-y-2">
@@ -336,9 +357,27 @@ export default function BrowseProducts() {
                     )}
                   </div>
                 ))}
-              </PopoverContent>
-            </Popover>
-          </div>
+            </PopoverContent>
+          </Popover>
+          <LocationFilterPopover state={locationFilter} />
+        </div>
+
+        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
+          {locationFilter.location ? (
+            <>
+              Showing products from shops within{" "}
+              <span className="font-semibold">{locationFilter.radius} km</span>{" "}
+              of{" "}
+              <span className="font-mono">
+                {locationFilter.location.latitude.toFixed(3)},{" "}
+                {locationFilter.location.longitude.toFixed(3)}
+              </span>
+              .
+            </>
+          ) : (
+            <>Set a location filter to hide shops that are too far away.</>
+          )}
+        </div>
         </div>
 
         {isLoading ? (

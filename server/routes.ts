@@ -50,6 +50,7 @@ import {
   passwordResetTokens as passwordResetTokensTable,
   magicLinkTokens as magicLinkTokensTable,
   User,
+  UserRole,
   Booking,
   Order,
   type Service,
@@ -61,11 +62,19 @@ import {
   shopWorkers,
 } from "@shared/schema";
 import { platformFees } from "@shared/config";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { db } from "./db";
 import crypto from "crypto";
 import { performance } from "node:perf_hooks";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
+import {
+  normalizeCoordinate,
+  toNumericCoordinate,
+  haversineDistanceKm,
+  DEFAULT_NEARBY_RADIUS_KM,
+  MIN_NEARBY_RADIUS_KM,
+  MAX_NEARBY_RADIUS_KM,
+} from "./utils/geo";
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 import { bookingsRouter } from "./routes/bookings";
 import { ordersRouter } from "./routes/orders";
@@ -108,6 +117,27 @@ const PLATFORM_SERVICE_FEE = platformFees.productOrder;
 const SERVICE_DETAIL_CACHE_TTL_MS = 60_000;
 const PRODUCT_DETAIL_CACHE_TTL_MS = 60_000;
 const SHOP_DETAIL_CACHE_TTL_MS = 120_000;
+const NEARBY_SEARCH_LIMIT = 200;
+const NEARBY_USER_ROLES: UserRole[] = ["shop", "provider"];
+
+const locationUpdateSchema = z
+  .object({
+    latitude: z.coerce.number().min(-90).max(90),
+    longitude: z.coerce.number().min(-180).max(180),
+  })
+  .strict();
+
+const nearbySearchSchema = z
+  .object({
+    lat: z.coerce.number().min(-90).max(90),
+    lng: z.coerce.number().min(-180).max(180),
+    radius: z
+      .coerce.number()
+      .min(MIN_NEARBY_RADIUS_KM)
+      .max(MAX_NEARBY_RADIUS_KM)
+      .default(DEFAULT_NEARBY_RADIUS_KM),
+  })
+  .strict();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -868,6 +898,13 @@ const servicesQuerySchema = z
     locationState: z.string().trim().max(100).optional(),
     locationPostalCode: z.string().trim().max(20).optional(),
     availabilityDate: dateStringSchema.optional(),
+    lat: z.coerce.number().min(-90).max(90).optional(),
+    lng: z.coerce.number().min(-180).max(180).optional(),
+    radius: z
+      .coerce.number()
+      .min(MIN_NEARBY_RADIUS_KM)
+      .max(MAX_NEARBY_RADIUS_KM)
+      .optional(),
   })
   .strict()
   .refine(
@@ -878,6 +915,15 @@ const servicesQuerySchema = z
     {
       message: "minPrice cannot be greater than maxPrice",
       path: ["minPrice"],
+    },
+  )
+  .refine(
+    (data) =>
+      (data.lat === undefined && data.lng === undefined) ||
+      (data.lat !== undefined && data.lng !== undefined),
+    {
+      message: "lat and lng must be provided together",
+      path: ["lat"],
     },
   );
 
@@ -904,6 +950,13 @@ const productsQuerySchema = z
     attributes: z.string().trim().optional(),
     locationCity: z.string().trim().max(100).optional(),
     locationState: z.string().trim().max(100).optional(),
+    lat: z.coerce.number().min(-90).max(90).optional(),
+    lng: z.coerce.number().min(-180).max(180).optional(),
+    radius: z
+      .coerce.number()
+      .min(MIN_NEARBY_RADIUS_KM)
+      .max(MAX_NEARBY_RADIUS_KM)
+      .optional(),
     page: z.coerce.number().int().positive().optional(),
     pageSize: z.coerce.number().int().positive().max(100).optional(),
   })
@@ -916,6 +969,15 @@ const productsQuerySchema = z
     {
       message: "minPrice cannot be greater than maxPrice",
       path: ["minPrice"],
+    },
+  )
+  .refine(
+    (data) =>
+      (data.lat === undefined && data.lng === undefined) ||
+      (data.lat !== undefined && data.lng !== undefined),
+    {
+      message: "lat and lng must be provided together",
+      path: ["lat"],
     },
   );
 
@@ -989,6 +1051,35 @@ function ensureProfileVerified(
     return false;
   }
   return true;
+}
+
+type NearbyRole = (typeof NEARBY_USER_ROLES)[number];
+
+async function fallbackNearbySearch(
+  latitude: number,
+  longitude: number,
+  radiusKm: number,
+) {
+  const candidates = await storage.getAllUsers();
+  const results: Array<{ user: User; distance: number }> = [];
+
+  for (const user of candidates) {
+    if (!NEARBY_USER_ROLES.includes(user.role as NearbyRole)) {
+      continue;
+    }
+    const userLat = toNumericCoordinate(user.latitude);
+    const userLng = toNumericCoordinate(user.longitude);
+    if (userLat === null || userLng === null) {
+      continue;
+    }
+    const distance = haversineDistanceKm(latitude, longitude, userLat, userLng);
+    if (distance <= radiusKm) {
+      results.push({ user, distance });
+    }
+  }
+
+  results.sort((a, b) => a.distance - b.distance);
+  return results.slice(0, NEARBY_SEARCH_LIMIT).map((entry) => entry.user);
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -2035,6 +2126,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Shop Profile Management
+  app.post("/api/profile/location", requireAuth, async (req, res) => {
+    const parsed = locationUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(formatValidationError(parsed.error));
+    }
+
+    const userId = Number(req.user?.id);
+    if (!Number.isFinite(userId)) {
+      return res.status(400).json({ message: "Invalid user identifier" });
+    }
+
+    const normalizedLatitude = normalizeCoordinate(parsed.data.latitude);
+    const normalizedLongitude = normalizeCoordinate(parsed.data.longitude);
+    if (normalizedLatitude === null || normalizedLongitude === null) {
+      return res.status(400).json({ message: "Invalid coordinates" });
+    }
+
+    try {
+      const updatedUser = await storage.updateUser(userId, {
+        latitude: normalizedLatitude,
+        longitude: normalizedLongitude,
+      });
+      const safeUser = sanitizeUser(updatedUser);
+      if (!safeUser) {
+        return res.status(500).json({ message: "Unable to save location" });
+      }
+
+      if (req.user) {
+        req.user.latitude = normalizedLatitude as any;
+        req.user.longitude = normalizedLongitude as any;
+      }
+
+      res.json({
+        message: "Location updated!",
+        user: safeUser,
+      });
+    } catch (error) {
+      logger.error("Error updating profile location", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error ? error.message : "Failed to update location",
+        });
+    }
+  });
+
+  app.get("/api/search/nearby", requireAuth, async (req, res) => {
+    const parsed = nearbySearchSchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json(formatValidationError(parsed.error));
+    }
+
+    const { lat, lng, radius } = parsed.data;
+    const radiusInMeters = radius * 1000;
+    const distanceOrder = sql`
+      ST_Distance(
+        ST_MakePoint(${users.longitude}, ${users.latitude})::geography,
+        ST_MakePoint(${lng}, ${lat})::geography
+      )
+    `;
+
+    try {
+      const result = await db
+        .select()
+        .from(users)
+        .where(
+          and(
+            inArray(users.role, NEARBY_USER_ROLES),
+            sql`${users.latitude} IS NOT NULL`,
+            sql`${users.longitude} IS NOT NULL`,
+            sql`ST_DWithin(
+              ST_MakePoint(${users.longitude}, ${users.latitude})::geography,
+              ST_MakePoint(${lng}, ${lat})::geography,
+              ${radiusInMeters}
+            )`,
+          ),
+        )
+        .orderBy(distanceOrder)
+        .limit(NEARBY_SEARCH_LIMIT);
+
+      res.json(sanitizeUserList(result));
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "PostGIS nearby search failed; falling back to in-memory distance check",
+      );
+      try {
+        const fallbackResults = await fallbackNearbySearch(lat, lng, radius);
+        res.json(sanitizeUserList(fallbackResults));
+      } catch (fallbackError) {
+        logger.error("Fallback nearby search failed", fallbackError);
+        res
+          .status(500)
+          .json({
+            message:
+              fallbackError instanceof Error
+                ? fallbackError.message
+                : "Failed to perform nearby search",
+          });
+      }
+    }
+  });
+
   const profileUpdateSchema = insertUserSchema.partial().extend({
     upiId: z
       .string()
@@ -2462,6 +2657,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         locationState,
         locationPostalCode,
         availabilityDate,
+        lat,
+        lng,
+        radius,
       } = parsedQuery.data;
 
       const filters: Record<string, unknown> = {};
@@ -2475,6 +2673,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (locationPostalCode)
         filters.locationPostalCode = locationPostalCode;
       if (availabilityDate) filters.availabilityDate = availabilityDate;
+      if (lat !== undefined && lng !== undefined) {
+        filters.lat = lat;
+        filters.lng = lng;
+        filters.radiusKm = radius ?? DEFAULT_NEARBY_RADIUS_KM;
+      }
 
       const services = await storage.getServices(filters);
       logger.info("Filtered services:", services); // Debug log
@@ -2547,6 +2750,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 addressState: provider.addressState,
                 addressPostalCode: provider.addressPostalCode,
                 addressCountry: provider.addressCountry,
+                latitude: provider.latitude,
+                longitude: provider.longitude,
               }
             : null,
         };
@@ -5158,6 +5363,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         locationState,
         page = 1,
         pageSize = 24,
+        lat,
+        lng,
+        radius,
       } = parsedQuery.data;
 
       const normalizedPage = Math.max(1, Number(page));
@@ -5203,6 +5411,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (locationCity) filters.locationCity = locationCity;
       if (locationState) filters.locationState = locationState;
+      if (lat !== undefined && lng !== undefined) {
+        filters.lat = lat;
+        filters.lng = lng;
+        filters.radiusKm = radius ?? DEFAULT_NEARBY_RADIUS_KM;
+      }
 
       const { items, hasMore } = await storage.getProducts(filters);
       const list = items.map((product) => ({

@@ -43,6 +43,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"; // Added for delete confirmation
 import { Switch } from "@/components/ui/switch";
+import { ProfileLocationSection } from "@/components/location/profile-location-section";
 
 const daysOfWeek = [
   "Monday",
@@ -325,6 +326,12 @@ export default function ShopProfile() {
             )}
           </CardContent>
         </Card>
+
+        <ProfileLocationSection
+          user={user}
+          title="Store Location"
+          description="Drag the pin to your storefront or service area so that nearby customers can find you."
+        />
 
         <Card>
           <CardHeader>

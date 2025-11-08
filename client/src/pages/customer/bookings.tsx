@@ -25,6 +25,7 @@ import { PaymentMethodSelector } from "@/components/payment-method-selector";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Booking, Service, Review } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { copyTextToClipboard } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import {
@@ -132,6 +133,39 @@ export default function Bookings() {
     useState<PaymentMethodType>("upi");
   const [disputeReason, setDisputeReason] = useState("");
   const [statusFilter, setStatusFilter] = useState<BookingStatusFilter>("all");
+
+  const handleCopyUpiId = async (upiId?: string | null) => {
+    if (!upiId) {
+      toast({
+        title: "UPI ID unavailable",
+        description: "This provider has not shared a UPI ID yet.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await copyTextToClipboard(upiId);
+      if (result === "copied") {
+        toast({
+          title: "Copied",
+          description: "UPI ID copied to clipboard",
+        });
+        return;
+      }
+
+      toast({
+        title: "Copy manually",
+        description: "Please copy the UPI ID from the prompt shown.",
+      });
+    } catch {
+      toast({
+        title: "Unable to copy",
+        description: "Clipboard access is blocked. Please copy manually.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Fetch bookings
   const { data: bookings, isLoading } = useQuery<BookingsResponse>({
@@ -632,18 +666,11 @@ export default function Bookings() {
                                         <Button
                                           type="button"
                                           size="sm"
-                                          onClick={() => {
-                                            if (booking.provider?.upiId) {
-                                              navigator.clipboard.writeText(
-                                                booking.provider.upiId,
-                                              );
-                                              toast({
-                                                title: "Copied",
-                                                description:
-                                                  "UPI ID copied to clipboard",
-                                              });
-                                            }
-                                          }}
+                                          onClick={() =>
+                                            handleCopyUpiId(
+                                              booking.provider?.upiId,
+                                            )
+                                          }
                                         >
                                           Copy
                                         </Button>
@@ -995,18 +1022,11 @@ export default function Bookings() {
                                         <Button
                                           type="button"
                                           size="sm"
-                                          onClick={() => {
-                                            if (booking.provider?.upiId) {
-                                              navigator.clipboard.writeText(
-                                                booking.provider.upiId,
-                                              );
-                                              toast({
-                                                title: "Copied",
-                                                description:
-                                                  "UPI ID copied to clipboard",
-                                              });
-                                            }
-                                          }}
+                                          onClick={() =>
+                                            handleCopyUpiId(
+                                              booking.provider?.upiId,
+                                            )
+                                          }
                                         >
                                           Copy
                                         </Button>

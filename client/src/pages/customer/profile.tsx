@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"; // Added for delete confirmation
+import { ProfileLocationSection } from "@/components/location/profile-location-section";
 
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -269,6 +270,13 @@ export default function CustomerProfile() {
               </Form>
             </CardContent>
           </Card>
+
+          <ProfileLocationSection
+            user={user}
+            title="My Saved Location"
+            description="Use the map or your device GPS to remember where you usually shop from."
+            className="md:col-span-2"
+          />
 
           <Card className="md:col-span-2">
             <CardHeader>

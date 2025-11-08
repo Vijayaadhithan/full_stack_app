@@ -77,6 +77,10 @@ import {
   normalizePhone,
   normalizeUsername,
 } from "./utils/identity";
+import {
+  normalizeCoordinate,
+  DEFAULT_NEARBY_RADIUS_KM,
+} from "./utils/geo";
 // Import date utilities for IST handling
 
 interface BlockedTimeSlot {
@@ -158,6 +162,20 @@ function normalizeProductFilters(filters: Record<string, unknown>) {
   if (filters.locationState) {
     normalized.locationState = String(filters.locationState).trim();
   }
+  if (filters.lat !== undefined && filters.lng !== undefined) {
+    const lat = Number(filters.lat);
+    const lng = Number(filters.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      normalized.lat = lat;
+      normalized.lng = lng;
+      if (filters.radiusKm !== undefined) {
+        const radius = Number(filters.radiusKm);
+        if (Number.isFinite(radius)) {
+          normalized.radiusKm = radius;
+        }
+      }
+    }
+  }
   if (filters.page !== undefined) {
     const page = Number(filters.page);
     if (Number.isFinite(page)) {
@@ -190,6 +208,42 @@ function buildProductCacheKey(filters?: Record<string, unknown>): string {
   const serialized = stableStringify(normalized);
   const digest = createHash("sha256").update(serialized).digest("hex");
   return `${PRODUCT_CACHE_PREFIX}:${digest}`;
+}
+
+const EARTH_RADIUS_KM = 6371;
+
+function buildHaversineCondition({
+  columnLat,
+  columnLng,
+  lat,
+  lng,
+  radiusKm,
+}: {
+  columnLat: SQL | unknown;
+  columnLng: SQL | unknown;
+  lat: number;
+  lng: number;
+  radiusKm: number;
+}) {
+  const latRad = sql`radians(${lat})`;
+  const lngRad = sql`radians(${lng})`;
+  const rowLat = sql`radians(${columnLat}::float8)`;
+  const rowLng = sql`radians(${columnLng}::float8)`;
+  const distanceExpr = sql`
+    ${EARTH_RADIUS_KM} * 2 * asin(
+      sqrt(
+        power(sin((${rowLat} - ${latRad}) / 2), 2) +
+        cos(${latRad}) * cos(${rowLat}) *
+        power(sin((${rowLng} - ${lngRad}) / 2), 2)
+      )
+    )
+  `;
+  const condition = sql`(
+    ${columnLat} IS NOT NULL
+    AND ${columnLng} IS NOT NULL
+    AND ${distanceExpr} <= ${radiusKm}
+  )`;
+  return { condition, distanceExpr };
 }
 
 export class PostgresStorage implements IStorage {
@@ -628,6 +682,25 @@ export class PostgresStorage implements IStorage {
           conditions.push(eq(users.addressState, criteria.locationState));
         }
       }
+
+      if (criteria.lat !== undefined && criteria.lng !== undefined) {
+        if (!joinedUsers) {
+          query = query.leftJoin(users, eq(products.shopId, users.id));
+          joinedUsers = true;
+        }
+        const lat = Number(criteria.lat);
+        const lng = Number(criteria.lng);
+        const radiusKm = Number(criteria.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM);
+        const { condition, distanceExpr } = buildHaversineCondition({
+          columnLat: users.latitude,
+          columnLng: users.longitude,
+          lat,
+          lng,
+          radiusKm,
+        });
+        conditions.push(condition);
+        query = query.orderBy(distanceExpr);
+      }
     }
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as typeof query;
@@ -740,6 +813,8 @@ export class PostgresStorage implements IStorage {
       addressState: user.addressState,
       addressPostalCode: user.addressPostalCode,
       addressCountry: user.addressCountry,
+      latitude: normalizeCoordinate(user.latitude),
+      longitude: normalizeCoordinate(user.longitude),
       language: user.language,
       profilePicture: user.profilePicture,
       shopProfile: user.shopProfile ? (user.shopProfile as ShopProfile) : null,
@@ -786,6 +861,14 @@ export class PostgresStorage implements IStorage {
     if (updateData.phone !== undefined) {
       const normalized = normalizePhone(updateData.phone);
       normalizedUpdate.phone = normalized ?? "";
+    }
+
+    if (updateData.latitude !== undefined) {
+      normalizedUpdate.latitude = normalizeCoordinate(updateData.latitude);
+    }
+
+    if (updateData.longitude !== undefined) {
+      normalizedUpdate.longitude = normalizeCoordinate(updateData.longitude);
     }
 
     // Calculate profile completeness if relevant fields are updated
@@ -1191,6 +1274,8 @@ export class PostgresStorage implements IStorage {
   async getServices(filters?: any): Promise<Service[]> {
     // Build an array of conditions starting with the non-deleted check
     const conditions = [eq(services.isDeleted, false)];
+    let query: any = db.select().from(services);
+    let joinedProviders = false;
     const escapeLikePattern = (value: string) =>
       value.replace(/[%_]/g, (char) => `\\${char}`);
 
@@ -1255,16 +1340,34 @@ export class PostgresStorage implements IStorage {
       if (filters.availabilityDate) {
         conditions.push(eq(services.isAvailable, true));
       }
+      if (filters.lat !== undefined && filters.lng !== undefined) {
+        if (!joinedProviders) {
+          query = query.leftJoin(users, eq(services.providerId, users.id));
+          joinedProviders = true;
+        }
+        const lat = Number(filters.lat);
+        const lng = Number(filters.lng);
+        const radiusKm = Number(filters.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM);
+        const { condition, distanceExpr } = buildHaversineCondition({
+          columnLat: users.latitude,
+          columnLng: users.longitude,
+          lat,
+          lng,
+          radiusKm,
+        });
+        conditions.push(condition);
+        query = query.orderBy(distanceExpr);
+      }
     }
     // Exclude providers with many unresolved payments
     const exclusion = sql`SELECT s.provider_id FROM ${bookings} b JOIN ${services} s ON b.service_id = s.id WHERE b.status = 'awaiting_payment' GROUP BY s.provider_id HAVING COUNT(*) > 5`;
 
     conditions.push(sql`${services.providerId} NOT IN (${exclusion})`);
-    const query = db
-      .select()
-      .from(services)
-      .where(and(...conditions));
-    return await query;
+    query = query.where(and(...conditions));
+    const rows = await query;
+    return joinedProviders
+      ? (rows as Array<{ services: Service }>).map((row) => row.services)
+      : (rows as Service[]);
   }
 
   // ─── BOOKING OPERATIONS ──────────────────────────────────────────

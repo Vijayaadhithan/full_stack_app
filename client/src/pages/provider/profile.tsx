@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"; // Added for delete confirmation
+import { ProfileLocationSection } from "@/components/location/profile-location-section";
 
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -272,6 +273,12 @@ export default function ProviderProfile() {
             )}
           </CardContent>
         </Card>
+
+        <ProfileLocationSection
+          user={user}
+          title="Service Location"
+          description="Pin the place where you primarily deliver services so customers can find nearby providers."
+        />
 
         <Card>
           <CardHeader>

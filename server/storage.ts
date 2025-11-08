@@ -14,6 +14,12 @@ import {
   normalizeUsername,
 } from "./utils/identity";
 import {
+  normalizeCoordinate,
+  haversineDistanceKm,
+  toNumericCoordinate,
+  DEFAULT_NEARBY_RADIUS_KM,
+} from "./utils/geo";
+import {
   User,
   InsertUser,
   Service,
@@ -674,6 +680,25 @@ export class MemStorage implements IStorage {
       }
     }
 
+    if (filters.lat !== undefined && filters.lng !== undefined) {
+      const lat = Number(filters.lat);
+      const lng = Number(filters.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        const radiusKm = Number(filters.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM);
+        results = results.filter((product) => {
+          if (!product.shopId) return false;
+          const shop = this.users.get(product.shopId);
+          if (!shop) return false;
+          const shopLat = toNumericCoordinate(shop.latitude);
+          const shopLng = toNumericCoordinate(shop.longitude);
+          if (shopLat === null || shopLng === null) {
+            return false;
+          }
+          return haversineDistanceKm(lat, lng, shopLat, shopLng) <= radiusKm;
+        });
+      }
+    }
+
     const offset = (page - 1) * pageSize;
     const sliced = results.slice(offset, offset + pageSize + 1);
     const items: ProductListItem[] = sliced.slice(0, pageSize).map((product) => ({
@@ -795,6 +820,8 @@ export class MemStorage implements IStorage {
         insertUser.addressCountry === undefined
           ? null
           : insertUser.addressCountry,
+      latitude: normalizeCoordinate(insertUser.latitude),
+      longitude: normalizeCoordinate(insertUser.longitude),
       language: insertUser.language === undefined ? null : insertUser.language,
       profilePicture:
         insertUser.profilePicture === undefined
@@ -872,6 +899,14 @@ export class MemStorage implements IStorage {
     if (restOfData.phone !== undefined) {
       const normalized = normalizePhone(restOfData.phone);
       normalizedUpdate.phone = normalized ?? "";
+    }
+
+    if (restOfData.latitude !== undefined) {
+      normalizedUpdate.latitude = normalizeCoordinate(restOfData.latitude);
+    }
+
+    if (restOfData.longitude !== undefined) {
+      normalizedUpdate.longitude = normalizeCoordinate(restOfData.longitude);
     }
 
     const updatedUserData = { ...existing, ...normalizedUpdate };
@@ -984,7 +1019,7 @@ export class MemStorage implements IStorage {
     this.services.delete(id);
   }
 
-  async getServices(): Promise<Service[]> {
+  async getServices(filters?: any): Promise<Service[]> {
     const counts: Record<number, number> = {};
     for (const b of Array.from(this.bookings.values())) {
       if (b.status === "awaiting_payment" && b.serviceId) {
@@ -994,12 +1029,90 @@ export class MemStorage implements IStorage {
         }
       }
     }
-    const blocked = Object.entries(counts)
-      .filter(([_, c]) => c > 5)
-      .map(([id]) => Number(id));
-    return Array.from(this.services.values()).filter(
-      (s) => !blocked.includes(s.providerId!),
+    const blocked = new Set(
+      Object.entries(counts)
+        .filter(([, c]) => c > 5)
+        .map(([id]) => Number(id)),
     );
+
+    let results = Array.from(this.services.values()).filter(
+      (service) => !blocked.has(service.providerId ?? -1) && service.isDeleted !== true,
+    );
+
+    if (filters) {
+      if (filters.category) {
+        const normalized = String(filters.category).toLowerCase();
+        results = results.filter(
+          (service) => (service.category ?? "").toLowerCase() === normalized,
+        );
+      }
+      if (filters.minPrice !== undefined) {
+        const minPrice = Number(filters.minPrice);
+        if (Number.isFinite(minPrice)) {
+          results = results.filter((service) => Number(service.price) >= minPrice);
+        }
+      }
+      if (filters.maxPrice !== undefined) {
+        const maxPrice = Number(filters.maxPrice);
+        if (Number.isFinite(maxPrice)) {
+          results = results.filter((service) => Number(service.price) <= maxPrice);
+        }
+      }
+      if (filters.searchTerm) {
+        const normalized = String(filters.searchTerm).trim().toLowerCase();
+        if (normalized.length > 0) {
+          const tokens = normalized.split(/\s+/).filter(Boolean);
+          results = results.filter((service) => {
+            const searchable = `${service.name} ${service.description ?? ""}`.toLowerCase();
+            if (searchable.includes(normalized)) return true;
+            return tokens.every((token) => searchable.includes(token));
+          });
+        }
+      }
+      if (filters.providerId) {
+        results = results.filter(
+          (service) => service.providerId === Number(filters.providerId),
+        );
+      }
+      if (filters.locationCity) {
+        results = results.filter(
+          (service) => service.addressCity === filters.locationCity,
+        );
+      }
+      if (filters.locationState) {
+        results = results.filter(
+          (service) => service.addressState === filters.locationState,
+        );
+      }
+      if (filters.locationPostalCode) {
+        results = results.filter(
+          (service) => service.addressPostalCode === filters.locationPostalCode,
+        );
+      }
+      if (filters.availabilityDate) {
+        results = results.filter((service) => service.isAvailable === true);
+      }
+      if (filters.lat !== undefined && filters.lng !== undefined) {
+        const lat = Number(filters.lat);
+        const lng = Number(filters.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          const radiusKm = Number(filters.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM);
+          results = results.filter((service) => {
+            if (!service.providerId) return false;
+            const provider = this.users.get(service.providerId);
+            if (!provider) return false;
+            const providerLat = toNumericCoordinate(provider.latitude);
+            const providerLng = toNumericCoordinate(provider.longitude);
+            if (providerLat === null || providerLng === null) return false;
+            return (
+              haversineDistanceKm(lat, lng, providerLat, providerLng) <= radiusKm
+            );
+          });
+        }
+      }
+    }
+
+    return results;
   }
 
   // Booking operations

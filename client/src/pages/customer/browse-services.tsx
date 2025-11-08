@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Loader2, MapPin, Star, Clock, Search, Filter } from "lucide-react";
+import { Loader2, Star, Clock, Search, Filter } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Service } from "@shared/schema";
 import { serviceFilterConfig } from "@shared/config";
@@ -25,6 +25,11 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
+import {
+  useLocationFilter,
+  Coordinates as GeoCoordinates,
+} from "@/hooks/use-location-filter";
+import { LocationFilterPopover } from "@/components/location/location-filter-popover";
 
 const container = {
   hidden: { opacity: 0 },
@@ -39,8 +44,67 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
+const haversineDistance = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) => {
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const computeDistance = (
+  origin: GeoCoordinates | null,
+  destination?: { latitude?: string | number | null; longitude?: string | number | null } | null,
+) => {
+  if (!origin || !destination?.latitude || !destination?.longitude) {
+    return null;
+  }
+  const lat = Number(destination.latitude);
+  const lng = Number(destination.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return haversineDistance(origin.latitude, origin.longitude, lat, lng);
+};
+
+type ProviderSummary = {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  profilePicture: string | null;
+  addressStreet: string | null;
+  addressCity: string | null;
+  addressState: string | null;
+  addressPostalCode: string | null;
+  addressCountry: string | null;
+  latitude: string | null;
+  longitude: string | null;
+};
+
+type ServiceWithProvider = Service & {
+  rating: number | null;
+  provider: ProviderSummary | null;
+};
+
 export default function BrowseServices() {
   const { toast } = useToast();
+  const locationFilter = useLocationFilter({ storageKey: "services-radius" });
+  const locationQuery = locationFilter.location
+    ? {
+        lat: locationFilter.location.latitude,
+        lng: locationFilter.location.longitude,
+        radius: locationFilter.radius,
+      }
+    : null;
   const [filters, setFilters] = useState({
     searchTerm: "",
     category: "all",
@@ -58,8 +122,14 @@ export default function BrowseServices() {
     data: services,
     isLoading,
     error,
-  } = useQuery<Service[]>({
-    queryKey: ["/api/services", filters],
+  } = useQuery<ServiceWithProvider[]>({
+    queryKey: [
+      "/api/services",
+      filters,
+      locationQuery?.lat,
+      locationQuery?.lng,
+      locationQuery?.radius,
+    ],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.searchTerm) params.append("searchTerm", filters.searchTerm);
@@ -71,6 +141,11 @@ export default function BrowseServices() {
         params.append("locationCity", filters.locationCity);
       if (filters.locationState)
         params.append("locationState", filters.locationState);
+      if (locationQuery) {
+        params.append("lat", locationQuery.lat.toString());
+        params.append("lng", locationQuery.lng.toString());
+        params.append("radius", locationQuery.radius.toString());
+      }
 
       const queryString = params.toString();
       const response = await apiRequest(
@@ -137,11 +212,11 @@ export default function BrowseServices() {
                 ))}
               </SelectContent>
             </Select>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full sm:w-auto">
-                  <Filter className="mr-2 h-4 w-4" /> More Filters
-                </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto">
+                <Filter className="mr-2 h-4 w-4" /> More Filters
+              </Button>
               </PopoverTrigger>
               <PopoverContent className="w-80 p-4 space-y-4">
                 <div className="space-y-2">
@@ -186,9 +261,26 @@ export default function BrowseServices() {
                     }
                   />
                 </div>
-              </PopoverContent>
-            </Popover>
-          </div>
+            </PopoverContent>
+          </Popover>
+          <LocationFilterPopover state={locationFilter} />
+        </div>
+
+        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
+          {locationFilter.location ? (
+            <>
+              Showing providers within{" "}
+              <span className="font-semibold">{locationFilter.radius} km</span> of{" "}
+              <span className="font-mono">
+                {locationFilter.location.latitude.toFixed(3)},{" "}
+                {locationFilter.location.longitude.toFixed(3)}
+              </span>
+              .
+            </>
+          ) : (
+            <>Set your location filter to prioritize nearby service providers.</>
+          )}
+        </div>
         </div>
 
         {isLoading ? (
@@ -203,41 +295,45 @@ export default function BrowseServices() {
           </Card>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredServices.map((service) => (
-              <motion.div key={service.id} variants={item}>
-                <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex flex-col gap-4">
-                      <div>
-                        <h3 className="font-semibold">{service.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {service.description}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          <span>{service.duration} mins</span>
+            {filteredServices.map((service) => {
+              const distance = computeDistance(
+                locationFilter.location,
+                service.provider,
+              );
+              return (
+                <motion.div key={service.id} variants={item}>
+                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col gap-4">
+                        <div>
+                          <h3 className="font-semibold">{service.name}</h3>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {service.description}
+                          </p>
+                          {distance !== null ? (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {distance.toFixed(1)} km away
+                            </p>
+                          ) : null}
                         </div>
-                        <span className="font-semibold">₹{service.price}</span>
-                      </div>
 
-                      <Link href={`/customer/service-details/${service.id}`}>
-                        <Button
-                          className="w-full"
-                          onClick={() =>
-                            console.log("Navigating to service:", service.id)
-                          }
-                        >
-                          View Details
-                        </Button>
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            <span>{service.duration} mins</span>
+                          </div>
+                          <span className="font-semibold">₹{service.price}</span>
+                        </div>
+
+                        <Link href={`/customer/service-details/${service.id}`}>
+                          <Button className="w-full">View Details</Button>
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </motion.div>
