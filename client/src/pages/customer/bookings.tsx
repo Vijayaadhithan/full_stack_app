@@ -25,7 +25,6 @@ import { PaymentMethodSelector } from "@/components/payment-method-selector";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Booking, Service, Review } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { copyTextToClipboard } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import {
@@ -144,26 +143,94 @@ export default function Bookings() {
       return;
     }
 
-    try {
-      const result = await copyTextToClipboard(upiId);
-      if (result === "copied") {
-        toast({
-          title: "Copied",
-          description: "UPI ID copied to clipboard",
-        });
-        return;
-      }
-
+    const notifySuccess = () => toast({ title: "UPI ID copied to clipboard" });
+    const notifyManual = () =>
       toast({
         title: "Copy manually",
-        description: "Please copy the UPI ID from the prompt shown.",
+        description: "Clipboard access is blocked. Copy from the prompt shown.",
       });
-    } catch {
+    const notifyFailure = () =>
       toast({
-        title: "Unable to copy",
-        description: "Clipboard access is blocked. Please copy manually.",
+        title: "Unable to copy UPI ID",
+        description: "Please copy it manually.",
         variant: "destructive",
       });
+
+    const fallbackCopy = () => {
+      if (typeof document === "undefined" || !document.body) {
+        throw new Error("Clipboard unavailable");
+      }
+
+      const textarea = document.createElement("textarea");
+      textarea.value = upiId;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "0";
+      textarea.style.pointerEvents = "none";
+      textarea.setAttribute("readonly", "");
+      document.body.appendChild(textarea);
+
+      const selection = document.getSelection();
+      const previousRange =
+        selection && selection.rangeCount > 0
+          ? selection.getRangeAt(0).cloneRange()
+          : null;
+
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+
+      const successful = document.execCommand
+        ? document.execCommand("copy")
+        : false;
+
+      document.body.removeChild(textarea);
+
+      if (previousRange && selection) {
+        selection.removeAllRanges();
+        selection.addRange(previousRange);
+      }
+
+      if (!successful) {
+        throw new Error("Fallback copy failed");
+      }
+    };
+
+    const isWindowDefined = typeof window !== "undefined";
+    const isLocalhost =
+      isWindowDefined &&
+      ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+    const isSecureEnvironment = isWindowDefined
+      ? window.isSecureContext ?? isLocalhost
+      : false;
+
+    const canUseClipboardApi =
+      typeof navigator !== "undefined" &&
+      !!navigator.clipboard &&
+      typeof navigator.clipboard.writeText === "function" &&
+      (isWindowDefined ? isSecureEnvironment : true);
+
+    if (canUseClipboardApi) {
+      try {
+        await navigator.clipboard.writeText(upiId);
+        notifySuccess();
+        return;
+      } catch {
+        // fall through to fallback copy
+      }
+    }
+
+    try {
+      fallbackCopy();
+      notifySuccess();
+    } catch {
+      if (isWindowDefined && typeof window.prompt === "function") {
+        window.prompt("Copy the UPI ID below", upiId);
+        notifyManual();
+      } else {
+        notifyFailure();
+      }
     }
   };
 
