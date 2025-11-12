@@ -19,6 +19,8 @@ const userContactSchema = z.object({
   addressState: nullableString,
   addressPostalCode: nullableString,
   addressCountry: nullableString,
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
 });
 
 const workingDaySchema = z.object({
@@ -144,6 +146,8 @@ const orderPartySchema = z.object({
   phone: nullableString,
   email: nullableString,
   address: nullableString,
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
 });
 
 const shopPartySchema = orderPartySchema.extend({

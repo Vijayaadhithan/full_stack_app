@@ -1,5 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import MapLink from "@/components/location/MapLink";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -242,6 +243,11 @@ export default function OrderDetails() {
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
+  const shopCoordinatesAvailable =
+    order?.shop?.latitude != null && order?.shop?.longitude != null;
+  const customerCoordinatesAvailable =
+    order?.customer?.latitude != null && order?.customer?.longitude != null;
+
   return (
     <DashboardLayout>
       <motion.div
@@ -351,11 +357,27 @@ export default function OrderDetails() {
               </div>
               <div>
                 <p className="text-muted-foreground">Address</p>
-                <p className="font-medium">
-                  {order.deliveryMethod === "delivery"
-                    ? order.customer?.address || "Not provided"
-                    : order.shop?.address || "Not provided"}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium">
+                    {order.deliveryMethod === "delivery"
+                      ? order.customer?.address || "Not provided"
+                      : order.shop?.address || "Not provided"}
+                  </p>
+                  {order.deliveryMethod === "delivery" &&
+                  customerCoordinatesAvailable ? (
+                    <MapLink
+                      latitude={order.customer?.latitude}
+                      longitude={order.customer?.longitude}
+                    />
+                  ) : null}
+                  {order.deliveryMethod === "pickup" &&
+                  shopCoordinatesAvailable ? (
+                    <MapLink
+                      latitude={order.shop?.latitude}
+                      longitude={order.shop?.longitude}
+                    />
+                  ) : null}
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -9,6 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { User } from "@shared/schema";
 import { LocationPicker, Coordinates } from "./location-picker";
 import { cn } from "@/lib/utils";
+import MapLink from "@/components/location/MapLink";
 
 type ProfileLocationSectionProps = {
   user: Pick<User, "latitude" | "longitude" | "role"> | null;
@@ -182,6 +183,10 @@ export function ProfileLocationSection({
                   {location.longitude.toFixed(6)}
                 </span>
               </span>
+              <MapLink
+                latitude={location.latitude}
+                longitude={location.longitude}
+              />
               {initialLocation && !isDirty ? (
                 <span className="text-xs text-muted-foreground">
                   This matches your saved location.

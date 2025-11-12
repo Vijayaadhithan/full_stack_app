@@ -1,5 +1,6 @@
 import React from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import MapLink from "@/components/location/MapLink";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,11 +44,14 @@ import { z } from "zod";
 import { useState, useEffect } from "react";
 //const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 type OrderWithDetails = Order & {
-  customer: {
+  customer?: {
     name: string;
     phone: string;
     email: string;
-  };
+    latitude?: number | null;
+    longitude?: number | null;
+    address?: string | null;
+  } | null;
   items: {
     id: number;
     productId: number;
@@ -335,11 +339,17 @@ export default function ShopOrders() {
                                 : "Not specified"}
                           </p>
                           {order.deliveryMethod === "delivery" ? (
-                            <p className="text-sm text-muted-foreground whitespace-pre-line">
-                              {order.shippingAddress?.trim().length
-                                ? order.shippingAddress
-                                : "No shipping address provided"}
-                            </p>
+                            <div className="text-sm text-muted-foreground whitespace-pre-line flex flex-col gap-2">
+                              <span>
+                                {order.shippingAddress?.trim().length
+                                  ? order.shippingAddress
+                                  : "No shipping address provided"}
+                              </span>
+                              <MapLink
+                                latitude={order.customer?.latitude}
+                                longitude={order.customer?.longitude}
+                              />
+                            </div>
                           ) : (
                             <p className="text-sm text-muted-foreground">
                               Provide the order at your shop counter when the

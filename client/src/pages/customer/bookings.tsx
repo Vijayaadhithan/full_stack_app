@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import MapLink from "@/components/location/MapLink";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,8 @@ type BookingWithService = Booking & {
     addressState?: string;
     addressPostalCode?: string;
     addressCountry?: string;
+    latitude?: number | null;
+    longitude?: number | null;
   } | null;
 };
 type BookingsResponse =
@@ -670,7 +673,7 @@ export default function Bookings() {
                             <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
                             {formatIndianDisplay(booking.bookingDate, "time")}
                           </p>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                             <LocationIcon className="h-4 w-4" />
                             <span>
                               {booking.serviceLocation === "customer"
@@ -679,6 +682,12 @@ export default function Bookings() {
                                   ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
                                   : "Service at Provider's Location"}
                             </span>
+                            {booking.serviceLocation === "provider" ? (
+                              <MapLink
+                                latitude={booking.provider?.latitude}
+                                longitude={booking.provider?.longitude}
+                              />
+                            ) : null}
                           </div>
                           {booking.provider && (
                             <div className="mt-2 text-sm text-muted-foreground border-t pt-2">

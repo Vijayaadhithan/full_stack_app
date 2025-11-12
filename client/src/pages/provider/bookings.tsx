@@ -1,5 +1,6 @@
 import React from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import MapLink from "@/components/location/MapLink";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -449,6 +450,11 @@ export default function ProviderBookings() {
                                   ({t("customer_address_not_available")})
                                 </p>
                               )}
+                              <MapLink
+                                latitude={booking.customer?.latitude}
+                                longitude={booking.customer?.longitude}
+                                className="mt-1"
+                              />
                             </>
                           ) : (
                             <span>

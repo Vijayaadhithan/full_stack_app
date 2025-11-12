@@ -1,5 +1,6 @@
 import React from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import MapLink from "@/components/location/MapLink";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,11 +58,22 @@ const ORDER_STATUS_LABELS: Record<Order["status"], string> = {
   returned: "Returned",
 };
 
+type OrderWithShop = Order & {
+  shop?: {
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    address?: string | null;
+  };
+};
+
 export default function Orders() {
   const [statusFilter, setStatusFilter] = React.useState<OrderStatusFilter>(
     "all",
   );
-  const { data: orders, isLoading } = useQuery<Order[]>({
+  const { data: orders, isLoading } = useQuery<OrderWithShop[]>({
     queryKey: ["/api/orders/customer", statusFilter],
     queryFn: async () => {
       const query =
@@ -125,41 +137,69 @@ export default function Orders() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {orders.map((order) => (
-              <motion.div key={order.id} variants={itemVariants}>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex flex-col md:flex-row justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Package className="h-5 w-5 text-primary" />
-                          <h3 className="font-semibold">Order #{order.id}</h3>
+            {orders.map((order) => {
+              const hasShopCoordinates =
+                order.shop?.latitude != null &&
+                order.shop?.longitude != null;
+              return (
+                <motion.div key={order.id} variants={itemVariants}>
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex flex-col md:flex-row justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Package className="h-5 w-5 text-primary" />
+                            <h3 className="font-semibold">
+                              Order #{order.id}
+                            </h3>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Order ID: {order.id} <span className="mx-1">•</span>{" "}
+                            Placed{" "}
+                            {order.orderDate
+                              ? formatIndianDisplay(
+                                  order.orderDate,
+                                  "datetime",
+                                )
+                              : "recently"}
+                          </p>
                         </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Order ID: {order.id} <span className="mx-1">•</span>{" "}
-                          Placed{" "}
-                          {order.orderDate
-                            ? formatIndianDisplay(order.orderDate, "datetime")
-                            : "recently"}
-                        </p>
+                        <div className="flex flex-col items-end justify-between">
+                          <p className="font-semibold">₹{order.total}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {ORDER_STATUS_LABELS[order.status] || order.status}
+                          </p>
+                          <Link href={`/customer/order/${order.id}`}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="mt-2"
+                            >
+                              View Details{" "}
+                              <ExternalLink className="h-3 w-3 ml-1" />
+                            </Button>
+                          </Link>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end justify-between">
-                        <p className="font-semibold">₹{order.total}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {ORDER_STATUS_LABELS[order.status] || order.status}
-                        </p>
-                        <Link href={`/customer/order/${order.id}`}>
-                          <Button size="sm" variant="outline" className="mt-2">
-                            View Details{" "}
-                            <ExternalLink className="h-3 w-3 ml-1" />
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+                      {order.deliveryMethod === "pickup" &&
+                        (order.shop?.address || hasShopCoordinates) && (
+                          <div className="mt-4 text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+                            <span>
+                              {order.shop?.address
+                                ? `Pickup: ${order.shop.address}`
+                                : "Pickup location available"}
+                            </span>
+                            <MapLink
+                              latitude={order.shop?.latitude}
+                              longitude={order.shop?.longitude}
+                            />
+                          </div>
+                        )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </motion.div>

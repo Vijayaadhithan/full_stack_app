@@ -1,6 +1,7 @@
 import React from 'react';
 import { useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import MapLink from "@/components/location/MapLink";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
@@ -148,10 +149,16 @@ export default function ServiceProvider() {
                       reviews)
                     </span>
                   </div>
-                  <p className="text-muted-foreground mt-2 flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    {formatAddress(service.provider)}
-                  </p>
+                  <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="h-4 w-4" />
+                      {formatAddress(service.provider)}
+                    </span>
+                    <MapLink
+                      latitude={service.provider?.latitude}
+                      longitude={service.provider?.longitude}
+                    />
+                  </div>
                   <p className="text-muted-foreground flex items-center gap-2">
                     <Phone className="h-4 w-4" />
                     {service.provider?.phone || "Phone not available"}

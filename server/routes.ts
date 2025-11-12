@@ -72,6 +72,7 @@ import {
   DEFAULT_NEARBY_RADIUS_KM,
   MIN_NEARBY_RADIUS_KM,
   MAX_NEARBY_RADIUS_KM,
+  toNumericCoordinate,
 } from "./utils/geo";
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 import { bookingsRouter } from "./routes/bookings";
@@ -244,8 +245,8 @@ const formatUserAddress = (
         | "addressCountry"
       >
     | null,
-) => {
-  if (!user) return "";
+) : string | null => {
+  if (!user) return null;
   const parts = [
     user.addressStreet,
     user.addressCity,
@@ -253,6 +254,9 @@ const formatUserAddress = (
     user.addressPostalCode,
     user.addressCountry,
   ].filter((part): part is string => Boolean(part && part.trim()));
+  if (parts.length === 0) {
+    return null;
+  }
   return parts.join(", ");
 };
 
@@ -270,6 +274,17 @@ function pickAddressFields(
   return Object.values(address).some((value) => value && String(value).trim())
     ? address
     : null;
+}
+
+function extractUserCoordinates(
+  user: Pick<User, "latitude" | "longitude"> | null | undefined,
+): { latitude: number | null; longitude: number | null } {
+  const lat = toNumericCoordinate(user?.latitude ?? null);
+  const lng = toNumericCoordinate(user?.longitude ?? null);
+  return {
+    latitude: lat === null ? null : Number(lat.toFixed(6)),
+    longitude: lng === null ? null : Number(lng.toFixed(6)),
+  };
 }
 
 function buildUserResponse(
@@ -325,8 +340,24 @@ function buildUserResponse(
 
 type CustomerBookingHydrated = Booking & {
   service?: Service | null;
-  customer?: { id: number; name: string | null; phone: string | null } | null;
-  provider?: { id: number; name: string | null; phone: string | null } | null;
+  customer?:
+    | {
+        id: number;
+        name: string | null;
+        phone: string | null;
+        latitude: number | null;
+        longitude: number | null;
+      }
+    | null;
+  provider?:
+    | {
+        id: number;
+        name: string | null;
+        phone: string | null;
+        latitude: number | null;
+        longitude: number | null;
+      }
+    | null;
   relevantAddress?: Record<string, string | null> | null;
 };
 
@@ -400,6 +431,7 @@ async function hydrateCustomerBookings(
             id: customer.id,
             name: customer.name,
             phone: customer.phone,
+            ...extractUserCoordinates(customer),
           }
         : null,
       provider: provider
@@ -407,6 +439,7 @@ async function hydrateCustomerBookings(
             id: provider.id,
             name: provider.name,
             phone: provider.phone,
+            ...extractUserCoordinates(provider),
           }
         : null,
       relevantAddress,
@@ -425,6 +458,8 @@ type ProviderBookingHydrated = Booking & {
     addressState?: string | null;
     addressPostalCode?: string | null;
     addressCountry?: string | null;
+    latitude: number | null;
+    longitude: number | null;
   } | null;
   relevantAddress?: Record<string, string | null> | null;
 };
@@ -489,6 +524,7 @@ async function hydrateProviderBookings(
             addressState: customer.addressState,
             addressPostalCode: customer.addressPostalCode,
             addressCountry: customer.addressCountry,
+            ...extractUserCoordinates(customer),
           }
         : null,
       relevantAddress,
@@ -512,11 +548,21 @@ type HydratedOrderItem = {
 
 type HydratedOrder = Order & {
   items: HydratedOrderItem[];
-  shop?: { name: string | null; phone: string | null; email: string | null };
+  shop?: {
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  };
   customer?: {
     name: string | null;
     phone: string | null;
     email: string | null;
+    address: string | null;
+    latitude: number | null;
+    longitude: number | null;
   };
 };
 
@@ -601,10 +647,15 @@ async function hydrateOrders(
     if (options.includeShop && order.shopId != null) {
       const shop = userMap.get(order.shopId);
       if (shop) {
+        const { latitude, longitude } = extractUserCoordinates(shop);
+        const address = formatUserAddress(shop);
         result.shop = {
           name: shop.name,
           phone: shop.phone,
           email: shop.email,
+          address: address ?? null,
+          latitude,
+          longitude,
         };
       }
     }
@@ -612,10 +663,15 @@ async function hydrateOrders(
     if (options.includeCustomer && order.customerId != null) {
       const customer = userMap.get(order.customerId);
       if (customer) {
+        const { latitude, longitude } = extractUserCoordinates(customer);
+        const address = formatUserAddress(customer);
         result.customer = {
           name: customer.name,
           phone: customer.phone,
           email: customer.email,
+          address: address ?? null,
+          latitude,
+          longitude,
         };
       }
     }
@@ -2787,18 +2843,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           workingHours,
           breakTime: breakSlots,
           rating,
-          provider: {
-            id: provider.id,
-            name: provider.name ?? null,
-            email: provider.email ?? null,
-            phone: provider.phone ?? null,
-            profilePicture: provider.profilePicture ?? null,
-            addressStreet: provider.addressStreet ?? null,
-            addressCity: provider.addressCity ?? null,
-            addressState: provider.addressState ?? null,
-            addressPostalCode: provider.addressPostalCode ?? null,
-            addressCountry: provider.addressCountry ?? null,
-          },
+        provider: {
+          id: provider.id,
+          name: provider.name ?? null,
+          email: provider.email ?? null,
+          phone: provider.phone ?? null,
+          profilePicture: provider.profilePicture ?? null,
+          addressStreet: provider.addressStreet ?? null,
+          addressCity: provider.addressCity ?? null,
+          addressState: provider.addressState ?? null,
+          addressPostalCode: provider.addressPostalCode ?? null,
+          addressCountry: provider.addressCountry ?? null,
+          ...extractUserCoordinates(provider),
+        },
           reviews: (reviews ?? []).map((review) => ({
             id: review.id,
             customerId: review.customerId ?? null,
@@ -3567,6 +3624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   addressState: provider.addressState,
                   addressPostalCode: provider.addressPostalCode,
                   addressCountry: provider.addressCountry,
+                  ...extractUserCoordinates(provider),
                 }
               : null,
           };
@@ -4742,6 +4800,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               phone: customer.phone ?? null,
               email: customer.email ?? null,
               address: formatUserAddress(customer) ?? null,
+              ...extractUserCoordinates(customer),
             }
           : undefined,
         shop: shop
@@ -4750,6 +4809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               phone: shop.phone ?? null,
               email: shop.email ?? null,
               address: formatUserAddress(shop) ?? null,
+              ...extractUserCoordinates(shop),
               upiId: (shop as any).upiId ?? null,
               returnsEnabled:
                 (shop as any).returnsEnabled === undefined

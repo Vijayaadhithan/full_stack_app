@@ -1,5 +1,6 @@
 import React from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import MapLink from "@/components/location/MapLink";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -266,9 +267,15 @@ export default function ShopDetails() {
                 <h1 className="text-2xl font-bold">
                   {shop.shopProfile?.shopName ?? shop.name}
                 </h1>
-                <div className="flex items-center text-muted-foreground mt-1">
-                  <MapPin className="h-4 w-4 mr-1" />
-                  <span>{formatAddress(shop)}</span>
+                <div className="flex flex-wrap items-center gap-2 text-muted-foreground mt-1">
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="h-4 w-4" />
+                    {formatAddress(shop)}
+                  </span>
+                  <MapLink
+                    latitude={shop.latitude}
+                    longitude={shop.longitude}
+                  />
                 </div>
                 <p className="mt-4">
                   {shop.shopProfile?.description ?? "No description available"}
