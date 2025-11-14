@@ -1,8 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { AsyncLocalStorage } from "node:async_hooks";
 import pino from "pino";
 import type { Logger } from "pino";
+import type { LogCategory, LogContext } from "@shared/logging";
+import {
+  getRequestContextStore,
+  runWithRequestContext,
+  updateLogContext,
+} from "./requestContext";
 
 type PinoTransportTarget = {
   level: string;
@@ -13,34 +18,16 @@ type PinoTransportTarget = {
   };
 };
 
-export type LogCategory =
-  | "admin"
-  | "service_provider"
-  | "customer"
-  | "shop_owner"
-  | "other";
-
-type LogContext = {
-  category?: LogCategory;
-  userId?: string | number;
-  userRole?: string;
-  adminId?: string;
-};
-
-const logContextStorage = new AsyncLocalStorage<LogContext>();
-
 export function runWithLogContext<T>(callback: () => T, initialContext: LogContext = {}): T {
-  return logContextStorage.run(initialContext, callback);
+  return runWithRequestContext(callback, { log: initialContext });
 }
 
 export function setLogContext(context: Partial<LogContext>): void {
-  const store = logContextStorage.getStore();
-  if (!store) return;
-  Object.assign(store, context);
+  updateLogContext(context);
 }
 
 export function getLogContext(): LogContext | undefined {
-  return logContextStorage.getStore();
+  return getRequestContextStore()?.log;
 }
 
 const level = process.env.LOG_LEVEL || "info";
@@ -80,7 +67,7 @@ const logger = pino(
   {
     level,
     mixin() {
-      const context = logContextStorage.getStore();
+      const context = getRequestContextStore()?.log;
       return context ? { ...context } : {};
     },
   },

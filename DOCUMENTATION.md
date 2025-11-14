@@ -351,3 +351,13 @@ The command recreates the database state captured at the time of the dump.
 - An example configuration lives in `deploy/nginx-load-balancer.conf` and forwards traffic to multiple Express instances while propagating proxy metadata.
 - Place the file in `/etc/nginx/conf.d/` (or equivalent), update upstream server addresses, and reload Nginx: `sudo nginx -t && sudo systemctl reload nginx`.
 - When terminating TLS at Nginx, ensure `app.set("trust proxy", 1)` remains set so Express and the rate limiting middleware honour the correct client IP.
+
+### 10.5 Request Context & Correlation IDs
+- Every request now executes inside an `AsyncLocalStorage` context (`server/requestContext.ts`) that captures the method, path, user identity, and a generated `x-request-id`.
+- Pino log mixins automatically include the current request context so distributed traces can be stitched together without manually passing IDs around.
+- Use `runWithRequestContext`/`updateRequestContext` if you need to enrich the context inside background tasks, and read the current metadata via `getRequestMetadata`.
+
+### 10.6 PostgreSQL Read Replicas
+- `server/db.ts` accepts an optional `DATABASE_REPLICA_URL`. When present, all `db.select()` calls run against the replica while writes/trans­actions stay on the primary.
+- Set `DB_READ_POOL_SIZE` to tune the replica pool size independently from `DB_POOL_SIZE`. Use `DB_SLOW_THRESHOLD_MS` to control when slow queries are promoted to warnings.
+- Code that must observe primary writes immediately (bootstrap scripts, consistency-sensitive flows) can wrap logic with `runWithPrimaryReads(() => ...)` to temporarily pin reads to the primary connection.

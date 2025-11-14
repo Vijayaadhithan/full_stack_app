@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { MonitoringSnapshot } from "@shared/monitoring";
+import type { LogCategory } from "@shared/logging";
 
 const OVERVIEW_REFRESH_INTERVAL = 60000;
 const LOGS_REFRESH_INTERVAL = 60000;
@@ -95,7 +96,6 @@ type LogEntry = {
   metadata?: Record<string, unknown>;
 };
 
-type LogCategory = "admin" | "service_provider" | "customer" | "shop_owner" | "other";
 // UI restricts to non-admin categories
 type UiLogCategory = Exclude<LogCategory, "admin">;
 

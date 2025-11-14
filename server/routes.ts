@@ -10,7 +10,8 @@ import {
   createServer as createHttpsServer,
   type ServerOptions as HttpsServerOptions,
 } from "https";
-import logger, { LogCategory, runWithLogContext } from "./logger";
+import logger from "./logger";
+import type { LogCategory } from "@shared/logging";
 import {
   initializeAuth,
   registerAuthRoutes,
@@ -79,6 +80,7 @@ import { bookingsRouter } from "./routes/bookings";
 import { ordersRouter } from "./routes/orders";
 import { registerWorkerRoutes } from "./routes/workers";
 import { recordFrontendMetric } from "./monitoring/metrics";
+import { runWithRequestContext } from "./requestContext";
 import { performanceMetricEnvelopeSchema } from "./routes/admin";
 import {
   requireShopOrWorkerPermission,
@@ -1125,6 +1127,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(csrfProtection);
   registerAuthRoutes(app);
 
+  app.use((req, res, next) => {
+    const request = req as RequestWithAuth;
+    const category = resolveLogCategory(request);
+    const headerRequestId = req.headers["x-request-id"];
+    const providedId = Array.isArray(headerRequestId)
+      ? headerRequestId[0]
+      : headerRequestId;
+    const fallbackRequestId = crypto.randomUUID();
+    const requestId =
+      typeof providedId === "string" && providedId.trim().length > 0
+        ? providedId.trim()
+        : fallbackRequestId;
+    const userId = request.user?.id ?? request.session?.adminId ?? undefined;
+    const userRole = request.user?.role ?? undefined;
+    const adminId = request.session?.adminId ?? undefined;
+
+    const startedAt = process.hrtime.bigint();
+    if (!res.headersSent) {
+      res.setHeader("x-request-id", requestId);
+    }
+    const userAgentHeader = req.headers["user-agent"];
+
+    runWithRequestContext(
+      () => {
+        if (category !== "admin") {
+          res.on("finish", () => {
+            if ((res.locals as any)?.skipRequestLog) {
+              return;
+            }
+            const durationNs = process.hrtime.bigint() - startedAt;
+            const durationMs = Number(durationNs) / 1_000_000;
+            logger.info(
+              {
+                method: req.method,
+                path: req.originalUrl,
+                status: res.statusCode,
+                durationMs,
+              },
+              "Request completed",
+            );
+          });
+        }
+
+        next();
+      },
+      {
+        request: {
+          requestId,
+          method: req.method,
+          path: req.originalUrl,
+          ip: req.ip,
+          userAgent: Array.isArray(userAgentHeader) ? userAgentHeader[0] : userAgentHeader,
+          userId,
+          userRole,
+          adminId,
+        },
+        log: {
+          category,
+          userId,
+          userRole,
+          adminId,
+          requestId,
+        },
+      },
+    );
+  });
+
   app.get("/api/events", requireAuth, (req, res) => {
     const userId = Number(req.user?.id);
     if (!Number.isFinite(userId)) {
@@ -1149,40 +1218,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(200).json({ csrfToken: req.csrfToken() });
   });
 
-  app.use((req, res, next) => {
-    const request = req as RequestWithAuth;
-    const category = resolveLogCategory(request);
-    const initialContext = {
-      category,
-      userId: request.user?.id ?? request.session?.adminId ?? undefined,
-      userRole: request.user?.role ?? undefined,
-      adminId: request.session?.adminId ?? undefined,
-    };
-    const startedAt = process.hrtime.bigint();
-
-    runWithLogContext(() => {
-      if (category !== "admin") {
-        res.on("finish", () => {
-          if ((res.locals as any)?.skipRequestLog) {
-            return;
-          }
-          const durationNs = process.hrtime.bigint() - startedAt;
-          const durationMs = Number(durationNs) / 1_000_000;
-          logger.info(
-            {
-              method: req.method,
-              path: req.originalUrl,
-              status: res.statusCode,
-              durationMs,
-            },
-            "Request completed",
-          );
-        });
-      }
-
-      next();
-    }, initialContext);
-  });
 
   const numericParamSchemas: Record<string, z.ZodTypeAny> = {
     id: z.coerce.number().int().positive(),

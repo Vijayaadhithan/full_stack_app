@@ -161,6 +161,7 @@ npm run test    # run the Node test suite (uses in-memory storage by default)
 - **Slow requests**: debug entries include `prepMs`, `hydrateMs`, and `totalMs`. If `prepMs` spikes, investigate DB/index usage; if `hydrateMs` spikes, optimize batching in `hydrateOrders` / `hydrateCustomerBookings`.
 - **Performance metrics**: `/api/performance-metrics` accepts browser-reported timings; review logs for outliers.
 - **Live metrics**: when deployed with PM2, use `pm2 status`, `pm2 logs server`, or the built-in monitoring dashboard to watch request/minute, latency, and error rate. A persistent 5%+ error rate usually signals misconfigured OAuth or SMTP credentials.
+- **Traceability**: every response now carries an `x-request-id` header and logs include the same identifier so you can correlate client failures with backend traces.
 - **Common symptoms**
   - Long tail latencies (> 5 s) with low CPU → likely waiting on the database or external email/OAuth providers (enable `DEBUG_TIMING=true` if you add custom timers).
   - 400 errors on `/api/upload` → ensure the request uses `multipart/form-data` and is under the 5 MB image limit.
@@ -173,6 +174,9 @@ Add these to `.env` (prefix with `VITE_` for client-side usage when noted):
 | Variable | Description |
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string |
+| `DATABASE_REPLICA_URL` | Optional PostgreSQL read replica used for `SELECT` queries |
+| `DB_POOL_SIZE` / `DB_READ_POOL_SIZE` | Connection pool sizes for primary/read pools |
+| `DB_SLOW_THRESHOLD_MS` | Millisecond threshold before a query is logged as slow |
 | `SESSION_SECRET` | Session encryption secret for Express |
 | `PORT`, `HOST` | API bind port/host |
 | `FRONTEND_URL`, `APP_BASE_URL` | URLs used for redirects/session cookies |
@@ -181,6 +185,7 @@ Add these to `.env` (prefix with `VITE_` for client-side usage when noted):
 | `FRONTEND_URL` / `APP_BASE_URL` | Must be HTTPS in production for secure cookies |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` | Nodemailer SMTP configuration for transactional email |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Bootstrap admin account (required in production) |
+| `REDIS_URL`, `DISABLE_REDIS` | Enable the shared Redis cache or force in-memory caching |
 | `CAPACITOR_*` | Mobile bridge options; see [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md) |
 
 Refer to `config/network-config.json` if you prefer JSON-based overrides for local/LAN testing.

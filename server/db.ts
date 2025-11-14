@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../shared/schema";
@@ -6,41 +7,105 @@ import logger from "./logger";
 
 dotenv.config();
 
-// Check for required environment variables
 if (!process.env.DATABASE_URL) {
   logger.error("DATABASE_URL environment variable is required");
   process.exit(1);
 }
 
-// Create postgres connection
-const connectionString = process.env.DATABASE_URL;
-const poolSize = parseInt(process.env.DB_POOL_SIZE || "10", 10);
+type PoolRole = "primary" | "replica";
+
 const slowThreshold = Number(process.env.DB_SLOW_THRESHOLD_MS || 200);
-const client = postgres(connectionString, {
-  max: poolSize,
-  debug: (connection, query, parameters) => {
+const readPreference = new AsyncLocalStorage<boolean>();
+
+function createDebugLogger(role: PoolRole) {
+  const label = role === "replica" ? "DB:READ" : "DB";
+  return (_connection: unknown, query: string, parameters: unknown) => {
     const start = Date.now();
     return (error?: Error) => {
       const duration = Date.now() - start;
-      const msg = `${query} \u2013 ${duration}ms`;
+      const msg = `[${label}] ${query} \u2013 ${duration}ms`;
+      if (error) {
+        logger.error({ err: error }, msg);
+        return;
+      }
       if (duration > slowThreshold) {
-        logger.warn(`[DB SLOW] ${msg}`, parameters);
+        logger.warn(`[SLOW] ${msg}`, parameters);
       } else {
-        logger.info(`[DB] ${msg}`);
+        logger.info(msg);
       }
     };
+  };
+}
+
+function createClient(url: string, poolSize: number, role: PoolRole) {
+  return postgres(url, {
+    max: poolSize,
+    debug: createDebugLogger(role),
+  });
+}
+
+const primaryPoolSize = Number.parseInt(process.env.DB_POOL_SIZE || "10", 10);
+const parsedReadPool = Number.parseInt(process.env.DB_READ_POOL_SIZE ?? "", 10);
+const readPoolSize =
+  Number.isFinite(parsedReadPool) && parsedReadPool > 0 ? parsedReadPool : primaryPoolSize;
+
+const primaryUrl = process.env.DATABASE_URL!;
+const replicaUrl = process.env.DATABASE_REPLICA_URL?.trim();
+
+const primaryClient = createClient(primaryUrl, primaryPoolSize, "primary");
+const replicaClient =
+  replicaUrl && replicaUrl.length > 0 && replicaUrl !== primaryUrl
+    ? createClient(replicaUrl, readPoolSize, "replica")
+    : primaryClient;
+
+const primaryDb = drizzle(primaryClient, { schema });
+const replicaDb = replicaClient === primaryClient ? primaryDb : drizzle(replicaClient, { schema });
+if (replicaClient === primaryClient) {
+  logger.info("No DATABASE_REPLICA_URL configured; SELECT statements use the primary database.");
+} else {
+  logger.info("DATABASE_REPLICA_URL detected; routing SELECT statements to the read replica.");
+}
+
+const READ_METHODS = new Set<string>(["select"]);
+
+function shouldUsePrimaryReads() {
+  return readPreference.getStore() === true || replicaDb === primaryDb;
+}
+
+const dbProxy = new Proxy(primaryDb, {
+  get(target, prop, receiver) {
+    if (typeof prop === "string" && READ_METHODS.has(prop)) {
+      const source = shouldUsePrimaryReads() ? target : replicaDb;
+      const value = Reflect.get(source as object, prop, receiver);
+      if (typeof value === "function") {
+        return value.bind(source);
+      }
+      return value;
+    }
+    return Reflect.get(target as object, prop, receiver);
+  },
+  set(target, prop, value, receiver) {
+    if (typeof prop === "string" && READ_METHODS.has(prop) && replicaDb !== target) {
+      Reflect.set(replicaDb as object, prop, value);
+    }
+    return Reflect.set(target as object, prop, value, receiver);
   },
 });
 
-// Create drizzle database instance
-export const db = drizzle(client, { schema });
+export const db = dbProxy as typeof primaryDb;
 
-// Export a function to test the database connection
+export function runWithPrimaryReads<T>(callback: () => T): T {
+  return readPreference.run(true, callback);
+}
+
 export async function testConnection() {
   try {
-    // Try to query the database
-    await client`SELECT 1`;
-    logger.info("✅ Database connection successful");
+    await primaryClient`SELECT 1`;
+    logger.info("✅ Primary database connection successful");
+    if (replicaClient !== primaryClient) {
+      await replicaClient`SELECT 1`;
+      logger.info("✅ Replica database connection successful");
+    }
     return true;
   } catch (error) {
     logger.error("❌ Database connection failed:", error);

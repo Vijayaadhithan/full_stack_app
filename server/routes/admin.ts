@@ -25,7 +25,7 @@ import { lastRun as bookingJobLastRun } from "../jobs/bookingExpirationJob";
 import { lastRun as paymentJobLastRun } from "../jobs/paymentReminderJob";
 import { adminLoginRateLimiter } from "../security/rateLimiters";
 import logger, { LOG_FILE_PATH } from "../logger";
-import type { LogCategory } from "../logger";
+import type { LogCategory } from "@shared/logging";
 import {
   getMonitoringSnapshot,
   recordFrontendMetric,

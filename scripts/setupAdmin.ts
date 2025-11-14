@@ -1,4 +1,4 @@
-import { db } from "../server/db";
+import { db, runWithPrimaryReads } from "../server/db";
 import {
   adminPermissions,
   adminRoles,
@@ -19,43 +19,45 @@ async function main() {
     { action: "manage_settings", description: "Manage platform settings" },
   ];
 
-  for (const perm of basePermissions) {
-    await db.insert(adminPermissions).values(perm).onConflictDoNothing();
-  }
+  await runWithPrimaryReads(async () => {
+    for (const perm of basePermissions) {
+      await db.insert(adminPermissions).values(perm).onConflictDoNothing();
+    }
 
-  const [masterRole] = await db
-    .insert(adminRoles)
-    .values({ name: "master", description: "Master Admin" })
-    .onConflictDoNothing()
-    .returning();
+    const [masterRole] = await db
+      .insert(adminRoles)
+      .values({ name: "master", description: "Master Admin" })
+      .onConflictDoNothing()
+      .returning();
 
-  const permissions = await db.select().from(adminPermissions);
-  for (const perm of permissions) {
-    await db
-      .insert(adminRolePermissions)
-      .values({ roleId: masterRole.id, permissionId: perm.id })
-      .onConflictDoNothing();
-  }
+    const permissions = await db.select().from(adminPermissions);
+    for (const perm of permissions) {
+      await db
+        .insert(adminRolePermissions)
+        .values({ roleId: masterRole.id, permissionId: perm.id })
+        .onConflictDoNothing();
+    }
 
-  const email = process.env.MASTER_ADMIN_EMAIL || "admin@example.com";
-  const password = process.env.MASTER_ADMIN_PASSWORD || "changeme";
-  const hashedPassword = await hashPasswordInternal(password);
+    const email = process.env.MASTER_ADMIN_EMAIL || "admin@example.com";
+    const password = process.env.MASTER_ADMIN_PASSWORD || "changeme";
+    const hashedPassword = await hashPasswordInternal(password);
 
-  const existing = await db
-    .select()
-    .from(adminUsers)
-    .where(eq(adminUsers.email, email))
-    .limit(1);
-  if (existing.length === 0) {
-    await db.insert(adminUsers).values({
-      email,
-      hashedPassword,
-      roleId: masterRole.id,
-    });
-    console.log("Master admin created");
-  } else {
-    console.log("Admin already exists");
-  }
+    const existing = await db
+      .select()
+      .from(adminUsers)
+      .where(eq(adminUsers.email, email))
+      .limit(1);
+    if (existing.length === 0) {
+      await db.insert(adminUsers).values({
+        email,
+        hashedPassword,
+        roleId: masterRole.id,
+      });
+      console.log("Master admin created");
+    } else {
+      console.log("Admin already exists");
+    }
+  });
 
   process.exit(0);
 }
