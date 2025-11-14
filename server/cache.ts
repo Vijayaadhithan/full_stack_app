@@ -13,6 +13,22 @@ let redisInitPromise: Promise<void> | null = null;
 let redisNextRetry = 0;
 let loggedMissingUrl = false;
 let loggedDisabled = false;
+let redisModuleLoader: (() => Promise<any>) | null = null;
+export function __resetCacheForTesting() {
+  redisClient = null;
+  redisReady = false;
+  redisInitPromise = null;
+  redisNextRetry = 0;
+  loggedMissingUrl = false;
+  loggedDisabled = false;
+  redisModuleLoader = null;
+  memoryCache.clear();
+}
+export function __setRedisModuleLoaderForTesting(
+  loader: (() => Promise<any>) | null,
+) {
+  redisModuleLoader = loader;
+}
 
 async function initRedis() {
   if (redisClient || redisInitPromise) {
@@ -59,7 +75,9 @@ async function initRedis() {
 
   redisInitPromise = (async () => {
     try {
-      const redisModule = await import("redis");
+      const redisModule = await (redisModuleLoader
+        ? redisModuleLoader()
+        : import("redis"));
       const createClient = (redisModule as any).createClient;
       if (typeof createClient !== "function") {
         throw new Error("redis module does not export createClient");
