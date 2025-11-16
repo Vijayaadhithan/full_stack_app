@@ -4,6 +4,32 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import { PushNotifications, Token } from "@capacitor/push-notifications";
 import { Capacitor } from "@capacitor/core";
 
+const isTestEnvironment =
+  typeof process !== "undefined" && process.env?.NODE_ENV === "test";
+
+const safeConsole = {
+  log: (...args: Parameters<typeof console.log>) => {
+    if (!isTestEnvironment) {
+      console.log(...args);
+    }
+  },
+  info: (...args: Parameters<typeof console.info>) => {
+    if (!isTestEnvironment) {
+      console.info(...args);
+    }
+  },
+  warn: (...args: Parameters<typeof console.warn>) => {
+    if (!isTestEnvironment) {
+      console.warn(...args);
+    }
+  },
+  error: (...args: Parameters<typeof console.error>) => {
+    if (!isTestEnvironment) {
+      console.error(...args);
+    }
+  },
+};
+
 const permissionDeps = {
   Geolocation,
   Filesystem,
@@ -26,7 +52,7 @@ export const checkLocationPermission = async (): Promise<string> => {
     const status = await permissionDeps.Geolocation.checkPermissions();
     return status.location;
   } catch (e) {
-    console.error("Error checking location permission:", e);
+    safeConsole.error("Error checking location permission:", e);
     return "denied"; // Default to denied on error
   }
 };
@@ -36,7 +62,7 @@ export const requestLocationPermission = async (): Promise<string> => {
     const status = await permissionDeps.Geolocation.requestPermissions();
     return status.location;
   } catch (e) {
-    console.error("Error requesting location permission:", e);
+    safeConsole.error("Error requesting location permission:", e);
     return "denied";
   }
 };
@@ -46,14 +72,14 @@ export const getCurrentPosition = async () => {
     const permission = await requestLocationPermission();
     if (permission === "granted") {
       const coordinates = await permissionDeps.Geolocation.getCurrentPosition();
-      console.log("Current position:", coordinates);
+      safeConsole.log("Current position:", coordinates);
       return coordinates;
     } else {
-      console.warn("Location permission not granted.");
+      safeConsole.warn("Location permission not granted.");
       return null;
     }
   } catch (e) {
-    console.error("Error getting current position:", e);
+    safeConsole.error("Error getting current position:", e);
     return null;
   }
 };
@@ -81,7 +107,7 @@ export const checkStoragePermission = async (): Promise<boolean> => {
       // This is an expected error if the file doesn't exist, implies we can try to access storage
       return true;
     }
-    console.warn("Storage access might be restricted:", e);
+    safeConsole.warn("Storage access might be restricted:", e);
     return false; // Other errors might indicate a permission issue
   }
 };
@@ -95,16 +121,16 @@ export const writeFileToStorage = async (fileName: string, data: string) => {
       directory: permissionDeps.Directory.Data, // Choose appropriate directory
       encoding: permissionDeps.Encoding.UTF8,
     });
-    console.log("File written successfully:", fileName);
+    safeConsole.log("File written successfully:", fileName);
     const contents = await permissionDeps.Filesystem.readFile({
       path: fileName,
       directory: permissionDeps.Directory.Data,
       encoding: permissionDeps.Encoding.UTF8,
     });
-    console.log("File content:", contents.data);
+    safeConsole.log("File content:", contents.data);
     return true;
   } catch (e) {
-    console.error("Error writing file:", e);
+    safeConsole.error("Error writing file:", e);
     return false;
   }
 };
@@ -115,7 +141,7 @@ export const checkNotificationPermission = async (): Promise<string> => {
     const status = await permissionDeps.LocalNotifications.checkPermissions();
     return status.display;
   } catch (e) {
-    console.error("Error checking notification permission:", e);
+    safeConsole.error("Error checking notification permission:", e);
     return "denied";
   }
 };
@@ -125,7 +151,7 @@ export const requestNotificationPermission = async (): Promise<string> => {
     const status = await permissionDeps.LocalNotifications.requestPermissions();
     return status.display;
   } catch (e) {
-    console.error("Error requesting notification permission:", e);
+    safeConsole.error("Error requesting notification permission:", e);
     return "denied";
   }
 };
@@ -148,12 +174,12 @@ export const scheduleLocalNotification = async () => {
           },
         ],
       });
-      console.log("Local notification scheduled");
+      safeConsole.log("Local notification scheduled");
     } else {
-      console.warn("Notification permission not granted.");
+      safeConsole.warn("Notification permission not granted.");
     }
   } catch (e) {
-    console.error("Error scheduling local notification:", e);
+    safeConsole.error("Error scheduling local notification:", e);
   }
 };
 
@@ -163,7 +189,7 @@ export const scheduleLocalNotification = async () => {
 
 export const registerPushNotifications = async () => {
   if (!permissionDeps.Capacitor.isNativePlatform()) {
-    console.log("Push notifications not supported on web.");
+    safeConsole.log("Push notifications not supported on web.");
     return false;
   }
   let permStatus = await permissionDeps.PushNotifications.checkPermissions();
@@ -173,7 +199,7 @@ export const registerPushNotifications = async () => {
   }
 
   if (permStatus.receive !== "granted") {
-    console.warn("Push notification permission not granted.");
+    safeConsole.warn("Push notification permission not granted.");
     return false;
   }
 
@@ -188,20 +214,20 @@ export const addPushNotificationListeners = () => {
   }
   // On success, we should be able to receive notifications
   permissionDeps.PushNotifications.addListener("registration", (token: Token) => {
-    console.info("Push registration success, token: " + token.value);
+    safeConsole.info("Push registration success, token: " + token.value);
     // Send token to your server here to store it for sending pushes
   });
 
   // Some issue with registration, perhaps definitional
   permissionDeps.PushNotifications.addListener("registrationError", (error: any) => {
-    console.error("Error on push registration: " + JSON.stringify(error));
+    safeConsole.error("Error on push registration: " + JSON.stringify(error));
   });
 
   // Show us the notification payload if the app is open on our device
   permissionDeps.PushNotifications.addListener(
     "pushNotificationReceived",
     (notification: any) => {
-      console.log("Push received: " + JSON.stringify(notification));
+      safeConsole.log("Push received: " + JSON.stringify(notification));
       // You might want to display a local notification here if the app is in the foreground
       // or update UI based on the payload
     },
@@ -211,7 +237,7 @@ export const addPushNotificationListeners = () => {
   permissionDeps.PushNotifications.addListener(
     "pushNotificationActionPerformed",
     (notification: any) => {
-      console.log("Push action performed: " + JSON.stringify(notification));
+      safeConsole.log("Push action performed: " + JSON.stringify(notification));
       // Navigate to a specific screen or perform an action based on the notification
     },
   );
@@ -220,7 +246,7 @@ export const addPushNotificationListeners = () => {
 // Call this early in your app's lifecycle, e.g., in App.tsx
 export const initializePushNotifications = async () => {
   if (!permissionDeps.Capacitor.isNativePlatform()) {
-    console.log("Skipping push notification initialization on web.");
+    safeConsole.log("Skipping push notification initialization on web.");
     return;
   }
   const registered = await registerPushNotifications();

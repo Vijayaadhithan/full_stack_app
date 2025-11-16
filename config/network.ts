@@ -46,6 +46,12 @@ function substituteEnvPlaceholders<T>(input: T): T {
   return input;
 }
 
+function stripJsonComments(input: string): string {
+  return input
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+}
+
 export function getNetworkConfig(): NetworkConfig | null {
   if (cachedConfig !== undefined) {
     return cachedConfig;
@@ -57,15 +63,33 @@ export function getNetworkConfig(): NetworkConfig | null {
     return cachedConfig;
   }
 
-  try {
-    const raw = fs.readFileSync(configPath, "utf-8");
-    const parsed = JSON.parse(raw) as NetworkConfig;
+  const raw = fs.readFileSync(configPath, "utf-8");
+
+  const tryParse = (input: string) => {
+    const parsed = JSON.parse(input) as NetworkConfig;
     cachedConfig = substituteEnvPlaceholders(parsed);
-  } catch (error) {
-    console.error(
-      `[network-config] Failed to parse ${configPath}:`,
-      error instanceof Error ? error.message : error,
-    );
+  };
+
+  try {
+    tryParse(raw);
+  } catch (firstError) {
+    try {
+      tryParse(stripJsonComments(raw));
+    } catch (secondError) {
+      const message =
+        secondError instanceof Error
+          ? secondError.message
+          : firstError instanceof Error
+            ? firstError.message
+            : String(secondError ?? firstError);
+      console.error(
+        `[network-config] Failed to parse ${configPath}:`,
+        message,
+      );
+      cachedConfig = null;
+    }
+  }
+  if (cachedConfig === undefined) {
     cachedConfig = null;
   }
   return cachedConfig;

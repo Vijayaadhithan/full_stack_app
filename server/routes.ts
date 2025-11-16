@@ -4205,8 +4205,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const { role } = parsedBody.data;
       try {
+        const effectiveRole = role ?? req.user?.role;
+        if (!effectiveRole) {
+          return res.status(400).json({ message: "User role is required" });
+        }
         // Pass both user ID and role to properly filter notifications
-        await storage.markAllNotificationsAsRead(req.user!.id, role);
+        await storage.markAllNotificationsAsRead(req.user!.id, effectiveRole);
         res.status(200).json({ success: true });
       } catch (error) {
         logger.error("Error marking notifications as read:", error);

@@ -99,6 +99,12 @@ export function runWithPrimaryReads<T>(callback: () => T): T {
 }
 
 export async function testConnection() {
+  if (process.env.NODE_ENV === "test" || process.env.USE_IN_MEMORY_DB === "true") {
+    logger.debug(
+      "Skipping database connectivity check in test mode or when using in-memory storage.",
+    );
+    return true;
+  }
   try {
     await primaryClient`SELECT 1`;
     logger.info("✅ Primary database connection successful");

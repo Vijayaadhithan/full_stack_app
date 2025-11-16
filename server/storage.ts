@@ -1,5 +1,6 @@
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import { createRequire } from "node:module";
 import logger from "./logger";
 import {
   notifyBookingChange,
@@ -146,6 +147,7 @@ export interface IStorage {
   getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]>; // Added
   getBookingHistoryForProvider(providerId: number): Promise<Booking[]>; // Added
   getBookingHistoryForCustomer(customerId: number): Promise<Booking[]>; // Added
+  getBookingRequestsWithStatusForCustomer(customerId: number): Promise<Booking[]>;
   processExpiredBookings(): Promise<void>; // Added
 
   // Product operations
@@ -226,6 +228,7 @@ export interface IStorage {
   createNotification(notification: InsertNotification): Promise<Notification>;
   getNotificationsByUser(userId: number): Promise<Notification[]>;
   markNotificationAsRead(id: number): Promise<void>;
+  markAllNotificationsAsRead(userId: number, role: UserRole): Promise<void>;
   deleteNotification(id: number): Promise<void>;
 
   // Promotion operations
@@ -2632,8 +2635,7 @@ export class MemStorage implements IStorage {
   }
 }
 
-// Import the PostgreSQL storage implementation
-import { PostgresStorage } from "./pg-storage";
+const require = createRequire(import.meta.url);
 
 const isTestEnv = process.env.NODE_ENV === "test";
 const requestedInMemory = process.env.USE_IN_MEMORY_DB === "true";
@@ -2650,7 +2652,16 @@ if (!isTestEnv && runningUnderPm2 && requestedInMemory) {
   );
 }
 
-export const storage = shouldUseInMemory ? new MemStorage() : new PostgresStorage();
+let storageInstance: IStorage;
+
+if (shouldUseInMemory) {
+  storageInstance = new MemStorage();
+} else {
+  const { PostgresStorage } = require("./pg-storage") as typeof import("./pg-storage");
+  storageInstance = new PostgresStorage();
+}
+
+export const storage = storageInstance;
 
 if (shouldUseInMemory) {
   const message =

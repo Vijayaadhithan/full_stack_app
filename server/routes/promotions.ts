@@ -130,6 +130,9 @@ const promotionRedeemSchema = z
 const PROMOTION_QUERY_KEYS = ["/api/promotions/shop", "/api/promotions/active"] as const;
 
 async function notifyPromotionSubscribers(shopId: number | null | undefined) {
+  if (process.env.NODE_ENV === "test") {
+    return;
+  }
   if (shopId == null) return;
   try {
     const workers = await db
