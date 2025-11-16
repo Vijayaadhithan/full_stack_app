@@ -47,7 +47,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
 import { z } from "zod";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 
 // Define the Promotion type based on the server schema
@@ -103,12 +103,15 @@ export default function ShopPromotions() {
   const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(
     null,
   );
+  const baseQueryKey = canManage ? "/api/promotions/shop" : "/api/promotions/active";
+  const promotionsQueryKey = useMemo(
+    () => [baseQueryKey, listShopId] as const,
+    [baseQueryKey, listShopId],
+  );
 
   // Fetch promotions for the current shop
   const { data: promotions, isLoading } = useQuery<Promotion[]>({
-    queryKey: canManage
-      ? ["/api/promotions/shop", listShopId]
-      : ["/api/promotions/active", listShopId],
+    queryKey: promotionsQueryKey,
     enabled: !!listShopId,
     queryFn: async () => {
       if (!listShopId) return [] as Promotion[];
@@ -173,7 +176,7 @@ export default function ShopPromotions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/promotions/shop/${user?.id}`],
+        queryKey: promotionsQueryKey,
       });
       toast({
         title: "Success",
@@ -200,7 +203,8 @@ export default function ShopPromotions() {
       id: number;
       data: PromotionFormData;
     }) => {
-      const res = await apiRequest("PATCH", `/api/promotions/${id}`, data);
+      const { shopId: _shopId, ...payload } = data;
+      const res = await apiRequest("PATCH", `/api/promotions/${id}`, payload);
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to update promotion");
@@ -209,7 +213,7 @@ export default function ShopPromotions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/promotions/shop/${user?.id}`],
+        queryKey: promotionsQueryKey,
       });
       toast({
         title: "Success",
@@ -241,7 +245,7 @@ export default function ShopPromotions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/promotions/shop/${user?.id}`],
+        queryKey: promotionsQueryKey,
       });
       toast({
         title: "Success",
@@ -269,7 +273,7 @@ export default function ShopPromotions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/promotions/shop/${user?.id}`],
+        queryKey: promotionsQueryKey,
       });
       toast({
         title: "Success",

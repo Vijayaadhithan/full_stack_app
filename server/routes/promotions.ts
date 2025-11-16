@@ -2,7 +2,7 @@ import { Express, type Request } from "express";
 import { z } from "zod";
 import { eq, and, gte, lte, isNull, or } from "drizzle-orm"; // Added 'or'
 import { db } from "../db";
-import { promotions, products } from "@shared/schema";
+import { promotions, products, shopWorkers } from "@shared/schema";
 import logger from "../logger";
 import {
   requireShopOrWorkerPermission,
@@ -11,6 +11,7 @@ import {
   type RequestWithContext,
 } from "../workerAuth";
 import { formatValidationError } from "../utils/zod";
+import { broadcastInvalidation } from "../realtime";
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -125,6 +126,25 @@ const promotionRedeemSchema = z
     orderId: z.coerce.number().int().positive(),
   })
   .strict();
+
+const PROMOTION_QUERY_KEYS = ["/api/promotions/shop", "/api/promotions/active"] as const;
+
+async function notifyPromotionSubscribers(shopId: number | null | undefined) {
+  if (shopId == null) return;
+  try {
+    const workers = await db
+      .select({ workerUserId: shopWorkers.workerUserId })
+      .from(shopWorkers)
+      .where(and(eq(shopWorkers.shopId, shopId), eq(shopWorkers.active, true)));
+    const recipients = [shopId, ...workers.map((worker) => worker.workerUserId)];
+    broadcastInvalidation(recipients, [...PROMOTION_QUERY_KEYS]);
+  } catch (error) {
+    logger.warn(
+      { err: error, shopId },
+      "Failed to broadcast promotion change",
+    );
+  }
+}
 
 async function resolveAuthorizedShopId(
   req: Request,
@@ -247,6 +267,7 @@ export function registerPromotionRoutes(app: Express) {
           .values(dbValues)
           .returning();
 
+        void notifyPromotionSubscribers(shopContextId);
         res.status(201).json(promotion[0]);
       } catch (error) {
         logger.error("Error creating promotion:", error);
@@ -466,6 +487,7 @@ export function registerPromotionRoutes(app: Express) {
             .json({ message: "Failed to update promotion" });
         }
 
+        void notifyPromotionSubscribers(shopContextId);
         res.json(updatedPromotion);
       } catch (error) {
         logger.error("Error updating promotion:", error);
@@ -563,6 +585,7 @@ export function registerPromotionRoutes(app: Express) {
             .json({ message: "Failed to update promotion status" });
         }
 
+        void notifyPromotionSubscribers(shopContextId);
         res.json(updatedPromotion);
       } catch (error) {
         logger.error("Error updating promotion status:", error);
@@ -631,6 +654,7 @@ export function registerPromotionRoutes(app: Express) {
           });
         }
 
+        void notifyPromotionSubscribers(shopContextId);
         res.status(200).json({ message: "Promotion deleted successfully" });
       } catch (error) {
         logger.error("Error deleting promotion:", error);
