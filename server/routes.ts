@@ -84,6 +84,7 @@ import { runWithRequestContext } from "./requestContext";
 import { performanceMetricEnvelopeSchema } from "./routes/admin";
 import {
   requireShopOrWorkerPermission,
+  requireShopOrWorkerContext,
   resolveShopContextId,
   coerceNumericId,
   type RequestWithContext,
@@ -4597,7 +4598,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(
     "/api/shops/dashboard-stats",
     requireAuth,
-    requireShopOrWorkerPermission(["analytics:view"]),
+    requireShopOrWorkerContext(),
     async (req, res) => {
       try {
         const shopContextId = req.shopContextId;

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import { ShopLayout } from "@/components/layout/shop-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { useAuth } from "@/hooks/use-auth";
 import { useLanguage } from "@/contexts/language-context";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,10 +33,10 @@ import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
 import { Product } from "@shared/schema";
 import { productFilterConfig } from "@shared/config";
 import { z } from "zod";
-import { useState } from "react";
 import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { getVerificationError, parseApiError } from "@/lib/api-error";
+import { useShopContext } from "@/hooks/use-shop-context";
 
 const ProductFormDialogLazy = lazy(() => import("./components/ProductFormDialog"));
 
@@ -72,7 +71,13 @@ const productFormSchema = z.object({
 type ProductFormData = z.infer<typeof productFormSchema>;
 
 export default function ShopProducts() {
-  const { user } = useAuth();
+  const {
+    user,
+    shopId: shopContextId,
+    isWorker,
+    permissionsLoading: workerPermissionsLoading,
+    hasPermission,
+  } = useShopContext();
   const { t } = useLanguage();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -104,9 +109,26 @@ export default function ShopProducts() {
     return match?.label ?? value;
   };
 
-  const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: [`/api/products/shop/${user?.id}`],
-    enabled: !!user?.id,
+  const waitingOnPermissions = isWorker && workerPermissionsLoading;
+  const canReadProducts = hasPermission("products:read");
+  const canWriteProducts = hasPermission("products:write");
+
+  const resolvedProductsQueryKey =
+    shopContextId !== null
+      ? [`/api/products/shop/${shopContextId}`]
+      : null;
+  const invalidateProductsQuery = () => {
+    if (resolvedProductsQueryKey) {
+      queryClient.invalidateQueries({ queryKey: resolvedProductsQueryKey });
+    }
+  };
+
+  const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
+    queryKey: resolvedProductsQueryKey ?? [`/api/products/shop/pending`],
+    enabled:
+      Boolean(resolvedProductsQueryKey) &&
+      canReadProducts &&
+      !waitingOnPermissions,
   });
 
   const form = useForm<ProductFormData>({
@@ -120,7 +142,7 @@ export default function ShopProducts() {
       category: "",
       isAvailable: true,
       images: [],
-      shopId: user?.id || 0,
+      shopId: shopContextId ?? 0,
       // New fields
       sku: "",
       barcode: "",
@@ -133,6 +155,12 @@ export default function ShopProducts() {
       lowStockThreshold: undefined,
     },
   });
+
+  useEffect(() => {
+    if (shopContextId) {
+      form.setValue("shopId", shopContextId);
+    }
+  }, [form, shopContextId]);
 
   // State for advanced options visibility
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -152,7 +180,7 @@ export default function ShopProducts() {
       category: normalizeCategoryValue(product.category),
       images: product.images || [],
       isAvailable: product.isAvailable ?? true, // Default to true if null
-      shopId: user?.id || 0,
+      shopId: shopContextId ?? product.shopId ?? 0,
       // New fields
       sku: product.sku || "",
       barcode: product.barcode || "",
@@ -211,10 +239,13 @@ export default function ShopProducts() {
 
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
+      if (!shopContextId) {
+        throw new Error("Unable to determine shop context for this action");
+      }
       // Format the data for API submission
       const formattedData = {
         ...data,
-        shopId: user?.id,
+        shopId: shopContextId,
         price: String(data.price),
         mrp: String(data.mrp),
         // Ensure dimensions are properly formatted
@@ -236,9 +267,7 @@ export default function ShopProducts() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [`/api/products/shop/${user?.id}`],
-      });
+      invalidateProductsQuery();
       toast({
         title: t("success"),
         description: t("product_created_successfully"),
@@ -325,9 +354,7 @@ export default function ShopProducts() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [`/api/products/shop/${user?.id}`],
-      });
+      invalidateProductsQuery();
       toast({
         title: t("success"),
         description: t("product_updated_successfully"),
@@ -368,9 +395,7 @@ export default function ShopProducts() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [`/api/products/shop/${user?.id}`],
-      });
+      invalidateProductsQuery();
       toast({
         title: t("success"),
         description: t("product_deleted_successfully"),
@@ -391,6 +416,14 @@ export default function ShopProducts() {
   };
 
   const onSubmit = (data: ProductFormData) => {
+    if (!shopContextId || !canWriteProducts) {
+      toast({
+        title: t("error"),
+        description: "You do not have permission to manage products for this shop.",
+        variant: "destructive",
+      });
+      return;
+    }
     const payload = {
       ...data,
       category: normalizeCategoryValue(data.category),
@@ -414,7 +447,7 @@ export default function ShopProducts() {
       category: "",
       isAvailable: true,
       images: [],
-      shopId: user?.id || 0,
+      shopId: shopContextId ?? 0,
       // New fields
       sku: "",
       barcode: "",
@@ -429,177 +462,215 @@ export default function ShopProducts() {
     setShowAdvancedOptions(false);
   };
 
+  const renderLoadingIndicator = (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <Loader2 className="h-8 w-8 animate-spin" />
+    </div>
+  );
+
+  const renderStatusCard = (message: string) => (
+    <Card>
+      <CardContent className="p-6 text-center">
+        <p className="text-muted-foreground">{message}</p>
+      </CardContent>
+    </Card>
+  );
+
+  const renderProductsList = () => {
+    if (!products?.length) return null;
+    return (
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {products.map((product) => (
+          <Card key={product.id}>
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-semibold">{product.name}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {product.description}
+                  </p>
+                </div>
+                {canWriteProducts && (
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setEditingProduct(product);
+                        resetFormWithProduct(product);
+                        setDialogOpen(true);
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            {t("delete_product_confirmation")}
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {t("delete_product_warning")}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleDeleteProduct(product.id)}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            {t("delete")}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span>{t("price")}</span>
+                  <div>
+                    <span className="font-semibold">₹{product.price}</span>
+                    {product.mrp > product.price && (
+                      <span className="ml-2 line-through text-muted-foreground">
+                        ₹{product.mrp}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span>{t("stock")}</span>
+                  <span
+                    className={`font-semibold ${
+                      product.stock <= (product.lowStockThreshold || 5)
+                        ? "text-red-500"
+                        : ""
+                    }`}
+                  >
+                    {product.stock} {t("units")}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span>{t("category")}</span>
+                  <span className="font-semibold">
+                    {getCategoryLabel(product.category)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-medium">
+                    {t("availability")}
+                  </span>
+                </div>
+                <Switch
+                  checked={product.isAvailable ?? false}
+                  disabled={!canWriteProducts}
+                  onCheckedChange={(checked) => {
+                    if (!canWriteProducts) return;
+                    updateProductMutation.mutate({
+                      id: product.id,
+                      data: { isAvailable: checked },
+                    });
+                  }}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  };
+
+  const productsSection = (() => {
+    if (waitingOnPermissions) {
+      return renderLoadingIndicator;
+    }
+    if (!shopContextId) {
+      return renderStatusCard(
+        isWorker
+          ? "Your worker account is not linked to a shop yet."
+          : t("no_products_created_yet"),
+      );
+    }
+    if (!canReadProducts) {
+      return renderStatusCard(
+        "You do not have permission to view products for this shop.",
+      );
+    }
+    if (productsLoading) {
+      return renderLoadingIndicator;
+    }
+    if (!products?.length) {
+      return renderStatusCard(t("no_products_created_yet"));
+    }
+    return renderProductsList();
+  })();
+
   return (
     <ShopLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">{t("my_products")}</h1>
-          <Dialog
-            open={dialogOpen}
-            onOpenChange={(open) => {
-              setDialogOpen(open);
-              if (!open) {
-                setEditingProduct(null);
-                resetForm();
-              }
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                {t("add_product")}
-              </Button>
-            </DialogTrigger>
-            <Suspense
-              fallback={
-                <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
-                  <div className="flex items-center justify-center py-16">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  </div>
-                </DialogContent>
-              }
+          {canWriteProducts && shopContextId && (
+            <Dialog
+              open={dialogOpen}
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) {
+                  setEditingProduct(null);
+                  resetForm();
+                }
+              }}
             >
-              <ProductFormDialogLazy
-                t={t}
-                editingProduct={editingProduct}
-                form={form}
-                showAdvancedOptions={showAdvancedOptions}
-                setShowAdvancedOptions={setShowAdvancedOptions}
-                handleImageUpload={handleImageUpload}
-                handleRemoveImage={handleRemoveImage}
-                imageUploadError={imageUploadError}
-                specKey={specKey}
-                specValue={specValue}
-                setSpecKey={setSpecKey}
-                setSpecValue={setSpecValue}
-                tagInput={tagInput}
-                setTagInput={setTagInput}
-                onSubmit={onSubmit}
-                createPending={createProductMutation.isPending}
-                updatePending={updateProductMutation.isPending}
-              />
-            </Suspense>
-          </Dialog>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t("add_product")}
+                </Button>
+              </DialogTrigger>
+              <Suspense
+                fallback={
+                  <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
+                    <div className="flex items-center justify-center py-16">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    </div>
+                  </DialogContent>
+                }
+              >
+                <ProductFormDialogLazy
+                  t={t}
+                  editingProduct={editingProduct}
+                  form={form}
+                  showAdvancedOptions={showAdvancedOptions}
+                  setShowAdvancedOptions={setShowAdvancedOptions}
+                  handleImageUpload={handleImageUpload}
+                  handleRemoveImage={handleRemoveImage}
+                  imageUploadError={imageUploadError}
+                  specKey={specKey}
+                  specValue={specValue}
+                  setSpecKey={setSpecKey}
+                  setSpecValue={setSpecValue}
+                  tagInput={tagInput}
+                  setTagInput={setTagInput}
+                  onSubmit={onSubmit}
+                  createPending={createProductMutation.isPending}
+                  updatePending={updateProductMutation.isPending}
+                />
+              </Suspense>
+            </Dialog>
+          )}
         </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-        ) : !products?.length ? (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">
-                {t("no_products_created_yet")}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {products.map((product) => (
-              <Card key={product.id}>
-                <CardContent className="p-6">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold">{product.name}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {product.description}
-                      </p>
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingProduct(product);
-                          resetFormWithProduct(product);
-                          setDialogOpen(true);
-                        }}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              {t("delete_product_confirmation")}
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {t("delete_product_warning")}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeleteProduct(product.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              {t("delete")}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    <div className="flex justify-between items-center text-sm">
-                      <span>{t("price")}</span>
-                      <div>
-                        <span className="font-semibold">₹{product.price}</span>
-                        {product.mrp > product.price && (
-                          <span className="ml-2 line-through text-muted-foreground">
-                            ₹{product.mrp}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span>{t("stock")}</span>
-                      <span
-                        className={`font-semibold ${
-                          product.stock <= (product.lowStockThreshold || 5)
-                            ? "text-red-500"
-                            : ""
-                        }`}
-                      >
-                        {product.stock} {t("units")}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span>{t("category")}</span>
-                      <span className="font-semibold">
-                        {getCategoryLabel(product.category)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <span className="text-sm font-medium">
-                        {t("availability")}
-                      </span>
-                    </div>
-                    <Switch
-                      checked={product.isAvailable ?? false} // Handle null case
-                      onCheckedChange={(checked) =>
-                        updateProductMutation.mutate({
-                          id: product.id,
-                          data: { isAvailable: checked },
-                        })
-                      }
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        {productsSection}
       </div>
     </ShopLayout>
   );

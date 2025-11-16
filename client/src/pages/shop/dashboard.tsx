@@ -2,9 +2,8 @@ import React from 'react';
 import { ShopLayout } from "@/components/layout/shop-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
-import { Product, Order, ProductReview } from "@shared/schema";
+import { Order, ProductReview } from "@shared/schema";
 
 interface DashboardStats {
   pendingOrders: number;
@@ -25,30 +24,78 @@ import {
 } from "lucide-react";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 import { apiRequest } from "@/lib/queryClient";
-import { useWorkerPermissions } from "@/hooks/use-worker-permissions";
+import { useShopContext } from "@/hooks/use-shop-context";
 
 export default function ShopDashboard() {
-  const { user } = useAuth();
-  const { has: can, isWorker, responsibilities } = useWorkerPermissions();
+  const {
+    user,
+    shopId: shopContextId,
+    isWorker,
+    permissionsLoading,
+    hasPermission,
+    workerResponsibilities,
+  } = useShopContext();
+
+  const waitingOnPermissions = isWorker && permissionsLoading;
+  const canAddProduct = hasPermission("products:write");
+  const canViewOrders = hasPermission("orders:read");
+  const canProcessOrders = hasPermission("orders:update");
+  const canManagePromotions = hasPermission("promotions:manage");
+  const canViewAnalytics = hasPermission("analytics:view");
+  const allowedOrdersAccess = !isWorker || canViewOrders;
 
   const { data: stats, isLoading: isLoadingStats } = useQuery<DashboardStats>({
-    queryKey: ["shopDashboardStats"],
-    queryFn: () =>
-      apiRequest("GET", "/api/shops/dashboard-stats").then((r: Response) =>
-        r.json(),
-      ),
-    enabled: !!user?.id,
+    queryKey: ["/api/shops/dashboard-stats", shopContextId],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/shops/dashboard-stats");
+      return res.json();
+    },
+    enabled: Boolean(shopContextId) && !waitingOnPermissions,
   });
 
   const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
-    queryKey: ["/api/orders/shop/recent"],
-    enabled: !!user?.id,
+    queryKey: ["/api/orders/shop/recent", shopContextId],
+    enabled: Boolean(shopContextId) && allowedOrdersAccess && !waitingOnPermissions,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/orders/shop/recent");
+      return res.json();
+    },
   });
 
-  const { data: reviews } = useQuery<ProductReview[]>({
-    queryKey: [`/api/reviews/shop/${user?.id}`],
-    enabled: !!user?.id,
+  const { data: reviews, isLoading: reviewsLoading } = useQuery<ProductReview[]>({
+    queryKey: ["/api/reviews/shop", shopContextId],
+    enabled: Boolean(shopContextId) && !waitingOnPermissions,
+    queryFn: async () => {
+      if (!shopContextId) return [];
+      const res = await apiRequest("GET", `/api/reviews/shop/${shopContextId}`);
+      return res.json();
+    },
   });
+
+  if (waitingOnPermissions) {
+    return (
+      <ShopLayout>
+        <div className="flex min-h-[400px] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      </ShopLayout>
+    );
+  }
+
+  if (!shopContextId) {
+    return (
+      <ShopLayout>
+        <div className="space-y-6">
+          <h1 className="text-2xl font-bold">Shop Dashboard</h1>
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground">
+              Your worker account is not linked to a shop yet. Please contact the shop owner for access.
+            </CardContent>
+          </Card>
+        </div>
+      </ShopLayout>
+    );
+  }
 
   return (
     <ShopLayout>
@@ -62,7 +109,7 @@ export default function ShopDashboard() {
               Here's what's happening with your shop today.
             </p>
           </div>
-          {(user?.role === 'shop' || can('products:write')) && (
+          {canAddProduct && (
             <Link href="/shop/products">
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -182,9 +229,9 @@ export default function ShopDashboard() {
                 <CardTitle>My Permissions</CardTitle>
               </CardHeader>
               <CardContent>
-                {responsibilities && responsibilities.length > 0 ? (
+                {workerResponsibilities && workerResponsibilities.length > 0 ? (
                   <ul className="list-disc pl-5 space-y-1 text-sm">
-                    {responsibilities.map((p) => (
+                    {workerResponsibilities.map((p) => (
                       <li key={p}>{p}</li>
                     ))}
                   </ul>
@@ -199,19 +246,19 @@ export default function ShopDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {(can('orders:read') || can('orders:update')) && (
+                  {(canViewOrders || canProcessOrders) && (
                     <Link href="/shop/orders"><Button size="sm">View Orders</Button></Link>
                   )}
-                  {can('orders:update') && (
+                  {canProcessOrders && (
                     <Link href="/shop/orders"><Button size="sm" variant="secondary">Process Payments</Button></Link>
                   )}
-                  {can('products:write') && (
+                  {canAddProduct && (
                     <Link href="/shop/products"><Button size="sm">Add Product</Button></Link>
                   )}
-                  {can('promotions:manage') && (
+                  {canManagePromotions && (
                     <Link href="/shop/promotions"><Button size="sm">Create Promotion</Button></Link>
                   )}
-                  {can('analytics:view') && (
+                  {canViewAnalytics && (
                     <Link href="/shop"><Button size="sm" variant="outline">View Analytics</Button></Link>
                   )}
                 </div>
@@ -230,6 +277,10 @@ export default function ShopDashboard() {
                 <div className="flex items-center justify-center py-6">
                   <Loader2 className="h-8 w-8 animate-spin" />
                 </div>
+              ) : isWorker && !allowedOrdersAccess ? (
+                <p className="text-center text-muted-foreground py-6">
+                  You do not have permission to view shop orders.
+                </p>
               ) : !orders?.length ? (
                 <p className="text-center text-muted-foreground py-6">
                   No orders yet
@@ -273,7 +324,11 @@ export default function ShopDashboard() {
               <CardTitle>Recent Reviews</CardTitle>
             </CardHeader>
             <CardContent>
-              {!reviews?.length ? (
+              {reviewsLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : !reviews?.length ? (
                 <p className="text-center text-muted-foreground py-6">
                   No reviews yet
                 </p>

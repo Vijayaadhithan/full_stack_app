@@ -65,6 +65,10 @@ export function requireShopOrWorkerPermission(
   };
 }
 
+export function requireShopOrWorkerContext() {
+  return requireShopOrWorkerPermission([] as WorkerResponsibility[]);
+}
+
 export async function getWorkerShopId(workerUserId: number): Promise<number | null> {
   const result = await db
     .select({ shopId: shopWorkers.shopId })
