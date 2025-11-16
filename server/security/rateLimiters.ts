@@ -1,4 +1,4 @@
-import rateLimit, { type Options } from "express-rate-limit";
+import rateLimit, { type Options, type RateLimitRequestHandler } from "express-rate-limit";
 
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -9,78 +9,87 @@ const defaultSensitiveConfig: Partial<Options> = {
   legacyHeaders: false,
 };
 
-export const loginLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+const disableRateLimiters =
+  String(process.env.DISABLE_RATE_LIMITERS || "").toLowerCase() === "true";
+
+function noopLimiter(): RateLimitRequestHandler {
+  const handler = ((_, __, next) => next()) as RateLimitRequestHandler;
+  handler.resetKey = () => {};
+  handler.getKey = async () => undefined;
+  return handler;
+}
+
+function buildLimiter(options: Partial<Options>): RateLimitRequestHandler {
+  if (disableRateLimiters) {
+    return noopLimiter();
+  }
+  const config = {
+    ...defaultSensitiveConfig,
+    ...options,
+  } as Options;
+  return rateLimit(config);
+}
+
+export const loginLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 10,
   message: { message: "Too many login attempts. Try again later." },
 });
 
-export const registerLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const registerLimiter = buildLimiter({
   windowMs: ONE_HOUR_MS,
   max: 10,
   message: { message: "Too many signups from this IP. Try later." },
 });
 
-export const verifyEmailLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const verifyEmailLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 30,
 });
 
-export const googleAuthLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const googleAuthLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 20,
 });
 
-export const deleteAccountLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const deleteAccountLimiter = buildLimiter({
   windowMs: ONE_HOUR_MS,
   max: 5,
 });
 
-export const requestPasswordResetLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const requestPasswordResetLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 5,
   message: { message: "Too many password reset requests. Try later." },
 });
 
-export const resetPasswordLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const resetPasswordLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 10,
 });
 
-export const adminLoginRateLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const adminLoginRateLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 10,
 });
 
-export const emailLookupLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const emailLookupLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 30,
 });
 
-export const magicLinkRequestLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const magicLinkRequestLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 5,
   message: { message: "Too many magic link requests. Try later." },
 });
 
-export const magicLinkLoginLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const magicLinkLoginLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 20,
 });
 
-export const usernameLookupLimiter = rateLimit({
-  ...defaultSensitiveConfig,
+export const usernameLookupLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 30,
 });

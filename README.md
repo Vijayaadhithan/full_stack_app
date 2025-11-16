@@ -155,6 +155,38 @@ npm run test    # run the Node test suite (uses in-memory storage by default)
 
 `npm run test` now logs per-route timings (see below) which helps correlate failing tests or slow suites with specific API calls.
 
+### Load testing with k6
+
+We keep a scripted load test (`load-test.js`) that spins up a verified shop, provider, and customer before hammering the high-traffic endpoints (login, catalog, service detail, customer orders, order placement). To run it locally:
+
+1. Install [k6](https://k6.io/docs/) (e.g. `brew install k6` on macOS).
+2. Start the API with the in-memory storage and relaxed guards so the script can seed data quickly:
+
+   ```bash
+   SESSION_SECRET='LoadTest#Secret!2025{Example}' \
+   USE_IN_MEMORY_DB=true \
+   DISABLE_REDIS=true \
+   DISABLE_RATE_LIMITERS=true \
+   npm run start
+   ```
+
+   - `DISABLE_RATE_LIMITERS=true` temporarily disables `express-rate-limit` so the scripted login/registration traffic is not throttled.
+   - Leave this flag **unset** in normal development or production.
+
+3. In another terminal, run the test:
+
+   ```bash
+   k6 run load-test.js
+   ```
+
+   You can override defaults with environment variables:
+
+   - `BASE_URL` (default `http://localhost:5000`)
+   - `TEST_CATEGORY` or `PLATFORM_FEE` to align with your seed data
+   - `ENABLE_REG_SPIKE=true` to include the optional anonymous registration burst (keep the rate limiters disabled when doing so).
+
+The script enforces the success criteria documented in the prompt (`http_req_failed < 1%`, GET p95 < 500 ms). Review the console report or the `logs/app.log` entries for any failures, then re-enable rate limiting once the test is complete.
+
 ## Observability & Troubleshooting
 
 - **Structured logs** go to `logs/app.log` (via Pino). Look for entries such as `Fetched customer orders` or `Fetched shop orders` to inspect query vs hydration time.
@@ -186,6 +218,7 @@ Add these to `.env` (prefix with `VITE_` for client-side usage when noted):
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` | Nodemailer SMTP configuration for transactional email |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Bootstrap admin account (required in production) |
 | `REDIS_URL`, `DISABLE_REDIS` | Enable the shared Redis cache or force in-memory caching |
+| `DISABLE_RATE_LIMITERS` | Set to `true` only during load tests to bypass login/signup rate limits |
 | `CAPACITOR_*` | Mobile bridge options; see [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md) |
 
 Refer to `config/network-config.json` if you prefer JSON-based overrides for local/LAN testing.
