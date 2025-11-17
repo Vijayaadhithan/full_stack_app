@@ -322,15 +322,28 @@ function buildUserResponse(
     totalReviews: sanitized.totalReviews ?? 0,
   };
 
-  if (sanitized.role === "shop" && sanitized.shopProfile) {
-    minimal.shopProfile = {
-      shopName: sanitized.shopProfile.shopName,
-      description: sanitized.shopProfile.description,
-      businessType: sanitized.shopProfile.businessType,
-    };
+  if (sanitized.role === "shop") {
+    if (sanitized.shopProfile) {
+      minimal.shopProfile = {
+        shopName: sanitized.shopProfile.shopName,
+        description: sanitized.shopProfile.description,
+        businessType: sanitized.shopProfile.businessType,
+      };
+    }
+
     minimal.pickupAvailable = sanitized.pickupAvailable ?? null;
     minimal.deliveryAvailable = sanitized.deliveryAvailable ?? null;
     minimal.returnsEnabled = sanitized.returnsEnabled ?? null;
+
+    minimal.addressStreet = sanitized.addressStreet ?? null;
+    minimal.addressCity = sanitized.addressCity ?? null;
+    minimal.addressState = sanitized.addressState ?? null;
+    minimal.addressPostalCode = sanitized.addressPostalCode ?? null;
+    minimal.addressCountry = sanitized.addressCountry ?? null;
+
+    const { latitude, longitude } = extractUserCoordinates(sanitized);
+    minimal.latitude = latitude;
+    minimal.longitude = longitude;
   }
 
   if (sanitized.role === "provider") {
