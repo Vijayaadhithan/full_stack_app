@@ -30,6 +30,12 @@ export default function AdminPlatformUserManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-users"] }),
   });
 
+  const removeMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/admin/platform-users/${id}`),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-users"] }),
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -86,8 +92,24 @@ export default function AdminPlatformUserManagement() {
                   onClick={() =>
                     suspendMutation.mutate({ id: u.id, isSuspended: !u.isSuspended })
                   }
+                  disabled={suspendMutation.isPending}
                 >
                   {u.isSuspended ? "Unsuspend" : "Suspend"}
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="ml-2"
+                  disabled={removeMutation.isPending}
+                  onClick={() => {
+                    const confirmed = window.confirm(
+                      "This will permanently remove the user and all related data. Continue?",
+                    );
+                    if (confirmed) {
+                      removeMutation.mutate(u.id);
+                    }
+                  }}
+                >
+                  Remove
                 </Button>
               </td>
             </tr>

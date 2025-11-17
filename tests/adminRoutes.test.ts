@@ -494,7 +494,7 @@ describe("admin routes", () => {
     );
     const req = {
       session: { adminId: "admin-10" },
-      validatedParams: { userId: 44 },
+      params: { userId: "44" },
       body: { isSuspended: true },
     };
     const res = createMockRes();
@@ -506,6 +506,59 @@ describe("admin routes", () => {
     assert.equal(updates.length, 1);
     assert.equal(updates[0].table, users);
     assert.equal(updates[0].payload.isSuspended, true);
+  });
+
+  it("removes platform users and records audit logs", async () => {
+    const { db } = await import("../server/db");
+    const { storage } = await import("../server/storage");
+    const selectCalls: Array<{ table: unknown }> = [];
+    mock.method(db, "select", () => ({
+      from(table: unknown) {
+        selectCalls.push({ table });
+        return {
+          where: () => ({
+            limit: async () => [{ id: 55 }],
+          }),
+        };
+      },
+    }));
+
+    const deletedUsers: number[] = [];
+    mock.method(storage, "deleteUserAndData", async (userId: number) => {
+      deletedUsers.push(userId);
+    });
+
+    const auditLogs: Array<Record<string, unknown>> = [];
+    mock.method(db, "insert", (table: unknown) => ({
+      values: async (payload: Record<string, unknown>) => {
+        if (table === adminAuditLogs) {
+          auditLogs.push(payload);
+        }
+      },
+    }));
+
+    const { default: adminRouter } = await import(
+      `../server/routes/admin.ts?test=${Date.now()}`
+    );
+    const handler = findRouterHandler(
+      adminRouter,
+      "delete",
+      "/platform-users/:userId",
+    );
+    const req = {
+      session: { adminId: "admin-99" },
+      params: { userId: "55" },
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, { success: true });
+    assert.deepEqual(deletedUsers, [55]);
+    assert.equal(auditLogs.length, 1);
+    assert.equal(auditLogs[0]?.resource, "user:55");
+    assert.equal(selectCalls.length, 1);
   });
 
   it("updates role permissions and records audit logs", async () => {
@@ -947,7 +1000,7 @@ describe("admin routes", () => {
     );
     const req = {
       session: { adminId: "admin-1" },
-      validatedParams: { reviewId: 90 },
+      params: { reviewId: "90" },
     };
     const res = createMockRes();
 

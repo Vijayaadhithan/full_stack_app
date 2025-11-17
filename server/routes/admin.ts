@@ -31,6 +31,7 @@ import {
   recordFrontendMetric,
 } from "../monitoring/metrics";
 import { formatValidationError } from "../utils/zod";
+import { storage } from "../storage";
 
 const router = Router();
 const scryptAsync = promisify(scrypt);
@@ -82,6 +83,18 @@ const adminPasswordChangeSchema = z
 const adminSuspendUserSchema = z
   .object({
     isSuspended: z.boolean(),
+  })
+  .strict();
+
+const userIdParamSchema = z
+  .object({
+    userId: z.coerce.number().int().positive(),
+  })
+  .strict();
+
+const reviewIdParamSchema = z
+  .object({
+    reviewId: z.coerce.number().int().positive(),
   })
   .strict();
 
@@ -735,10 +748,11 @@ router.patch(
   isAdminAuthenticated,
   checkPermissions(["manage_users"]),
   async (req, res) => {
-    const userId = req.validatedParams?.userId;
-    if (typeof userId !== "number") {
-      return res.status(400).json({ message: "Invalid user id" });
+    const parsedParams = userIdParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      return res.status(400).json(formatValidationError(parsedParams.error));
     }
+    const { userId } = parsedParams.data;
     const parsedBody = adminSuspendUserSchema.safeParse(req.body);
     if (!parsedBody.success) {
       return res.status(400).json(formatValidationError(parsedBody.error));
@@ -753,6 +767,40 @@ router.patch(
         resource: `user:${userId}`,
       });
     } catch {}
+    res.json({ success: true });
+  },
+);
+
+router.delete(
+  "/platform-users/:userId",
+  isAdminAuthenticated,
+  checkPermissions(["manage_users"]),
+  async (req, res) => {
+    const parsedParams = userIdParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      return res.status(400).json(formatValidationError(parsedParams.error));
+    }
+    const { userId } = parsedParams.data;
+
+    const userExists = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (userExists.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    await storage.deleteUserAndData(userId);
+
+    try {
+      await db.insert(adminAuditLogs).values({
+        adminId: req.session!.adminId!,
+        action: "delete_user",
+        resource: `user:${userId}`,
+      });
+    } catch {}
+
     res.json({ success: true });
   },
 );
@@ -812,10 +860,11 @@ router.delete(
   isAdminAuthenticated,
   checkPermissions(["manage_reviews"]),
   async (req, res) => {
-    const reviewId = req.validatedParams?.reviewId;
-    if (typeof reviewId !== "number") {
-      return res.status(400).json({ message: "Invalid review id" });
+    const parsedParams = reviewIdParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      return res.status(400).json(formatValidationError(parsedParams.error));
     }
+    const { reviewId } = parsedParams.data;
     await db.delete(reviews).where(eq(reviews.id, reviewId));
     // Audit log (best-effort)
     try {
