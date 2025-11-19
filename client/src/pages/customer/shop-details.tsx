@@ -11,13 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  useQuery,
-  useMutation,
-  UseQueryResult,
-  UseMutationResult,
-} from "@tanstack/react-query";
-import { Product, User } from "@shared/schema";
+import { useQuery, useMutation, UseMutationResult } from "@tanstack/react-query";
 import { productFilterConfig } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -34,8 +28,9 @@ import {
 import { useState } from "react";
 import { useParams, Link } from "wouter";
 import Meta from "@/components/meta";
+import type { PublicShop } from "@/types/public-shop";
 // Helper function to format address
-const formatAddress = (user: User | undefined): string => {
+const formatAddress = (user: PublicShop | undefined): string => {
   if (!user) return "Location not specified";
   const parts = [
     user.addressStreet,
@@ -62,6 +57,26 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
+type ShopProductListItem = {
+  id: number;
+  name: string;
+  description: string | null;
+  price: string;
+  mrp: string | null;
+  category: string | null;
+  images: string[];
+  shopId: number | null;
+  isAvailable: boolean;
+  stock: number;
+};
+
+type ShopProductListResponse = {
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  items: ShopProductListItem[];
+};
+
 export default function ShopDetails() {
   const { id } = useParams<{ id: string }>();
   console.log("ShopDetails component - Shop ID from params:", id);
@@ -74,10 +89,13 @@ export default function ShopDetails() {
     isLoading: shopLoading,
     isError: isShopError,
     error: shopError,
-  } = useQuery<User, Error>({
-    queryKey: [`/api/users/${id}`],
+  } = useQuery<PublicShop, Error>({
+    queryKey: [`/api/shops/${id}`],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/users/${id}`);
+      if (!id) {
+        throw new Error("Missing shop id");
+      }
+      const res = await apiRequest("GET", `/api/shops/${id}`);
       if (!res.ok) {
         throw new Error("Failed to fetch shop details");
       }
@@ -90,19 +108,29 @@ export default function ShopDetails() {
 
   if (isShopError) {
     console.error("Error fetching shop:", shopError);
-    console.error("Query key:", [`/api/users/${id}`]);
+    console.error("Query key:", [`/api/shops/${id}`]);
     // Optionally show a toast or specific error message here
   }
 
   const {
-    data: products,
+    data: productsResponse,
     isLoading: productsLoading,
     isError: isProductsError,
     error: productsError,
-  } = useQuery<Product[], Error>({
-    queryKey: [`/api/products/shop/${id}`],
+  } = useQuery<ShopProductListResponse, Error>({
+    queryKey: ["/api/products", id],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/products/shop/${id}`);
+      if (!id) {
+        throw new Error("Missing shop id");
+      }
+      const params = new URLSearchParams({
+        shopId: id,
+        pageSize: "100",
+      });
+      const res = await apiRequest(
+        "GET",
+        `/api/products?${params.toString()}`,
+      );
       if (!res.ok) {
         throw new Error("Failed to fetch shop products");
       }
@@ -177,6 +205,7 @@ export default function ShopDetails() {
       },
     });
 
+  const products = productsResponse?.items ?? [];
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
 
@@ -251,14 +280,14 @@ export default function ShopDetails() {
         {/* Shop Header */}
         <Card className="mb-8">
           <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-6 items-start">
-              <div className="h-24 w-24 rounded-lg bg-primary/10 flex items-center justify-center">
-                {shop.profilePicture ? (
-                  <img
-                    src={shop.profilePicture}
-                    alt={shop.name}
-                    className="h-full w-full rounded-lg object-cover"
-                  />
+                <div className="flex flex-col md:flex-row gap-6 items-start">
+                  <div className="h-24 w-24 rounded-lg bg-primary/10 flex items-center justify-center">
+                    {shop.profilePicture ? (
+                      <img
+                        src={shop.profilePicture}
+                        alt={shop.shopProfile?.shopName || shop.name || "Shop"}
+                        className="h-full w-full rounded-lg object-cover"
+                      />
                 ) : (
                   <Store className="h-12 w-12 text-primary" />
                 )}

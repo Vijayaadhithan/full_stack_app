@@ -136,45 +136,20 @@ function Router() {
         component={CustomerDashboard}
         roles={["customer"]}
       />
-      <ProtectedRoute
-        path="/customer/browse-services"
-        component={BrowseServices}
-        roles={["customer"]}
-      />
-      <ProtectedRoute
-        path="/customer/service-details/:id"
-        component={ServiceDetails}
-        roles={["customer"]}
-      />
-      <ProtectedRoute
-        path="/customer/service-provider/:id"
-        component={ServiceProvider}
-        roles={["customer"]}
-      />
+      <Route path="/customer/browse-services" component={BrowseServices} />
+      <Route path="/customer/service-details/:id" component={ServiceDetails} />
+      <Route path="/customer/service-provider/:id" component={ServiceProvider} />
       <ProtectedRoute
         path="/customer/book-service/:id"
         component={BookService}
         roles={["customer"]}
       />
-      <ProtectedRoute
-        path="/customer/browse-products"
-        component={BrowseProducts}
-        roles={["customer"]}
-      />
-      <ProtectedRoute
-        path="/customer/browse-shops"
-        component={BrowseShops}
-        roles={["customer"]}
-      />
-      <ProtectedRoute
-        path="/customer/shops/:id"
-        component={ShopDetails}
-        roles={["customer"]}
-      />
-      <ProtectedRoute
+      <Route path="/customer/browse-products" component={BrowseProducts} />
+      <Route path="/customer/browse-shops" component={BrowseShops} />
+      <Route path="/customer/shops/:id" component={ShopDetails} />
+      <Route
         path="/customer/shops/:shopId/products/:productId"
         component={ProductDetails}
-        roles={["customer"]}
       />{" "}
       {/* Add route for product details */}
       <ProtectedRoute path="/customer/cart" component={Cart} roles={["customer"]} />

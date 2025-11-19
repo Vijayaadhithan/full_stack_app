@@ -5,7 +5,6 @@ import MapLink from "@/components/location/MapLink";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import { Review } from "@shared/schema";
 import { Loader2, MapPin, Clock, Star, Phone } from "lucide-react";
 import { motion } from "framer-motion";
 import { useParams, Link } from "wouter";
@@ -47,19 +46,6 @@ export default function ServiceProvider() {
     retry: false, // Optional: prevent retries on error if desired
   });
 
-  // Fetch reviews separately
-  const {
-    data: reviews,
-    isLoading: reviewsLoading,
-    isError: reviewsIsError,
-    error: reviewsError,
-    isSuccess: reviewsIsSuccess,
-  } = useQuery<Review[], Error>({
-    queryKey: [`/api/reviews/service/${id}`],
-    enabled: !!id,
-    retry: false, // Optional: prevent retries on error if desired
-  });
-
   // Handle service query side effects
   useEffect(() => {
     if (serviceIsError && serviceError) {
@@ -74,20 +60,7 @@ export default function ServiceProvider() {
     }
   }, [serviceIsSuccess, service]);
 
-  // Handle reviews query side effects
-  useEffect(() => {
-    if (reviewsIsError && reviewsError) {
-      console.error("Error fetching reviews:", reviewsError);
-    }
-  }, [reviewsIsError, reviewsError]);
-
-  useEffect(() => {
-    if (reviewsIsSuccess && reviews) {
-      console.log("Successfully fetched reviews data:", reviews);
-    }
-  }, [reviewsIsSuccess, reviews]);
-
-  const isPageLoading = isLoading || reviewsLoading;
+  const isPageLoading = isLoading;
 
   if (isPageLoading) {
     return (
@@ -113,7 +86,7 @@ export default function ServiceProvider() {
   }
 
   // Ensure reviews is an array before calculating average rating
-  const validReviews = Array.isArray(reviews) ? reviews : [];
+  const validReviews = Array.isArray(service.reviews) ? service.reviews : [];
   const averageRating = validReviews.length
     ? validReviews.reduce((acc, review) => acc + review.rating, 0) /
       validReviews.length

@@ -35,6 +35,7 @@ type NavItem = {
 export function MainNav({ rightSlot }: MainNavProps) {
   const { user, logoutMutation } = useAuth();
   const [location] = useLocation();
+  const isAuthenticated = Boolean(user);
 
   const navItems = React.useMemo<NavItem[]>(() => {
     if (!user?.role) {
@@ -131,15 +132,21 @@ export function MainNav({ rightSlot }: MainNavProps) {
                     {rightSlot}
                   </div>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={handleLogout}
-                  disabled={isLoggingOut}
-                  className="justify-start"
-                >
-                  <LogOut className="mr-2 h-5 w-5" />
-                  Sign out
-                </Button>
+                {isAuthenticated ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    className="justify-start"
+                  >
+                    <LogOut className="mr-2 h-5 w-5" />
+                    Sign out
+                  </Button>
+                ) : (
+                  <Button variant="default" asChild className="justify-start">
+                    <Link href="/auth">Sign in</Link>
+                  </Button>
+                )}
               </div>
             </SheetContent>
           </Sheet>
@@ -152,50 +159,60 @@ export function MainNav({ rightSlot }: MainNavProps) {
           DoorStepTN
         </Link>
 
-        <nav className="ml-2 hidden items-center gap-1 md:flex">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location === item.href;
-            return (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant={isActive ? "secondary" : "ghost"}
-                  className="flex items-center gap-2"
-                >
-                  <Icon className="h-5 w-5" />
-                  {item.label}
-                </Button>
-              </Link>
-            );
-          })}
-        </nav>
+        {navItems.length > 0 && (
+          <nav className="ml-2 hidden items-center gap-1 md:flex">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location === item.href;
+              return (
+                <Link key={item.href} href={item.href}>
+                  <Button
+                    variant={isActive ? "secondary" : "ghost"}
+                    className="flex items-center gap-2"
+                  >
+                    <Icon className="h-5 w-5" />
+                    {item.label}
+                  </Button>
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
         <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:gap-3 md:w-auto md:flex-nowrap">
           {rightSlot && <div className="hidden md:flex">{rightSlot}</div>}
-          <NotificationsCenter />
-          <div className="hidden items-center gap-2 truncate sm:flex">
-            <User className="h-5 w-5" />
-            <span className="max-w-[160px] truncate">{user?.name}</span>
-          </div>
-          <Button
-            size="icon"
-            variant="outline"
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            aria-label="Sign out"
-            className="sm:hidden"
-          >
-            <LogOut className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="hidden sm:inline-flex"
-          >
-            <LogOut className="mr-2 h-5 w-5" />
-            Sign out
-          </Button>
+          {isAuthenticated ? (
+            <>
+              <NotificationsCenter />
+              <div className="hidden items-center gap-2 truncate sm:flex">
+                <User className="h-5 w-5" />
+                <span className="max-w-[160px] truncate">{user?.name}</span>
+              </div>
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                aria-label="Sign out"
+                className="sm:hidden"
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="hidden sm:inline-flex"
+              >
+                <LogOut className="mr-2 h-5 w-5" />
+                Sign out
+              </Button>
+            </>
+          ) : (
+            <Button variant="default" asChild>
+              <Link href="/auth">Sign in</Link>
+            </Button>
+          )}
         </div>
       </div>
     </header>

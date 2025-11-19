@@ -199,6 +199,29 @@ type RequestWithAuth = Request & {
   session?: (Request["session"] & { adminId?: string | null }) | null;
 };
 
+function buildPublicShopResponse(shop: User) {
+  return {
+    id: shop.id,
+    name: shop.name,
+    shopProfile: shop.shopProfile ?? null,
+    profilePicture: shop.profilePicture ?? null,
+    shopBannerImageUrl: shop.shopBannerImageUrl ?? null,
+    shopLogoImageUrl: shop.shopLogoImageUrl ?? null,
+    addressStreet: shop.addressStreet ?? null,
+    addressCity: shop.addressCity ?? null,
+    addressState: shop.addressState ?? null,
+    addressPostalCode: shop.addressPostalCode ?? null,
+    addressCountry: shop.addressCountry ?? null,
+    latitude: shop.latitude ?? null,
+    longitude: shop.longitude ?? null,
+    deliveryAvailable: shop.deliveryAvailable ?? false,
+    pickupAvailable: shop.pickupAvailable ?? false,
+    returnsEnabled: shop.returnsEnabled ?? false,
+    averageRating: shop.averageRating ?? null,
+    totalReviews: shop.totalReviews ?? 0,
+  };
+}
+
 declare global {
   namespace Express {
     // Stores sanitized, numeric route parameters for downstream handlers.
@@ -2359,7 +2382,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all shops
-  app.get("/api/shops", requireAuth, async (req, res) => {
+  app.get("/api/shops", async (req, res) => {
     try {
       const parsedQuery = shopsQuerySchema.safeParse(req.query);
       if (!parsedQuery.success) {
@@ -2372,7 +2395,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const shops = await storage.getShops(filters);
 
-      res.json(sanitizeUserList(shops));
+      const publicShops = shops
+        .filter((shop): shop is User => Boolean(shop && shop.role === "shop"))
+        .map((shop) => buildPublicShopResponse(shop as User));
+
+      res.json(publicShops);
     } catch (error) {
       logger.error("Error fetching shops:", error);
       res
@@ -2695,7 +2722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.get("/api/services", requireAuth, async (req, res) => {
+  app.get("/api/services", async (req, res) => {
     try {
       const parsedQuery = servicesQuerySchema.safeParse(req.query);
       if (!parsedQuery.success) {
@@ -2826,7 +2853,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get(
     "/api/services/:id",
-    requireAuth,
     async (req, res) => {
       try {
         const serviceId = getValidatedParam(req, "id");
@@ -5407,7 +5433,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.get("/api/products", requireAuth, async (req, res) => {
+  app.get("/api/products", async (req, res) => {
     try {
       const parsedQuery = productsQuerySchema.safeParse(req.query);
       if (!parsedQuery.success) {
@@ -5513,7 +5539,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get a specific product by shop ID and product ID
   app.get(
     "/api/shops/:shopId/products/:productId",
-    requireAuth,
     async (req, res) => {
       try {
         const shopId = getValidatedParam(req, "shopId");
@@ -5567,11 +5592,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Get shop details by ID
-  app.get("/api/shops/:shopId", requireAuth, async (req, res) => {
+  app.get("/api/shops/:shopId", async (req, res) => {
     try {
       const shopId = getValidatedParam(req, "shopId");
       const cacheKey = `shop_detail_${shopId}`;
-      const cached = await getCache<{ id: number; name: string | null; shopProfile: ShopProfile | null }>(cacheKey);
+      const cached = await getCache<ReturnType<typeof buildPublicShopResponse>>(cacheKey);
       if (cached) {
         return res.json(cached);
       }
@@ -5580,12 +5605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!shop || shop.role !== "shop") {
         return res.status(404).json({ message: "Shop not found" });
       }
-      // Return only necessary public shop info
-      const payload = {
-        id: shop.id,
-        name: shop.name,
-        shopProfile: shop.shopProfile,
-      } as const;
+      const payload = buildPublicShopResponse(shop);
       await setCache(cacheKey, payload, SHOP_DETAIL_CACHE_TTL_MS);
       res.json(payload);
     } catch (error) {

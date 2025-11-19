@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ProductReview, User } from "@shared/schema";
+import { ProductReview } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useParams, Link } from "wouter";
@@ -17,12 +17,15 @@ import { ShoppingCart, Heart, ArrowLeft, Store, Star, Loader2 } from "lucide-rea
 import Meta from "@/components/meta";
 import { ProductDetail } from "@shared/api-contract";
 import { apiClient } from "@/lib/apiClient";
+import { useAuth } from "@/hooks/use-auth";
+import type { PublicShop } from "@/types/public-shop";
 
 export default function ProductDetails() {
   const { toast } = useToast();
   const params = useParams();
   const shopId = params.shopId ? parseInt(params.shopId) : undefined;
   const productId = params.productId ? parseInt(params.productId) : undefined;
+  const { user } = useAuth();
 
   const { data: product, isLoading: isLoadingProduct } = useQuery<ProductDetail>({
     queryKey: [`/api/shops/${shopId}/products/${productId}`],
@@ -40,21 +43,23 @@ export default function ProductDetails() {
     enabled: !!shopId && !!productId,
   });
 
-  const { data: shop, isLoading: isLoadingShop } = useQuery<User>({
+  const { data: shop, isLoading: isLoadingShop } = useQuery<PublicShop>({
     queryKey: [`/api/shops/${shopId}`],
     enabled: !!shopId,
   });
 
+  const enableReviews = Boolean(productId && user);
   const {
-    data: reviews,
+    data: reviewsData,
     isLoading: isLoadingReviews,
   } = useQuery<ProductReview[]>({
     queryKey: [`/api/reviews/product/${productId}`],
-    enabled: !!productId,
+    enabled: enableReviews,
   });
+  const reviews = reviewsData ?? [];
 
   const averageRating =
-    reviews && reviews.length > 0
+    reviews.length > 0
       ? reviews.reduce((total, review) => total + review.rating, 0) /
         reviews.length
       : null;
@@ -266,66 +271,75 @@ export default function ProductDetails() {
             </CardTitle>
             <CardDescription>
               {averageRating !== null
-                ? `${averageRating.toFixed(1)} out of 5 • ${reviews?.length ?? 0} review${
-                    (reviews?.length ?? 0) !== 1 ? "s" : ""
+                ? `${averageRating.toFixed(1)} out of 5 • ${reviews.length} review${
+                    reviews.length !== 1 ? "s" : ""
                   }`
-                : "No reviews yet"}
+                : enableReviews
+                  ? "No reviews yet"
+                  : "Sign in to view customer reviews"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {isLoadingReviews ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : !reviews?.length ? (
-              <p className="text-muted-foreground text-sm">
-                Customers haven’t reviewed this product yet.
+            {!enableReviews && (
+              <p className="text-sm text-muted-foreground">
+                Sign in to view customer reviews.
               </p>
-            ) : (
-              reviews.map((review) => (
-                <div
-                  key={review.id}
-                  className="rounded-lg border p-4 space-y-2 bg-muted/30"
-                >
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: 5 }).map((_, index) => (
-                        <Star
-                          key={index}
-                          className={`h-4 w-4 ${
-                            index < review.rating
-                              ? "fill-yellow-400 text-yellow-500"
-                              : "text-muted-foreground"
-                          }`}
-                        />
-                      ))}
+            )}
+            {enableReviews ? (
+              isLoadingReviews ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : reviews.length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Customers haven’t reviewed this product yet.
+                </p>
+              ) : (
+                reviews.map((review) => (
+                  <div
+                    key={review.id}
+                    className="rounded-lg border p-4 space-y-2 bg-muted/30"
+                  >
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: 5 }).map((_, index) => (
+                          <Star
+                            key={index}
+                            className={`h-4 w-4 ${
+                              index < review.rating
+                                ? "fill-yellow-400 text-yellow-500"
+                                : "text-muted-foreground"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      {review.createdAt && (
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(review.createdAt).toLocaleDateString()}
+                        </span>
+                      )}
                     </div>
-                    {review.createdAt && (
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(review.createdAt).toLocaleDateString()}
-                      </span>
+                    {review.review ? (
+                      <p className="text-sm text-muted-foreground">
+                        {review.review}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">
+                        No written feedback provided.
+                      </p>
+                    )}
+                    {review.shopReply && (
+                      <div className="rounded-md bg-background/80 border border-dashed p-3 text-sm">
+                        <p className="font-medium">Shop reply</p>
+                        <p className="text-muted-foreground mt-1">
+                          {review.shopReply}
+                        </p>
+                      </div>
                     )}
                   </div>
-                  {review.review ? (
-                    <p className="text-sm text-muted-foreground">
-                      {review.review}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">
-                      No written feedback provided.
-                    </p>
-                  )}
-                  {review.shopReply && (
-                    <div className="rounded-md bg-background/80 border border-dashed p-3 text-sm">
-                      <p className="font-medium">Shop reply</p>
-                      <p className="text-muted-foreground mt-1">
-                        {review.shopReply}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
+                ))
+              )
+            ) : null}
           </CardContent>
         </Card>
       </div>

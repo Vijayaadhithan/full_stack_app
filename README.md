@@ -123,6 +123,48 @@ The application will be available at:
 - Frontend: http://localhost:5173
 - API: http://localhost:5000/api
 
+### Checking public catalog endpoints
+
+The core catalog routes (services, products, and shops) are now public, so you can test them without logging in. With the API running on `http://localhost:5000`, run the following from any terminal:
+
+```bash
+# List all shops (public)
+curl http://localhost:5000/api/shops | jq '.'
+
+# Fetch a single shop (replace with a real ID from the previous call)
+SHOP_ID=1
+curl "http://localhost:5000/api/shops/${SHOP_ID}" | jq '.'
+
+# Browse products
+curl "http://localhost:5000/api/products?searchTerm=phone" | jq '.items[:3]'
+
+# View specific product details within a shop (IDs must exist)
+PRODUCT_ID=5
+curl "http://localhost:5000/api/shops/${SHOP_ID}/products/${PRODUCT_ID}" | jq '.'
+
+# Browse services with optional filters
+curl "http://localhost:5000/api/services?locationCity=Mumbai" | jq '.[:3]'
+
+# View a specific service
+SERVICE_ID=7
+curl "http://localhost:5000/api/services/${SERVICE_ID}" | jq '.'
+```
+
+You can omit the `jq` pipes if it is not installed; they are only there to pretty-print the JSON.
+
+### Browsing via the frontend
+
+The Vite client now lets anonymous visitors open the catalog screens directly. Once both dev servers are running (`npm run dev:server` and `npm run dev:client`), open these URLs in your browser:
+
+- `http://localhost:5173/customer/browse-services`
+- `http://localhost:5173/customer/browse-products`
+- `http://localhost:5173/customer/browse-shops`
+- `http://localhost:5173/customer/shops/<id>` – replace `<id>` with a shop id from `/api/shops`
+- `http://localhost:5173/customer/shops/<shopId>/products/<productId>` – ids from the products API
+- `http://localhost:5173/customer/service-details/<serviceId>` and `/customer/service-provider/<serviceId>` – ids from `/api/services`
+
+If you browse anonymously, cart/wishlist buttons will still redirect you to sign in because those actions call protected routes, but the read-only data now renders without authentication.
+
 ### LAN / Device Testing
 
 1. Discover your machine's LAN IP (e.g. `ipconfig` on Windows or `ifconfig`/`ip addr` on macOS/Linux).

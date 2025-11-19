@@ -13,7 +13,6 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
-import { User } from "@shared/schema";
 import { motion } from "framer-motion";
 import { apiRequest } from "@/lib/queryClient";
 import {
@@ -21,8 +20,10 @@ import {
   Coordinates as GeoCoordinates,
 } from "@/hooks/use-location-filter";
 import { LocationFilterPopover } from "@/components/location/location-filter-popover";
+import { useAuth } from "@/hooks/use-auth";
+import type { PublicShop } from "@/types/public-shop";
 
-const formatAddress = (user: User): string => {
+const formatAddress = (user: PublicShop): string => {
   const parts = [
     user.addressStreet,
     user.addressCity,
@@ -67,7 +68,7 @@ function haversineDistance(
 
 function computeDistance(
   origin: GeoCoordinates | null,
-  destination: User,
+  destination: PublicShop,
 ): number | null {
   if (!origin || !destination.latitude || !destination.longitude) return null;
   const lat = Number(destination.latitude);
@@ -78,6 +79,7 @@ function computeDistance(
 
 export default function BrowseShops() {
   const locationFilter = useLocationFilter({ storageKey: "shops-radius" });
+  const { user } = useAuth();
   const [filters, setFilters] = useState({
     searchQuery: "",
     locationCity: "",
@@ -92,6 +94,7 @@ export default function BrowseShops() {
         radius,
       }
     : null;
+  const canUseNearbySearch = Boolean(user && locationQuery);
 
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -100,9 +103,9 @@ export default function BrowseShops() {
   const {
     data: fallbackShops,
     isLoading: isLoadingFallback,
-  } = useQuery<User[]>({
+  } = useQuery<PublicShop[]>({
     queryKey: ["/api/shops", filters.locationCity, filters.locationState],
-    enabled: !locationQuery,
+    enabled: !canUseNearbySearch,
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.locationCity)
@@ -125,14 +128,14 @@ export default function BrowseShops() {
   const {
     data: nearbyShops,
     isFetching: isSearchingNearby,
-  } = useQuery<User[]>({
+  } = useQuery<PublicShop[]>({
     queryKey: [
       "search-nearby",
       locationQuery?.lat,
       locationQuery?.lng,
       locationQuery?.radius,
     ],
-    enabled: Boolean(locationQuery),
+    enabled: canUseNearbySearch,
     queryFn: async () => {
       const params = new URLSearchParams({
         lat: String(locationQuery!.lat),
@@ -151,17 +154,17 @@ export default function BrowseShops() {
     },
   });
 
-  const shops = locationQuery ? nearbyShops : fallbackShops;
-  const isLoading = locationQuery ? isSearchingNearby : isLoadingFallback;
+  const shops = canUseNearbySearch ? nearbyShops : fallbackShops;
+  const isLoading = canUseNearbySearch ? isSearchingNearby : isLoadingFallback;
 
   const filteredShops = useMemo(() => {
     if (!shops) return [];
     return shops
-      .filter((shop) => shop.role === "shop")
       .filter((shop) => {
         if (!filters.searchQuery) return true;
         const query = filters.searchQuery.toLowerCase();
-        const nameMatch = shop.name.toLowerCase().includes(query);
+        const displayName = shop.shopProfile?.shopName || shop.name || "";
+        const nameMatch = displayName.toLowerCase().includes(query);
         const descMatch = shop.shopProfile?.description
           ?.toLowerCase()
           .includes(query);
@@ -238,7 +241,7 @@ export default function BrowseShops() {
           </Popover>
           <LocationFilterPopover state={locationFilter} />
         </div>
-        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
+        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground space-y-1">
           {customerLocation ? (
             <>
               Showing shops within{" "}
@@ -248,9 +251,14 @@ export default function BrowseShops() {
                 {customerLocation.longitude.toFixed(3)}
               </span>
               .
+              {!user && (
+                <span className="block text-xs text-muted-foreground/80">
+                  Sign in to load location-based results.
+                </span>
+              )}
             </>
           ) : (
-            <>Set a location filter to focus on nearby shops.</>
+            <>{user ? "Set a location filter to focus on nearby shops." : "Sign in or use the text filters to browse shops."}</>
           )}
         </div>
 
@@ -281,7 +289,7 @@ export default function BrowseShops() {
                               {shop.profilePicture ? (
                                 <img
                                   src={shop.profilePicture}
-                                  alt={shop.name}
+                                  alt={shop.shopProfile?.shopName || shop.name || "Shop"}
                                   className="h-full w-full rounded-full object-cover"
                                 />
                               ) : (
