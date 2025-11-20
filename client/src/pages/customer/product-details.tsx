@@ -13,7 +13,8 @@ import { ProductReview } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useParams, Link } from "wouter";
-import { ShoppingCart, Heart, ArrowLeft, Store, Star, Loader2 } from "lucide-react";
+import { ShoppingCart, Heart, ArrowLeft, Store, Star } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import Meta from "@/components/meta";
 import { ProductDetail } from "@shared/api-contract";
 import { apiClient } from "@/lib/apiClient";
@@ -64,8 +65,19 @@ export default function ProductDetails() {
         reviews.length
       : null;
 
-  const addToCartMutation = useMutation({
-    mutationFn: async (productId: number) => {
+  type CartItem = {
+    product: ProductDetail;
+    quantity: number;
+  };
+
+  const addToCartMutation = useMutation<
+    unknown,
+    Error,
+    ProductDetail,
+    { previousCart?: CartItem[] }
+  >({
+    mutationFn: async (product) => {
+      const productId = product.id;
       const res = await apiRequest("POST", "/api/cart", {
         productId,
         quantity: 1,
@@ -76,14 +88,37 @@ export default function ProductDetails() {
       }
       return res.json();
     },
+    onMutate: async (product) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/cart"] });
+      const previousCart = queryClient.getQueryData<CartItem[]>(["/api/cart"]);
+
+      const existingItem = previousCart?.find(
+        (item) => item.product.id === product.id,
+      );
+
+      const optimisticCart = previousCart
+        ? existingItem
+          ? previousCart.map((item) =>
+              item.product.id === product.id
+                ? { ...item, quantity: item.quantity + 1 }
+                : item,
+            )
+          : [...previousCart, { product, quantity: 1 }]
+        : [{ product, quantity: 1 }];
+
+      queryClient.setQueryData(["/api/cart"], optimisticCart);
+      return { previousCart };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
       toast({
         title: "Added to cart",
         description: "Product has been added to your cart.",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _product, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(["/api/cart"], context.previousCart);
+      }
       let description = error.message || "Failed to add product to cart";
       if (error.message.includes("Cannot add items from different shops")) {
         description =
@@ -95,30 +130,62 @@ export default function ProductDetails() {
         variant: "destructive",
       });
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+    },
   });
 
-  const addToWishlistMutation = useMutation({
-    mutationFn: async (productId: number) => {
-      const res = await apiRequest("POST", "/api/wishlist", { productId });
+  const addToWishlistMutation = useMutation<
+    unknown,
+    Error,
+    ProductDetail,
+    { previousWishlist: ProductDetail[] }
+  >({
+    mutationFn: async (product) => {
+      const res = await apiRequest("POST", "/api/wishlist", {
+        productId: product.id,
+      });
       if (!res.ok) {
         const error = await res.text();
         throw new Error(error);
       }
       return res.json();
     },
+    onMutate: async (product) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/wishlist"] });
+      const previousWishlist =
+        queryClient.getQueryData<ProductDetail[]>(["/api/wishlist"]) ?? [];
+
+      if (!previousWishlist.find((item) => item.id === product.id)) {
+        queryClient.setQueryData<ProductDetail[]>(["/api/wishlist"], [
+          ...previousWishlist,
+          product,
+        ]);
+      }
+
+      return { previousWishlist };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/wishlist"] });
       toast({
         title: "Added to wishlist",
         description: "Product has been added to your wishlist.",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _product, context) => {
+      if (context?.previousWishlist) {
+        queryClient.setQueryData(
+          ["/api/wishlist"],
+          context.previousWishlist,
+        );
+      }
       toast({
         title: "Error",
         description: error.message || "Failed to add product to wishlist",
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wishlist"] });
     },
   });
 
@@ -126,8 +193,42 @@ export default function ProductDetails() {
     return (
       <DashboardLayout>
         <Meta title="Loading Product..." />
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+        <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
+          <Skeleton className="h-9 w-48" />
+          <Card>
+            <CardHeader className="space-y-3">
+              <Skeleton className="h-7 w-64" />
+              <Skeleton className="h-5 w-40" />
+            </CardHeader>
+            <CardContent className="grid md:grid-cols-2 gap-6">
+              <Skeleton className="aspect-square rounded-lg" />
+              <div className="space-y-4">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-10 w-32" />
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-4 w-1/2" />
+                <div className="flex gap-3 pt-4">
+                  <Skeleton className="h-11 flex-1 rounded-md" />
+                  <Skeleton className="h-11 w-12 rounded-md" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-4 w-24" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="space-y-2">
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
       </DashboardLayout>
     );
@@ -241,7 +342,7 @@ export default function ProductDetails() {
               <div className="flex gap-3 pt-4">
                 <Button
                   size="lg"
-                  onClick={() => addToCartMutation.mutate(product.id)}
+                  onClick={() => addToCartMutation.mutate(product)}
                   disabled={
                     !product.isAvailable ||
                     product.stock <= 0 ||
@@ -254,7 +355,7 @@ export default function ProductDetails() {
                 <Button
                   size="lg"
                   variant="outline"
-                  onClick={() => addToWishlistMutation.mutate(product.id)}
+                  onClick={() => addToWishlistMutation.mutate(product)}
                   disabled={addToWishlistMutation.isPending}
                 >
                   <Heart className="h-5 w-5" />
@@ -287,8 +388,17 @@ export default function ProductDetails() {
             )}
             {enableReviews ? (
               isLoadingReviews ? (
-                <div className="flex items-center justify-center py-6">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <div className="space-y-3 py-2">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="rounded-lg border p-4 space-y-2 bg-muted/30"
+                    >
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  ))}
                 </div>
               ) : reviews.length === 0 ? (
                 <p className="text-muted-foreground text-sm">

@@ -4,6 +4,7 @@ import MapLink from "@/components/location/MapLink";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -11,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useQuery, useMutation, UseMutationResult } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { productFilterConfig } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -23,7 +24,6 @@ import {
   Store,
   MapPin,
   ArrowLeft,
-  Loader2,
 } from "lucide-react";
 import { useState } from "react";
 import { useParams, Link } from "wouter";
@@ -75,6 +75,11 @@ type ShopProductListResponse = {
   pageSize: number;
   hasMore: boolean;
   items: ShopProductListItem[];
+};
+
+type CartItem = {
+  product: ShopProductListItem;
+  quantity: number;
 };
 
 export default function ShopDetails() {
@@ -146,10 +151,15 @@ export default function ShopDetails() {
     // Optionally show a toast or specific error message here
   }
 
-  const addToCartMutation: UseMutationResult<any, Error, number> = useMutation({
-    mutationFn: async (productId: number) => {
+  const addToCartMutation = useMutation<
+    unknown,
+    Error,
+    ShopProductListItem,
+    { previousCart?: CartItem[] }
+  >({
+    mutationFn: async (product) => {
       const res = await apiRequest("POST", "/api/cart", {
-        productId,
+        productId: product.id,
         quantity: 1,
       });
       if (!res.ok) {
@@ -158,14 +168,36 @@ export default function ShopDetails() {
       }
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+    onMutate: async (product) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/cart"] });
+      const previousCart = queryClient.getQueryData<CartItem[]>(["/api/cart"]);
+
+      const existingItem = previousCart?.find(
+        (item) => item.product.id === product.id,
+      );
+      const optimisticCart = previousCart
+        ? existingItem
+          ? previousCart.map((item) =>
+              item.product.id === product.id
+                ? { ...item, quantity: item.quantity + 1 }
+                : item,
+            )
+          : [...previousCart, { product, quantity: 1 }]
+        : [{ product, quantity: 1 }];
+
+      queryClient.setQueryData(["/api/cart"], optimisticCart);
+      return { previousCart };
+    },
+    onSuccess: (_data, product) => {
       toast({
         title: "Added to cart",
-        description: "Product has been added to your cart.",
+        description: `${product.name} has been added to your cart.`,
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _product, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(["/api/cart"], context.previousCart);
+      }
       let description = error.message || "Failed to add product to cart";
       if (error.message.includes("Cannot add items from different shops")) {
         description =
@@ -177,33 +209,65 @@ export default function ShopDetails() {
         variant: "destructive",
       });
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+    },
   });
 
-  const addToWishlistMutation: UseMutationResult<any, Error, number> =
-    useMutation({
-      mutationFn: async (productId: number) => {
-        const res = await apiRequest("POST", "/api/wishlist", { productId });
-        if (!res.ok) {
-          const error = await res.text();
-          throw new Error(error);
-        }
-        return res.json();
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["/api/wishlist"] });
-        toast({
-          title: "Added to wishlist",
-          description: "Product has been added to your wishlist.",
-        });
-      },
-      onError: (error: Error) => {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to add product to wishlist",
-          variant: "destructive",
-        });
-      },
-    });
+  const addToWishlistMutation = useMutation<
+    unknown,
+    Error,
+    ShopProductListItem,
+    { previousWishlist: ShopProductListItem[] }
+  >({
+    mutationFn: async (product) => {
+      const res = await apiRequest("POST", "/api/wishlist", {
+        productId: product.id,
+      });
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+      return res.json();
+    },
+    onMutate: async (product) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/wishlist"] });
+      const previousWishlist =
+        queryClient.getQueryData<ShopProductListItem[]>(["/api/wishlist"]) ??
+        [];
+
+      if (!previousWishlist.find((item) => item.id === product.id)) {
+        queryClient.setQueryData<ShopProductListItem[]>(["/api/wishlist"], [
+          ...previousWishlist,
+          product,
+        ]);
+      }
+
+      return { previousWishlist };
+    },
+    onSuccess: (_data, product) => {
+      toast({
+        title: "Added to wishlist",
+        description: `${product.name} has been added to your wishlist.`,
+      });
+    },
+    onError: (error: Error, _product, context) => {
+      if (context?.previousWishlist) {
+        queryClient.setQueryData(
+          ["/api/wishlist"],
+          context.previousWishlist,
+        );
+      }
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add product to wishlist",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wishlist"] });
+    },
+  });
 
   const products = productsResponse?.items ?? [];
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -230,8 +294,44 @@ export default function ShopDetails() {
     return (
       <DashboardLayout>
         <Meta title="Loading Shop..." />
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Loader2 className="h-8 w-8 animate-spin" />
+        <div className="max-w-7xl mx-auto space-y-6 p-6">
+          <Skeleton className="h-6 w-28" />
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex flex-col md:flex-row gap-6 items-start">
+                <Skeleton className="h-24 w-24 rounded-lg" />
+                <div className="flex-1 space-y-3">
+                  <Skeleton className="h-7 w-64" />
+                  <Skeleton className="h-4 w-80" />
+                  <Skeleton className="h-4 w-56" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <div className="flex gap-4 w-full md:w-auto">
+            <Skeleton className="h-10 flex-1 md:w-80" />
+            <Skeleton className="h-10 w-40" />
+          </div>
+          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <Card key={index} className="h-full">
+                <div className="aspect-square">
+                  <Skeleton className="h-full w-full" />
+                </div>
+                <CardContent className="p-4 space-y-2">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-4 w-full" />
+                  <div className="flex items-center justify-between pt-2">
+                    <Skeleton className="h-6 w-16" />
+                    <div className="flex gap-2">
+                      <Skeleton className="h-10 w-10 rounded-md" />
+                      <Skeleton className="h-10 w-10 rounded-md" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -398,7 +498,7 @@ export default function ShopDetails() {
                               onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
-                                addToWishlistMutation.mutate(product.id);
+                                addToWishlistMutation.mutate(product);
                               }}
                               disabled={addToWishlistMutation.isPending}
                             >
@@ -409,7 +509,7 @@ export default function ShopDetails() {
                               onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
-                                addToCartMutation.mutate(product.id);
+                                addToCartMutation.mutate(product);
                               }}
                               disabled={
                                 !product.isAvailable ||

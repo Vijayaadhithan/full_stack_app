@@ -8,12 +8,13 @@ import { platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { Minus, Plus, Trash2, Tag, RefreshCw, Check, Info } from "lucide-react";
+import { Minus, Plus, Trash2, Tag, Check, Info } from "lucide-react";
 import { useState, useEffect } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PaymentMethodSelector } from "@/components/payment-method-selector";
 import {
   Tooltip,
@@ -103,14 +104,13 @@ export default function Cart() {
 
   console.log("Cart items:", cartItems); // Debug log
 
-  const updateCartMutation = useMutation({
-    mutationFn: async ({
-      productId,
-      quantity,
-    }: {
-      productId: number;
-      quantity: number;
-    }) => {
+  const updateCartMutation = useMutation<
+    unknown,
+    Error,
+    { productId: number; quantity: number },
+    { previousCart?: CartItem[] }
+  >({
+    mutationFn: async ({ productId, quantity }) => {
       const res = await apiRequest("POST", "/api/cart", {
         productId,
         quantity,
@@ -120,10 +120,28 @@ export default function Cart() {
       }
       return res.json();
     },
+    onMutate: async ({ productId, quantity }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/cart"] });
+      const previousCart = queryClient.getQueryData<CartItem[]>(["/api/cart"]);
+
+      if (previousCart) {
+        const optimisticCart = previousCart
+          .map((item) =>
+            item.product.id === productId ? { ...item, quantity } : item,
+          )
+          .filter((item) => item.quantity > 0);
+        queryClient.setQueryData(["/api/cart"], optimisticCart);
+      }
+
+      return { previousCart };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _variables, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(["/api/cart"], context.previousCart);
+      }
       toast({
         title: "Error",
         description: error.message,
@@ -132,12 +150,28 @@ export default function Cart() {
     },
   });
 
-  const removeFromCartMutation = useMutation({
+  const removeFromCartMutation = useMutation<
+    unknown,
+    Error,
+    number,
+    { previousCart?: CartItem[] }
+  >({
     mutationFn: async (productId: number) => {
       const res = await apiRequest("DELETE", `/api/cart/${productId}`);
       if (!res.ok) {
         throw new Error("Failed to remove from cart");
       }
+    },
+    onMutate: async (productId) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/cart"] });
+      const previousCart = queryClient.getQueryData<CartItem[]>(["/api/cart"]);
+      if (previousCart) {
+        queryClient.setQueryData<CartItem[]>(
+          ["/api/cart"],
+          previousCart.filter((item) => item.product.id !== productId),
+        );
+      }
+      return { previousCart };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
@@ -146,7 +180,10 @@ export default function Cart() {
         description: "Product has been removed from your cart.",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _productId, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(["/api/cart"], context.previousCart);
+      }
       toast({
         title: "Error",
         description: error.message,
@@ -332,8 +369,48 @@ export default function Cart() {
         <h1 className="text-2xl font-bold">Shopping Cart</h1>
 
         {isLoading ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+          <div className="grid gap-6">
+            <Card>
+              <CardContent className="divide-y">
+                {Array.from({ length: 2 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="py-4 first:pt-6 last:pb-6 flex gap-4"
+                  >
+                    <Skeleton className="w-24 h-24 rounded" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-5 w-56" />
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-10 w-32" />
+                    </div>
+                    <div className="space-y-2 text-right">
+                      <Skeleton className="h-5 w-16 ml-auto" />
+                      <Skeleton className="h-10 w-10 ml-auto rounded-md" />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-5 w-32" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-64" />
+                <Skeleton className="h-4 w-40" />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-5 w-32" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
           </div>
         ) : !cartItems?.length ? (
           <Card>
@@ -442,8 +519,10 @@ export default function Cart() {
                 </CardHeader>
                 <CardContent>
                   {isLoadingPromotions ? (
-                    <div className="flex items-center justify-center py-4">
-                      <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <div className="space-y-3">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
                     </div>
                   ) : !availablePromotions?.length ? (
                     <p className="text-sm text-muted-foreground">

@@ -19,6 +19,7 @@ import { Search, ShoppingCart, Heart, Filter } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Popover,
   PopoverContent,
@@ -177,8 +178,19 @@ export default function BrowseProducts() {
     }
   }, [error, toast]);
 
-  const addToCartMutation = useMutation({
-    mutationFn: async (productId: number) => {
+  type CartItem = {
+    product: ProductListItem;
+    quantity: number;
+  };
+
+  const addToCartMutation = useMutation<
+    unknown,
+    Error,
+    ProductListItem,
+    { previousCart?: CartItem[] }
+  >({
+    mutationFn: async (product: ProductListItem) => {
+      const productId = product.id;
       const res = await apiRequest("POST", "/api/cart", {
         productId,
         quantity: 1,
@@ -189,44 +201,100 @@ export default function BrowseProducts() {
       }
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+    onMutate: async (product) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/cart"] });
+      const previousCart = queryClient.getQueryData<CartItem[]>(["/api/cart"]);
+
+      const existingItem = previousCart?.find(
+        (item) => item.product.id === product.id,
+      );
+      const optimisticCart = previousCart
+        ? existingItem
+          ? previousCart.map((item) =>
+              item.product.id === product.id
+                ? { ...item, quantity: item.quantity + 1 }
+                : item,
+            )
+          : [...previousCart, { product, quantity: 1 }]
+        : [{ product, quantity: 1 }];
+
+      queryClient.setQueryData(["/api/cart"], optimisticCart);
+      return { previousCart };
+    },
+    onSuccess: (_data, product) => {
       toast({
         title: "Added to cart",
-        description: "Product has been added to your cart.",
+        description: `${product.name} has been added to your cart.`,
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _product, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(["/api/cart"], context.previousCart);
+      }
       toast({
         title: "Error",
         description: error.message || "Failed to add product to cart",
         variant: "destructive",
       });
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+    },
   });
 
-  const addToWishlistMutation = useMutation({
-    mutationFn: async (productId: number) => {
-      const res = await apiRequest("POST", "/api/wishlist", { productId });
+  const addToWishlistMutation = useMutation<
+    unknown,
+    Error,
+    ProductListItem,
+    { previousWishlist: ProductListItem[] }
+  >({
+    mutationFn: async (product: ProductListItem) => {
+      const res = await apiRequest("POST", "/api/wishlist", {
+        productId: product.id,
+      });
       if (!res.ok) {
         const error = await res.text();
         throw new Error(error);
       }
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/wishlist"] });
+    onMutate: async (product) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/wishlist"] });
+      const previousWishlist =
+        queryClient.getQueryData<ProductListItem[]>(["/api/wishlist"]) ?? [];
+
+      if (previousWishlist.some((item) => item.id === product.id)) {
+        return { previousWishlist };
+      }
+
+      queryClient.setQueryData<ProductListItem[]>(["/api/wishlist"], [
+        ...previousWishlist,
+        product,
+      ]);
+
+      return { previousWishlist };
+    },
+    onSuccess: (_data, product) => {
       toast({
         title: "Added to wishlist",
-        description: "Product has been added to your wishlist.",
+        description: `${product.name} has been added to your wishlist.`,
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _product, context) => {
+      if (context?.previousWishlist) {
+        queryClient.setQueryData(
+          ["/api/wishlist"],
+          context.previousWishlist,
+        );
+      }
       toast({
         title: "Error",
         description: error.message || "Failed to add product to wishlist",
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wishlist"] });
     },
   });
 
@@ -381,8 +449,26 @@ export default function BrowseProducts() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <Card key={index} className="h-full">
+                <div className="aspect-square relative overflow-hidden">
+                  <Skeleton className="h-full w-full" />
+                </div>
+                <CardContent className="p-4 space-y-3">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-6 w-16" />
+                    <div className="flex gap-2">
+                      <Skeleton className="h-10 w-10 rounded-md" />
+                      <Skeleton className="h-10 w-10 rounded-md" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         ) : (
           <>
@@ -419,7 +505,7 @@ export default function BrowseProducts() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                addToWishlistMutation.mutate(product.id);
+                                addToWishlistMutation.mutate(product);
                               }}
                               disabled={addToWishlistMutation.isPending}
                             >
@@ -430,7 +516,7 @@ export default function BrowseProducts() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                addToCartMutation.mutate(product.id);
+                                addToCartMutation.mutate(product);
                               }}
                               disabled={
                                 !product.isAvailable ||
