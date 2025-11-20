@@ -176,6 +176,10 @@ async function comparePasswords(
 }
 
 async function generateEmailVerificationToken(userId: number) {
+  // In in-memory mode there is no backing users table for FK checks, so skip DB insert.
+  if (process.env.USE_IN_MEMORY_DB === "true") {
+    return randomBytes(32).toString("hex");
+  }
   const token = randomBytes(32).toString("hex");
   const hashedToken = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
