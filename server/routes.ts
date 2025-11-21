@@ -74,6 +74,7 @@ import {
   MIN_NEARBY_RADIUS_KM,
   MAX_NEARBY_RADIUS_KM,
   toNumericCoordinate,
+  haversineDistanceKm,
 } from "./utils/geo";
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 import { bookingsRouter } from "./routes/bookings";
@@ -121,6 +122,7 @@ const PRODUCT_DETAIL_CACHE_TTL_MS = 60_000;
 const SHOP_DETAIL_CACHE_TTL_MS = 120_000;
 const NEARBY_SEARCH_LIMIT = 200;
 const NEARBY_USER_ROLES: UserRole[] = ["shop", "provider"];
+const GLOBAL_SEARCH_RESULT_LIMIT = 25;
 
 const locationUpdateSchema = z
   .object({
@@ -1064,6 +1066,29 @@ const productsQuerySchema = z
       path: ["minPrice"],
     },
   )
+  .refine(
+    (data) =>
+      (data.lat === undefined && data.lng === undefined) ||
+      (data.lat !== undefined && data.lng !== undefined),
+    {
+      message: "lat and lng must be provided together",
+      path: ["lat"],
+    },
+  );
+
+const globalSearchQuerySchema = z
+  .object({
+    q: z.string().trim().min(1).max(200),
+    lat: z.coerce.number().min(-90).max(90).optional(),
+    lng: z.coerce.number().min(-180).max(180).optional(),
+    radius: z
+      .coerce.number()
+      .min(MIN_NEARBY_RADIUS_KM)
+      .max(MAX_NEARBY_RADIUS_KM)
+      .optional(),
+    limit: z.coerce.number().int().positive().max(50).optional(),
+  })
+  .strict()
   .refine(
     (data) =>
       (data.lat === undefined && data.lng === undefined) ||
@@ -2851,6 +2876,280 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const computeDistanceKm = (
+    origin:
+      | {
+          lat: number;
+          lng: number;
+        }
+      | null,
+    target?:
+      | {
+          latitude?: string | number | null;
+          longitude?: string | number | null;
+        }
+      | null,
+  ) => {
+    if (!origin || !target) return null;
+    const targetLat = toNumericCoordinate(target.latitude);
+    const targetLng = toNumericCoordinate(target.longitude);
+    if (targetLat === null || targetLng === null) return null;
+    return haversineDistanceKm(origin.lat, origin.lng, targetLat, targetLng);
+  };
+
+  const buildRelevanceScore = (
+    haystack: string,
+    tokens: string[],
+    normalizedQuery: string,
+    distanceKm: number | null,
+  ) => {
+    let score = 0;
+    if (haystack.includes(normalizedQuery)) {
+      score += 4;
+    }
+    const tokenHits = tokens.reduce(
+      (acc, token) => acc + (haystack.includes(token) ? 1 : 0),
+      0,
+    );
+    score += tokenHits;
+
+    if (distanceKm !== null) {
+      if (distanceKm < 1) score += 2;
+      else if (distanceKm < 5) score += 1.5;
+      else if (distanceKm < 15) score += 1;
+      else if (distanceKm < 40) score += 0.5;
+    }
+
+    return score;
+  };
+
+  app.get("/api/search/global", async (req, res) => {
+    try {
+      const parsedQuery = globalSearchQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return res.status(400).json(formatValidationError(parsedQuery.error));
+      }
+
+      const {
+        q,
+        lat,
+        lng,
+        radius,
+        limit = GLOBAL_SEARCH_RESULT_LIMIT,
+      } = parsedQuery.data;
+
+      const normalizedQuery = q.trim().toLowerCase();
+      const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+      const origin =
+        lat !== undefined && lng !== undefined
+          ? { lat, lng, radiusKm: radius ?? DEFAULT_NEARBY_RADIUS_KM }
+          : null;
+      const maxResults = Math.min(limit, GLOBAL_SEARCH_RESULT_LIMIT);
+
+      const [services, productsPayload, shops] = await Promise.all([
+        storage.getServices({
+          searchTerm: q,
+          ...(origin
+            ? {
+                lat: origin.lat,
+                lng: origin.lng,
+                radiusKm: origin.radiusKm,
+              }
+            : {}),
+        }),
+        storage.getProducts({
+          searchTerm: q,
+          page: 1,
+          pageSize: maxResults,
+          ...(origin
+            ? {
+                lat: origin.lat,
+                lng: origin.lng,
+                radiusKm: origin.radiusKm,
+              }
+            : {}),
+        }),
+        storage.getShops(),
+      ]);
+
+      const serviceProviderIds = new Set(
+        services
+          .map((service) => service.providerId)
+          .filter((id): id is number => id != null),
+      );
+      const serviceProviders =
+        serviceProviderIds.size > 0
+          ? await storage.getUsersByIds(Array.from(serviceProviderIds))
+          : [];
+      const serviceProviderMap = new Map(
+        serviceProviders.map((provider) => [provider.id, provider]),
+      );
+
+      const serviceResults = services.map((service) => {
+        const provider =
+          service.providerId != null
+            ? serviceProviderMap.get(service.providerId) ?? null
+            : null;
+        const distanceKm = provider
+          ? computeDistanceKm(
+              origin ? { lat: origin.lat, lng: origin.lng } : null,
+              provider,
+            )
+          : null;
+        const haystack = `${service.name ?? ""} ${
+          service.description ?? ""
+        } ${provider?.name ?? ""}`.toLowerCase();
+        const relevanceScore = buildRelevanceScore(
+          haystack,
+          tokens,
+          normalizedQuery,
+          distanceKm,
+        );
+
+        return {
+          type: "service" as const,
+          id: service.id,
+          serviceId: service.id,
+          name: service.name ?? null,
+          description: service.description ?? null,
+          price: service.price ?? null,
+          image: Array.isArray(service.images) ? service.images[0] ?? null : null,
+          providerId: service.providerId ?? null,
+          providerName: provider?.name ?? null,
+          location: {
+            city: provider?.addressCity ?? null,
+            state: provider?.addressState ?? null,
+          },
+          distanceKm,
+          relevanceScore,
+        };
+      });
+
+      const productItems = productsPayload.items ?? [];
+      const productShopIds = new Set(
+        productItems
+          .map((product) => product.shopId)
+          .filter((id): id is number => id != null),
+      );
+      const productShops =
+        productShopIds.size > 0
+          ? await storage.getUsersByIds(Array.from(productShopIds))
+          : [];
+      const productShopMap = new Map(
+        productShops.map((shop) => [shop.id, shop]),
+      );
+
+      const productResults = productItems.map((product) => {
+        const shop = product.shopId ? productShopMap.get(product.shopId) ?? null : null;
+        const distanceKm = shop
+          ? computeDistanceKm(
+              origin ? { lat: origin.lat, lng: origin.lng } : null,
+              shop,
+            )
+          : null;
+        const haystack = `${product.name ?? ""} ${
+          product.description ?? ""
+        } ${shop?.name ?? ""}`.toLowerCase();
+        const relevanceScore = buildRelevanceScore(
+          haystack,
+          tokens,
+          normalizedQuery,
+          distanceKm,
+        );
+
+        return {
+          type: "product" as const,
+          id: product.id,
+          productId: product.id,
+          shopId: product.shopId ?? null,
+          name: product.name ?? null,
+          description: product.description ?? null,
+          price: product.price ?? null,
+          image: Array.isArray(product.images) ? product.images[0] ?? null : null,
+          shopName: shop?.name ?? null,
+          location: {
+            city: shop?.addressCity ?? null,
+            state: shop?.addressState ?? null,
+          },
+          distanceKm,
+          relevanceScore,
+        };
+      });
+
+      const shopResults = shops
+        .filter((shop) => {
+          const haystack = `${shop.name ?? ""} ${
+            shop.shopProfile?.description ?? ""
+          }`.toLowerCase();
+          if (!haystack) return false;
+          if (haystack.includes(normalizedQuery)) return true;
+          return tokens.every((token) => haystack.includes(token));
+        })
+        .map((shop) => {
+          const distanceKm = computeDistanceKm(
+            origin ? { lat: origin.lat, lng: origin.lng } : null,
+            shop,
+          );
+          const haystack = `${shop.name ?? ""} ${
+            shop.shopProfile?.description ?? ""
+          }`.toLowerCase();
+          const relevanceScore = buildRelevanceScore(
+            haystack,
+            tokens,
+            normalizedQuery,
+            distanceKm,
+          );
+          return {
+            type: "shop" as const,
+            id: shop.id,
+            shopId: shop.id,
+            name: shop.name ?? null,
+            description: shop.shopProfile?.description ?? null,
+            image: shop.profilePicture ?? null,
+            location: {
+              city: shop.addressCity ?? null,
+              state: shop.addressState ?? null,
+            },
+            distanceKm,
+            relevanceScore,
+          };
+        });
+
+      const combined = [...serviceResults, ...productResults, ...shopResults];
+      combined.sort((a, b) => {
+        if (b.relevanceScore !== a.relevanceScore) {
+          return b.relevanceScore - a.relevanceScore;
+        }
+        if (a.distanceKm !== null && b.distanceKm !== null) {
+          if (a.distanceKm !== b.distanceKm) {
+            return a.distanceKm - b.distanceKm;
+          }
+        } else if (a.distanceKm !== null) {
+          return -1;
+        } else if (b.distanceKm !== null) {
+          return 1;
+        }
+        return (a.name ?? "").localeCompare(b.name ?? "");
+      });
+
+      const results = combined.slice(0, maxResults).map((result) => {
+        const { relevanceScore, ...payload } = result;
+        return payload;
+      });
+
+      res.json({
+        query: q,
+        results,
+      });
+    } catch (error) {
+      logger.error("Error in global search:", error);
+      res.status(500).json({
+        message:
+          error instanceof Error ? error.message : "Failed to perform search",
+      });
+    }
+  });
+
   app.get(
     "/api/services/:id",
     async (req, res) => {
@@ -3808,6 +4107,228 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     },
   );
+
+  app.get(
+    "/api/recommendations/buy-again",
+    requireAuth,
+    requireRole(["customer"]),
+    async (req, res) => {
+      const customerId = req.user!.id;
+      const parseTimestamp = (value: unknown) => {
+        if (!value) return 0;
+        const date =
+          value instanceof Date ? value : new Date(value as string | number);
+        const time = date.getTime();
+        return Number.isFinite(time) ? time : 0;
+      };
+
+      const successfulOrderStatuses: Order["status"][] = [
+        "delivered",
+        "shipped",
+        "dispatched",
+        "processing",
+        "packed",
+        "confirmed",
+      ];
+      const successfulBookingStatuses: Booking["status"][] = [
+        "completed",
+        "accepted",
+        "rescheduled",
+        "rescheduled_pending_provider_approval",
+      ];
+
+      try {
+        const [orders, bookings] = await Promise.all([
+          storage.getOrdersByCustomer(customerId),
+          storage.getBookingsByCustomer(customerId),
+        ]);
+
+        const eligibleOrders = orders.filter((order) =>
+          successfulOrderStatuses.includes(order.status),
+        );
+
+        const orderIds = eligibleOrders.map((order) => order.id);
+        const orderItems =
+          orderIds.length > 0
+            ? await storage.getOrderItemsByOrderIds(orderIds)
+            : [];
+
+        const orderDateById = new Map<number, number>();
+        const orderShopById = new Map<number, number | null>();
+        for (const order of eligibleOrders) {
+          const timestamp = parseTimestamp(order.orderDate);
+          orderDateById.set(order.id, timestamp);
+          orderShopById.set(order.id, order.shopId ?? null);
+        }
+
+        const productFrequency = new Map<
+          number,
+          { count: number; lastTimestamp: number; shopId: number | null }
+        >();
+        for (const item of orderItems) {
+          const productId = item.productId;
+          if (!productId) continue;
+          const quantity = Number(item.quantity) || 1;
+          const orderTimestamp = orderDateById.get(item.orderId ?? -1) ?? 0;
+          const shopId = orderShopById.get(item.orderId ?? -1) ?? null;
+          const current =
+            productFrequency.get(productId) ?? {
+              count: 0,
+              lastTimestamp: 0,
+              shopId,
+            };
+          current.count += quantity;
+          current.lastTimestamp = Math.max(current.lastTimestamp, orderTimestamp);
+          current.shopId = current.shopId ?? shopId ?? null;
+          productFrequency.set(productId, current);
+        }
+
+        const bookingFrequency = new Map<
+          number,
+          { count: number; lastTimestamp: number }
+        >();
+        for (const booking of bookings) {
+          if (!booking.serviceId) continue;
+          if (!successfulBookingStatuses.includes(booking.status)) continue;
+          const timestamp =
+            parseTimestamp(booking.bookingDate ?? booking.updatedAt) ??
+            parseTimestamp(booking.createdAt);
+          const current =
+            bookingFrequency.get(booking.serviceId) ?? {
+              count: 0,
+              lastTimestamp: 0,
+            };
+          current.count += 1;
+          current.lastTimestamp = Math.max(current.lastTimestamp, timestamp);
+          bookingFrequency.set(booking.serviceId, current);
+        }
+
+        const [products, services] = await Promise.all([
+          productFrequency.size > 0
+            ? storage.getProductsByIds(Array.from(productFrequency.keys()))
+            : Promise.resolve([]),
+          bookingFrequency.size > 0
+            ? storage.getServicesByIds(Array.from(bookingFrequency.keys()))
+            : Promise.resolve([]),
+        ]);
+
+        const shopIds = new Set(
+          products
+            .map((product) => product.shopId)
+            .filter((id): id is number => id != null),
+        );
+        const providerIds = new Set(
+          services
+            .map((service) => service.providerId)
+            .filter((id): id is number => id != null),
+        );
+
+        const [shops, providers] = await Promise.all([
+          shopIds.size > 0
+            ? storage.getUsersByIds(Array.from(shopIds))
+            : Promise.resolve([]),
+          providerIds.size > 0
+            ? storage.getUsersByIds(Array.from(providerIds))
+            : Promise.resolve([]),
+        ]);
+
+        const shopMap = new Map(shops.map((shop) => [shop.id, shop]));
+        const providerMap = new Map(
+          providers.map((provider) => [provider.id, provider]),
+        );
+
+        const productRecommendations = products
+          .map((product) => {
+            const stat = productFrequency.get(product.id);
+            if (!stat) return null;
+            const shop = product.shopId
+              ? shopMap.get(product.shopId) ?? null
+              : null;
+            const lastOrderedAt =
+              stat.lastTimestamp > 0
+                ? new Date(stat.lastTimestamp).toISOString()
+                : null;
+            return {
+              productId: product.id,
+              shopId: product.shopId ?? stat.shopId ?? null,
+              name: product.name ?? null,
+              price: product.price ?? null,
+              image: Array.isArray(product.images)
+                ? product.images[0] ?? null
+                : null,
+              timesOrdered: stat.count,
+              lastOrderedAt,
+              shopName: shop?.name ?? null,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null)
+          .sort((a, b) => {
+            if (b.timesOrdered !== a.timesOrdered) {
+              return b.timesOrdered - a.timesOrdered;
+            }
+            const aTime = a.lastOrderedAt
+              ? new Date(a.lastOrderedAt).getTime()
+              : 0;
+            const bTime = b.lastOrderedAt
+              ? new Date(b.lastOrderedAt).getTime()
+              : 0;
+            return bTime - aTime;
+          });
+
+        const serviceRecommendations = services
+          .map((service) => {
+            const stat = bookingFrequency.get(service.id);
+            if (!stat) return null;
+            const provider = service.providerId
+              ? providerMap.get(service.providerId) ?? null
+              : null;
+            const lastBookedAt =
+              stat.lastTimestamp > 0
+                ? new Date(stat.lastTimestamp).toISOString()
+                : null;
+            return {
+              serviceId: service.id,
+              providerId: service.providerId ?? null,
+              name: service.name ?? null,
+              price: service.price ?? null,
+              image: Array.isArray(service.images)
+                ? service.images[0] ?? null
+                : null,
+              timesBooked: stat.count,
+              lastBookedAt,
+              providerName: provider?.name ?? null,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null)
+          .sort((a, b) => {
+            if (b.timesBooked !== a.timesBooked) {
+              return b.timesBooked - a.timesBooked;
+            }
+            const aTime = a.lastBookedAt
+              ? new Date(a.lastBookedAt).getTime()
+              : 0;
+            const bTime = b.lastBookedAt
+              ? new Date(b.lastBookedAt).getTime()
+              : 0;
+            return bTime - aTime;
+          });
+
+        res.json({
+          products: productRecommendations,
+          services: serviceRecommendations,
+        });
+      } catch (error) {
+        logger.error("Error building buy-again recommendations:", error);
+        res.status(500).json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to load recommendations",
+        });
+      }
+    },
+  );
+
   app.post(
     "/api/waitlist",
     requireAuth,
