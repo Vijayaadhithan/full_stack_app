@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
   Card,
@@ -20,6 +20,9 @@ import { ProductDetail } from "@shared/api-contract";
 import { apiClient } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/use-auth";
 import type { PublicShop } from "@/types/public-shop";
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import { useLocation } from "wouter";
+const MotionButton = motion(Button);
 
 export default function ProductDetails() {
   const { toast } = useToast();
@@ -27,6 +30,8 @@ export default function ProductDetails() {
   const shopId = params.shopId ? parseInt(params.shopId) : undefined;
   const productId = params.productId ? parseInt(params.productId) : undefined;
   const { user } = useAuth();
+  const [, navigate] = useLocation();
+  const [showFloatingBar, setShowFloatingBar] = useState(false);
 
   const { data: product, isLoading: isLoadingProduct } = useQuery<ProductDetail>({
     queryKey: [`/api/shops/${shopId}/products/${productId}`],
@@ -48,6 +53,15 @@ export default function ProductDetails() {
     queryKey: [`/api/shops/${shopId}`],
     enabled: !!shopId,
   });
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowFloatingBar(window.scrollY > 260);
+    };
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const enableReviews = Boolean(productId && user);
   const {
@@ -189,6 +203,20 @@ export default function ProductDetails() {
     },
   });
 
+  const galleryImages = useMemo(
+    () =>
+      product?.images?.length
+        ? product.images
+        : ["https://via.placeholder.com/600"],
+    [product?.images],
+  );
+  const primaryImage = galleryImages[0];
+  const handleBuyNow = () => {
+    addToCartMutation.mutate(product, {
+      onSuccess: () => navigate("/customer/cart"),
+    });
+  };
+
   if (isLoadingProduct || isLoadingShop) {
     return (
       <DashboardLayout>
@@ -268,191 +296,276 @@ export default function ProductDetails() {
           },
         }}
       />
-      <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
-        <Link href="/customer/browse-products">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to All Products
-          </Button>
-        </Link>
+      <LayoutGroup>
+        <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <Link href="/customer/browse-products">
+              <MotionButton variant="outline" size="sm" whileTap={{ scale: 0.95 }}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to All Products
+              </MotionButton>
+            </Link>
+            <Link href={`/customer/shops/${shop.id}`}>
+              <MotionButton variant="outline" size="sm" whileTap={{ scale: 0.95 }}>
+                <Store className="mr-2 h-4 w-4" /> Visit Shop
+              </MotionButton>
+            </Link>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle className="text-2xl md:text-3xl">
-                  {product.name}
-                </CardTitle>
-                <CardDescription className="mt-1">
-                  Sold by:{" "}
-                  <Link
-                    href={`/customer/shops/${shop.id}`}
-                    className="text-primary hover:underline"
-                  >
-                    {shop.shopProfile?.shopName || shop.name}
-                  </Link>
-                </CardDescription>
-              </div>
-              <Link href={`/customer/shops/${shop.id}`}>
-                <Button variant="outline" size="sm">
-                  <Store className="mr-2 h-4 w-4" /> Visit Shop
-                </Button>
-              </Link>
+          <section className="space-y-3">
+            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory rounded-3xl border bg-muted/40 p-2 md:hidden">
+              {galleryImages.map((image, index) => (
+                <motion.img
+                  key={image + index}
+                  layoutId={index === 0 ? `product-${product.id}-image` : undefined}
+                  src={image}
+                  alt={`${product.name} ${index + 1}`}
+                  className="h-72 w-[85vw] flex-shrink-0 snap-center rounded-2xl object-cover"
+                />
+              ))}
             </div>
-          </CardHeader>
-          <CardContent className="grid md:grid-cols-2 gap-6">
-            <div className="aspect-square relative overflow-hidden rounded-lg border">
-              <img
-                src={product.images?.[0] || "https://via.placeholder.com/600"}
+            <div className="hidden gap-4 rounded-3xl border bg-muted/40 p-4 md:grid md:grid-cols-[2fr_1fr]">
+              <motion.img
+                layoutId={`product-${product.id}-image`}
+                src={primaryImage}
                 alt={product.name}
-                className="object-cover w-full h-full"
+                className="h-full w-full rounded-2xl object-cover"
               />
-              {/* Discount display removed as 'discount' property doesn't exist on Product type */}
+              <div className="grid grid-cols-2 gap-3">
+                {galleryImages.slice(1, 5).map((image, index) => (
+                  <motion.img
+                    key={image + index}
+                    src={image}
+                    alt={`${product.name} ${index + 2}`}
+                    className="h-full w-full rounded-xl object-cover"
+                  />
+                ))}
+              </div>
             </div>
-            <div className="space-y-4">
-              <p className="text-muted-foreground">{product.description}</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">₹{product.price}</span>
-                {product.mrp && product.price < product.mrp && (
-                  <span className="text-sm text-muted-foreground line-through">
-                    ₹{product.mrp}
-                  </span>
+          </section>
+
+          <Card className="shadow-sm">
+            <CardHeader>
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <CardTitle className="text-2xl md:text-3xl">
+                    {product.name}
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Sold by{" "}
+                    <Link
+                      href={`/customer/shops/${shop.id}`}
+                      className="text-primary hover:underline"
+                    >
+                      {shop.shopProfile?.shopName || shop.name}
+                    </Link>
+                  </CardDescription>
+                </div>
+                {averageRating !== null && (
+                  <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
+                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                    {averageRating.toFixed(1)} ({reviews?.length})
+                  </div>
                 )}
               </div>
-              {averageRating !== null && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-500" />
-                  <span>
-                    {averageRating.toFixed(1)} out of 5 ({reviews?.length} reviews)
-                  </span>
-                </div>
-              )}
-              <p
-                className={`text-sm font-medium ${product.isAvailable && product.stock > 0 ? "text-green-600" : "text-red-600"}`}
-              >
-                {product.isAvailable && product.stock > 0
-                  ? `In Stock (${product.stock} available)`
-                  : "Out of Stock"}
-              </p>
-              {product.category && (
-                <p className="text-sm text-muted-foreground">
-                  Category: {product.category}
+            </CardHeader>
+            <CardContent className="grid gap-6 md:grid-cols-[2fr_1fr]">
+              <div className="space-y-4">
+                <p className="text-muted-foreground leading-relaxed">
+                  {product.description}
                 </p>
-              )}
-              {/* Add more product details here if needed, e.g., specifications */}
-              <div className="flex gap-3 pt-4">
-                <Button
+                {product.category && (
+                  <p className="text-sm text-muted-foreground">
+                    Category: {product.category}
+                  </p>
+                )}
+                <div className="rounded-xl border bg-muted/40 p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                    Availability
+                  </p>
+                  <p
+                    className={`text-sm font-semibold ${product.isAvailable && product.stock > 0 ? "text-green-600" : "text-red-600"}`}
+                  >
+                    {product.isAvailable && product.stock > 0
+                      ? `In Stock (${product.stock} available)`
+                      : "Out of Stock"}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-4 rounded-2xl border bg-muted/40 p-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Price</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold">₹{product.price}</span>
+                    {product.mrp && product.price < product.mrp && (
+                      <span className="text-sm text-muted-foreground line-through">
+                        ₹{product.mrp}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <MotionButton
+                    size="lg"
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => addToCartMutation.mutate(product)}
+                    disabled={
+                      !product.isAvailable ||
+                      product.stock <= 0 ||
+                      addToCartMutation.isPending
+                    }
+                    className="flex-1"
+                  >
+                    <ShoppingCart className="mr-2 h-5 w-5" /> Add to Cart
+                  </MotionButton>
+                  <MotionButton
+                    size="lg"
+                    variant="outline"
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => addToWishlistMutation.mutate(product)}
+                    disabled={addToWishlistMutation.isPending}
+                  >
+                    <Heart className="h-5 w-5" />
+                  </MotionButton>
+                </div>
+                <MotionButton
+                  whileTap={{ scale: 0.95 }}
                   size="lg"
-                  onClick={() => addToCartMutation.mutate(product)}
+                  className="w-full"
+                  onClick={handleBuyNow}
                   disabled={
                     !product.isAvailable ||
                     product.stock <= 0 ||
                     addToCartMutation.isPending
                   }
-                  className="flex-1"
                 >
-                  <ShoppingCart className="mr-2 h-5 w-5" /> Add to Cart
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  onClick={() => addToWishlistMutation.mutate(product)}
-                  disabled={addToWishlistMutation.isPending}
-                >
-                  <Heart className="h-5 w-5" />
-                </Button>
+                  Buy Now
+                </MotionButton>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Star className="h-5 w-5 fill-yellow-400 text-yellow-500" />
-              Ratings & Reviews
-            </CardTitle>
-            <CardDescription>
-              {averageRating !== null
-                ? `${averageRating.toFixed(1)} out of 5 • ${reviews.length} review${
-                    reviews.length !== 1 ? "s" : ""
-                  }`
-                : enableReviews
-                  ? "No reviews yet"
-                  : "Sign in to view customer reviews"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!enableReviews && (
-              <p className="text-sm text-muted-foreground">
-                Sign in to view customer reviews.
-              </p>
-            )}
-            {enableReviews ? (
-              isLoadingReviews ? (
-                <div className="space-y-3 py-2">
-                  {Array.from({ length: 3 }).map((_, index) => (
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Star className="h-5 w-5 fill-yellow-400 text-yellow-500" />
+                Ratings & Reviews
+              </CardTitle>
+              <CardDescription>
+                {averageRating !== null
+                  ? `${averageRating.toFixed(1)} out of 5 • ${reviews.length} review${
+                      reviews.length !== 1 ? "s" : ""
+                    }`
+                  : enableReviews
+                    ? "No reviews yet"
+                    : "Sign in to view customer reviews"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!enableReviews && (
+                <p className="text-sm text-muted-foreground">
+                  Sign in to view customer reviews.
+                </p>
+              )}
+              {enableReviews ? (
+                isLoadingReviews ? (
+                  <div className="space-y-3 py-2">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className="rounded-lg border p-4 space-y-2 bg-muted/30"
+                      >
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-1/2" />
+                      </div>
+                    ))}
+                  </div>
+                ) : reviews.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    Customers haven’t reviewed this product yet.
+                  </p>
+                ) : (
+                  reviews.map((review) => (
                     <div
-                      key={index}
+                      key={review.id}
                       className="rounded-lg border p-4 space-y-2 bg-muted/30"
                     >
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-1/2" />
-                    </div>
-                  ))}
-                </div>
-              ) : reviews.length === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  Customers haven’t reviewed this product yet.
-                </p>
-              ) : (
-                reviews.map((review) => (
-                  <div
-                    key={review.id}
-                    className="rounded-lg border p-4 space-y-2 bg-muted/30"
-                  >
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: 5 }).map((_, index) => (
-                          <Star
-                            key={index}
-                            className={`h-4 w-4 ${
-                              index < review.rating
-                                ? "fill-yellow-400 text-yellow-500"
-                                : "text-muted-foreground"
-                            }`}
-                          />
-                        ))}
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: 5 }).map((_, index) => (
+                            <Star
+                              key={index}
+                              className={`h-4 w-4 ${
+                                index < review.rating
+                                  ? "fill-yellow-400 text-yellow-500"
+                                  : "text-muted-foreground"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        {review.createdAt && (
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(review.createdAt).toLocaleDateString()}
+                          </span>
+                        )}
                       </div>
-                      {review.createdAt && (
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(review.createdAt).toLocaleDateString()}
-                        </span>
+                      {review.review ? (
+                        <p className="text-sm text-muted-foreground">
+                          {review.review}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">
+                          No written feedback provided.
+                        </p>
+                      )}
+                      {review.shopReply && (
+                        <div className="rounded-md bg-background/80 border border-dashed p-3 text-sm">
+                          <p className="font-medium">Shop reply</p>
+                          <p className="text-muted-foreground mt-1">
+                            {review.shopReply}
+                          </p>
+                        </div>
                       )}
                     </div>
-                    {review.review ? (
-                      <p className="text-sm text-muted-foreground">
-                        {review.review}
-                      </p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">
-                        No written feedback provided.
-                      </p>
-                    )}
-                    {review.shopReply && (
-                      <div className="rounded-md bg-background/80 border border-dashed p-3 text-sm">
-                        <p className="font-medium">Shop reply</p>
-                        <p className="text-muted-foreground mt-1">
-                          {review.shopReply}
-                        </p>
-                      </div>
-                    )}
+                  ))
+                )
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+
+        <AnimatePresence>
+          {showFloatingBar && (
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              className="fixed bottom-4 left-4 right-4 z-40 md:hidden"
+            >
+              <Card className="border-primary/30 shadow-2xl backdrop-blur">
+                <CardContent className="flex items-center justify-between gap-4 p-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Buy now</p>
+                    <p className="text-xl font-bold">₹{product.price}</p>
                   </div>
-                ))
-              )
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+                  <MotionButton
+                    whileTap={{ scale: 0.95 }}
+                    size="lg"
+                    onClick={handleBuyNow}
+                    disabled={
+                      !product.isAvailable ||
+                      product.stock <= 0 ||
+                      addToCartMutation.isPending
+                    }
+                  >
+                    Buy Now
+                  </MotionButton>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </LayoutGroup>
     </DashboardLayout>
   );
 }

@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 import { User } from "lucide-react"; // Import User icon
+import { motion } from "framer-motion";
 
 type GlobalSearchResult = {
   type: "service" | "product" | "shop";
@@ -80,6 +81,16 @@ type BuyAgainResponse = {
 type CombinedRecommendation =
   | (BuyAgainService & { type: "service"; lastUsedAt: Date | null })
   | (BuyAgainProduct & { type: "product"; lastUsedAt: Date | null });
+
+const container = {
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { staggerChildren: 0.08 } },
+};
+
+const item = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0 },
+};
 
 // Component to display booking requests with status tracking
 function BookingRequestsList() {
@@ -396,349 +407,370 @@ export default function CustomerDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-6">
-        <div>
-          <h1 className="text-2xl font-bold">Welcome, {user?.name}</h1>
-          <p className="text-muted-foreground">Here's what you can do</p>
-        </div>
-
-        <Card className="shadow-sm">
-          <CardHeader className="flex items-center justify-between gap-2">
+      <motion.div
+        initial="hidden"
+        animate="show"
+        variants={container}
+        className="space-y-6 p-4 sm:p-6"
+      >
+        <motion.div
+          variants={item}
+          className="relative overflow-hidden rounded-3xl border bg-gradient-to-r from-primary/10 via-primary/5 to-emerald-50 p-6 shadow-sm"
+        >
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.15),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.18),transparent_32%)]" />
+          <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Universal Search</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Find services, products, and shops in one search.
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Welcome back
+              </p>
+              <h1 className="text-2xl font-bold leading-tight">
+                {user?.name ?? "Customer"}
+              </h1>
+              <p className="text-muted-foreground">
+                Quick actions and live updates for your account.
               </p>
             </div>
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Sparkles className="h-4 w-4" />
-              New
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Try “cleaning” or “salon”"
-                  className="pl-9"
-                />
-              </div>
-              {profileLocation && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <MapPin className="h-3 w-3" />
-                  Using your saved location for distance and relevance
-                </div>
-              )}
-            </div>
-
-            {debouncedSearch.length < 2 ? (
-              <p className="text-sm text-muted-foreground">
-                Start typing to see nearby services, products, and shops together.
-              </p>
-            ) : isSearchLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Searching across the marketplace...
-              </div>
-            ) : (globalSearch?.results ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No matches found. Try a different keyword.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {globalSearch?.results.slice(0, 6).map((result) => {
-                  const price = formatPrice(result.price ?? null);
-                  const distanceLabel = formatDistance(result.distanceKm);
-                  const link =
-                    result.type === "service"
-                      ? `/customer/book-service/${result.id}`
-                      : result.type === "product"
-                        ? result.shopId != null
-                          ? `/customer/shops/${result.shopId}/products/${result.productId ?? result.id}`
-                          : "/customer/browse-products"
-                        : `/customer/shops/${result.id}`;
-
-                  return (
-                    <Card
-                      key={`${result.type}-${result.id}`}
-                      className="border-muted"
-                    >
-                      <CardContent className="p-3">
-                        <div className="flex items-start gap-3">
-                          <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                            {result.image ? (
-                              <img
-                                src={result.image}
-                                alt={result.name ?? "Result"}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <Search className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0 space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="text-xs">
-                                {result.type === "service"
-                                  ? "Service"
-                                  : result.type === "product"
-                                    ? "Product"
-                                    : "Shop"}
-                              </Badge>
-                              {distanceLabel && (
-                                <Badge variant="secondary" className="text-xs">
-                                  {distanceLabel}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="font-medium leading-tight line-clamp-1">
-                              {result.name ?? "Untitled"}
-                            </p>
-                            <p className="text-xs text-muted-foreground line-clamp-2">
-                              {result.description ||
-                                result.location?.city ||
-                                result.location?.state ||
-                                "Tap to view details"}
-                            </p>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                              {price && <span>{price}</span>}
-                              {result.type === "service" && result.providerName && (
-                                <span>{result.providerName}</span>
-                              )}
-                              {result.type !== "service" &&
-                                (result.shopName || result.location?.city) && (
-                                  <span>
-                                    {result.shopName ?? result.location?.city}
-                                  </span>
-                                )}
-                            </div>
-                          </div>
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={link}>
-                              {result.type === "service"
-                                ? "Book"
-                                : result.type === "product"
-                                  ? "View"
-                                  : "Open"}
-                            </Link>
-                          </Button>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {[
+                { label: "Reorder", href: "/customer/orders", icon: ShoppingBag },
+                { label: "Track", href: "/customer/orders", icon: Package },
+                { label: "Favorites", href: "/customer/wishlist", icon: Sparkles },
+              ].map((action) => {
+                const Icon = action.icon;
+                return (
+                  <motion.div
+                    key={action.label}
+                    whileHover={{ y: -2, scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="min-w-[150px]"
+                  >
+                    <Link href={action.href}>
+                      <div className="flex items-center gap-2 rounded-2xl border bg-white/80 px-3 py-2 shadow-sm backdrop-blur">
+                        <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
+                          <Icon className="h-4 w-4" />
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Link href="/customer/browse-services">
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Browse Services
-                </CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  Find and book services from local providers
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/customer/browse-shops">
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Browse Shops
-                </CardTitle>
-                <Store className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  Discover and explore local shops
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/customer/browse-products">
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Shop Products
-                </CardTitle>
-                <ShoppingBag className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  Browse and purchase products from local shops
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/customer/bookings">
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">
-                  My Bookings
-                </CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  View and manage your service bookings
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/customer/profile">
-            {" "}
-            {/* Add link to profile page */}
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">
-                  My Profile
-                </CardTitle>
-                <User className="h-4 w-4 text-muted-foreground" />{" "}
-                {/* Use User icon */}
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  View and edit your profile information
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/customer/orders">
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">My Orders</CardTitle>
-                <Package className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  Track and manage your product orders
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-        </div>
-
-        <Card className="shadow-sm">
-          <CardHeader className="flex items-start justify-between gap-2">
-            <div>
-              <CardTitle>Buy or Book Again</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Jump back into the items and services you use the most.
-              </p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">{action.label}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            Quick access
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  </motion.div>
+                );
+              })}
             </div>
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Sparkles className="h-4 w-4" />
-              Personalized
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            {isBuyAgainLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading your recent picks...
-              </div>
-            ) : recommendations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                We&apos;ll highlight your frequent orders and bookings once you&apos;ve placed a few.
-              </p>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {recommendations.map((item) => {
-                  const price = formatPrice(item.price);
-                  const lastUsedLabel =
-                    item.lastUsedAt && !Number.isNaN(item.lastUsedAt.getTime())
-                      ? `Last: ${format(item.lastUsedAt, "dd MMM")}`
-                      : null;
-                  const countLabel =
-                    item.type === "service"
-                      ? item.timesBooked
-                      : item.timesOrdered;
+          </div>
+        </motion.div>
 
-                  return (
-                    <Card key={`${item.type}-${item.type === "service" ? item.serviceId : item.productId}`}>
-                      <CardContent className="p-4">
-                        <div className="flex gap-3 items-start">
-                          <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                            {item.image ? (
-                              <img
-                                src={item.image}
-                                alt={item.name ?? "Recent item"}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0 space-y-1">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Badge variant="outline" className="text-xs">
-                                {item.type === "service" ? "Service" : "Product"}
-                              </Badge>
-                              <span>×{countLabel}</span>
+        <motion.div variants={item}>
+          <Card className="shadow-sm">
+            <CardHeader className="flex items-center justify-between gap-2">
+              <div>
+                <CardTitle>Universal Search</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Find services, products, and shops in one search.
+                </p>
+              </div>
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Sparkles className="h-4 w-4" />
+                New
+              </Badge>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Try “cleaning” or “salon”"
+                    className="pl-9"
+                  />
+                </div>
+                {profileLocation && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <MapPin className="h-3 w-3" />
+                    Using your saved location for distance and relevance
+                  </div>
+                )}
+              </div>
+
+              {debouncedSearch.length < 2 ? (
+                <p className="text-sm text-muted-foreground">
+                  Start typing to see nearby services, products, and shops together.
+                </p>
+              ) : isSearchLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Searching across the marketplace...
+                </div>
+              ) : (globalSearch?.results ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No matches found. Try a different keyword.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {globalSearch?.results.slice(0, 6).map((result) => {
+                    const price = formatPrice(result.price ?? null);
+                    const distanceLabel = formatDistance(result.distanceKm);
+                    const link =
+                      result.type === "service"
+                        ? `/customer/book-service/${result.id}`
+                        : result.type === "product"
+                          ? result.shopId != null
+                            ? `/customer/shops/${result.shopId}/products/${result.productId ?? result.id}`
+                            : "/customer/browse-products"
+                          : `/customer/shops/${result.id}`;
+
+                    return (
+                      <Card
+                        key={`${result.type}-${result.id}`}
+                        className="border-muted"
+                      >
+                        <CardContent className="p-3">
+                          <div className="flex items-start gap-3">
+                            <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center overflow-hidden">
+                              {result.image ? (
+                                <img
+                                  src={result.image}
+                                  alt={result.name ?? "Result"}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <Search className="h-4 w-4 text-muted-foreground" />
+                              )}
                             </div>
-                            <p className="font-medium leading-tight line-clamp-1">
-                              {item.name ?? "Recently used"}
-                            </p>
-                            <p className="text-xs text-muted-foreground line-clamp-2">
-                              {item.type === "service"
-                                ? item.providerName ?? "Your provider"
-                                : item.shopName ?? "From your local shop"}
-                            </p>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                              {price && <span>{price}</span>}
-                              {lastUsedLabel && <span>{lastUsedLabel}</span>}
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {result.type === "service"
+                                    ? "Service"
+                                    : result.type === "product"
+                                      ? "Product"
+                                      : "Shop"}
+                                </Badge>
+                                {distanceLabel && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {distanceLabel}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="font-medium leading-tight line-clamp-1">
+                                {result.name ?? "Untitled"}
+                              </p>
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {result.description ||
+                                  result.location?.city ||
+                                  result.location?.state ||
+                                  "Tap to view details"}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                {price && <span>{price}</span>}
+                                {result.type === "service" && result.providerName && (
+                                  <span>{result.providerName}</span>
+                                )}
+                                {result.type !== "service" &&
+                                  (result.shopName || result.location?.city) && (
+                                    <span>
+                                      {result.shopName ?? result.location?.city}
+                                    </span>
+                                  )}
+                              </div>
                             </div>
-                          </div>
-                          {item.type === "service" ? (
-                            <Button size="sm" asChild className="mt-1">
-                              <Link href={`/customer/book-service/${item.serviceId}`}>
-                                Book again
+                            <Button variant="outline" size="sm" asChild>
+                              <Link href={link}>
+                                {result.type === "service"
+                                  ? "Book"
+                                  : result.type === "product"
+                                    ? "View"
+                                    : "Open"}
                               </Link>
                             </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              className="mt-1"
-                              onClick={() => addToCartMutation.mutate(item.productId)}
-                              disabled={addToCartMutation.isPending}
-                            >
-                              {addToCartMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <>
-                                  <ShoppingCart className="h-4 w-4 mr-1" />
-                                  Add
-                                </>
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <motion.div variants={item}>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                title: "Browse Services",
+                href: "/customer/browse-services",
+                icon: Calendar,
+                blurb: "Find trusted pros",
+              },
+              {
+                title: "Browse Shops",
+                href: "/customer/browse-shops",
+                icon: Store,
+                blurb: "Explore local stores",
+              },
+              {
+                title: "Shop Products",
+                href: "/customer/browse-products",
+                icon: ShoppingBag,
+                blurb: "Add to cart fast",
+              },
+              {
+                title: "My Bookings",
+                href: "/customer/bookings",
+                icon: Calendar,
+                blurb: "Manage slots",
+              },
+              {
+                title: "My Orders",
+                href: "/customer/orders",
+                icon: Package,
+                blurb: "Track packages",
+              },
+              {
+                title: "My Profile",
+                href: "/customer/profile",
+                icon: User,
+                blurb: "Account & payments",
+              },
+            ].map((tile) => {
+              const Icon = tile.icon;
+              return (
+                <Link key={tile.title} href={tile.href}>
+                  <Card className="group cursor-pointer border bg-gradient-to-br from-white via-white to-primary/5 p-0 transition-all hover:-translate-y-1 hover:shadow-lg">
+                    <CardContent className="flex h-full flex-col gap-3 p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          Go
+                        </span>
+                        <div className="rounded-full bg-primary/10 p-2 text-primary">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-lg font-semibold">{tile.title}</p>
+                        <p className="text-sm text-muted-foreground">{tile.blurb}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        <motion.div variants={item}>
+          <Card className="shadow-sm">
+            <CardHeader className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle>Buy or Book Again</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Jump back into the items and services you use the most.
+                </p>
+              </div>
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Sparkles className="h-4 w-4" />
+                Personalized
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              {isBuyAgainLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading your recent picks...
+                </div>
+              ) : recommendations.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  We&apos;ll highlight your frequent orders and bookings once you&apos;ve placed a few.
+                </p>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {recommendations.map((item) => {
+                    const price = formatPrice(item.price);
+                    const lastUsedLabel =
+                      item.lastUsedAt && !Number.isNaN(item.lastUsedAt.getTime())
+                        ? `Last: ${format(item.lastUsedAt, "dd MMM")}`
+                        : null;
+                    const countLabel =
+                      item.type === "service"
+                        ? item.timesBooked
+                        : item.timesOrdered;
+
+                    return (
+                      <Card key={`${item.type}-${item.type === "service" ? item.serviceId : item.productId}`}>
+                        <CardContent className="p-4">
+                          <div className="flex gap-3 items-start">
+                            <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center overflow-hidden">
+                              {item.image ? (
+                                <img
+                                  src={item.image}
+                                  alt={item.name ?? "Recent item"}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant="outline" className="text-xs">
+                                  {item.type === "service" ? "Service" : "Product"}
+                                </Badge>
+                                <span>×{countLabel}</span>
+                              </div>
+                              <p className="font-medium leading-tight line-clamp-1">
+                                {item.name ?? "Recently used"}
+                              </p>
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {item.type === "service"
+                                  ? item.providerName ?? "Your provider"
+                                  : item.shopName ?? "From your local shop"}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                {price && <span>{price}</span>}
+                                {lastUsedLabel && <span>{lastUsedLabel}</span>}
+                              </div>
+                            </div>
+                            {item.type === "service" ? (
+                              <Button size="sm" asChild className="mt-1">
+                                <Link href={`/customer/book-service/${item.serviceId}`}>
+                                  Book again
+                                </Link>
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                className="mt-1"
+                                onClick={() => addToCartMutation.mutate(item.productId)}
+                                disabled={addToCartMutation.isPending}
+                              >
+                                {addToCartMutation.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <ShoppingCart className="h-4 w-4 mr-1" />
+                                    Add
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div variants={item} className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Booking Requests</CardTitle>
@@ -756,8 +788,8 @@ export default function CustomerDashboard() {
               <BookingHistoryList />
             </CardContent>
           </Card>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </DashboardLayout>
   );
 }

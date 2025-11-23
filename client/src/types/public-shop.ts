@@ -19,4 +19,5 @@ export type PublicShop = {
   returnsEnabled: boolean;
   averageRating: string | number | null;
   totalReviews: number;
+  promotions?: { id: number; title: string; imageUrl?: string }[];
 };

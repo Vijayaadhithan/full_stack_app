@@ -13,10 +13,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, Star, AlertCircle } from "lucide-react"; // Import icons
+import { Loader2, Star, AlertCircle, Sparkles } from "lucide-react"; // Import icons
 import { Review, ProductReview } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { Badge } from "@/components/ui/badge";
 
 // Use the updated Review type from the backend modification
 interface ReviewWithService extends Review {
@@ -220,77 +221,119 @@ const MyReviews: React.FC = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
-        <h1 className="text-3xl font-bold">My Reviews</h1>
-        {reviews.length === 0 ? (
-          <p>You haven&apos;t submitted any reviews yet.</p>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {reviews.map((review) => (
-              <Card key={review.id}>
-                <CardHeader>
-                  <CardTitle>
-                    {review.serviceName || `Service ID: ${review.serviceId}`}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <StarRating rating={review.rating} readOnly />
-                  <p className="text-sm text-muted-foreground">
-                    {review.review || "No comment provided."}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Reviewed on:{" "}
-                    {review.createdAt
-                      ? new Date(review.createdAt).toLocaleDateString()
-                      : "Date Unavailable"}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEditClick(review)}
-                  >
-                    Edit Review
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+      <div className="p-4 sm:p-6 space-y-6">
+        <div className="relative overflow-hidden rounded-3xl border bg-gradient-to-r from-primary/10 via-primary/5 to-amber-50 p-6 shadow-sm">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.14),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(251,191,36,0.16),transparent_32%)]" />
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Feedback
+              </p>
+              <h1 className="text-3xl font-bold leading-tight">My Reviews</h1>
+              <p className="text-sm text-muted-foreground">
+                Keep your voice polished—edit and revisit every rating.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-2 text-sm font-medium shadow-sm backdrop-blur">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span>{reviews.length + productReviews.length} total</span>
+            </div>
           </div>
-        )}
-        <h2 className="text-2xl font-semibold mt-8">Product Reviews</h2>
-        {productReviews.length === 0 ? (
-          <p>You haven&apos;t submitted any product reviews yet.</p>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {productReviews.map((review) => (
-              <Card key={review.id}>
-                <CardHeader>
-                  <CardTitle>
-                    {review.productName || `Product ID: ${review.productId}`}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <StarRating rating={review.rating} readOnly />
-                  <p className="text-sm text-muted-foreground">
-                    {review.review || "No comment provided."}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Reviewed on:{" "}
-                    {review.createdAt
-                      ? new Date(review.createdAt).toLocaleDateString()
-                      : "Date Unavailable"}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleProductEditClick(review)}
-                  >
-                    Edit Review
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Service Reviews</h2>
+            <Badge variant="outline">{reviews.length} entries</Badge>
           </div>
-        )}
+          {reviews.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-muted-foreground">
+                You haven&apos;t submitted any service reviews yet.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {reviews.map((review) => (
+                <Card key={review.id} className="h-full">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center justify-between gap-2">
+                      <span className="line-clamp-1">
+                        {review.serviceName || `Service ID: ${review.serviceId}`}
+                      </span>
+                      <Badge variant="secondary">Service</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <StarRating rating={review.rating} readOnly />
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {review.review || "No comment provided."}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {review.createdAt
+                        ? new Date(review.createdAt).toLocaleDateString()
+                        : "Date Unavailable"}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditClick(review)}
+                    >
+                      Edit Review
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Product Reviews</h2>
+            <Badge variant="outline">{productReviews.length} entries</Badge>
+          </div>
+          {productReviews.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-muted-foreground">
+                You haven&apos;t submitted any product reviews yet.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {productReviews.map((review) => (
+                <Card key={review.id} className="h-full">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center justify-between gap-2">
+                      <span className="line-clamp-1">
+                        {review.productName || `Product ID: ${review.productId}`}
+                      </span>
+                      <Badge variant="secondary">Product</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <StarRating rating={review.rating} readOnly />
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {review.review || "No comment provided."}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {review.createdAt
+                        ? new Date(review.createdAt).toLocaleDateString()
+                        : "Date Unavailable"}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleProductEditClick(review)}
+                    >
+                      Edit Review
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Edit Review Dialog using Shadcn UI */}

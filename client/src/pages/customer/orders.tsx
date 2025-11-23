@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { Order } from "@shared/schema";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Package, ArrowLeft, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 import { formatIndianDisplay } from "@shared/date-utils";
@@ -57,6 +57,46 @@ const ORDER_STATUS_LABELS: Record<Order["status"], string> = {
   delivered: "Delivered",
   returned: "Returned",
 };
+
+const ORDER_TRACK_STEPS: Order["status"][] = [
+  "pending",
+  "confirmed",
+  "shipped",
+  "delivered",
+];
+
+const getOrderProgressIndex = (status: Order["status"]) => {
+  const index = ORDER_TRACK_STEPS.indexOf(status);
+  return index >= 0 ? index : 1;
+};
+
+const ConfettiBurst = () => (
+  <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    {Array.from({ length: 12 }).map((_, index) => (
+      <motion.span
+        key={index}
+        className="absolute h-1.5 w-1.5 rounded-full"
+        style={{
+          backgroundColor: index % 2 === 0 ? "#22c55e" : "#3b82f6",
+          left: `${(index / 12) * 100}%`,
+          top: "50%",
+        }}
+        initial={{ opacity: 1, y: 0, x: 0 }}
+        animate={{
+          opacity: [1, 0.9, 0],
+          y: [-10 - index * 2, -30 - index * 2],
+          x: [0, (index % 2 === 0 ? 1 : -1) * 12],
+        }}
+        transition={{
+          duration: 1.1,
+          delay: index * 0.04,
+          repeat: Infinity,
+          repeatDelay: 5,
+        }}
+      />
+    ))}
+  </div>
+);
 
 type OrderWithShop = Order & {
   shop?: {
@@ -141,10 +181,13 @@ export default function Orders() {
               const hasShopCoordinates =
                 order.shop?.latitude != null &&
                 order.shop?.longitude != null;
+              const progressIndex = getOrderProgressIndex(order.status);
+              const isDelivered = order.status === "delivered";
               return (
                 <motion.div key={order.id} variants={itemVariants}>
                   <Card>
-                    <CardContent className="p-6">
+                    <CardContent className="p-6 relative overflow-hidden">
+                      <AnimatePresence>{isDelivered ? <ConfettiBurst /> : null}</AnimatePresence>
                       <div className="flex flex-col md:flex-row justify-between gap-4">
                         <div>
                           <div className="flex items-center gap-2">
@@ -180,6 +223,30 @@ export default function Orders() {
                             </Button>
                           </Link>
                         </div>
+                      </div>
+                      <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                        {ORDER_TRACK_STEPS.map((step, index) => {
+                          const isActive = index <= progressIndex;
+                          return (
+                            <React.Fragment key={step}>
+                              <div className="flex items-center gap-1">
+                                <div
+                                  className={`h-2.5 w-2.5 rounded-full border ${isActive ? "bg-primary border-primary" : "border-muted-foreground/40"}`}
+                                />
+                                <span
+                                  className={isActive ? "text-foreground" : ""}
+                                >
+                                  {ORDER_STATUS_LABELS[step] || step}
+                                </span>
+                              </div>
+                              {index !== ORDER_TRACK_STEPS.length - 1 && (
+                                <div
+                                  className={`h-px w-6 ${isActive ? "bg-primary" : "bg-muted"}`}
+                                />
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
                       </div>
                       {order.deliveryMethod === "pickup" &&
                         (order.shop?.address || hasShopCoordinates) && (

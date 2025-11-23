@@ -117,6 +117,7 @@ export function MainNav({ rightSlot }: MainNavProps) {
                       <Button
                         variant={isActive ? "secondary" : "ghost"}
                         className="w-full justify-start"
+                        data-cart-icon={item.label === "Cart" ? "true" : undefined}
                       >
                         <Icon className="mr-3 h-5 w-5" />
                         {item.label}
@@ -169,6 +170,7 @@ export function MainNav({ rightSlot }: MainNavProps) {
                   <Button
                     variant={isActive ? "secondary" : "ghost"}
                     className="flex items-center gap-2"
+                    data-cart-icon={item.label === "Cart" ? "true" : undefined}
                   >
                     <Icon className="h-5 w-5" />
                     {item.label}

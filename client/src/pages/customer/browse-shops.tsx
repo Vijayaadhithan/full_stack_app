@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Loader2, Store, MapPin, Filter } from "lucide-react";
+import { Loader2, Store, MapPin, Filter, Sparkles, Compass } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   Popover,
   PopoverTrigger,
@@ -197,51 +198,69 @@ export default function BrowseShops() {
         variants={container}
         initial="hidden"
         animate="show"
-        className="space-y-6 p-6"
+        className="space-y-6 p-4 sm:p-6"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold">Browse Shops</h1>
-          <div className="relative flex-1 w-full sm:max-w-xs">
-            <Input
-              placeholder="Search shops..."
-              value={filters.searchQuery}
-              onChange={(e) =>
-                handleFilterChange("searchQuery", e.target.value)
-              }
-            />
+        <div className="relative overflow-hidden rounded-3xl border bg-gradient-to-r from-primary/10 via-primary/5 to-sky-50 p-6 shadow-sm">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.14),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.16),transparent_32%)]" />
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Discover
+              </p>
+              <h1 className="text-2xl font-bold leading-tight">
+                Browse Shops nearby
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Glassy filters + location to surface the best fit.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 rounded-2xl bg-white/80 px-3 py-2 shadow-sm backdrop-blur">
+              <Compass className="h-4 w-4 text-primary" />
+              <div className="text-sm">
+                {canUseNearbySearch
+                  ? "Using your saved location"
+                  : "Set a radius to improve results"}
+              </div>
+            </div>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                <Filter className="mr-2 h-4 w-4" /> More Filters
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-4 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="city">City</Label>
-                <Input
-                  id="city"
-                  value={filters.locationCity}
-                  onChange={(e) =>
-                    handleFilterChange("locationCity", e.target.value)
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="state">State</Label>
-                <Input
-                  id="state"
-                  value={filters.locationState}
-                  onChange={(e) =>
-                    handleFilterChange("locationState", e.target.value)
-                  }
-                />
-              </div>
-            </PopoverContent>
-          </Popover>
-          <LocationFilterPopover state={locationFilter} />
+          <div className="mt-4 grid grid-cols-1 gap-3 items-center md:grid-cols-[1.6fr_1fr_1fr]">
+            <div className="relative w-full">
+              <Input
+                placeholder="Search shops..."
+                value={filters.searchQuery}
+                onChange={(e) => handleFilterChange("searchQuery", e.target.value)}
+                className="pl-3"
+              />
+            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-auto">
+                  <Filter className="mr-2 h-4 w-4" /> Filters
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    value={filters.locationCity}
+                    onChange={(e) => handleFilterChange("locationCity", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <Input
+                    id="state"
+                    value={filters.locationState}
+                    onChange={(e) => handleFilterChange("locationState", e.target.value)}
+                  />
+                </div>
+              </PopoverContent>
+            </Popover>
+            <LocationFilterPopover state={locationFilter} />
+          </div>
         </div>
-        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground space-y-1">
+        <div className="rounded-2xl border bg-muted/40 p-4 text-sm text-muted-foreground space-y-1">
           {customerLocation ? (
             <>
               Showing shops within{" "}
@@ -263,8 +282,19 @@ export default function BrowseShops() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center min-h-[320px]">
-            <Loader2 className="h-8 w-8 animate-spin" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Card key={index} className="overflow-hidden">
+                <div className="h-28 bg-gradient-to-r from-muted to-muted/60" />
+                <CardContent className="space-y-2 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="h-4 w-28 rounded bg-muted" />
+                    <div className="h-6 w-16 rounded bg-muted" />
+                  </div>
+                  <div className="h-4 w-32 rounded bg-muted" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
         ) : filteredShops.length === 0 ? (
           <Card>
@@ -278,49 +308,57 @@ export default function BrowseShops() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredShops.map((shop) => {
               const distance = computeDistance(customerLocation, shop);
+              const displayName = shop.shopProfile?.shopName || shop.name;
               return (
                 <motion.div key={shop.id} variants={item}>
                   <Link href={`/customer/shops/${shop.id}`}>
-                    <Card className="h-full cursor-pointer transition-shadow hover:shadow-lg">
-                      <CardContent className="p-6">
-                        <div className="flex flex-col gap-4 h-full">
+                    <Card className="group h-full cursor-pointer overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-xl">
+                      <div className="relative h-24 bg-gradient-to-r from-primary/10 via-muted to-muted/60">
+                        {shop.shopBannerImageUrl ? (
+                          <img
+                            src={shop.shopBannerImageUrl}
+                            alt={displayName ?? "Shop banner"}
+                            className="absolute inset-0 h-full w-full object-cover opacity-70"
+                          />
+                        ) : null}
+                        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background/80" />
+                        <div className="absolute left-4 bottom-3 inline-flex items-center gap-2 rounded-full bg-background/80 px-3 py-1 text-xs font-semibold shadow-sm">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          Featured shop
+                        </div>
+                      </div>
+                      <CardContent className="flex h-full flex-col gap-3 p-4">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                              {shop.profilePicture ? (
-                                <img
-                                  src={shop.profilePicture}
-                                  alt={shop.shopProfile?.shopName || shop.name || "Shop"}
-                                  className="h-full w-full rounded-full object-cover"
-                                />
-                              ) : (
-                                <Store className="h-6 w-6 text-primary" />
-                              )}
+                            <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary/10 text-primary">
+                              <Store className="h-5 w-5" />
                             </div>
                             <div>
-                              <h3 className="font-semibold">
-                                {shop.shopProfile?.shopName || shop.name}
+                              <h3 className="font-semibold line-clamp-1">
+                                {displayName}
                               </h3>
-                              <div className="flex items-center text-sm text-muted-foreground">
-                                <MapPin className="mr-1 h-3 w-3" />
-                                <span>{formatAddress(shop)}</span>
-                              </div>
-                              {distance !== null ? (
-                                <p className="text-xs text-muted-foreground">
-                                  {distance.toFixed(1)} km away
-                                </p>
-                              ) : null}
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {shop.shopProfile?.description ||
+                                  "Local shop near you"}
+                              </p>
                             </div>
                           </div>
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {shop.shopProfile?.description ||
-                              "No description available"}
-                          </p>
-                          <div className="mt-auto pt-2">
-                            <Button variant="outline" className="w-full">
-                              View Shop
-                            </Button>
-                          </div>
+                          <Badge variant="secondary">Shop</Badge>
                         </div>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <MapPin className="h-4 w-4" />
+                          <span className="line-clamp-1">
+                            {formatAddress(shop)}
+                          </span>
+                        </div>
+                        {distance !== null && (
+                          <p className="text-xs font-medium text-primary">
+                            {distance.toFixed(1)} km away
+                          </p>
+                        )}
+                        <Button className="w-full mt-auto" variant="outline">
+                          Visit Shop
+                        </Button>
                       </CardContent>
                     </Card>
                   </Link>

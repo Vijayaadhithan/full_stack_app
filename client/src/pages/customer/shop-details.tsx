@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import MapLink from "@/components/location/MapLink";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +16,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { productFilterConfig } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import {
   Search,
   ShoppingCart,
@@ -25,7 +25,6 @@ import {
   MapPin,
   ArrowLeft,
 } from "lucide-react";
-import { useState } from "react";
 import { useParams, Link } from "wouter";
 import Meta from "@/components/meta";
 import type { PublicShop } from "@/types/public-shop";
@@ -88,6 +87,11 @@ export default function ShopDetails() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const { scrollY } = useScroll();
+  const bannerBlur = useTransform(scrollY, [0, 220], ["blur(0px)", "blur(12px)"]);
+  const bannerOpacity = useTransform(scrollY, [0, 220], [1, 0.7]);
+  const titleScale = useTransform(scrollY, [0, 220], [1, 0.9]);
 
   const {
     data: shop,
@@ -150,6 +154,33 @@ export default function ShopDetails() {
     console.error("Error fetching shop products:", productsError);
     // Optionally show a toast or specific error message here
   }
+
+  const promotions = useMemo(() => {
+    if (!shop) return [];
+    const direct = (shop as unknown as { promotions?: { id: number; title: string; imageUrl?: string }[] }).promotions;
+    const profilePromos =
+      (shop.shopProfile as unknown as { promotions?: { id: number; title: string; imageUrl?: string }[] } | null | undefined)?.promotions;
+    return (
+      direct ||
+      profilePromos || [
+        {
+          id: 1,
+          title: "New Drop",
+          imageUrl: shop.shopBannerImageUrl ?? undefined,
+        },
+        {
+          id: 2,
+          title: "Bestsellers",
+          imageUrl: shop.shopLogoImageUrl ?? undefined,
+        },
+        {
+          id: 3,
+          title: "Seasonal Picks",
+          imageUrl: undefined,
+        },
+      ]
+    );
+  }, [shop]);
 
   const addToCartMutation = useMutation<
     unknown,
@@ -378,41 +409,89 @@ export default function ShopDetails() {
         </Link>
 
         {/* Shop Header */}
-        <Card className="mb-8">
-          <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row gap-6 items-start">
-                  <div className="h-24 w-24 rounded-lg bg-primary/10 flex items-center justify-center">
-                    {shop.profilePicture ? (
-                      <img
-                        src={shop.profilePicture}
-                        alt={shop.shopProfile?.shopName || shop.name || "Shop"}
-                        className="h-full w-full rounded-lg object-cover"
-                      />
+        <motion.div
+          ref={bannerRef}
+          className="relative mb-6 overflow-hidden rounded-3xl border bg-muted/40"
+        >
+          <motion.div
+            className="absolute inset-0"
+            style={{ filter: bannerBlur, opacity: bannerOpacity }}
+          >
+            <img
+              src={
+                shop.shopBannerImageUrl ||
+                "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1400&q=80"
+              }
+              alt={shop.shopProfile?.shopName ?? shop.name ?? "Shop banner"}
+              className="h-full w-full object-cover"
+            />
+          </motion.div>
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/30 to-background" />
+          <div className="relative z-10 flex flex-col gap-4 p-6 sm:flex-row sm:items-end sm:justify-between sm:p-8">
+            <div className="flex items-center gap-4">
+              <div className="h-20 w-20 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center border border-white/30">
+                {shop.profilePicture ? (
+                  <img
+                    src={shop.profilePicture}
+                    alt={shop.shopProfile?.shopName || shop.name || "Shop"}
+                    className="h-full w-full rounded-2xl object-cover"
+                  />
                 ) : (
-                  <Store className="h-12 w-12 text-primary" />
+                  <Store className="h-10 w-10 text-white" />
                 )}
               </div>
-              <div className="flex-1">
-                <h1 className="text-2xl font-bold">
+              <div>
+                <motion.h1
+                  style={{ scale: titleScale }}
+                  className="text-3xl font-bold text-white drop-shadow"
+                >
                   {shop.shopProfile?.shopName ?? shop.name}
-                </h1>
-                <div className="flex flex-wrap items-center gap-2 text-muted-foreground mt-1">
+                </motion.h1>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-white/80">
                   <span className="inline-flex items-center gap-1">
                     <MapPin className="h-4 w-4" />
                     {formatAddress(shop)}
                   </span>
-                  <MapLink
-                    latitude={shop.latitude}
-                    longitude={shop.longitude}
-                  />
+                  <MapLink latitude={shop.latitude} longitude={shop.longitude} />
                 </div>
-                <p className="mt-4">
-                  {shop.shopProfile?.description ?? "No description available"}
-                </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+            <div className="flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-white backdrop-blur">
+              <Store className="h-4 w-4" />
+              <span className="text-sm">Returns {shop.returnsEnabled ? "enabled" : "policy applies"}</span>
+            </div>
+          </div>
+        </motion.div>
+
+        <div className="mb-8 overflow-hidden rounded-2xl border bg-background/80 p-3 shadow-sm">
+          <p className="px-2 text-sm font-semibold text-muted-foreground">
+            Promotions
+          </p>
+          <div className="mt-2 flex gap-3 overflow-x-auto pb-2">
+            {promotions.map((promo) => (
+              <motion.div
+                key={promo.id}
+                whileHover={{ y: -4 }}
+                className="flex w-20 flex-col items-center gap-2"
+              >
+                <div className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-primary/60 bg-muted">
+                  {promo.imageUrl ? (
+                    <img
+                      src={promo.imageUrl}
+                      alt={promo.title}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Store className="m-auto h-6 w-6 text-primary" />
+                  )}
+                </div>
+                <span className="text-center text-xs font-medium">
+                  {promo.title}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        </div>
 
         {/* Products Section */}
         <div className="space-y-6">
@@ -461,19 +540,19 @@ export default function ShopDetails() {
                     href={`/customer/shops/${product.shopId}/products/${product.id}`}
                     className="block h-full"
                   >
-                    <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
-                      <div className="aspect-square relative overflow-hidden">
+                    <Card className="h-full flex flex-col overflow-hidden cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-xl">
+                      <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-muted to-muted/40">
                         <img
                           src={
                             product.images?.[0] ||
-                            "https://via.placeholder.com/400"
+                            "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
                           }
                           alt={product.name}
-                          className="object-cover w-full h-full"
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                         {product.mrp &&
                           parseFloat(product.mrp) > parseFloat(product.price) && (
-                            <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                            <div className="absolute left-3 top-3 rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white shadow">
                               {Math.round(
                                 ((parseFloat(product.mrp) -
                                   parseFloat(product.price)) /
@@ -483,14 +562,33 @@ export default function ShopDetails() {
                               % OFF
                             </div>
                           )}
+                        {!product.isAvailable && (
+                          <div className="absolute inset-0 grid place-items-center bg-black/40 text-sm font-semibold text-white">
+                            Out of stock
+                          </div>
+                        )}
                       </div>
-                      <CardContent className="flex-1 p-4">
-                        <h3 className="font-semibold truncate">{product.name}</h3>
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                          {product.description ?? "No description"}
-                        </p>
+                      <CardContent className="flex flex-1 flex-col gap-3 p-4">
+                        <div className="space-y-1">
+                          <h3 className="font-semibold line-clamp-1">
+                            {product.name}
+                          </h3>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {product.description ?? "No description"}
+                          </p>
+                        </div>
                         <div className="flex items-center justify-between">
-                          <p className="font-semibold">₹{product.price}</p>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-lg font-semibold">
+                              ₹{product.price}
+                            </p>
+                            {product.mrp &&
+                              parseFloat(product.mrp) > parseFloat(product.price) && (
+                                <span className="text-xs text-muted-foreground line-through">
+                                  ₹{product.mrp}
+                                </span>
+                              )}
+                          </div>
                           <div className="flex gap-2">
                             <Button
                               size="icon"

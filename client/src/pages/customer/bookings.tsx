@@ -27,7 +27,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Booking, Service, Review } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Star,
   Calendar as CalendarIcon,
@@ -39,6 +39,8 @@ import { format, isAfter, isBefore, addDays } from "date-fns";
 import { formatIndianDisplay } from "@shared/date-utils";
 import { DialogTrigger } from "@radix-ui/react-dialog";
 import { Input } from "@/components/ui/input"; // Added Input for datetime-local
+import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 type BookingWithService = Booking & {
   service: Service;
@@ -107,6 +109,28 @@ const getBookingStatusBadgeClass = (status: CustomerBookingStatus) =>
     BOOKING_STATUS_BADGE_CLASSES[status] ||
     "bg-slate-100 text-slate-700 border-slate-200"
   }`;
+
+const ACTIVE_BOOKING_STATUSES: CustomerBookingStatus[] = [
+  "accepted",
+  "rescheduled",
+  "rescheduled_pending_provider_approval",
+  "awaiting_payment",
+];
+
+const isInProgressStatus = (status: CustomerBookingStatus) =>
+  ACTIVE_BOOKING_STATUSES.includes(status);
+
+const TIMELINE_STEPS: CustomerBookingStatus[] = [
+  "pending",
+  "accepted",
+  "rescheduled",
+  "completed",
+];
+
+const getStatusProgressIndex = (status: CustomerBookingStatus) => {
+  const index = TIMELINE_STEPS.indexOf(status);
+  return index >= 0 ? index : 1;
+};
 
 function hasWrappedBookings(
   data: BookingsResponse | undefined,
@@ -601,6 +625,9 @@ export default function Bookings() {
       b.status === "completed" ||
       isBefore(new Date(b.bookingDate), new Date()),
   );
+  const liveBooking = upcomingBookings.find((b) =>
+    isInProgressStatus(b.status),
+  );
 
   return (
     <DashboardLayout>
@@ -614,6 +641,51 @@ export default function Bookings() {
         className="max-w-4xl mx-auto space-y-6"
       >
         <h1 className="text-2xl font-bold">My Bookings</h1>
+        <AnimatePresence>
+          {liveBooking && (
+            <motion.div
+              key={liveBooking.id}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <Card className="border-emerald-200 bg-emerald-50/60 shadow-sm">
+                <CardContent className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="absolute inset-0 animate-ping rounded-full bg-emerald-400/50" />
+                      <div className="relative grid h-10 w-10 place-items-center rounded-full bg-emerald-500 text-white">
+                        <Clock className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-900">
+                        {BOOKING_STATUS_LABELS[liveBooking.status] ||
+                          "In progress"}
+                      </p>
+                      <p className="text-sm text-emerald-800">
+                        {liveBooking.service.name} —{" "}
+                        {formatIndianDisplay(liveBooking.bookingDate, "datetime")}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/customer/book-service/${liveBooking.serviceId}`}>
+                        Book Again
+                      </Link>
+                    </Button>
+                    <Button asChild size="sm">
+                      <Link href={`/customer/bookings`}>
+                        Track Status
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <Tabs defaultValue="upcoming">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <TabsList className="grid w-full grid-cols-2 sm:w-auto">
@@ -658,12 +730,21 @@ export default function Bookings() {
                             <h3 className="font-semibold">
                               {booking.service.name}
                             </h3>
-                            <Badge
-                              variant="outline"
-                              className={getBookingStatusBadgeClass(booking.status)}
-                            >
-                              {BOOKING_STATUS_LABELS[booking.status] || booking.status}
-                            </Badge>
+                            <div className="relative inline-flex items-center">
+                              {isInProgressStatus(booking.status) && (
+                                <span className="absolute -inset-1 rounded-full bg-emerald-300/60 animate-ping" />
+                              )}
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "relative",
+                                  getBookingStatusBadgeClass(booking.status),
+                                )}
+                              >
+                                {BOOKING_STATUS_LABELS[booking.status] ||
+                                  booking.status}
+                              </Badge>
+                            </div>
                           </div>
                           <p className="text-sm text-muted-foreground">
                             <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
@@ -706,8 +787,50 @@ export default function Bookings() {
                               {booking.rejectionReason || "No reason provided"}
                             </p>
                           )}
+                          <div className="pt-3">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                              {TIMELINE_STEPS.map((step, index) => {
+                                const activeIndex =
+                                  getStatusProgressIndex(booking.status);
+                                const isComplete = index <= activeIndex;
+                                return (
+                                  <React.Fragment key={step}>
+                                    <div className="flex items-center gap-1">
+                                      <div
+                                        className={cn(
+                                          "h-2.5 w-2.5 rounded-full border border-muted-foreground/40",
+                                          isComplete && "bg-emerald-500 border-emerald-500",
+                                        )}
+                                      />
+                                      <span
+                                        className={cn(
+                                          "capitalize",
+                                          isComplete && "text-foreground",
+                                        )}
+                                      >
+                                        {BOOKING_STATUS_LABELS[step] || step}
+                                      </span>
+                                    </div>
+                                    {index !== TIMELINE_STEPS.length - 1 && (
+                                      <div
+                                        className={cn(
+                                          "h-px w-6 bg-muted",
+                                          isComplete && "bg-emerald-400",
+                                        )}
+                                      />
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                         <div className="space-x-2">
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/customer/book-service/${booking.serviceId}`}>
+                              Book Again
+                            </Link>
+                          </Button>
                           {booking.status === "accepted" && (
                             <Dialog>
                               <DialogTrigger asChild>
@@ -1020,12 +1143,21 @@ export default function Bookings() {
                             <h3 className="font-semibold">
                               {booking.service.name}
                             </h3>
-                            <Badge
-                              variant="outline"
-                              className={getBookingStatusBadgeClass(booking.status)}
-                            >
-                              {BOOKING_STATUS_LABELS[booking.status] || booking.status}
-                            </Badge>
+                            <div className="relative inline-flex items-center">
+                              {isInProgressStatus(booking.status) && (
+                                <span className="absolute -inset-1 rounded-full bg-emerald-300/60 animate-ping" />
+                              )}
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "relative",
+                                  getBookingStatusBadgeClass(booking.status),
+                                )}
+                              >
+                                {BOOKING_STATUS_LABELS[booking.status] ||
+                                  booking.status}
+                              </Badge>
+                            </div>
                           </div>
                           <p className="text-sm text-muted-foreground">
                             <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
@@ -1062,8 +1194,50 @@ export default function Bookings() {
                               {booking.rejectionReason || "No reason provided"}
                             </p>
                           )}
+                          <div className="pt-3">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                              {TIMELINE_STEPS.map((step, index) => {
+                                const activeIndex =
+                                  getStatusProgressIndex(booking.status);
+                                const isComplete = index <= activeIndex;
+                                return (
+                                  <React.Fragment key={step}>
+                                    <div className="flex items-center gap-1">
+                                      <div
+                                        className={cn(
+                                          "h-2.5 w-2.5 rounded-full border border-muted-foreground/40",
+                                          isComplete && "bg-emerald-500 border-emerald-500",
+                                        )}
+                                      />
+                                      <span
+                                        className={cn(
+                                          "capitalize",
+                                          isComplete && "text-foreground",
+                                        )}
+                                      >
+                                        {BOOKING_STATUS_LABELS[step] || step}
+                                      </span>
+                                    </div>
+                                    {index !== TIMELINE_STEPS.length - 1 && (
+                                      <div
+                                        className={cn(
+                                          "h-px w-6 bg-muted",
+                                          isComplete && "bg-emerald-400",
+                                        )}
+                                      />
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                         <div className="space-x-2">
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/customer/book-service/${booking.serviceId}`}>
+                              Book Again
+                            </Link>
+                          </Button>
                           {booking.status === "accepted" && (
                             <Dialog>
                               <DialogTrigger asChild>

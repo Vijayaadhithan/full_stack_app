@@ -7,7 +7,7 @@ import { Product, Promotion, PaymentMethodType } from "@shared/schema";
 import { platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Plus, Trash2, Tag, Check, Info } from "lucide-react";
 import { useState, useEffect } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -22,6 +22,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { getVerificationError, parseApiError } from "@/lib/api-error";
@@ -34,11 +41,6 @@ const container = {
       staggerChildren: 0.1,
     },
   },
-};
-
-const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
 };
 
 type CartItem = {
@@ -60,6 +62,7 @@ export default function Cart() {
   );
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethodType>("upi");
+  const [drawerOpen, setDrawerOpen] = useState(true);
 
   const { data: shopInfo } = useQuery<any>({
     queryKey: ["shop-info", shopId],
@@ -357,15 +360,13 @@ export default function Cart() {
     }
   };
 
-  return (
-    <TooltipProvider>
-      <DashboardLayout>
-      <motion.div
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="max-w-4xl mx-auto space-y-6"
-      >
+  const cartContent = (
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="max-w-4xl mx-auto space-y-6"
+    >
         <h1 className="text-2xl font-bold">Shopping Cart</h1>
 
         {isLoading ? (
@@ -422,89 +423,105 @@ export default function Cart() {
           <div className="grid gap-6">
             <Card>
               <CardContent className="divide-y">
-                {cartItems?.map(
-                  (
-                    item: CartItem, // Explicit type
-                  ) => (
-                    <motion.div
-                      key={item.product.id}
-                      className="py-4 first:pt-6 last:pb-6"
-                    >
-                      <div className="flex gap-4">
-                        <img
-                          src={
-                            item.product.images?.[0] ||
-                            "https://via.placeholder.com/100"
-                          }
-                          alt={item.product.name}
-                          className="w-24 h-24 object-cover rounded"
-                        />
-                        <div className="flex-1">
-                          <h3 className="font-semibold">{item.product.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            ₹{item.product.price} × {item.quantity}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
+                <AnimatePresence initial={false}>
+                  {cartItems?.map(
+                    (
+                      item: CartItem, // Explicit type
+                    ) => (
+                      <motion.div
+                        key={item.product.id}
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{
+                          opacity: 0,
+                          x: -80,
+                          height: 0,
+                          marginTop: 0,
+                          marginBottom: 0,
+                          backgroundColor: "rgba(248,113,113,0.18)",
+                        }}
+                        transition={{ duration: 0.3 }}
+                        className="py-4 first:pt-6 last:pb-6"
+                      >
+                        <div className="flex gap-4">
+                          <img
+                            src={
+                              item.product.images?.[0] ||
+                              "https://via.placeholder.com/100"
+                            }
+                            alt={item.product.name}
+                            className="w-24 h-24 object-cover rounded"
+                          />
+                          <div className="flex-1">
+                            <h3 className="font-semibold">
+                              {item.product.name}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              ₹{item.product.price} × {item.quantity}
+                            </p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={() =>
+                                  updateCartMutation.mutate({
+                                    productId: item.product.id,
+                                    quantity: item.quantity - 1,
+                                  })
+                                }
+                                disabled={
+                                  item.quantity <= 1 ||
+                                  updateCartMutation.isPending
+                                }
+                              >
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                              <span className="w-8 text-center">
+                                {item.quantity}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={() =>
+                                  updateCartMutation.mutate({
+                                    productId: item.product.id,
+                                    quantity: item.quantity + 1,
+                                  })
+                                }
+                                disabled={
+                                  updateCartMutation.isPending ||
+                                  item.quantity >= item.product.stock
+                                }
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">
+                              ₹
+                              {(
+                                parseFloat(item.product.price) * item.quantity
+                              ).toFixed(2)}
+                            </p>
                             <Button
                               size="icon"
-                              variant="outline"
+                              variant="ghost"
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
                               onClick={() =>
-                                updateCartMutation.mutate({
-                                  productId: item.product.id,
-                                  quantity: item.quantity - 1,
-                                })
+                                removeFromCartMutation.mutate(item.product.id)
                               }
-                              disabled={
-                                item.quantity <= 1 ||
-                                updateCartMutation.isPending
-                              }
+                              disabled={removeFromCartMutation.isPending}
                             >
-                              <Minus className="h-4 w-4" />
-                            </Button>
-                            <span className="w-8 text-center">
-                              {item.quantity}
-                            </span>
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              onClick={() =>
-                                updateCartMutation.mutate({
-                                  productId: item.product.id,
-                                  quantity: item.quantity + 1,
-                                })
-                              }
-                              disabled={
-                                updateCartMutation.isPending ||
-                                item.quantity >= item.product.stock
-                              }
-                            >
-                              <Plus className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-semibold">
-                            ₹
-                            {(
-                              parseFloat(item.product.price) * item.quantity
-                            ).toFixed(2)}
-                          </p>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() =>
-                              removeFromCartMutation.mutate(item.product.id)
-                            }
-                            disabled={removeFromCartMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ),
-                )}
+                      </motion.div>
+                    ),
+                  )}
+                </AnimatePresence>
               </CardContent>
             </Card>
 
@@ -710,6 +727,40 @@ export default function Cart() {
           </div>
         )}
       </motion.div>
+  );
+
+  return (
+    <TooltipProvider>
+      <DashboardLayout>
+        <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+          <div className="max-w-6xl mx-auto p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-bold">Slide-over Cart</h1>
+                <p className="text-sm text-muted-foreground">
+                  Keep your place while reviewing items.
+                </p>
+              </div>
+              <SheetTrigger asChild>
+                <Button variant="outline" onClick={() => setDrawerOpen(true)}>
+                  Open Cart
+                </Button>
+              </SheetTrigger>
+            </div>
+          </div>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-xl overflow-y-auto"
+          >
+            <SheetHeader className="space-y-1">
+              <SheetTitle>Your Cart</SheetTitle>
+              <p className="text-sm text-muted-foreground">
+                Manage items and checkout without losing context.
+              </p>
+            </SheetHeader>
+            <div className="py-4">{cartContent}</div>
+          </SheetContent>
+        </Sheet>
       </DashboardLayout>
     </TooltipProvider>
   );

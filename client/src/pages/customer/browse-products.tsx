@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { productFilterConfig } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { motion } from "framer-motion";
-import { Search, ShoppingCart, Heart, Filter } from "lucide-react";
-import { useState, useEffect } from "react";
+import { LayoutGroup, motion } from "framer-motion";
+import { Search, ShoppingCart, Heart, Filter, Plus } from "lucide-react";
 import { Link } from "wouter";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -95,6 +94,46 @@ export default function BrowseProducts() {
       },
     }));
   };
+
+  const imageRefs = useRef<Record<number, HTMLImageElement | null>>({});
+
+  const triggerFlyToCart = useCallback((image?: HTMLImageElement | null) => {
+    if (typeof document === "undefined" || !image) return;
+    const cartIcon = document.querySelector(
+      "[data-cart-icon]",
+    ) as HTMLElement | null;
+    if (!cartIcon) return;
+
+    const imgRect = image.getBoundingClientRect();
+    const cartRect = cartIcon.getBoundingClientRect();
+    const ghost = image.cloneNode(true) as HTMLImageElement;
+    ghost.style.position = "fixed";
+    ghost.style.top = `${imgRect.top}px`;
+    ghost.style.left = `${imgRect.left}px`;
+    ghost.style.width = `${imgRect.width}px`;
+    ghost.style.height = `${imgRect.height}px`;
+    ghost.style.borderRadius = "16px";
+    ghost.style.zIndex = "9999";
+    ghost.style.boxShadow = "0 15px 45px rgba(0,0,0,0.25)";
+    ghost.style.pointerEvents = "none";
+    document.body.appendChild(ghost);
+
+    const translateX = cartRect.left - imgRect.left;
+    const translateY = cartRect.top - imgRect.top;
+
+    const animation = ghost.animate(
+      [
+        { transform: "translate(0px, 0px) scale(1)", opacity: 0.9 },
+        {
+          transform: `translate(${translateX}px, ${translateY}px) scale(0.2)`,
+          opacity: 0.3,
+        },
+      ],
+      { duration: 650, easing: "ease-in-out" },
+    );
+
+    animation.onfinish = () => ghost.remove();
+  }, []);
 
   type ProductListItem = {
     id: number;
@@ -303,246 +342,320 @@ export default function BrowseProducts() {
 
   return (
     <DashboardLayout>
-      <motion.div
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="max-w-7xl mx-auto space-y-6"
-      >
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <h1 className="text-2xl font-bold">Browse Products</h1>
-          <div className="flex flex-wrap gap-4 w-full md:w-auto items-center">
-            <div className="relative flex-1 min-w-[200px] md:w-auto">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Search products..."
-                value={filters.searchTerm}
-                onChange={(e) =>
-                  handleFilterChange("searchTerm", e.target.value)
-                }
-                className="pl-10"
-              />
-            </div>
-            <Select
-              value={filters.category}
-              onValueChange={(value) => handleFilterChange("category", value)}
+      <LayoutGroup>
+        <motion.div
+          variants={container}
+          initial="hidden"
+          animate="show"
+          className="max-w-7xl mx-auto space-y-6 p-4 sm:p-6"
+        >
+          <div className="sticky top-[76px] z-30 space-y-3">
+            <motion.div
+              layout
+              className="rounded-3xl border bg-background/90 px-4 py-4 shadow-sm backdrop-blur md:px-6 md:py-5 supports-[backdrop-filter]:bg-background/80"
             >
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {productFilterConfig.categories.map((category) => (
-                  <SelectItem key={category.value} value={category.value}>
-                    {category.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                <Filter className="mr-2 h-4 w-4" /> More Filters
-              </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80 p-4 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="minPrice">Min Price (₹)</Label>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Shop smarter
+                  </p>
+                  <h1 className="text-2xl font-bold leading-tight">
+                    Masonry view of products
+                  </h1>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {filteredProducts.length
+                    ? `${filteredProducts.length} products`
+                    : "No matches yet"}
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 items-center md:grid-cols-[1.6fr_1fr_1fr_1fr]">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
-                    id="minPrice"
-                    type="number"
-                    placeholder="e.g., 100"
-                    value={filters.minPrice}
+                    placeholder="Search products..."
+                    value={filters.searchTerm}
                     onChange={(e) =>
-                      handleFilterChange("minPrice", e.target.value)
+                      handleFilterChange("searchTerm", e.target.value)
                     }
+                    className="pl-10"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="maxPrice">Max Price (₹)</Label>
-                  <Input
-                    id="maxPrice"
-                    type="number"
-                    placeholder="e.g., 1000"
-                    value={filters.maxPrice}
-                    onChange={(e) =>
-                      handleFilterChange("maxPrice", e.target.value)
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    value={filters.locationCity}
-                    onChange={(e) =>
-                      handleFilterChange("locationCity", e.target.value)
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="state">State</Label>
-                  <Input
-                    id="state"
-                    value={filters.locationState}
-                    onChange={(e) =>
-                      handleFilterChange("locationState", e.target.value)
-                    }
-                  />
-                </div>
-                {productFilterConfig.attributeFilters.map((attribute) => (
-                  <div className="space-y-2" key={attribute.key}>
-                    <Label htmlFor={`attribute-${attribute.key}`}>
-                      {attribute.label}
-                    </Label>
-                    {attribute.type === "select" && attribute.options ? (
-                      <Select
-                        value={filters.attributes[attribute.key] ?? ""}
-                        onValueChange={(value) =>
-                          handleAttributeChange(attribute.key, value)
-                        }
-                      >
-                        <SelectTrigger id={`attribute-${attribute.key}`}>
-                          <SelectValue placeholder={attribute.label} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {attribute.options.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
+                <Select
+                  value={filters.category}
+                  onValueChange={(value) => handleFilterChange("category", value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {productFilterConfig.categories.map((category) => (
+                      <SelectItem key={category.value} value={category.value}>
+                        {category.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full sm:w-auto">
+                      <Filter className="mr-2 h-4 w-4" /> More Filters
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-4 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="minPrice">Min Price (₹)</Label>
                       <Input
-                        id={`attribute-${attribute.key}`}
-                        placeholder={attribute.placeholder ?? attribute.label}
-                        value={filters.attributes[attribute.key] ?? ""}
+                        id="minPrice"
+                        type="number"
+                        placeholder="e.g., 100"
+                        value={filters.minPrice}
                         onChange={(e) =>
-                          handleAttributeChange(attribute.key, e.target.value)
+                          handleFilterChange("minPrice", e.target.value)
                         }
                       />
-                    )}
-                  </div>
-                ))}
-            </PopoverContent>
-          </Popover>
-          <LocationFilterPopover state={locationFilter} />
-        </div>
-
-        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
-          {locationFilter.location ? (
-            <>
-              Showing products from shops within{" "}
-              <span className="font-semibold">{locationFilter.radius} km</span>{" "}
-              of{" "}
-              <span className="font-mono">
-                {locationFilter.location.latitude.toFixed(3)},{" "}
-                {locationFilter.location.longitude.toFixed(3)}
-              </span>
-              .
-            </>
-          ) : (
-            <>Set a location filter to hide shops that are too far away.</>
-          )}
-        </div>
-        </div>
-
-        {isLoading ? (
-          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <Card key={index} className="h-full">
-                <div className="aspect-square relative overflow-hidden">
-                  <Skeleton className="h-full w-full" />
-                </div>
-                <CardContent className="p-4 space-y-3">
-                  <Skeleton className="h-5 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-2/3" />
-                  <div className="flex items-center justify-between">
-                    <Skeleton className="h-6 w-16" />
-                    <div className="flex gap-2">
-                      <Skeleton className="h-10 w-10 rounded-md" />
-                      <Skeleton className="h-10 w-10 rounded-md" />
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredProducts.map((product) => (
-                <motion.div key={product.id} variants={item}>
-                  <Link
-                    href={`/customer/shops/${product.shopId}/products/${product.id}`}
-                  >
-                    <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
-                      <div className="aspect-square relative overflow-hidden">
-                        <img
-                          src={
-                            product.images?.[0] ||
-                            "https://via.placeholder.com/400"
-                          }
-                          alt={product.name}
-                          className="object-cover w-full h-full"
-                        />
+                    <div className="space-y-2">
+                      <Label htmlFor="maxPrice">Max Price (₹)</Label>
+                      <Input
+                        id="maxPrice"
+                        type="number"
+                        placeholder="e.g., 1000"
+                        value={filters.maxPrice}
+                        onChange={(e) =>
+                          handleFilterChange("maxPrice", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="city">City</Label>
+                      <Input
+                        id="city"
+                        value={filters.locationCity}
+                        onChange={(e) =>
+                          handleFilterChange("locationCity", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="state">State</Label>
+                      <Input
+                        id="state"
+                        value={filters.locationState}
+                        onChange={(e) =>
+                          handleFilterChange("locationState", e.target.value)
+                        }
+                      />
+                    </div>
+                    {productFilterConfig.attributeFilters.map((attribute) => (
+                      <div className="space-y-2" key={attribute.key}>
+                        <Label htmlFor={`attribute-${attribute.key}`}>
+                          {attribute.label}
+                        </Label>
+                        {attribute.type === "select" && attribute.options ? (
+                          <Select
+                            value={filters.attributes[attribute.key] ?? ""}
+                            onValueChange={(value) =>
+                              handleAttributeChange(attribute.key, value)
+                            }
+                          >
+                            <SelectTrigger id={`attribute-${attribute.key}`}>
+                              <SelectValue placeholder={attribute.label} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {attribute.options.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            id={`attribute-${attribute.key}`}
+                            placeholder={attribute.placeholder ?? attribute.label}
+                            value={filters.attributes[attribute.key] ?? ""}
+                            onChange={(e) =>
+                              handleAttributeChange(attribute.key, e.target.value)
+                            }
+                          />
+                        )}
                       </div>
-                      <CardContent className="flex-1 p-4">
-                        <h3 className="font-semibold truncate">
-                          {product.name}
-                        </h3>
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                          {product.description}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <p className="font-semibold">₹{product.price}</p>
-                          <div className="flex gap-2">
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                addToWishlistMutation.mutate(product);
-                              }}
-                              disabled={addToWishlistMutation.isPending}
-                            >
-                              <Heart className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                addToCartMutation.mutate(product);
-                              }}
-                              disabled={
-                                !product.isAvailable ||
-                                product.stock <= 0 ||
-                                addToCartMutation.isPending
-                              }
-                            >
-                              <ShoppingCart className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                </motion.div>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+                <LocationFilterPopover state={locationFilter} />
+              </div>
+            </motion.div>
+            <div className="rounded-2xl border bg-muted/40 p-4 text-sm text-muted-foreground">
+              {locationFilter.location ? (
+                <>
+                  Showing products from shops within{" "}
+                  <span className="font-semibold">{locationFilter.radius} km</span>{" "}
+                  of{" "}
+                  <span className="font-mono">
+                    {locationFilter.location.latitude.toFixed(3)},{" "}
+                    {locationFilter.location.longitude.toFixed(3)}
+                  </span>
+                  .
+                </>
+              ) : (
+                <>Set a location filter to hide shops that are too far away.</>
+              )}
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="columns-1 gap-6 sm:columns-2 xl:columns-3 [column-fill:_balance]">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <Card
+                  key={index}
+                  className="mb-6 break-inside-avoid shadow-sm"
+                  style={{ breakInside: "avoid" }}
+                >
+                  <div className="aspect-[4/5] relative overflow-hidden">
+                    <Skeleton className="h-full w-full" />
+                  </div>
+                  <CardContent className="p-4 space-y-3">
+                    <Skeleton className="h-5 w-3/4" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-2/3" />
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-6 w-16" />
+                      <div className="flex gap-2">
+                        <Skeleton className="h-10 w-10 rounded-md" />
+                        <Skeleton className="h-10 w-10 rounded-md" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
-            {productsResponse?.hasMore ? (
-              <p className="text-sm text-muted-foreground mt-6">
-                Showing the first {productsResponse.pageSize} matches. Refine
-                your filters to narrow the results further.
-              </p>
-            ) : null}
-          </>
-        )}
-      </motion.div>
+          ) : (
+            <>
+              <motion.div
+                variants={container}
+                initial="hidden"
+                animate="show"
+                className="columns-1 gap-6 space-y-6 sm:columns-2 xl:columns-3 [column-fill:_balance]"
+              >
+                {filteredProducts.map((product) => (
+                  <motion.div
+                    key={product.id}
+                    variants={item}
+                    layout
+                    className="mb-6 break-inside-avoid"
+                    style={{ breakInside: "avoid" }}
+                  >
+                    <Link
+                      href={`/customer/shops/${product.shopId}/products/${product.id}`}
+                      className="block h-full"
+                    >
+                      <Card className="h-full overflow-hidden shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg">
+                        <div className="relative overflow-hidden rounded-2xl">
+                          <motion.img
+                            ref={(node) => {
+                              imageRefs.current[product.id] = node;
+                            }}
+                            layoutId={`product-${product.id}-image`}
+                            src={
+                              product.images?.[0] ||
+                              "https://via.placeholder.com/400"
+                            }
+                            alt={product.name}
+                            className="h-full w-full object-cover"
+                          />
+                          <motion.button
+                            whileTap={{ scale: 0.94 }}
+                            className="absolute right-3 top-3 rounded-full bg-white/90 p-2 text-primary shadow-lg backdrop-blur hover:bg-primary hover:text-white"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              triggerFlyToCart(imageRefs.current[product.id]);
+                              addToCartMutation.mutate(product);
+                            }}
+                            disabled={
+                              !product.isAvailable ||
+                              product.stock <= 0 ||
+                              addToCartMutation.isPending
+                            }
+                          >
+                            <Plus className="h-4 w-4" />
+                          </motion.button>
+                          {product.mrp &&
+                            parseFloat(product.mrp) > parseFloat(product.price) && (
+                              <div className="absolute left-3 top-3 rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white shadow">
+                                {Math.round(
+                                  ((parseFloat(product.mrp) -
+                                    parseFloat(product.price)) /
+                                    parseFloat(product.mrp)) *
+                                    100,
+                                )}
+                                % OFF
+                              </div>
+                            )}
+                        </div>
+                        <CardContent className="flex flex-col gap-3 p-4">
+                          <div className="space-y-1">
+                            <h3 className="font-semibold leading-tight">
+                              {product.name}
+                            </h3>
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                              {product.description}
+                            </p>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <p className="text-lg font-semibold">
+                              ₹{product.price}
+                            </p>
+                            <div className="flex gap-2">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  addToWishlistMutation.mutate(product);
+                                }}
+                                disabled={addToWishlistMutation.isPending}
+                              >
+                                <Heart className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  triggerFlyToCart(imageRefs.current[product.id]);
+                                  addToCartMutation.mutate(product);
+                                }}
+                                disabled={
+                                  !product.isAvailable ||
+                                  product.stock <= 0 ||
+                                  addToCartMutation.isPending
+                                }
+                              >
+                                <ShoppingCart className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </motion.div>
+                ))}
+              </motion.div>
+              {productsResponse?.hasMore ? (
+                <p className="text-sm text-muted-foreground mt-6">
+                  Showing the first {productsResponse.pageSize} matches. Refine
+                  your filters to narrow the results further.
+                </p>
+              ) : null}
+            </>
+          )}
+        </motion.div>
+      </LayoutGroup>
     </DashboardLayout>
   );
 }
