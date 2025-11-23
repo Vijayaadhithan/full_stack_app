@@ -292,7 +292,9 @@ export const bookings = pgTable(
       | "cancelled"
       | "expired"
       | "rescheduled_pending_provider_approval"
+      | "rescheduled_by_provider"
       | "awaiting_payment"
+      | "en_route"
       | "disputed"
     >()
     .notNull(),

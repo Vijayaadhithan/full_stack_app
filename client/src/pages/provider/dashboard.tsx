@@ -73,21 +73,31 @@ import { getVerificationError, parseApiError } from "@/lib/api-error";
 import { z } from "zod";
 import { useLanguage } from "@/contexts/language-context";
 
+type BookingProximityInfo = {
+  nearestBookingId: number;
+  nearestBookingDate: string | null;
+  distanceKm: number;
+  message: string;
+};
+
+type PendingBooking = Booking & {
+  service?: Service;
+  proximityInfo?: BookingProximityInfo | null;
+};
+
 // ─── PENDING BOOKING REQUESTS COMPONENT ───────────────────────────────
 function PendingBookingRequestsList() {
   const { toast } = useToast();
-  const [selectedBooking, setSelectedBooking] = useState<
-    (Booking & { service?: Service }) | null
-  >(null);
+  const [selectedBooking, setSelectedBooking] = useState<PendingBooking | null>(
+    null,
+  );
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<"accept" | "reject" | null>(
     null,
   );
   const [actionComment, setActionComment] = useState("");
 
-  const { data: pendingBookings, isLoading } = useQuery<
-    (Booking & { service?: Service })[]
-  >({
+  const { data: pendingBookings, isLoading } = useQuery<PendingBooking[]>({
     queryKey: ["/api/bookings/provider/pending"],
   });
 
@@ -193,6 +203,12 @@ function PendingBookingRequestsList() {
                   : "Expiration not set"}
               </span>
             </div>
+            {booking.proximityInfo && (
+              <div className="mt-1 flex items-center text-xs text-blue-700">
+                <AlertCircle className="h-3 w-3 mr-1 text-blue-500" />
+                <span>{booking.proximityInfo.message}</span>
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
@@ -502,6 +518,12 @@ export default function ProviderDashboard() {
   const pendingBookingsCount = bookings
     ? bookings.filter((b) => b.status === "pending").length
     : 0;
+  const activeBookingStatuses: Booking["status"][] = [
+    "accepted",
+    "rescheduled",
+    "rescheduled_by_provider",
+    "en_route",
+  ];
   const averageRating =
     reviews && reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
@@ -510,7 +532,7 @@ export default function ProviderDashboard() {
     ? bookings
         .filter(
           (b) =>
-            b.status === "accepted" &&
+            activeBookingStatuses.includes(b.status) &&
             b.bookingDate &&
             new Date(b.bookingDate) > new Date(),
         )

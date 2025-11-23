@@ -79,11 +79,13 @@ const BOOKING_STATUS_LABELS: Record<CustomerBookingStatus, string> = {
   accepted: "Accepted",
   rejected: "Rejected",
   rescheduled: "Rescheduled",
+  rescheduled_by_provider: "Rescheduled by Provider",
   completed: "Completed",
   cancelled: "Cancelled",
   expired: "Expired",
   rescheduled_pending_provider_approval: "Awaiting Provider Approval",
   awaiting_payment: "Awaiting Payment",
+  en_route: "On My Way",
   disputed: "Disputed",
 };
 
@@ -94,11 +96,13 @@ const BOOKING_STATUS_BADGE_CLASSES: Partial<
   accepted: "bg-emerald-50 text-emerald-700 border-emerald-200",
   rejected: "bg-rose-50 text-rose-700 border-rose-200",
   rescheduled: "bg-violet-50 text-violet-700 border-violet-200",
+  rescheduled_by_provider: "bg-violet-50 text-violet-700 border-violet-200",
   rescheduled_pending_provider_approval:
     "bg-violet-50 text-violet-700 border-violet-200",
   completed: "bg-sky-50 text-sky-700 border-sky-200",
   cancelled: "bg-slate-100 text-slate-700 border-slate-300",
   awaiting_payment: "bg-blue-50 text-blue-700 border-blue-200",
+  en_route: "bg-blue-50 text-blue-700 border-blue-200",
   disputed: "bg-amber-100 text-amber-800 border-amber-200",
 };
 

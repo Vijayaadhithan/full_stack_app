@@ -735,6 +735,7 @@ const bookingStatusSchema = z.enum([
   "expired",
   "rescheduled_pending_provider_approval",
   "awaiting_payment",
+  "en_route",
   "disputed",
   "rescheduled_by_provider",
 ]);
@@ -1718,21 +1719,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const pendingBookings =
           await storage.getPendingBookingRequestsForProvider(providerId);
 
+        if (pendingBookings.length === 0) {
+          return res.json([]);
+        }
+
+        const scheduledStatuses = new Set<Booking["status"]>([
+          "accepted",
+          "rescheduled",
+          "rescheduled_by_provider",
+          "awaiting_payment",
+          "en_route",
+        ]);
+        const scheduledBookings = (
+          await storage.getBookingsByProvider(providerId)
+        ).filter((booking) => scheduledStatuses.has(booking.status));
+
         const serviceIds = Array.from(
           new Set(pendingBookings.map((b) => b.serviceId!).filter(Boolean)),
         );
         const services = await storage.getServicesByIds(serviceIds);
         const serviceMap = new Map(services.map((s) => [s.id, s]));
 
-        const userIds = new Set<number>();
+        const userIds = new Set<number>([providerId]);
         services.forEach((s) => {
           if (s.providerId) userIds.add(s.providerId);
         });
         pendingBookings.forEach((b) => {
           if (b.customerId) userIds.add(b.customerId);
         });
+        scheduledBookings.forEach((b) => {
+          if (b.customerId) userIds.add(b.customerId);
+        });
         const users = await storage.getUsersByIds(Array.from(userIds));
         const userMap = new Map(users.map((u) => [u.id, u]));
+
+        const buildDayKey = (date: Date) =>
+          [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, "0"),
+            String(date.getDate()).padStart(2, "0"),
+          ].join("-");
+
+        const getBookingCoordinates = (
+          booking: Booking,
+        ): { lat: number; lon: number } | null => {
+          if (booking.serviceLocation === "provider") {
+            const provider = userMap.get(providerId);
+            const lat = toNumericCoordinate(provider?.latitude ?? null);
+            const lon = toNumericCoordinate(provider?.longitude ?? null);
+            if (lat === null || lon === null) {
+              return null;
+            }
+            return { lat, lon };
+          }
+
+          const customer = booking.customerId
+            ? userMap.get(booking.customerId)
+            : undefined;
+          const lat = toNumericCoordinate(customer?.latitude ?? null);
+          const lon = toNumericCoordinate(customer?.longitude ?? null);
+          if (lat === null || lon === null) {
+            return null;
+          }
+          return { lat, lon };
+        };
+
+        const scheduledBookingsByDay = new Map<string, Booking[]>();
+        for (const booking of scheduledBookings) {
+          const dateValue = booking.bookingDate
+            ? new Date(booking.bookingDate)
+            : null;
+          if (!dateValue || Number.isNaN(dateValue.getTime())) {
+            continue;
+          }
+          const key = buildDayKey(dateValue);
+          if (!scheduledBookingsByDay.has(key)) {
+            scheduledBookingsByDay.set(key, []);
+          }
+          scheduledBookingsByDay.get(key)!.push(booking);
+        }
 
         const bookingsWithDetails = pendingBookings.map((b) => {
           const service = serviceMap.get(b.serviceId!);
@@ -1753,6 +1818,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
           }
 
+          let proximityInfo: {
+            nearestBookingId: number;
+            nearestBookingDate: string | null;
+            distanceKm: number;
+            message: string;
+          } | null = null;
+
+          const bookingDate = b.bookingDate ? new Date(b.bookingDate) : null;
+          const currentCoords = getBookingCoordinates(b);
+          if (
+            bookingDate &&
+            !Number.isNaN(bookingDate.getTime()) &&
+            currentCoords
+          ) {
+            const sameDayBookings =
+              scheduledBookingsByDay.get(buildDayKey(bookingDate)) || [];
+
+            let nearest:
+              | { booking: Booking; distanceKm: number }
+              | null = null;
+            for (const otherBooking of sameDayBookings) {
+              const otherCoords = getBookingCoordinates(otherBooking);
+              if (!otherCoords) continue;
+
+              const distanceKm = haversineDistanceKm(
+                currentCoords.lat,
+                currentCoords.lon,
+                otherCoords.lat,
+                otherCoords.lon,
+              );
+
+              if (!Number.isFinite(distanceKm)) continue;
+              if (!nearest || distanceKm < nearest.distanceKm) {
+                nearest = { booking: otherBooking, distanceKm };
+              }
+            }
+
+            if (nearest) {
+              const nearestDate = nearest.booking.bookingDate
+                ? new Date(nearest.booking.bookingDate)
+                : null;
+              const roundedDistance = Number(nearest.distanceKm.toFixed(2));
+              const formattedTime =
+                nearestDate && !Number.isNaN(nearestDate.getTime())
+                  ? formatIndianDisplay(nearestDate, "time")
+                  : "a nearby slot";
+
+              const message =
+                roundedDistance <= 5
+                  ? `You have a booking ${roundedDistance} km away at ${formattedTime}, this slot fits well.`
+                  : `This location is ${roundedDistance} km from your other booking at ${formattedTime}.`;
+
+              proximityInfo = {
+                nearestBookingId: nearest.booking.id,
+                nearestBookingDate:
+                  nearestDate && !Number.isNaN(nearestDate.getTime())
+                    ? nearestDate.toISOString()
+                    : null,
+                distanceKm: roundedDistance,
+                message,
+              };
+            }
+          }
+
           return {
             ...b,
             service,
@@ -1763,6 +1892,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ? { id: provider.id, name: provider.name, phone: provider.phone }
               : null,
             relevantAddress,
+            proximityInfo,
           };
         });
 
@@ -3679,6 +3809,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
               error instanceof Error
                 ? error.message
                 : "Failed to update booking status",
+          });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/bookings/:id/en-route",
+    requireAuth,
+    requireRole(["provider"]),
+    async (req, res) => {
+      try {
+        const bookingId = getValidatedParam(req, "id");
+        const booking = await storage.getBooking(bookingId);
+        if (!booking) {
+          return res.status(404).json({ message: "Booking not found" });
+        }
+
+        const service =
+          booking.serviceId !== null
+            ? await storage.getService(booking.serviceId)
+            : null;
+        if (!service || service.providerId !== req.user!.id) {
+          return res
+            .status(403)
+            .json({ message: "Not authorized to update this booking" });
+        }
+
+        if (booking.status === "en_route") {
+          return res.json({
+            booking,
+            message: "Provider is already en route for this booking",
+          });
+        }
+
+        const startableStatuses: Booking["status"][] = [
+          "accepted",
+          "rescheduled",
+          "rescheduled_by_provider",
+        ];
+        if (!startableStatuses.includes(booking.status)) {
+          return res.status(400).json({
+            message: "Booking must be accepted before starting the job",
+          });
+        }
+
+        const updatedBooking = await storage.updateBooking(bookingId, {
+          status: "en_route",
+        });
+
+        if (booking.customerId) {
+          await storage.createNotification({
+            userId: booking.customerId,
+            type: "booking_update",
+            title: "Provider En Route",
+            message: "Your provider has started the trip and is on the way.",
+          });
+        }
+
+        res.json({
+          booking: updatedBooking,
+          message: "Booking marked as on the way",
+        });
+      } catch (error) {
+        logger.error("Error updating booking to en route:", error);
+        res
+          .status(400)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to mark booking as en route",
           });
       }
     },

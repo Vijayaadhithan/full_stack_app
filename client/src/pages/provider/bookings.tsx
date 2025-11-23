@@ -34,6 +34,8 @@ import {
   Calendar,
   Clock,
   User as UserIcon,
+  AlertCircle,
+  Navigation,
 } from "lucide-react"; // Import UserIcon
 import { MapPin as LocationIcon } from "lucide-react"; // Use a different alias for MapPin
 import { Booking, Service, User } from "@shared/schema"; // Import User type
@@ -48,6 +50,13 @@ const bookingActionSchema = z.object({
 });
 
 type BookingActionData = z.infer<typeof bookingActionSchema>;
+
+type BookingProximityInfo = {
+  nearestBookingId: number;
+  nearestBookingDate: string | null;
+  distanceKm: number;
+  message: string;
+};
 
 type AddressLike = {
   addressStreet?: string | null;
@@ -118,7 +127,8 @@ export default function ProviderBookings() {
   const [actionType, setActionType] = useState<
     "accept" | "reject" | "reschedule" | "complete" | null
   >(null);
-  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [selectedBooking, setSelectedBooking] =
+    useState<BookingWithDetails | null>(null);
   const [disputeReason, setDisputeReason] = useState("");
 
   // Fetch all bookings including accepted ones
@@ -257,6 +267,32 @@ export default function ProviderBookings() {
     },
   });
 
+  const startJobMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("PATCH", `/api/bookings/${id}/en-route`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to start the job");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/provider"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({
+        title: "On the way",
+        description: "Customer has been notified that you're en route.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not start trip",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const disputeMutation = useMutation({
     mutationFn: async ({
       bookingId,
@@ -357,6 +393,7 @@ export default function ProviderBookings() {
               <option value="all">{t("all_bookings")}</option>
               <option value="pending">{t("pending")}</option>
               <option value="accepted">{t("accepted")}</option>
+              <option value="en_route">{t("en_route")}</option>
               <option value="rejected">{t("rejected")}</option>
               <option value="rescheduled">{t("rescheduled")}</option>
               <option value="completed">{t("completed")}</option>
@@ -406,9 +443,11 @@ export default function ProviderBookings() {
                                 ? "text-red-600"
                                 : booking.status === "rescheduled"
                                   ? "text-yellow-600"
-                                  : booking.status === "completed"
+                                  : booking.status === "en_route"
                                     ? "text-blue-600"
-                                    : "text-gray-600"
+                                    : booking.status === "completed"
+                                      ? "text-blue-600"
+                                      : "text-gray-600"
                           }`}
                         >
                           {t(booking.status)}
@@ -465,6 +504,12 @@ export default function ProviderBookings() {
                           )}
                         </div>
                       </div>
+                      {booking.proximityInfo && (
+                        <div className="mt-2 flex items-center text-xs text-blue-700">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          <span>{booking.proximityInfo.message}</span>
+                        </div>
+                      )}
                       {/* Display Customer Information (Name and Phone) */}
                       {booking.customer && (
                         <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
@@ -681,7 +726,34 @@ export default function ProviderBookings() {
                         </div>
                       )}
 
-                    {booking.status === "accepted" && (
+                    {(booking.status === "accepted" ||
+                      booking.status === "rescheduled" ||
+                      booking.status === "rescheduled_by_provider") && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="text-blue-600"
+                          onClick={() => startJobMutation.mutate(booking.id)}
+                          disabled={startJobMutation.isPending}
+                        >
+                          {startJobMutation.isPending && (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          )}
+                          <Navigation className="h-4 w-4 mr-2" />
+                          Start Job
+                        </Button>
+                      </div>
+                    )}
+
+                    {booking.status === "en_route" && (
+                      <div className="flex items-center gap-2 text-blue-700">
+                        <Navigation className="h-4 w-4" />
+                        <span>On the way to the customer</span>
+                      </div>
+                    )}
+
+                    {(booking.status === "accepted" ||
+                      booking.status === "en_route") && (
                       <Dialog>
                         <DialogTrigger asChild>
                           <Button
@@ -811,4 +883,5 @@ type BookingWithDetails = Booking & {
     addressPostalCode?: string | null;
     addressCountry?: string | null;
   } | null;
+  proximityInfo?: BookingProximityInfo | null;
 };
