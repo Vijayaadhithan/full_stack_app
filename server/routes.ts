@@ -4136,8 +4136,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (booking.customerId !== req.user!.id)
           return res.status(403).json({ message: "Not authorized" });
 
-        if (booking.status !== "accepted") {
-          return res.status(400).json({ message: "Booking not confirmed" });
+        const canSubmitPayment =
+          booking.status === "accepted" || booking.status === "en_route";
+
+        if (!canSubmitPayment) {
+          return res
+            .status(400)
+            .json({ message: "Booking not ready for payment" });
         }
 
         // Update booking status to completed

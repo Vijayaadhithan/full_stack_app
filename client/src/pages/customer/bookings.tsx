@@ -310,7 +310,7 @@ export default function Bookings() {
 
   // Fetch existing reviews for selected service when leaving/editing a review
   const { data: existingReviews } = useQuery<Review[]>({
-    queryKey: ["/api/reviews/service/", selectedBooking?.serviceId],
+    queryKey: ["/api/reviews/service", selectedBooking?.serviceId],
     enabled: !!selectedBooking?.serviceId,
   });
 
@@ -646,163 +646,167 @@ export default function Bookings() {
           {/* Upcoming */}
           <TabsContent value="upcoming">
             <div className="grid gap-4">
-              {upcomingBookings?.map((booking) => (
-                <motion.div
-                  key={booking.id}
-                  variants={{
-                    hidden: { opacity: 0, y: 20 },
-                    show: { opacity: 1, y: 0 },
-                  }}
-                >
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-start gap-4">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold">
-                              {booking.service.name}
-                            </h3>
-                            <Badge
-                              variant="outline"
-                              className={getBookingStatusBadgeClass(booking.status)}
-                            >
-                              {BOOKING_STATUS_LABELS[booking.status] || booking.status}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
-                            {formatIndianDisplay(booking.bookingDate, "date")}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
-                            {formatIndianDisplay(booking.bookingDate, "time")}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                            <LocationIcon className="h-4 w-4" />
-                            <span>
-                              {booking.serviceLocation === "customer"
-                                ? "Service at Your Location"
-                                : booking.provider?.addressStreet
-                                  ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
-                                  : "Service at Provider's Location"}
-                            </span>
-                            {booking.serviceLocation === "provider" ? (
-                              <MapLink
-                                latitude={booking.provider?.latitude}
-                                longitude={booking.provider?.longitude}
-                              />
-                            ) : null}
-                          </div>
-                          {booking.provider && (
-                            <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
-                              <p>
-                                <strong>Provider:</strong>{" "}
-                                {booking.provider.name}
-                              </p>
-                              <p>
-                                <strong>Phone:</strong> {booking.provider.phone}
-                              </p>
+              {upcomingBookings?.map((booking) => {
+                const canCompleteAndPay =
+                  booking.status === "accepted" || booking.status === "en_route";
+
+                return (
+                  <motion.div
+                    key={booking.id}
+                    variants={{
+                      hidden: { opacity: 0, y: 20 },
+                      show: { opacity: 1, y: 0 },
+                    }}
+                  >
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-semibold">
+                                {booking.service.name}
+                              </h3>
+                              <Badge
+                                variant="outline"
+                                className={getBookingStatusBadgeClass(booking.status)}
+                              >
+                                {BOOKING_STATUS_LABELS[booking.status] || booking.status}
+                              </Badge>
                             </div>
-                          )}
-                          {booking.status === "rejected" && (
-                            <p className="mt-2 text-sm text-destructive">
-                              <strong>Reason:</strong>{" "}
-                              {booking.rejectionReason || "No reason provided"}
+                            <p className="text-sm text-muted-foreground">
+                              <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
+                              {formatIndianDisplay(booking.bookingDate, "date")}
                             </p>
-                          )}
-                        </div>
-                        <div className="space-x-2">
-                          {booking.status === "accepted" && (
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button
-                                  onClick={() => {
-                                    setSelectedBooking(booking);
-                                    setPaymentMethod("upi");
-                                    setPaymentReference(
-                                      booking.paymentReference || "",
-                                    );
-                                  }}
-                                >
-                                  Mark Service as Complete & Pay
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Submit Payment</DialogTitle>
-                                </DialogHeader>
-                                <div className="space-y-4 pt-4">
-                                  <PaymentMethodSelector
-                                    value={paymentMethod}
-                                    onChange={setPaymentMethod}
-                                  />
-                                  {paymentMethod === "upi" ? (
-                                    <>
-                                      <div className="flex items-center gap-2">
-                                        <p>
-                                          Send payment to UPI ID:{" "}
-                                          <strong>{booking.provider?.upiId}</strong>
-                                        </p>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          onClick={() =>
-                                            handleCopyUpiId(
-                                              booking.provider?.upiId,
-                                            )
-                                          }
-                                        >
-                                          Copy
-                                        </Button>
-                                      </div>
-                                      {booking.provider?.upiQrCodeUrl && (
-                                        <img
-                                          src={booking.provider.upiQrCodeUrl}
-                                          alt="QR"
-                                          className="h-32"
-                                        />
-                                      )}
-                                      <Input
-                                        placeholder="Transaction reference"
-                                        value={paymentReference}
-                                        onChange={(e) =>
-                                          setPaymentReference(e.target.value)
-                                        }
-                                      />
-                                    </>
-                                  ) : (
-                                    <p>
-                                      You chose to pay in cash directly to the provider.
-                                    </p>
-                                  )}
+                            <p className="text-sm text-muted-foreground">
+                              <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
+                              {formatIndianDisplay(booking.bookingDate, "time")}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                              <LocationIcon className="h-4 w-4" />
+                              <span>
+                                {booking.serviceLocation === "customer"
+                                  ? "Service at Your Location"
+                                  : booking.provider?.addressStreet
+                                    ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
+                                    : "Service at Provider's Location"}
+                              </span>
+                              {booking.serviceLocation === "provider" ? (
+                                <MapLink
+                                  latitude={booking.provider?.latitude}
+                                  longitude={booking.provider?.longitude}
+                                />
+                              ) : null}
+                            </div>
+                            {booking.provider && (
+                              <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
+                                <p>
+                                  <strong>Provider:</strong>{" "}
+                                  {booking.provider.name}
+                                </p>
+                                <p>
+                                  <strong>Phone:</strong> {booking.provider.phone}
+                                </p>
+                              </div>
+                            )}
+                            {booking.status === "rejected" && (
+                              <p className="mt-2 text-sm text-destructive">
+                                <strong>Reason:</strong>{" "}
+                                {booking.rejectionReason || "No reason provided"}
+                              </p>
+                            )}
+                          </div>
+                          <div className="space-x-2">
+                            {canCompleteAndPay && (
+                              <Dialog>
+                                <DialogTrigger asChild>
                                   <Button
-                                    onClick={() =>
-                                      paymentMutation.mutate({
-                                        bookingId: booking.id,
-                                        paymentReference:
-                                          paymentMethod === "cash"
-                                            ? "CASH"
-                                            : paymentReference,
-                                      })
-                                    }
-                                    className="w-full"
-                                    disabled={
-                                      paymentMethod === "upi" && !paymentReference
-                                    }
+                                    onClick={() => {
+                                      setSelectedBooking(booking);
+                                      setPaymentMethod("upi");
+                                      setPaymentReference(
+                                        booking.paymentReference || "",
+                                      );
+                                    }}
                                   >
-                                    {paymentMutation.isPending && (
-                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    )}
-                                    Submit and Confirm Payment
+                                    Mark Service as Complete & Pay
                                   </Button>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
-                          )}
-                          {booking.status === "awaiting_payment" && (
-                            <>
-                              <p className="text-sm">
-                                Reference: {booking.paymentReference}
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Submit Payment</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4 pt-4">
+                                    <PaymentMethodSelector
+                                      value={paymentMethod}
+                                      onChange={setPaymentMethod}
+                                    />
+                                    {paymentMethod === "upi" ? (
+                                      <>
+                                        <div className="flex items-center gap-2">
+                                          <p>
+                                            Send payment to UPI ID:{" "}
+                                            <strong>{booking.provider?.upiId}</strong>
+                                          </p>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() =>
+                                              handleCopyUpiId(
+                                                booking.provider?.upiId,
+                                              )
+                                            }
+                                          >
+                                            Copy
+                                          </Button>
+                                        </div>
+                                        {booking.provider?.upiQrCodeUrl && (
+                                          <img
+                                            src={booking.provider.upiQrCodeUrl}
+                                            alt="QR"
+                                            className="h-32"
+                                          />
+                                        )}
+                                        <Input
+                                          placeholder="Transaction reference"
+                                          value={paymentReference}
+                                          onChange={(e) =>
+                                            setPaymentReference(e.target.value)
+                                          }
+                                        />
+                                      </>
+                                    ) : (
+                                      <p>
+                                        You chose to pay in cash directly to the provider.
+                                      </p>
+                                    )}
+                                    <Button
+                                      onClick={() =>
+                                        paymentMutation.mutate({
+                                          bookingId: booking.id,
+                                          paymentReference:
+                                            paymentMethod === "cash"
+                                              ? "CASH"
+                                              : paymentReference,
+                                        })
+                                      }
+                                      className="w-full"
+                                      disabled={
+                                        paymentMethod === "upi" && !paymentReference
+                                      }
+                                    >
+                                      {paymentMutation.isPending && (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      )}
+                                      Submit and Confirm Payment
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            )}
+                            {booking.status === "awaiting_payment" && (
+                              <>
+                                <p className="text-sm">
+                                  Reference: {booking.paymentReference}
                               </p>
                               <Dialog>
                                 <DialogTrigger asChild>
@@ -1001,160 +1005,165 @@ export default function Bookings() {
                     </CardContent>
                   </Card>
                 </motion.div>
-              ))}
+              );
+            })}
             </div>
           </TabsContent>
 
           {/* Past */}
           <TabsContent value="past">
             <div className="grid gap-4">
-              {pastBookings?.map((booking) => (
-                <motion.div
-                  key={booking.id}
-                  variants={{
-                    hidden: { opacity: 0, y: 20 },
-                    show: { opacity: 1, y: 0 },
-                  }}
-                >
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-start gap-4">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold">
-                              {booking.service.name}
-                            </h3>
-                            <Badge
-                              variant="outline"
-                              className={getBookingStatusBadgeClass(booking.status)}
-                            >
-                              {BOOKING_STATUS_LABELS[booking.status] || booking.status}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
-                            {formatIndianDisplay(booking.bookingDate, "date")}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
-                            {formatIndianDisplay(booking.bookingDate, "time")}
-                          </p>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <LocationIcon className="h-4 w-4" />
-                            <span>
-                              {booking.serviceLocation === "customer"
-                                ? "Service at Your Location"
-                                : booking.provider?.addressStreet
-                                  ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
-                                  : "Service at Provider's Location"}
-                            </span>
-                          </div>
-                          {booking.provider && (
-                            <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
-                              <p>
-                                <strong>Provider:</strong>{" "}
-                                {booking.provider.name}
-                              </p>
-                              <p>
-                                <strong>Phone:</strong> {booking.provider.phone}
-                              </p>
+              {pastBookings?.map((booking) => {
+                const canCompleteAndPay =
+                  booking.status === "accepted" || booking.status === "en_route";
+
+                return (
+                  <motion.div
+                    key={booking.id}
+                    variants={{
+                      hidden: { opacity: 0, y: 20 },
+                      show: { opacity: 1, y: 0 },
+                    }}
+                  >
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-semibold">
+                                {booking.service.name}
+                              </h3>
+                              <Badge
+                                variant="outline"
+                                className={getBookingStatusBadgeClass(booking.status)}
+                              >
+                                {BOOKING_STATUS_LABELS[booking.status] || booking.status}
+                              </Badge>
                             </div>
-                          )}
-                          {booking.status === "rejected" && (
-                            <p className="mt-2 text-sm text-destructive">
-                              <strong>Reason:</strong>{" "}
-                              {booking.rejectionReason || "No reason provided"}
+                            <p className="text-sm text-muted-foreground">
+                              <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
+                              {formatIndianDisplay(booking.bookingDate, "date")}
                             </p>
-                          )}
-                        </div>
-                        <div className="space-x-2">
-                          {booking.status === "accepted" && (
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button
-                                  onClick={() => {
-                                    setSelectedBooking(booking);
-                                    setPaymentMethod("upi");
-                                    setPaymentReference(
-                                      booking.paymentReference || "",
-                                    );
-                                  }}
-                                >
-                                  Mark Service as Complete & Pay
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Submit Payment</DialogTitle>
-                                </DialogHeader>
-                                <div className="space-y-4 pt-4">
-                                  <PaymentMethodSelector
-                                    value={paymentMethod}
-                                    onChange={setPaymentMethod}
-                                  />
-                                  {paymentMethod === "upi" ? (
-                                    <>
-                                      <div className="flex items-center gap-2">
-                                        <p>
-                                          Send payment to UPI ID:{" "}
-                                          <strong>{booking.provider?.upiId}</strong>
-                                        </p>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          onClick={() =>
-                                            handleCopyUpiId(
-                                              booking.provider?.upiId,
-                                            )
-                                          }
-                                        >
-                                          Copy
-                                        </Button>
-                                      </div>
-                                      {booking.provider?.upiQrCodeUrl && (
-                                        <img
-                                          src={booking.provider.upiQrCodeUrl}
-                                          alt="QR"
-                                          className="h-32"
-                                        />
-                                      )}
-                                      <Input
-                                        placeholder="Transaction reference"
-                                        value={paymentReference}
-                                        onChange={(e) =>
-                                          setPaymentReference(e.target.value)
-                                        }
-                                      />
-                                    </>
-                                  ) : (
-                                    <p>
-                                      You chose to pay in cash directly to the provider.
-                                    </p>
-                                  )}
+                            <p className="text-sm text-muted-foreground">
+                              <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
+                              {formatIndianDisplay(booking.bookingDate, "time")}
+                            </p>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <LocationIcon className="h-4 w-4" />
+                              <span>
+                                {booking.serviceLocation === "customer"
+                                  ? "Service at Your Location"
+                                  : booking.provider?.addressStreet
+                                    ? `Provider Location: ${booking.provider.addressStreet}, ${booking.provider.addressCity}`
+                                    : "Service at Provider's Location"}
+                              </span>
+                            </div>
+                            {booking.provider && (
+                              <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
+                                <p>
+                                  <strong>Provider:</strong>{" "}
+                                  {booking.provider.name}
+                                </p>
+                                <p>
+                                  <strong>Phone:</strong> {booking.provider.phone}
+                                </p>
+                              </div>
+                            )}
+                            {booking.status === "rejected" && (
+                              <p className="mt-2 text-sm text-destructive">
+                                <strong>Reason:</strong>{" "}
+                                {booking.rejectionReason || "No reason provided"}
+                              </p>
+                            )}
+                          </div>
+                          <div className="space-x-2">
+                            {canCompleteAndPay && (
+                              <Dialog>
+                                <DialogTrigger asChild>
                                   <Button
-                                    onClick={() =>
-                                      paymentMutation.mutate({
-                                        bookingId: booking.id,
-                                        paymentReference:
-                                          paymentMethod === "cash"
-                                            ? "CASH"
-                                            : paymentReference,
-                                      })
-                                    }
-                                    className="w-full"
-                                    disabled={
-                                      paymentMethod === "upi" && !paymentReference
-                                    }
+                                    onClick={() => {
+                                      setSelectedBooking(booking);
+                                      setPaymentMethod("upi");
+                                      setPaymentReference(
+                                        booking.paymentReference || "",
+                                      );
+                                    }}
                                   >
-                                    {paymentMutation.isPending && (
-                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    )}
-                                    Submit and Confirm Payment
+                                    Mark Service as Complete & Pay
                                   </Button>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
-                          )}
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Submit Payment</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4 pt-4">
+                                    <PaymentMethodSelector
+                                      value={paymentMethod}
+                                      onChange={setPaymentMethod}
+                                    />
+                                    {paymentMethod === "upi" ? (
+                                      <>
+                                        <div className="flex items-center gap-2">
+                                          <p>
+                                            Send payment to UPI ID:{" "}
+                                            <strong>{booking.provider?.upiId}</strong>
+                                          </p>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() =>
+                                              handleCopyUpiId(
+                                                booking.provider?.upiId,
+                                              )
+                                            }
+                                          >
+                                            Copy
+                                          </Button>
+                                        </div>
+                                        {booking.provider?.upiQrCodeUrl && (
+                                          <img
+                                            src={booking.provider.upiQrCodeUrl}
+                                            alt="QR"
+                                            className="h-32"
+                                          />
+                                        )}
+                                        <Input
+                                          placeholder="Transaction reference"
+                                          value={paymentReference}
+                                          onChange={(e) =>
+                                            setPaymentReference(e.target.value)
+                                          }
+                                        />
+                                      </>
+                                    ) : (
+                                      <p>
+                                        You chose to pay in cash directly to the provider.
+                                      </p>
+                                    )}
+                                    <Button
+                                      onClick={() =>
+                                        paymentMutation.mutate({
+                                          bookingId: booking.id,
+                                          paymentReference:
+                                            paymentMethod === "cash"
+                                              ? "CASH"
+                                              : paymentReference,
+                                        })
+                                      }
+                                      className="w-full"
+                                      disabled={
+                                        paymentMethod === "upi" && !paymentReference
+                                      }
+                                    >
+                                      {paymentMutation.isPending && (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      )}
+                                      Submit and Confirm Payment
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            )}
                           {booking.status === "awaiting_payment" && (
                             <>
                               <p className="text-sm">
@@ -1270,7 +1279,8 @@ export default function Bookings() {
                     </CardContent>
                   </Card>
                 </motion.div>
-              ))}
+                );
+              })}
             </div>
           </TabsContent>
         </Tabs>
