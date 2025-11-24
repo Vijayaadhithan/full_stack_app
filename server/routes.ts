@@ -721,6 +721,44 @@ async function hydrateOrders(
   });
 }
 
+type ActiveOrderBoardLane = "new" | "packing" | "ready";
+
+type ActiveOrderBoardItem = {
+  id: number;
+  status: Order["status"];
+  total: number;
+  paymentStatus: Order["paymentStatus"] | null;
+  deliveryMethod: Order["deliveryMethod"] | null;
+  orderDate: string | null;
+  customerName: string | null;
+  items: {
+    id: number;
+    productId: number | null;
+    name: string;
+    quantity: number;
+  }[];
+};
+
+type ActiveOrderBoard = Record<ActiveOrderBoardLane, ActiveOrderBoardItem[]>;
+
+const ACTIVE_ORDER_STATUSES: Order["status"][] = [
+  "pending",
+  "confirmed",
+  "processing",
+  "packed",
+  "dispatched",
+  "shipped",
+];
+
+function getBoardLaneForStatus(
+  status: Order["status"],
+): ActiveOrderBoardLane | null {
+  if (status === "pending" || status === "confirmed") return "new";
+  if (status === "processing" || status === "packed") return "packing";
+  if (status === "dispatched" || status === "shipped") return "ready";
+  return null;
+}
+
 const dateStringSchema = z
   .string()
   .refine(isValidDateString, { message: "Invalid date format" });
@@ -944,6 +982,22 @@ const notificationsMarkAllSchema = z
   .strict();
 
 const productUpdateSchema = insertProductSchema.partial();
+
+const productBulkUpdateSchema = z
+  .object({
+    updates: z
+      .array(
+        z
+          .object({
+            productId: z.number().int().positive(),
+            stock: z.number().int().min(0),
+            lowStockThreshold: z.number().int().min(0).nullable().optional(),
+          })
+          .strict(),
+      )
+      .min(1, { message: "At least one product update is required" }),
+  })
+  .strict();
 
 const serviceUpdateSchema = insertServiceSchema
   .partial()
@@ -2673,6 +2727,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
     }
   });
+
+  app.patch(
+    "/api/products/bulk-update",
+    requireAuth,
+    requireShopOrWorkerPermission(["products:write"]),
+    async (req, res) => {
+      const parsedBody = productBulkUpdateSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+
+      try {
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
+
+        const dedupedUpdates = new Map<
+          number,
+          { stock: number; lowStockThreshold?: number | null }
+        >();
+        for (const update of parsedBody.data.updates) {
+          dedupedUpdates.set(update.productId, {
+            stock: update.stock,
+            lowStockThreshold: update.lowStockThreshold,
+          });
+        }
+
+        const productIds = Array.from(dedupedUpdates.keys());
+        const products =
+          productIds.length > 0
+            ? await storage.getProductsByIds(productIds)
+            : [];
+
+        const missingProducts = productIds.filter(
+          (id) => !products.some((product) => product.id === id),
+        );
+        if (missingProducts.length) {
+          return res
+            .status(404)
+            .json({ message: `Product not found: ${missingProducts[0]}` });
+        }
+
+        const unauthorized = products.find(
+          (product) => product.shopId !== shopContextId,
+        );
+        if (unauthorized) {
+          return res
+            .status(403)
+            .json({ message: "Not authorized to update these products" });
+        }
+
+        const normalizedUpdates = productIds.map((productId) => ({
+          productId,
+          ...dedupedUpdates.get(productId)!,
+        }));
+
+        const updatedProducts = await storage.bulkUpdateProductStock(
+          normalizedUpdates,
+        );
+
+        await Promise.all(
+          normalizedUpdates.map(({ productId }) =>
+            invalidateCache(`product_detail_${shopContextId}_${productId}`),
+          ),
+        );
+
+        res.json({ updated: updatedProducts });
+      } catch (error) {
+        logger.error("[API] Error in /api/products/bulk-update PATCH:", error);
+        res.status(400).json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to update products",
+        });
+      }
+    },
+  );
 
   app.patch(
     "/api/products/:id",
@@ -5381,6 +5514,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
               error instanceof Error
                 ? error.message
                 : "Failed to fetch dashboard stats",
+          });
+      }
+    },
+  );
+
+  app.get(
+    "/api/shops/orders/active",
+    requireAuth,
+    requireShopOrWorkerPermission(["orders:read"]),
+    async (req, res) => {
+      try {
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
+
+        const orders = await storage.getOrdersByShop(shopContextId);
+        const activeOrders = orders.filter((order) =>
+          ACTIVE_ORDER_STATUSES.includes(order.status),
+        );
+
+        if (activeOrders.length === 0) {
+          return res.json({ new: [], packing: [], ready: [] } as ActiveOrderBoard);
+        }
+
+        const orderIds = activeOrders.map((order) => order.id);
+        const orderItems =
+          orderIds.length > 0
+            ? await storage.getOrderItemsByOrderIds(orderIds)
+            : [];
+        const itemsByOrderId = new Map<number, OrderItem[]>();
+        for (const item of orderItems) {
+          if (item.orderId == null) continue;
+          if (!itemsByOrderId.has(item.orderId)) {
+            itemsByOrderId.set(item.orderId, []);
+          }
+          itemsByOrderId.get(item.orderId)!.push(item);
+        }
+
+        const productIds = Array.from(
+          new Set(
+            orderItems
+              .map((item) => item.productId)
+              .filter((id): id is number => id !== null),
+          ),
+        );
+        const products =
+          productIds.length > 0
+            ? await storage.getProductsByIds(productIds)
+            : [];
+        const productMap = new Map(products.map((product) => [product.id, product]));
+
+        const customerIds = Array.from(
+          new Set(
+            activeOrders
+              .map((order) => order.customerId)
+              .filter((id): id is number => id !== null),
+          ),
+        );
+        const customers =
+          customerIds.length > 0
+            ? await storage.getUsersByIds(customerIds)
+            : [];
+        const customerMap = new Map(
+          customers.map((customer) => [customer.id, customer]),
+        );
+
+        const board: ActiveOrderBoard = {
+          new: [],
+          packing: [],
+          ready: [],
+        };
+
+        for (const order of activeOrders) {
+          const lane = getBoardLaneForStatus(order.status);
+          if (!lane) continue;
+
+          const condensedItems = (itemsByOrderId.get(order.id) ?? []).map(
+            (item) => {
+              const product =
+                item.productId !== null
+                  ? productMap.get(item.productId)
+                  : undefined;
+              return {
+                id: item.id,
+                productId: item.productId,
+                name: product?.name ?? "Item",
+                quantity: item.quantity,
+              };
+            },
+          );
+
+          const customer = order.customerId
+            ? customerMap.get(order.customerId)
+            : undefined;
+
+          board[lane].push({
+            id: order.id,
+            status: order.status,
+            total: Number(order.total ?? 0),
+            paymentStatus: order.paymentStatus ?? null,
+            deliveryMethod: order.deliveryMethod ?? null,
+            orderDate:
+              order.orderDate instanceof Date
+                ? order.orderDate.toISOString()
+                : order.orderDate ?? null,
+            customerName: customer?.name ?? null,
+            items: condensedItems,
+          });
+        }
+
+        (Object.keys(board) as ActiveOrderBoardLane[]).forEach((lane) => {
+          board[lane].sort((a, b) => {
+            const aTime = a.orderDate ? new Date(a.orderDate).getTime() : 0;
+            const bTime = b.orderDate ? new Date(b.orderDate).getTime() : 0;
+            return bTime - aTime;
+          });
+        });
+
+        res.json(board);
+      } catch (error) {
+        logger.error("Error fetching active shop orders:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch active orders",
           });
       }
     },

@@ -1619,6 +1619,73 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getLowStockProducts(options?: {
+    shopId?: number;
+    threshold?: number;
+    limit?: number;
+  }): Promise<Product[]> {
+    const { shopId, threshold, limit } = options ?? {};
+    const fallbackThreshold = 5;
+    const conditions: SQL<unknown>[] = [eq(products.isDeleted, false)];
+
+    if (shopId !== undefined) {
+      conditions.push(eq(products.shopId, shopId));
+    }
+
+    if (threshold !== undefined) {
+      conditions.push(sql`${products.stock} <= ${threshold}`);
+    } else {
+      conditions.push(
+        sql`${products.stock} <= COALESCE(${products.lowStockThreshold}, ${fallbackThreshold})`,
+      );
+    }
+
+    const query = db
+      .select()
+      .from(products)
+      .where(and(...conditions))
+      .orderBy(products.stock);
+
+    if (typeof limit === "number") {
+      query.limit(limit);
+    }
+
+    return query;
+  }
+
+  async bulkUpdateProductStock(
+    updates: {
+      productId: number;
+      stock: number;
+      lowStockThreshold?: number | null;
+    }[],
+  ): Promise<Product[]> {
+    const updated: Product[] = [];
+
+    for (const update of updates) {
+      const result = await db
+        .update(products)
+        .set({
+          stock: update.stock,
+          lowStockThreshold:
+            update.lowStockThreshold !== undefined
+              ? update.lowStockThreshold
+              : undefined,
+          updatedAt: getCurrentISTDate(),
+        })
+        .where(and(eq(products.id, update.productId), eq(products.isDeleted, false)))
+        .returning();
+
+      if (!result[0]) {
+        throw new Error(`Product not found: ${update.productId}`);
+      }
+
+      updated.push(result[0]);
+    }
+
+    return updated;
+  }
+
   async removeProductFromAllCarts(productId: number): Promise<void> {
     logger.info(`Removing product ID ${productId} from all carts`);
     try {

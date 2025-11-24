@@ -22,6 +22,7 @@ import { startPaymentReminderJob } from "./jobs/paymentReminderJob";
 import { ensureDefaultAdmin } from "./bootstrap";
 import { reportError } from "./monitoring/errorReporter";
 import { trackRequestStart } from "./monitoring/metrics";
+import { startLowStockDigestJob } from "./jobs/lowStockDigestJob";
 
 config();
 
@@ -445,6 +446,7 @@ export async function startServer(port?: number) {
   if (process.env.NODE_ENV !== "test") {
     startBookingExpirationJob(dbStorage);
     startPaymentReminderJob(dbStorage);
+    startLowStockDigestJob(dbStorage);
   }
 
   const server = await registerRoutesPromise;

@@ -217,6 +217,13 @@ export function NotificationsCenter() {
           navigate(`/shop/returns${id ? `/${id}` : ""}`);
         }
         break;
+      case "shop":
+        if (user?.role === "shop") {
+          navigate("/shop/inventory");
+        } else {
+          navigate(`/${user?.role || ""}`);
+        }
+        break;
       case "service_request":
         if (user?.role === "provider") {
           navigate(`/provider/services${id ? `/${id}` : ""}`);

@@ -78,8 +78,49 @@ export default function ShopInventory() {
     },
   });
 
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async (
+      updates: { productId: number; stock: number }[],
+    ) => {
+      if (!canAdjustInventory) {
+        throw new Error("You do not have permission to update inventory.");
+      }
+      const res = await apiRequest("PATCH", "/api/products/bulk-update", {
+        updates,
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to update products");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateProductsQuery();
+      toast({
+        title: "Inventory updated",
+        description: "Stock levels saved successfully",
+      });
+      setStockUpdates({});
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleStockUpdate = (productId: number, stock: number) => {
     if (!canAdjustInventory) return;
+    if (!Number.isFinite(stock)) {
+      setStockUpdates((prev) => {
+        const next = { ...prev };
+        delete next[productId];
+        return next;
+      });
+      return;
+    }
     setStockUpdates((prev) => ({ ...prev, [productId]: stock }));
   };
 
@@ -98,6 +139,36 @@ export default function ShopInventory() {
     }
   };
 
+  const pendingUpdates = Object.entries(stockUpdates).filter(
+    ([, value]) => Number.isFinite(value),
+  );
+
+  const handleBulkSave = () => {
+    if (!canAdjustInventory) {
+      toast({
+        title: "Permission required",
+        description: "You do not have access to update inventory.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const updates = pendingUpdates.map(([productId, stock]) => ({
+      productId: Number(productId),
+      stock: Number(stock),
+    }));
+
+    if (!updates.length) {
+      toast({
+        title: "No changes to save",
+        description: "Adjust stock values before saving.",
+      });
+      return;
+    }
+
+    bulkUpdateMutation.mutate(updates);
+  };
+
   const renderLoadingIndicator = (
     <div className="flex items-center justify-center min-h-[400px]">
       <Loader2 className="h-8 w-8 animate-spin" />
@@ -111,6 +182,11 @@ export default function ShopInventory() {
       </CardContent>
     </Card>
   );
+
+  const lowStockItems =
+    products?.filter(
+      (product) => product.stock <= (product.lowStockThreshold ?? 5),
+    ) ?? [];
 
   const inventoryContent = (() => {
     if (waitingOnPermissions) {
@@ -136,6 +212,83 @@ export default function ShopInventory() {
     }
     return (
       <div className="space-y-4">
+        <Card className="border-dashed">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold">Quick edit</h3>
+                <p className="text-sm text-muted-foreground">
+                  {lowStockItems.length
+                    ? `${lowStockItems.length} items are below their low-stock threshold.`
+                    : "All items are above their low-stock threshold."}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={invalidateProductsQuery}
+                  disabled={productsLoading}
+                >
+                  Refresh
+                </Button>
+                <Button
+                  onClick={handleBulkSave}
+                  disabled={
+                    !pendingUpdates.length ||
+                    !canAdjustInventory ||
+                    bulkUpdateMutation.isPending
+                  }
+                >
+                  {bulkUpdateMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Save all changes"
+                  )}
+                </Button>
+              </div>
+            </div>
+            {lowStockItems.length ? (
+              <div className="space-y-3">
+                {lowStockItems.map((product) => (
+                  <div
+                    key={`low-${product.id}`}
+                    className="flex flex-col gap-3 rounded-lg border border-yellow-200 bg-yellow-50/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-semibold">{product.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Current: {product.stock} • Threshold:{" "}
+                        {product.lowStockThreshold ?? 5}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        type="number"
+                        value={stockUpdates[product.id] ?? product.stock}
+                        onChange={(e) =>
+                          handleStockUpdate(
+                            product.id,
+                            Number.parseInt(e.target.value, 10),
+                          )
+                        }
+                        className="w-24"
+                        disabled={!canAdjustInventory}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        units
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No low stock alerts right now.
+              </p>
+            )}
+          </CardContent>
+        </Card>
         {products.map((product) => (
           <Card
             key={product.id}

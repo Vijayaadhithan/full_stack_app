@@ -162,6 +162,14 @@ export interface IStorage {
     filters?: any,
   ): Promise<{ items: ProductListItem[]; hasMore: boolean }>; // Added filters parameter with pagination
   removeProductFromAllCarts(productId: number): Promise<void>;
+  getLowStockProducts(options?: {
+    shopId?: number;
+    threshold?: number;
+    limit?: number;
+  }): Promise<Product[]>;
+  bulkUpdateProductStock(
+    updates: { productId: number; stock: number; lowStockThreshold?: number | null }[],
+  ): Promise<Product[]>;
 
   // Cart operations
   addToCart(
@@ -1369,9 +1377,70 @@ export class MemStorage implements IStorage {
   async updateProduct(id: number, product: Partial<Product>): Promise<Product> {
     const existing = this.products.get(id);
     if (!existing) throw new Error("Product not found");
-    const updated = { ...existing, ...product };
+    const updated = {
+      ...existing,
+      ...product,
+      updatedAt: product.updatedAt ?? newIndianDate(),
+    };
     this.products.set(id, updated);
     return updated;
+  }
+
+  async getLowStockProducts(options?: {
+    shopId?: number;
+    threshold?: number;
+    limit?: number;
+  }): Promise<Product[]> {
+    const { shopId, threshold, limit } = options ?? {};
+    const fallbackThreshold = 5;
+
+    const products = Array.from(this.products.values()).filter((product) => {
+      if (shopId !== undefined && product.shopId !== shopId) {
+        return false;
+      }
+      const currentStock = Number(product.stock ?? 0);
+      if (!Number.isFinite(currentStock)) {
+        return false;
+      }
+      const effectiveThreshold =
+        threshold !== undefined
+          ? threshold
+          : product.lowStockThreshold ?? fallbackThreshold;
+      return currentStock <= effectiveThreshold;
+    });
+
+    products.sort(
+      (a, b) => Number(a.stock ?? 0) - Number(b.stock ?? 0),
+    );
+
+    return typeof limit === "number" ? products.slice(0, limit) : products;
+  }
+
+  async bulkUpdateProductStock(
+    updates: {
+      productId: number;
+      stock: number;
+      lowStockThreshold?: number | null;
+    }[],
+  ): Promise<Product[]> {
+    const updatedProducts: Product[] = [];
+    for (const update of updates) {
+      const product = this.products.get(update.productId);
+      if (!product) {
+        throw new Error(`Product not found: ${update.productId}`);
+      }
+      const nextProduct: Product = {
+        ...product,
+        stock: update.stock,
+        updatedAt: newIndianDate(),
+      };
+      if (update.lowStockThreshold !== undefined) {
+        nextProduct.lowStockThreshold = update.lowStockThreshold;
+      }
+      this.products.set(update.productId, nextProduct);
+      updatedProducts.push(nextProduct);
+    }
+    return updatedProducts;
   }
 
   // Cart operations
