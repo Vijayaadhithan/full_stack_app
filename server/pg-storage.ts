@@ -3,7 +3,7 @@ import pgSession from "connect-pg-simple";
 import { db } from "./db";
 import type { SQL } from "drizzle-orm";
 import logger from "./logger";
-import { getCache, setCache } from "./cache";
+import { getCache, setCache } from "./services/cache.service";
 import { createHash } from "crypto";
 import {
   notifyBookingChange,
@@ -99,7 +99,7 @@ interface InsertBlockedTimeSlot {
 }
 
 const PRODUCT_CACHE_PREFIX = "products";
-const PRODUCT_CACHE_TTL_MS = 60_000; // 60 seconds cache to balance freshness and throughput
+const PRODUCT_CACHE_TTL_SECONDS = 60; // 60 seconds cache to balance freshness and throughput
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") {
@@ -729,7 +729,7 @@ export class PostgresStorage implements IStorage {
     }));
 
     const payload = { items, hasMore };
-    await setCache(cacheKey, payload, PRODUCT_CACHE_TTL_MS);
+    await setCache(cacheKey, payload, PRODUCT_CACHE_TTL_SECONDS);
     return payload;
   }
 

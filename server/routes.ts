@@ -29,7 +29,11 @@ import multer, { MulterError } from "multer";
 import path from "path";
 import fs from "node:fs";
 import { fileURLToPath } from "url";
-import { getCache, setCache, invalidateCache } from "./cache";
+import {
+  getCache,
+  setCache,
+  invalidateCache,
+} from "./services/cache.service";
 import {
   insertServiceSchema,
   insertBookingSchema,
@@ -117,9 +121,9 @@ import {
 } from "@shared/api-contract";
 
 const PLATFORM_SERVICE_FEE = platformFees.productOrder;
-const SERVICE_DETAIL_CACHE_TTL_MS = 60_000;
-const PRODUCT_DETAIL_CACHE_TTL_MS = 60_000;
-const SHOP_DETAIL_CACHE_TTL_MS = 120_000;
+const SERVICE_DETAIL_CACHE_TTL_SECONDS = 60;
+const PRODUCT_DETAIL_CACHE_TTL_SECONDS = 60;
+const SHOP_DETAIL_CACHE_TTL_SECONDS = 120;
 const NEARBY_SEARCH_LIMIT = 200;
 const NEARBY_USER_ROLES: UserRole[] = ["shop", "provider"];
 const GLOBAL_SEARCH_RESULT_LIMIT = 25;
@@ -3517,7 +3521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "[API] /api/services/:id - Sending typed response",
           payload,
         );
-        await setCache(cacheKey, payload, SERVICE_DETAIL_CACHE_TTL_MS);
+        await setCache(cacheKey, payload, SERVICE_DETAIL_CACHE_TTL_SECONDS);
         res.json(payload);
       } catch (error) {
         logger.error("[API] Error in /api/services/:id:", error);
@@ -6564,7 +6568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               : product.updatedAt ?? null,
         });
 
-        await setCache(cacheKey, payload, PRODUCT_DETAIL_CACHE_TTL_MS);
+        await setCache(cacheKey, payload, PRODUCT_DETAIL_CACHE_TTL_SECONDS);
         res.json(payload);
       } catch (error) {
         logger.error("Error fetching product:", error);
@@ -6595,7 +6599,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Shop not found" });
       }
       const payload = buildPublicShopResponse(shop);
-      await setCache(cacheKey, payload, SHOP_DETAIL_CACHE_TTL_MS);
+      await setCache(cacheKey, payload, SHOP_DETAIL_CACHE_TTL_SECONDS);
       res.json(payload);
     } catch (error) {
       logger.error("Error fetching shop details:", error);
