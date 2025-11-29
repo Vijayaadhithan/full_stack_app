@@ -1844,7 +1844,7 @@ export class PostgresStorage implements IStorage {
           .delete(cart)
           .where(
             and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
-        );
+          );
         logger.info(
           `Successfully removed product ID ${productId} from cart for customer ID ${customerId} due to zero/negative quantity.`,
         );
@@ -1937,9 +1937,9 @@ export class PostgresStorage implements IStorage {
       const productsList =
         productIds.length > 0
           ? await db
-              .select()
-              .from(products)
-              .where(inArray(products.id, productIds))
+            .select()
+            .from(products)
+            .where(inArray(products.id, productIds))
           : [];
       const productMap = new Map(productsList.map((product) => [product.id, product]));
 
@@ -2036,9 +2036,9 @@ export class PostgresStorage implements IStorage {
     const productsList =
       productIds.length > 0
         ? await db
-            .select()
-            .from(products)
-            .where(inArray(products.id, productIds))
+          .select()
+          .from(products)
+          .where(inArray(products.id, productIds))
         : [];
     const productMap = new Map(productsList.map((product) => [product.id, product]));
 
@@ -2386,8 +2386,24 @@ export class PostgresStorage implements IStorage {
     return newNotification;
   }
 
-  async getNotificationsByUser(userId: number): Promise<Notification[]> {
-    const rows = await db
+  async getNotificationsByUser(
+    userId: number,
+    options?: { page: number; limit: number },
+  ): Promise<{ data: Notification[]; total: number; totalPages: number }> {
+    const page = options?.page ?? 1;
+    const limit = options?.limit ?? 20;
+    const offset = (page - 1) * limit;
+
+    // Count total
+    const [countResult] = await db
+      .select({ count: count() })
+      .from(notifications)
+      .where(eq(notifications.userId, userId));
+    const total = Number(countResult?.count ?? 0);
+    const totalPages = Math.ceil(total / limit);
+
+    // Get data
+    const data = await db
       .select({
         id: notifications.id,
         userId: notifications.userId,
@@ -2399,11 +2415,17 @@ export class PostgresStorage implements IStorage {
         createdAt: sql<Date>`(${notifications.createdAt} AT TIME ZONE 'Asia/Kolkata')`,
       })
       .from(notifications)
-      .where(eq(notifications.userId, userId));
-    return rows.map((row) => ({
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const mappedData = data.map((row) => ({
       ...row,
       createdAt: row.createdAt ?? null,
     }));
+
+    return { data: mappedData, total, totalPages };
   }
 
   async markNotificationAsRead(id: number): Promise<void> {
@@ -2558,63 +2580,7 @@ export class PostgresStorage implements IStorage {
   // Asynchronously compute last-update timestamp for sorting.
   // Removed duplicate implementation of getBookingHistoryForCustomer to resolve the duplicate function error.
 
-  async getBookingHistoryForProvider(providerId: number): Promise<Booking[]> {
-    const providerServices = await this.getServicesByProvider(providerId);
-    const serviceIds = providerServices.map((service) => service.id);
-    if (serviceIds.length === 0) return [];
 
-    const providerBookings = await db
-      .select()
-      .from(bookings)
-      .where(
-        and(
-          inArray(bookings.serviceId, serviceIds),
-          ne(bookings.status, "pending"),
-        ),
-      );
-
-    if (providerBookings.length === 0) {
-      return [];
-    }
-
-    const bookingIds = providerBookings.map((booking) => booking.id);
-    const historyRows = await db
-      .select()
-      .from(bookingHistory)
-      .where(inArray(bookingHistory.bookingId, bookingIds))
-      .orderBy(bookingHistory.changedAt);
-
-    const historyByBookingId = new Map<
-      number,
-      Array<(typeof historyRows)[number]>
-    >();
-    for (const history of historyRows) {
-      const bookingId = history.bookingId ?? undefined;
-      if (bookingId === undefined) {
-        continue;
-      }
-      const bucket = historyByBookingId.get(bookingId);
-      if (bucket) {
-        bucket.push(history);
-      } else {
-        historyByBookingId.set(bookingId, [history]);
-      }
-    }
-
-    const enhanced = providerBookings.map((booking) => {
-      const history = historyByBookingId.get(booking.id) ?? [];
-      const lastUpdateMs =
-        history.length > 0
-          ? new Date(history[history.length - 1].changedAt ?? new Date()).getTime()
-          : booking.createdAt
-            ? new Date(booking.createdAt).getTime()
-            : new Date().getTime();
-      return { ...booking, lastUpdate: lastUpdateMs };
-    });
-
-    enhanced.sort((a, b) => (b.lastUpdate ?? 0) - (a.lastUpdate ?? 0));
-    return enhanced;
-  }
 
   async updateBookingStatus(
     id: number,
@@ -2676,6 +2642,56 @@ export class PostgresStorage implements IStorage {
       "completed",
       "Service completed successfully",
     );
+  }
+
+  async getBookingHistoryForProvider(
+    providerId: number,
+    options?: { page: number; limit: number },
+  ): Promise<{ data: Booking[]; total: number; totalPages: number }> {
+    const page = options?.page ?? 1;
+    const limit = options?.limit ?? 20;
+    const offset = (page - 1) * limit;
+
+    // Get services for this provider
+    const providerServices = await db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.providerId, providerId));
+
+    const serviceIds = providerServices.map((s) => s.id);
+
+    if (serviceIds.length === 0) {
+      return { data: [], total: 0, totalPages: 0 };
+    }
+
+    // Count total
+    const [countResult] = await db
+      .select({ count: count() })
+      .from(bookings)
+      .where(
+        and(
+          inArray(bookings.serviceId, serviceIds),
+          ne(bookings.status, "pending"),
+        ),
+      );
+    const total = Number(countResult?.count ?? 0);
+    const totalPages = Math.ceil(total / limit);
+
+    // Get data
+    const data = await db
+      .select()
+      .from(bookings)
+      .where(
+        and(
+          inArray(bookings.serviceId, serviceIds),
+          ne(bookings.status, "pending"),
+        ),
+      )
+      .orderBy(desc(bookings.updatedAt))
+      .limit(limit)
+      .offset(offset);
+
+    return { data, total, totalPages };
   }
 
   async addBookingReview(

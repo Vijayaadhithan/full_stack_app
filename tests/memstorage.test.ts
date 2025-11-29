@@ -86,8 +86,8 @@ describe("MemStorage basic operations", () => {
     const updated = await store.getBooking(booking.id);
     assert.strictEqual(updated?.status, "expired");
     const custNotes = await store.getNotificationsByUser(customer.id);
-    assert.ok(custNotes.some((n) => n.type === "booking_expired"));
+    assert.ok(custNotes.data.some((n) => n.type === "booking_expired"));
     const provNotes = await store.getNotificationsByUser(provider.id);
-    assert.ok(provNotes.some((n) => n.type === "booking_expired"));
+    assert.ok(provNotes.data.some((n) => n.type === "booking_expired"));
   });
 });

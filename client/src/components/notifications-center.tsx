@@ -26,9 +26,15 @@ export function NotificationsCenter() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
 
-  const { data: notifications } = useQuery<Notification[]>({
+  const { data: notificationsData } = useQuery<{
+    data: Notification[];
+    total: number;
+    totalPages: number;
+  }>({
     queryKey: ["/api/notifications"],
   });
+
+  const notifications = notificationsData?.data;
 
   const markAsReadMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -43,14 +49,21 @@ export function NotificationsCenter() {
       // Optimistically update the UI immediately
       queryClient.setQueryData(
         ["/api/notifications"],
-        (oldData: Notification[] | undefined) => {
-          if (!oldData) return [];
-          return oldData.map((notification) => {
-            if (notification.id === id) {
-              return { ...notification, isRead: true };
-            }
-            return notification;
-          });
+        (
+          oldData:
+            | { data: Notification[]; total: number; totalPages: number }
+            | undefined,
+        ) => {
+          if (!oldData) return undefined;
+          return {
+            ...oldData,
+            data: oldData.data.map((notification) => {
+              if (notification.id === id) {
+                return { ...notification, isRead: true };
+              }
+              return notification;
+            }),
+          };
         },
       );
 
@@ -79,38 +92,45 @@ export function NotificationsCenter() {
       // Optimistically update the local cache to show zero unread count
       queryClient.setQueryData(
         ["/api/notifications"],
-        (oldData: Notification[] | undefined) => {
-          if (!oldData) return [];
+        (
+          oldData:
+            | { data: Notification[]; total: number; totalPages: number }
+            | undefined,
+        ) => {
+          if (!oldData) return undefined;
           // Only mark notifications relevant to the user's role as read
-          return oldData.map((notification) => {
-            // Check if this notification is relevant to the user's role
-            let isRelevantToUser = false;
+          return {
+            ...oldData,
+            data: oldData.data.map((notification) => {
+              // Check if this notification is relevant to the user's role
+              let isRelevantToUser = false;
 
-            // Shop owners should only mark shop/order/return notifications as read
-            if (user?.role === "shop") {
-              isRelevantToUser = ["order", "shop", "return"].includes(
-                notification.type,
-              );
-            }
+              // Shop owners should only mark shop/order/return notifications as read
+              if (user?.role === "shop") {
+                isRelevantToUser = ["order", "shop", "return"].includes(
+                  notification.type,
+                );
+              }
 
-            // Service providers should only mark service/booking notifications as read
-            else if (user?.role === "provider") {
-              isRelevantToUser = ["service", "booking"].includes(
-                notification.type,
-              );
-            }
+              // Service providers should only mark service/booking notifications as read
+              else if (user?.role === "provider") {
+                isRelevantToUser = ["service", "booking"].includes(
+                  notification.type,
+                );
+              }
 
-            // Customers should mark all their notifications as read
-            else if (user?.role === "customer") {
-              isRelevantToUser = true;
-            }
+              // Customers should mark all their notifications as read
+              else if (user?.role === "customer") {
+                isRelevantToUser = true;
+              }
 
-            // Only mark as read if it's relevant to the user
-            return {
-              ...notification,
-              isRead: isRelevantToUser ? true : notification.isRead,
-            };
-          });
+              // Only mark as read if it's relevant to the user
+              return {
+                ...notification,
+                isRead: isRelevantToUser ? true : notification.isRead,
+              };
+            }),
+          };
         },
       );
 
@@ -283,9 +303,8 @@ export function NotificationsCenter() {
               sortedNotifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`p-4 rounded-lg border ${
-                    notification.isRead ? "bg-background" : "bg-muted"
-                  } cursor-pointer`}
+                  className={`p-4 rounded-lg border ${notification.isRead ? "bg-background" : "bg-muted"
+                    } cursor-pointer`}
                   onClick={() => {
                     // Mark as read if unread
                     if (!notification.isRead) {
@@ -308,9 +327,9 @@ export function NotificationsCenter() {
                       <p className="text-xs text-muted-foreground mt-1">
                         {notification.createdAt
                           ? formatIndianDisplay(
-                              notification.createdAt,
-                              "datetime",
-                            ) // Use formatIndianDisplay with IST timezone
+                            notification.createdAt,
+                            "datetime",
+                          ) // Use formatIndianDisplay with IST timezone
                           : ""}
                       </p>
                     </div>

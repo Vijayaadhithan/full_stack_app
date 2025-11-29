@@ -195,13 +195,13 @@ const uploadMiddleware = multer({
 
 type RequestWithAuth = Request & {
   user?:
-    | {
-        id?: number | string;
-        role?: string;
-        isSuspended?: boolean;
-        verificationStatus?: string | null;
-      }
-    | null;
+  | {
+    id?: number | string;
+    role?: string;
+    isSuspended?: boolean;
+    verificationStatus?: string | null;
+  }
+  | null;
   session?: (Request["session"] & { adminId?: string | null }) | null;
 };
 
@@ -269,15 +269,15 @@ const isValidDateString = (value: string) =>
 const formatUserAddress = (
   user?:
     | Pick<
-        User,
-        | "addressStreet"
-        | "addressCity"
-        | "addressState"
-        | "addressPostalCode"
-        | "addressCountry"
-      >
+      User,
+      | "addressStreet"
+      | "addressCity"
+      | "addressState"
+      | "addressPostalCode"
+      | "addressCountry"
+    >
     | null,
-) : string | null => {
+): string | null => {
   if (!user) return null;
   const parts = [
     user.addressStreet,
@@ -386,23 +386,23 @@ function buildUserResponse(
 type CustomerBookingHydrated = Booking & {
   service?: Service | null;
   customer?:
-    | {
-        id: number;
-        name: string | null;
-        phone: string | null;
-        latitude: number | null;
-        longitude: number | null;
-      }
-    | null;
+  | {
+    id: number;
+    name: string | null;
+    phone: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  }
+  | null;
   provider?:
-    | {
-        id: number;
-        name: string | null;
-        phone: string | null;
-        latitude: number | null;
-        longitude: number | null;
-      }
-    | null;
+  | {
+    id: number;
+    name: string | null;
+    phone: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  }
+  | null;
   relevantAddress?: Record<string, string | null> | null;
 };
 
@@ -473,19 +473,19 @@ async function hydrateCustomerBookings(
       service,
       customer: customer
         ? {
-            id: customer.id,
-            name: customer.name,
-            phone: customer.phone,
-            ...extractUserCoordinates(customer),
-          }
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          ...extractUserCoordinates(customer),
+        }
         : null,
       provider: provider
         ? {
-            id: provider.id,
-            name: provider.name,
-            phone: provider.phone,
-            ...extractUserCoordinates(provider),
-          }
+          id: provider.id,
+          name: provider.name,
+          phone: provider.phone,
+          ...extractUserCoordinates(provider),
+        }
         : null,
       relevantAddress,
     };
@@ -561,16 +561,16 @@ async function hydrateProviderBookings(
       service: service || { name: "Unknown Service" },
       customer: customer
         ? {
-            id: customer.id,
-            name: customer.name,
-            phone: customer.phone,
-            addressStreet: customer.addressStreet,
-            addressCity: customer.addressCity,
-            addressState: customer.addressState,
-            addressPostalCode: customer.addressPostalCode,
-            addressCountry: customer.addressCountry,
-            ...extractUserCoordinates(customer),
-          }
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          addressStreet: customer.addressStreet,
+          addressCity: customer.addressCity,
+          addressState: customer.addressState,
+          addressPostalCode: customer.addressPostalCode,
+          addressCountry: customer.addressCountry,
+          ...extractUserCoordinates(customer),
+        }
         : null,
       relevantAddress,
     };
@@ -1239,10 +1239,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const csrfProtection: RequestHandler =
     process.env.NODE_ENV === "test"
       ? ((req, _res, next) => {
-          (req as Request & { csrfToken?: () => string }).csrfToken = () =>
-            "test-csrf-token";
-          next();
-        })
+        (req as Request & { csrfToken?: () => string }).csrfToken = () =>
+          "test-csrf-token";
+        next();
+      })
       : createCsrfProtection({ ignoreMethods: ["GET", "HEAD", "OPTIONS"] });
 
   app.use(csrfProtection);
@@ -2066,13 +2066,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 userId: booking.customerId,
                 type: "booking_rescheduled_by_provider",
                 title: "Booking Rescheduled by Provider",
-                message: `Provider ${
-                  currentUser.name || "ID: " + currentUser.id
-                } has rescheduled your booking #${bookingId} for '${
-                  service.name
-                }' to ${formattedProviderRescheduleDate}. ${
-                  comments ? "Comments: " + comments : ""
-                }`,
+                message: `Provider ${currentUser.name || "ID: " + currentUser.id
+                  } has rescheduled your booking #${bookingId} for '${service.name
+                  }' to ${formattedProviderRescheduleDate}. ${comments ? "Comments: " + comments : ""
+                  }`,
                 isRead: false,
                 relatedBookingId: bookingId,
               }),
@@ -2287,16 +2284,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(
     "/api/bookings/provider/history",
     requireAuth,
-    requireRole(["provider"]),
     async (req, res) => {
+      if (req.user!.role !== "provider") {
+        return res.status(403).send("Only providers can view booking history");
+      }
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
       try {
-        const providerId = req.user!.id;
-        const bookingHistory =
-          await storage.getBookingHistoryForProvider(providerId);
-
-        const bookingsWithDetails =
-          await hydrateCustomerBookings(bookingHistory);
-        res.json(bookingsWithDetails);
+        const history = await storage.getBookingHistoryForProvider(req.user!.id, {
+          page,
+          limit,
+        });
+        res.json(history);
       } catch (error) {
         logger.error("Error fetching booking history:", error);
         res
@@ -2356,7 +2355,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (
           booking.customerId !== req.user!.id &&
           (await storage.getService(booking.serviceId!))?.providerId !==
-            req.user!.id
+          req.user!.id
         ) {
           return res.status(403).json({ message: "Not authorized" });
         }
@@ -3114,19 +3113,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           rating,
           provider: provider
             ? {
-                // Include full provider details needed for address logic
-                id: provider.id,
-                name: provider.name,
-                phone: provider.phone,
-                profilePicture: provider.profilePicture,
-                addressStreet: provider.addressStreet,
-                addressCity: provider.addressCity,
-                addressState: provider.addressState,
-                addressPostalCode: provider.addressPostalCode,
-                addressCountry: provider.addressCountry,
-                latitude: provider.latitude,
-                longitude: provider.longitude,
-              }
+              // Include full provider details needed for address logic
+              id: provider.id,
+              name: provider.name,
+              phone: provider.phone,
+              profilePicture: provider.profilePicture,
+              addressStreet: provider.addressStreet,
+              addressCity: provider.addressCity,
+              addressState: provider.addressState,
+              addressPostalCode: provider.addressPostalCode,
+              addressCountry: provider.addressCountry,
+              latitude: provider.latitude,
+              longitude: provider.longitude,
+            }
             : null,
         };
       });
@@ -3146,15 +3145,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const computeDistanceKm = (
     origin:
       | {
-          lat: number;
-          lng: number;
-        }
+        lat: number;
+        lng: number;
+      }
       | null,
     target?:
       | {
-          latitude?: string | number | null;
-          longitude?: string | number | null;
-        }
+        latitude?: string | number | null;
+        longitude?: string | number | null;
+      }
       | null,
   ) => {
     if (!origin || !target) return null;
@@ -3218,10 +3217,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           searchTerm: q,
           ...(origin
             ? {
-                lat: origin.lat,
-                lng: origin.lng,
-                radiusKm: origin.radiusKm,
-              }
+              lat: origin.lat,
+              lng: origin.lng,
+              radiusKm: origin.radiusKm,
+            }
             : {}),
         }),
         storage.getProducts({
@@ -3230,10 +3229,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           pageSize: maxResults,
           ...(origin
             ? {
-                lat: origin.lat,
-                lng: origin.lng,
-                radiusKm: origin.radiusKm,
-              }
+              lat: origin.lat,
+              lng: origin.lng,
+              radiusKm: origin.radiusKm,
+            }
             : {}),
         }),
         storage.getShops(),
@@ -3259,13 +3258,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             : null;
         const distanceKm = provider
           ? computeDistanceKm(
-              origin ? { lat: origin.lat, lng: origin.lng } : null,
-              provider,
-            )
+            origin ? { lat: origin.lat, lng: origin.lng } : null,
+            provider,
+          )
           : null;
-        const haystack = `${service.name ?? ""} ${
-          service.description ?? ""
-        } ${provider?.name ?? ""}`.toLowerCase();
+        const haystack = `${service.name ?? ""} ${service.description ?? ""
+          } ${provider?.name ?? ""}`.toLowerCase();
         const relevanceScore = buildRelevanceScore(
           haystack,
           tokens,
@@ -3310,13 +3308,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const shop = product.shopId ? productShopMap.get(product.shopId) ?? null : null;
         const distanceKm = shop
           ? computeDistanceKm(
-              origin ? { lat: origin.lat, lng: origin.lng } : null,
-              shop,
-            )
+            origin ? { lat: origin.lat, lng: origin.lng } : null,
+            shop,
+          )
           : null;
-        const haystack = `${product.name ?? ""} ${
-          product.description ?? ""
-        } ${shop?.name ?? ""}`.toLowerCase();
+        const haystack = `${product.name ?? ""} ${product.description ?? ""
+          } ${shop?.name ?? ""}`.toLowerCase();
         const relevanceScore = buildRelevanceScore(
           haystack,
           tokens,
@@ -3345,9 +3342,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const shopResults = shops
         .filter((shop) => {
-          const haystack = `${shop.name ?? ""} ${
-            shop.shopProfile?.description ?? ""
-          }`.toLowerCase();
+          const haystack = `${shop.name ?? ""} ${shop.shopProfile?.description ?? ""
+            }`.toLowerCase();
           if (!haystack) return false;
           if (haystack.includes(normalizedQuery)) return true;
           return tokens.every((token) => haystack.includes(token));
@@ -3357,9 +3353,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             origin ? { lat: origin.lat, lng: origin.lng } : null,
             shop,
           );
-          const haystack = `${shop.name ?? ""} ${
-            shop.shopProfile?.description ?? ""
-          }`.toLowerCase();
+          const haystack = `${shop.name ?? ""} ${shop.shopProfile?.description ?? ""
+            }`.toLowerCase();
           const relevanceScore = buildRelevanceScore(
             haystack,
             tokens,
@@ -3456,7 +3451,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const reviews = await storage.getReviewsByService(serviceId);
         const rating = reviews?.length
           ? reviews.reduce((acc, review) => acc + review.rating, 0) /
-            reviews.length
+          reviews.length
           : null;
 
         const rawWorkingHours = (service as any).workingHours;
@@ -3484,19 +3479,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           workingHours,
           breakTime: breakSlots,
           rating,
-        provider: {
-          id: provider.id,
-          name: provider.name ?? null,
-          email: provider.email ?? null,
-          phone: provider.phone ?? null,
-          profilePicture: provider.profilePicture ?? null,
-          addressStreet: provider.addressStreet ?? null,
-          addressCity: provider.addressCity ?? null,
-          addressState: provider.addressState ?? null,
-          addressPostalCode: provider.addressPostalCode ?? null,
-          addressCountry: provider.addressCountry ?? null,
-          ...extractUserCoordinates(provider),
-        },
+          provider: {
+            id: provider.id,
+            name: provider.name ?? null,
+            email: provider.email ?? null,
+            phone: provider.phone ?? null,
+            profilePicture: provider.profilePicture ?? null,
+            addressStreet: provider.addressStreet ?? null,
+            addressCity: provider.addressCity ?? null,
+            addressState: provider.addressState ?? null,
+            addressPostalCode: provider.addressPostalCode ?? null,
+            addressCountry: provider.addressCountry ?? null,
+            ...extractUserCoordinates(provider),
+          },
           reviews: (reviews ?? []).map((review) => ({
             id: review.id,
             customerId: review.customerId ?? null,
@@ -3509,8 +3504,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ? review.createdAt.toISOString()
                 : review.createdAt
                   ? new Date(
-                      review.createdAt as unknown as string,
-                    ).toISOString()
+                    review.createdAt as unknown as string,
+                  ).toISOString()
                   : null,
             providerReply: review.providerReply ?? null,
             isVerifiedService: review.isVerifiedService ?? undefined,
@@ -3891,9 +3886,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updateData.rescheduleDate = null;
 
           notificationTitle = "Booking Rejected";
-          notificationMessage = `Your booking for ${serviceName} was rejected.${
-            rejectionReason ? ` Reason: ${rejectionReason}` : ""
-          }`;
+          notificationMessage = `Your booking for ${serviceName} was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ""
+            }`;
           responseMessage =
             "Booking rejected. Customer has been notified with the reason.";
         } else {
@@ -4303,14 +4297,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const providerAddressParts =
               provider !== null
                 ? [
-                    provider.addressStreet,
-                    provider.addressCity,
-                    provider.addressState,
-                  ]
-                    .map((part) =>
-                      typeof part === "string" ? part.trim() : "",
-                    )
-                    .filter((part) => part.length > 0)
+                  provider.addressStreet,
+                  provider.addressCity,
+                  provider.addressState,
+                ]
+                  .map((part) =>
+                    typeof part === "string" ? part.trim() : "",
+                  )
+                  .filter((part) => part.length > 0)
                 : [];
             const providerAddress = providerAddressParts.join(", ");
             displayAddress =
@@ -4331,18 +4325,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             displayAddress,
             provider: provider
               ? {
-                  id: provider.id,
-                  name: provider.name,
-                  phone: provider.phone,
-                  upiId: (provider as any).upiId ?? null,
-                  upiQrCodeUrl: (provider as any).upiQrCodeUrl ?? null,
-                  addressStreet: provider.addressStreet,
-                  addressCity: provider.addressCity,
-                  addressState: provider.addressState,
-                  addressPostalCode: provider.addressPostalCode,
-                  addressCountry: provider.addressCountry,
-                  ...extractUserCoordinates(provider),
-                }
+                id: provider.id,
+                name: provider.name,
+                phone: provider.phone,
+                upiId: (provider as any).upiId ?? null,
+                upiQrCodeUrl: (provider as any).upiQrCodeUrl ?? null,
+                addressStreet: provider.addressStreet,
+                addressCity: provider.addressCity,
+                addressState: provider.addressState,
+                addressPostalCode: provider.addressPostalCode,
+                addressCountry: provider.addressCountry,
+                ...extractUserCoordinates(provider),
+              }
               : null,
           };
         });
@@ -4382,7 +4376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               error instanceof Error
                 ? error.message
                 : "Failed to fetch bookings",
-        });
+          });
       }
     },
   );
@@ -5066,7 +5060,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Notification routes
   app.get("/api/notifications", requireAuth, async (req, res) => {
     try {
-      const notifications = await storage.getNotificationsByUser(req.user!.id);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const notifications = await storage.getNotificationsByUser(req.user!.id, {
+        page,
+        limit,
+      });
       res.json(notifications);
     } catch (error) {
       logger.error("Error fetching notifications:", error);
@@ -5868,26 +5867,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         items,
         customer: customer
           ? {
-              name: customer.name ?? null,
-              phone: customer.phone ?? null,
-              email: customer.email ?? null,
-              address: formatUserAddress(customer) ?? null,
-              ...extractUserCoordinates(customer),
-            }
+            name: customer.name ?? null,
+            phone: customer.phone ?? null,
+            email: customer.email ?? null,
+            address: formatUserAddress(customer) ?? null,
+            ...extractUserCoordinates(customer),
+          }
           : undefined,
         shop: shop
           ? {
-              name: shop.name ?? null,
-              phone: shop.phone ?? null,
-              email: shop.email ?? null,
-              address: formatUserAddress(shop) ?? null,
-              ...extractUserCoordinates(shop),
-              upiId: (shop as any).upiId ?? null,
-              returnsEnabled:
-                (shop as any).returnsEnabled === undefined
-                  ? null
-                  : Boolean((shop as any).returnsEnabled),
-            }
+            name: shop.name ?? null,
+            phone: shop.phone ?? null,
+            email: shop.email ?? null,
+            address: formatUserAddress(shop) ?? null,
+            ...extractUserCoordinates(shop),
+            upiId: (shop as any).upiId ?? null,
+            returnsEnabled:
+              (shop as any).returnsEnabled === undefined
+                ? null
+                : Boolean((shop as any).returnsEnabled),
+          }
           : undefined,
       });
 
@@ -5967,14 +5966,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       const orderId = getValidatedParam(req, "id");
       try {
-      const order = await storage.getOrder(orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      const shopContextId = req.shopContextId;
-      if (typeof shopContextId !== "number") {
-        return res.status(403).json({ message: "Unable to resolve shop context" });
-      }
-      if (order.shopId !== shopContextId)
-        return res.status(403).json({ message: "Not authorized" });
+        const order = await storage.getOrder(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
+        if (order.shopId !== shopContextId)
+          return res.status(403).json({ message: "Not authorized" });
         if (
           (order.paymentMethod === "upi" && order.paymentStatus !== "verifying") ||
           (order.paymentMethod === "cash" && order.paymentStatus !== "pending")

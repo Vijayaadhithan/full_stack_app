@@ -22,11 +22,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
 
   // Fetch all notifications
-  const { data: allNotifications = [], refetch: refreshNotifications } =
-    useQuery<Notification[]>({
+  const { data: notificationsData, refetch: refreshNotifications } =
+    useQuery<{ data: Notification[]; total: number; totalPages: number }>({
       queryKey: ["/api/notifications"],
       enabled: !!user,
     });
+
+  const allNotifications = notificationsData?.data || [];
 
   const { data: pendingBookings = [] } = useQuery<Booking[]>({
     queryKey: ["/api/bookings/provider/pending"],
@@ -107,14 +109,21 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       // Optimistically update the UI immediately
       queryClient.setQueryData(
         ["/api/notifications"],
-        (oldData: Notification[] | undefined) => {
-          if (!oldData) return [];
-          return oldData.map((notification) => {
-            if (notification.id === id) {
-              return { ...notification, isRead: true };
-            }
-            return notification;
-          });
+        (
+          oldData:
+            | { data: Notification[]; total: number; totalPages: number }
+            | undefined,
+        ) => {
+          if (!oldData) return undefined;
+          return {
+            ...oldData,
+            data: oldData.data.map((notification) => {
+              if (notification.id === id) {
+                return { ...notification, isRead: true };
+              }
+              return notification;
+            }),
+          };
         },
       );
 
@@ -126,9 +135,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Mark all notifications as read
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PATCH", "/api/notifications/mark-all-read", {
-        role: user?.role,
-      });
+      const res = await apiRequest(
+        "PATCH",
+        "/api/notifications/mark-all-read",
+        {
+          role: user?.role,
+        },
+      );
       if (!res.ok) {
         const error = await res.json();
         throw new Error(
@@ -143,12 +156,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       // Immediately update the local state to show zero unread count
       queryClient.setQueryData(
         ["/api/notifications"],
-        (oldData: Notification[] | undefined) => {
-          if (!oldData) return [];
-          return oldData.map((notification) => ({
-            ...notification,
-            isRead: true,
-          }));
+        (
+          oldData:
+            | { data: Notification[]; total: number; totalPages: number }
+            | undefined,
+        ) => {
+          if (!oldData) return undefined;
+          return {
+            ...oldData,
+            data: oldData.data.map((notification) => ({
+              ...notification,
+              isRead: true,
+            })),
+          };
         },
       );
     },

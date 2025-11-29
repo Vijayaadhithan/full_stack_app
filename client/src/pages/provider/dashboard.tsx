@@ -305,11 +305,15 @@ function PendingBookingRequestsList() {
 
 // ─── BOOKING HISTORY COMPONENT ─────────────────────────────────────────
 function BookingHistoryList() {
-  const { data: bookingHistory, isLoading } = useQuery<
-    (Booking & { service?: Service })[]
-  >({
+  const { data: bookingHistoryData, isLoading } = useQuery<{
+    data: (Booking & { service?: Service })[];
+    total: number;
+    totalPages: number;
+  }>({
     queryKey: ["/api/bookings/provider/history"],
   });
+
+  const bookingHistory = bookingHistoryData?.data;
 
   if (isLoading) {
     return (
@@ -530,18 +534,18 @@ export default function ProviderDashboard() {
       : 0;
   const upcomingBookings = bookings
     ? bookings
-        .filter(
-          (b) =>
-            activeBookingStatuses.includes(b.status) &&
-            b.bookingDate &&
-            new Date(b.bookingDate) > new Date(),
-        )
-        .sort(
-          (a, b) =>
-            new Date(a.bookingDate).getTime() -
-            new Date(b.bookingDate).getTime(),
-        )
-        .slice(0, 5)
+      .filter(
+        (b) =>
+          activeBookingStatuses.includes(b.status) &&
+          b.bookingDate &&
+          new Date(b.bookingDate) > new Date(),
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.bookingDate).getTime() -
+          new Date(b.bookingDate).getTime(),
+      )
+      .slice(0, 5)
     : [];
 
   // Mutations

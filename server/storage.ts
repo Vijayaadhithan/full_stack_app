@@ -145,7 +145,10 @@ export interface IStorage {
   getBookingsByStatus(status: string): Promise<Booking[]>;
   updateBooking(id: number, booking: Partial<Booking>): Promise<Booking>;
   getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]>; // Added
-  getBookingHistoryForProvider(providerId: number): Promise<Booking[]>; // Added
+  getBookingHistoryForProvider(
+    providerId: number,
+    options?: { page: number; limit: number },
+  ): Promise<{ data: Booking[]; total: number; totalPages: number }>; // Added
   getBookingHistoryForCustomer(customerId: number): Promise<Booking[]>; // Added
   getBookingRequestsWithStatusForCustomer(customerId: number): Promise<Booking[]>;
   processExpiredBookings(): Promise<void>; // Added
@@ -234,7 +237,10 @@ export interface IStorage {
   ): Promise<ProductReview>;
   // Notification operations
   createNotification(notification: InsertNotification): Promise<Notification>;
-  getNotificationsByUser(userId: number): Promise<Notification[]>;
+  getNotificationsByUser(
+    userId: number,
+    options?: { page: number; limit: number },
+  ): Promise<{ data: Notification[]; total: number; totalPages: number }>;
   markNotificationAsRead(id: number): Promise<void>;
   markAllNotificationsAsRead(userId: number, role: UserRole): Promise<void>;
   deleteNotification(id: number): Promise<void>;
@@ -525,12 +531,15 @@ export class MemStorage implements IStorage {
       ),
     );
   }
-  getBookingHistoryForProvider(providerId: number): Promise<Booking[]> {
+  getBookingHistoryForProvider(
+    providerId: number,
+    options?: { page: number; limit: number },
+  ): Promise<{ data: Booking[]; total: number; totalPages: number }> {
     const services = Array.from(this.services.values()).filter(
       (s) => s.providerId === providerId,
     );
     const serviceIds = services.map((s) => s.id);
-    const history = Array.from(this.bookings.values()).filter(
+    let history = Array.from(this.bookings.values()).filter(
       (b) =>
         b.serviceId !== null &&
         serviceIds.includes(b.serviceId) &&
@@ -541,7 +550,16 @@ export class MemStorage implements IStorage {
       const bTime = (b.updatedAt ?? b.createdAt ?? new Date()) as Date;
       return bTime.getTime() - aTime.getTime();
     });
-    return Promise.resolve(history);
+
+    const total = history.length;
+    const page = options?.page ?? 1;
+    const limit = options?.limit ?? 20;
+    const totalPages = Math.ceil(total / limit);
+    const offset = (page - 1) * limit;
+
+    const data = history.slice(offset, offset + limit);
+
+    return Promise.resolve({ data, total, totalPages });
   }
   getBookingHistoryForCustomer(customerId: number): Promise<Booking[]> {
     const history = Array.from(this.bookings.values()).filter(
@@ -553,6 +571,30 @@ export class MemStorage implements IStorage {
       return bTime.getTime() - aTime.getTime();
     });
     return Promise.resolve(history);
+  }
+  getNotificationsByUser(
+    userId: number,
+    options?: { page: number; limit: number },
+  ): Promise<{ data: Notification[]; total: number; totalPages: number }> {
+    let notifications = Array.from(this.notifications.values()).filter(
+      (n) => n.userId === userId,
+    );
+    // Sort by createdAt descending
+    notifications.sort((a, b) => {
+      const aTime = (a.createdAt ?? new Date()).getTime();
+      const bTime = (b.createdAt ?? new Date()).getTime();
+      return bTime - aTime;
+    });
+
+    const total = notifications.length;
+    const page = options?.page ?? 1;
+    const limit = options?.limit ?? 20;
+    const totalPages = Math.ceil(total / limit);
+    const offset = (page - 1) * limit;
+
+    const data = notifications.slice(offset, offset + limit);
+
+    return Promise.resolve({ data, total, totalPages });
   }
   processExpiredBookings(): Promise<void> {
     const now = new Date();
@@ -845,10 +887,10 @@ export class MemStorage implements IStorage {
       shopProfile:
         insertUser.shopProfile && insertUser.shopProfile !== null
           ? {
-              ...insertUser.shopProfile,
-              shippingPolicy: insertUser.shopProfile.shippingPolicy ?? undefined,
-              returnPolicy: insertUser.shopProfile.returnPolicy ?? undefined,
-            }
+            ...insertUser.shopProfile,
+            shippingPolicy: insertUser.shopProfile.shippingPolicy ?? undefined,
+            returnPolicy: insertUser.shopProfile.returnPolicy ?? undefined,
+          }
           : null,
       bio: insertUser.bio === undefined ? null : insertUser.bio,
       qualifications: null,
@@ -961,7 +1003,7 @@ export class MemStorage implements IStorage {
       serviceLocationType: (service.serviceLocationType === undefined
         ? "provider_location"
         : service.serviceLocationType === "customer_location" ||
-            service.serviceLocationType === "provider_location"
+          service.serviceLocationType === "provider_location"
           ? service.serviceLocationType
           : "provider_location") as "customer_location" | "provider_location",
       images: service.images === undefined ? null : service.images,
@@ -969,14 +1011,14 @@ export class MemStorage implements IStorage {
       workingHours:
         service.workingHours === undefined
           ? {
-              monday: { isAvailable: false, start: "", end: "" },
-              tuesday: { isAvailable: false, start: "", end: "" },
-              wednesday: { isAvailable: false, start: "", end: "" },
-              thursday: { isAvailable: false, start: "", end: "" },
-              friday: { isAvailable: false, start: "", end: "" },
-              saturday: { isAvailable: false, start: "", end: "" },
-              sunday: { isAvailable: false, start: "", end: "" },
-            }
+            monday: { isAvailable: false, start: "", end: "" },
+            tuesday: { isAvailable: false, start: "", end: "" },
+            wednesday: { isAvailable: false, start: "", end: "" },
+            thursday: { isAvailable: false, start: "", end: "" },
+            friday: { isAvailable: false, start: "", end: "" },
+            saturday: { isAvailable: false, start: "", end: "" },
+            sunday: { isAvailable: false, start: "", end: "" },
+          }
           : service.workingHours,
       breakTime: service.breakTime == null ? [] : service.breakTime,
       maxDailyBookings:
@@ -2073,11 +2115,7 @@ export class MemStorage implements IStorage {
     return finalNotification;
   }
 
-  async getNotificationsByUser(userId: number): Promise<Notification[]> {
-    return Array.from(this.notifications.values()).filter(
-      (notification) => notification.userId === userId,
-    );
-  }
+
 
   async markNotificationAsRead(id: number): Promise<void> {
     const notification = this.notifications.get(id);
@@ -2093,7 +2131,11 @@ export class MemStorage implements IStorage {
     role?: string,
   ): Promise<void> {
     // Get all notifications for this user
-    let userNotifications = await this.getNotificationsByUser(userId);
+    // We pass a large limit to get all notifications for marking as read, or we could iterate if needed.
+    // For MemStorage, we can just access the map directly or use the method with a large limit.
+    // However, getNotificationsByUser now returns { data, total, totalPages }.
+    const result = await this.getNotificationsByUser(userId, { page: 1, limit: 1000 });
+    let userNotifications = result.data;
 
     // Apply role-based filtering if role is provided
     if (role) {
@@ -2391,13 +2433,13 @@ export class MemStorage implements IStorage {
       status === "confirmed"
         ? "accepted"
         : (status as
-            | "pending"
-            | "completed"
-            | "cancelled"
-            | "accepted"
-            | "rejected"
-            | "rescheduled"
-            | "expired");
+          | "pending"
+          | "completed"
+          | "cancelled"
+          | "accepted"
+          | "rejected"
+          | "rescheduled"
+          | "expired");
     const finalUpdated = {
       ...booking,
       status: mappedStatus,
