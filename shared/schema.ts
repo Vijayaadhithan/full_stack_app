@@ -11,10 +11,18 @@ import {
   uuid,
   primaryKey,
   index,
+  customType,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import type { SessionData } from "express-session";
 import { z } from "zod";
+
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return "tsvector";
+  },
+});
 
 export type UserRole = "customer" | "provider" | "shop" | "admin" | "worker";
 export const PaymentMethodType = z.enum(["upi", "cash"]);
@@ -454,10 +462,17 @@ export const products = pgTable(
   lowStockThreshold: integer("low_stock_threshold"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  searchVector: tsvector("search_vector").generatedAlwaysAs(
+    sql`to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '') || ' ' || coalesce(category, ''))`,
+  ),
   },
   (table) => ({
     productsShopIdx: index("products_shop_id_idx").on(table.shopId),
     productsCategoryIdx: index("products_category_idx").on(table.category),
+    productsSearchVectorIdx: index("products_search_vector_idx").using(
+      "gin",
+      table.searchVector,
+    ),
   }),
 );
 

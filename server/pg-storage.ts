@@ -602,12 +602,10 @@ export class PostgresStorage implements IStorage {
     const offset = (page - 1) * pageSize;
     const limit = pageSize + 1;
 
-    const conditions = [eq(products.isDeleted, false)];
+    const conditions: SQL[] = [eq(products.isDeleted, false)];
+    const orderByClauses: SQL[] = [];
     let query: any = db.select().from(products);
     let joinedUsers = false;
-
-    const escapeLikePattern = (value: string) =>
-      value.replace(/[%_]/g, (char) => `\\${char}`);
 
     if (criteria && Object.keys(criteria).length > 0) {
       if (criteria.category) {
@@ -624,32 +622,10 @@ export class PostgresStorage implements IStorage {
       if (criteria.searchTerm) {
         const normalizedTerm = String(criteria.searchTerm).trim();
         if (normalizedTerm.length > 0) {
-          const escapedPhrase = `%${escapeLikePattern(normalizedTerm)}%`;
-          const phraseMatch = sql`(${products.name} ILIKE ${escapedPhrase} OR ${products.description} ILIKE ${escapedPhrase})`;
-          const wordClauses = normalizedTerm
-            .split(/\s+/)
-            .filter((word) => word.length > 0)
-            .map((word) => {
-              const escapedWord = `%${escapeLikePattern(word)}%`;
-              return sql`(${products.name} ILIKE ${escapedWord} OR ${products.description} ILIKE ${escapedWord})`;
-            });
-
-          if (wordClauses.length > 0) {
-            let combinedWords: SQL | null = null;
-            for (const clause of wordClauses) {
-              combinedWords = combinedWords
-                ? sql`${combinedWords} AND ${clause}`
-                : clause;
-            }
-
-            if (combinedWords) {
-              conditions.push(sql`(${phraseMatch} OR (${combinedWords}))`);
-            } else {
-              conditions.push(phraseMatch);
-            }
-          } else {
-            conditions.push(phraseMatch);
-          }
+          const tsQuery = sql`plainto_tsquery('english', ${normalizedTerm})`;
+          const searchVector = sql`${products.searchVector}`;
+          conditions.push(sql`${searchVector} @@ ${tsQuery}`);
+          orderByClauses.push(sql`ts_rank(${searchVector}, ${tsQuery}) DESC`);
         }
       }
       if (criteria.shopId) {
@@ -699,11 +675,15 @@ export class PostgresStorage implements IStorage {
           radiusKm,
         });
         conditions.push(condition);
-        query = query.orderBy(distanceExpr);
+        orderByClauses.push(distanceExpr);
       }
     }
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as typeof query;
+    }
+
+    if (orderByClauses.length > 0) {
+      query = query.orderBy(...orderByClauses);
     }
 
     query = query.limit(limit).offset(offset);
@@ -1565,7 +1545,10 @@ export class PostgresStorage implements IStorage {
 
   // ─── PRODUCT OPERATIONS ──────────────────────────────────────────
   async createProduct(product: InsertProduct): Promise<Product> {
-    const result = await db.insert(products).values(product).returning();
+    const result = await db
+      .insert(products)
+      .values(product as typeof products.$inferInsert)
+      .returning();
     return result[0];
   }
 

@@ -1269,54 +1269,37 @@ export class MemStorage implements IStorage {
           : product.lowStockThreshold,
       mrp: product.mrp === undefined ? product.price : product.mrp,
     };
-    this.products.set(id, {
+    const productRecord: Product = {
       id: newProduct.id,
-      name: newProduct.name,
-      shopId: newProduct.shopId,
-      description: newProduct.description,
-      price: newProduct.price,
-      mrp: newProduct.mrp,
-      stock: newProduct.stock,
-      category: newProduct.category,
-      images: newProduct.images,
-      isAvailable: newProduct.isAvailable,
-      isDeleted: newProduct.isDeleted,
-      createdAt: newProduct.createdAt,
-      updatedAt: newProduct.updatedAt,
-      sku: newProduct.sku,
-      barcode: newProduct.barcode,
-      weight: newProduct.weight,
-      dimensions: newProduct.dimensions,
-      specifications: newProduct.specifications,
-      tags: newProduct.tags,
-      minOrderQuantity: newProduct.minOrderQuantity,
-      maxOrderQuantity: newProduct.maxOrderQuantity,
-      lowStockThreshold: newProduct.lowStockThreshold ?? null,
-    });
-    return {
-      id: newProduct.id,
-      name: newProduct.name,
-      shopId: newProduct.shopId,
-      description: newProduct.description,
-      price: newProduct.price,
-      mrp: newProduct.mrp,
-      stock: newProduct.stock,
-      category: newProduct.category,
-      images: newProduct.images,
-      isAvailable: newProduct.isAvailable,
-      isDeleted: newProduct.isDeleted,
-      createdAt: newProduct.createdAt,
-      updatedAt: newProduct.updatedAt,
-      sku: newProduct.sku,
-      barcode: newProduct.barcode,
-      weight: newProduct.weight,
-      dimensions: newProduct.dimensions,
-      specifications: newProduct.specifications,
-      tags: newProduct.tags,
-      minOrderQuantity: newProduct.minOrderQuantity,
-      maxOrderQuantity: newProduct.maxOrderQuantity,
-      lowStockThreshold: newProduct.lowStockThreshold ?? null,
+      name: newProduct.name as string,
+      shopId: newProduct.shopId as number | null,
+      description: newProduct.description as string,
+      price: newProduct.price as string,
+      mrp: newProduct.mrp as string,
+      stock: newProduct.stock as number,
+      category: newProduct.category as string,
+      images: (newProduct.images ?? null) as string[] | null,
+      isAvailable: (newProduct.isAvailable ?? null) as boolean | null,
+      isDeleted: (newProduct.isDeleted ?? null) as boolean | null,
+      createdAt: (newProduct.createdAt ?? null) as Date | null,
+      updatedAt: (newProduct.updatedAt ?? null) as Date | null,
+      sku: (newProduct.sku ?? null) as string | null,
+      barcode: (newProduct.barcode ?? null) as string | null,
+      weight: (newProduct.weight ?? null) as string | null,
+      dimensions: (newProduct.dimensions ?? null) as {
+        length: number;
+        width: number;
+        height: number;
+      } | null,
+      specifications: (newProduct.specifications ?? null) as Record<string, string> | null,
+      tags: (newProduct.tags ?? null) as string[] | null,
+      minOrderQuantity: (newProduct.minOrderQuantity ?? null) as number | null,
+      maxOrderQuantity: (newProduct.maxOrderQuantity ?? null) as number | null,
+      lowStockThreshold: (newProduct.lowStockThreshold ?? null) as number | null,
+      searchVector: null as unknown as string,
     };
+    this.products.set(id, productRecord);
+    return productRecord;
   }
 
   async getProduct(id: number): Promise<Product | undefined> {
