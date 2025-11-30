@@ -73,6 +73,7 @@ export type BreakTime = {
   end: string;
 };
 
+// Time slot label for broad booking slots
 export type BlockedTimeSlot = {
   id: number;
   serviceId: number;
@@ -161,53 +162,53 @@ export const WorkerResponsibilityZ = z.enum(WorkerResponsibilities);
 export const users = pgTable(
   "users",
   {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  role: text("role").$type<UserRole>().notNull(),
-  name: text("name").notNull(),
-  phone: text("phone").notNull(),
-  email: text("email").notNull(),
-  addressStreet: text("address_street"),
-  addressCity: text("address_city"),
-  addressState: text("address_state"),
-  addressPostalCode: text("address_postal_code"),
-  addressCountry: text("address_country"),
-  latitude: decimal("latitude", { precision: 10, scale: 7 }),
-  longitude: decimal("longitude", { precision: 10, scale: 7 }),
-  language: text("language").default("en"),
-  profilePicture: text("profile_picture"),
-  paymentMethods: jsonb("payment_methods").$type<PaymentMethod[]>(),
-  shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
-  googleId: text("google_id").unique(), // Added for Google OAuth
-  emailVerified: boolean("email_verified").default(false), // Added for Google OAuth
-  isSuspended: boolean("is_suspended").default(false),
-  // Provider profile fields
-  bio: text("bio"),
-  qualifications: text("qualifications"),
-  experience: text("experience"),
-  workingHours: text("working_hours"),
-  languages: text("languages"),
-  // Enhanced profile fields for providers and shops
-  verificationStatus: text("verification_status")
-    .$type<"unverified" | "pending" | "verified">()
-    .default("unverified"),
-  verificationDocuments: jsonb("verification_documents").$type<string[]>(), // Array of document URLs or identifiers
-  profileCompleteness: integer("profile_completeness").default(0), // Percentage
-  specializations: text("specializations").array(), // For providers
-  certifications: text("certifications").array(), // For providers
-  shopBannerImageUrl: text("shop_banner_image_url"), // For shops
-  shopLogoImageUrl: text("shop_logo_image_url"), // For shops
-  yearsInBusiness: integer("years_in_business"),
-  socialMediaLinks: jsonb("social_media_links").$type<Record<string, string>>(), // e.g., { facebook: "url", instagram: "url" }
-  upiId: text("upi_id"),
-  upiQrCodeUrl: text("upi_qr_code_url"),
-  //rating: decimal("rating", { precision: 2, scale: 1 }),
-  deliveryAvailable: boolean("delivery_available").default(false),
-  pickupAvailable: boolean("pickup_available").default(true),
-  returnsEnabled: boolean("returns_enabled").default(true),
-  averageRating: decimal("average_rating").default("0"),
-  totalReviews: integer("total_reviews").default(0),
+    id: serial("id").primaryKey(),
+    username: text("username").notNull().unique(),
+    password: text("password").notNull(),
+    role: text("role").$type<UserRole>().notNull(),
+    name: text("name").notNull(),
+    phone: text("phone").notNull(),
+    email: text("email").notNull(),
+    addressStreet: text("address_street"),
+    addressCity: text("address_city"),
+    addressState: text("address_state"),
+    addressPostalCode: text("address_postal_code"),
+    addressCountry: text("address_country"),
+    latitude: decimal("latitude", { precision: 10, scale: 7 }),
+    longitude: decimal("longitude", { precision: 10, scale: 7 }),
+    language: text("language").default("en"),
+    profilePicture: text("profile_picture"),
+    paymentMethods: jsonb("payment_methods").$type<PaymentMethod[]>(),
+    shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
+    googleId: text("google_id").unique(), // Added for Google OAuth
+    emailVerified: boolean("email_verified").default(false), // Added for Google OAuth
+    isSuspended: boolean("is_suspended").default(false),
+    // Provider profile fields
+    bio: text("bio"),
+    qualifications: text("qualifications"),
+    experience: text("experience"),
+    workingHours: text("working_hours"),
+    languages: text("languages"),
+    // Enhanced profile fields for providers and shops
+    verificationStatus: text("verification_status")
+      .$type<"unverified" | "pending" | "verified">()
+      .default("unverified"),
+    verificationDocuments: jsonb("verification_documents").$type<string[]>(), // Array of document URLs or identifiers
+    profileCompleteness: integer("profile_completeness").default(0), // Percentage
+    specializations: text("specializations").array(), // For providers
+    certifications: text("certifications").array(), // For providers
+    shopBannerImageUrl: text("shop_banner_image_url"), // For shops
+    shopLogoImageUrl: text("shop_logo_image_url"), // For shops
+    yearsInBusiness: integer("years_in_business"),
+    socialMediaLinks: jsonb("social_media_links").$type<Record<string, string>>(), // e.g., { facebook: "url", instagram: "url" }
+    upiId: text("upi_id"),
+    upiQrCodeUrl: text("upi_qr_code_url"),
+    //rating: decimal("rating", { precision: 2, scale: 1 }),
+    deliveryAvailable: boolean("delivery_available").default(false),
+    pickupAvailable: boolean("pickup_available").default(true),
+    returnsEnabled: boolean("returns_enabled").default(true),
+    averageRating: decimal("average_rating").default("0"),
+    totalReviews: integer("total_reviews").default(0),
   },
   (table) => ({
     usersRoleIdx: index("users_role_idx").on(table.role),
@@ -237,38 +238,46 @@ export const shopWorkers = pgTable(
 export type ShopWorker = typeof shopWorkers.$inferSelect;
 export type InsertShopWorker = typeof shopWorkers.$inferInsert;
 
+export const timeSlotLabels = ["morning", "afternoon", "evening"] as const;
+export const timeSlotLabelSchema = z.enum(timeSlotLabels);
+export type TimeSlotLabel = (typeof timeSlotLabels)[number];
+
 // Update services table with new availability fields and soft deletion
 export const services = pgTable(
   "services",
   {
-  id: serial("id").primaryKey(),
-  providerId: integer("provider_id").references(() => users.id),
-  name: text("name").notNull(),
-  description: text("description").notNull(),
-  price: decimal("price").notNull(),
-  duration: integer("duration").notNull(), // in minutes
-  isAvailable: boolean("is_available").default(true),
-  isDeleted: boolean("is_deleted").default(false), // Add soft deletion flag
-  category: text("category").notNull(),
-  images: text("images").array(),
-  addressStreet: text("address_street"),
-  addressCity: text("address_city"),
-  addressState: text("address_state"),
-  addressPostalCode: text("address_postal_code"),
-  addressCountry: text("address_country"),
-  // Removed latitude and longitude
-  bufferTime: integer("buffer_time").default(15), // in minutes
-  workingHours: jsonb("working_hours").$type<WorkingHours>(),
-  breakTime: jsonb("break_time").$type<BreakTime[]>(),
-  maxDailyBookings: integer("max_daily_bookings").default(10),
-  serviceLocationType: text("service_location_type")
-    .$type<"customer_location" | "provider_location">()
-    .notNull()
-    .default("provider_location"), // New field: where the service takes place
+    id: serial("id").primaryKey(),
+    providerId: integer("provider_id").references(() => users.id),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    price: decimal("price").notNull(),
+    duration: integer("duration").notNull(), // in minutes
+    isAvailable: boolean("is_available").default(true),
+    isDeleted: boolean("is_deleted").default(false), // Add soft deletion flag
+    category: text("category").notNull(),
+    images: text("images").array(),
+    addressStreet: text("address_street"),
+    addressCity: text("address_city"),
+    addressState: text("address_state"),
+    addressPostalCode: text("address_postal_code"),
+    addressCountry: text("address_country"),
+    // Removed latitude and longitude
+    bufferTime: integer("buffer_time").default(15), // in minutes
+    workingHours: jsonb("working_hours").$type<WorkingHours>(),
+    breakTime: jsonb("break_time").$type<BreakTime[]>(),
+    maxDailyBookings: integer("max_daily_bookings").default(10),
+    serviceLocationType: text("service_location_type")
+      .$type<"customer_location" | "provider_location">()
+      .notNull()
+      .default("provider_location"), // New field: where the service takes place
+    isAvailableNow: boolean("is_available_now").default(true).notNull(), // Uber-style availability toggle
+    availabilityNote: text("availability_note"), // Optional note for unavailability
+    allowedSlots: jsonb("allowed_slots").$type<TimeSlotLabel[]>().default(["morning", "afternoon", "evening"]), // Configurable slots
   },
   (table) => ({
     servicesProviderIdx: index("services_provider_id_idx").on(table.providerId),
     servicesCategoryIdx: index("services_category_idx").on(table.category),
+    servicesAvailableNowIdx: index("idx_services_is_available_now").on(table.isAvailableNow),
   }),
 );
 
@@ -286,51 +295,53 @@ export const serviceAvailability = pgTable("service_availability", {
 export const bookings = pgTable(
   "bookings",
   {
-  id: serial("id").primaryKey(),
-  customerId: integer("customer_id").references(() => users.id),
-  serviceId: integer("service_id").references(() => services.id),
-  bookingDate: timestamp("booking_date").notNull(),
-  status: text("status")
-    .$type<
-      | "pending"
-      | "accepted"
-      | "rejected"
-      | "rescheduled"
-      | "completed"
-      | "cancelled"
-      | "expired"
-      | "rescheduled_pending_provider_approval"
-      | "rescheduled_by_provider"
-      | "awaiting_payment"
-      | "en_route"
-      | "disputed"
-    >()
-    .notNull(),
-  paymentStatus: text("payment_status", {
-    enum: ["pending", "verifying", "paid", "failed"],
-  })
-    .$type<"pending" | "verifying" | "paid" | "failed">()
-    .default("pending"),
-  deliveryMethod: text("delivery_method", { enum: ["delivery", "pickup"] }),
-  rejectionReason: text("rejection_reason"),
-  rescheduleDate: timestamp("reschedule_date"), // This can store the original date if rescheduled, or the new date if status is 'rescheduled'
-  comments: text("comments"),
-  eReceiptId: text("e_receipt_id"),
-  eReceiptUrl: text("e_receipt_url"),
-  eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
-  paymentReference: text("payment_reference"),
-  disputeReason: text("dispute_reason"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-  expiresAt: timestamp("expires_at"),
-  serviceLocation: text("service_location").$type<"customer" | "provider">(), // Added service location type
-  providerAddress: text("provider_address"), // Added provider address (nullable)
+    id: serial("id").primaryKey(),
+    customerId: integer("customer_id").references(() => users.id),
+    serviceId: integer("service_id").references(() => services.id),
+    bookingDate: timestamp("booking_date").notNull(),
+    timeSlotLabel: text("time_slot_label").$type<TimeSlotLabel>(), // Broad time slot label
+    status: text("status")
+      .$type<
+        | "pending"
+        | "accepted"
+        | "rejected"
+        | "rescheduled"
+        | "completed"
+        | "cancelled"
+        | "expired"
+        | "rescheduled_pending_provider_approval"
+        | "rescheduled_by_provider"
+        | "awaiting_payment"
+        | "en_route"
+        | "disputed"
+      >()
+      .notNull(),
+    paymentStatus: text("payment_status", {
+      enum: ["pending", "verifying", "paid", "failed"],
+    })
+      .$type<"pending" | "verifying" | "paid" | "failed">()
+      .default("pending"),
+    deliveryMethod: text("delivery_method", { enum: ["delivery", "pickup"] }),
+    rejectionReason: text("rejection_reason"),
+    rescheduleDate: timestamp("reschedule_date"), // This can store the original date if rescheduled, or the new date if status is 'rescheduled'
+    comments: text("comments"),
+    eReceiptId: text("e_receipt_id"),
+    eReceiptUrl: text("e_receipt_url"),
+    eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
+    paymentReference: text("payment_reference"),
+    disputeReason: text("dispute_reason"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+    expiresAt: timestamp("expires_at"),
+    serviceLocation: text("service_location").$type<"customer" | "provider">(), // Added service location type
+    providerAddress: text("provider_address"), // Added provider address (nullable)
   },
   (table) => ({
     bookingsCustomerIdx: index("bookings_customer_id_idx").on(table.customerId),
     bookingsServiceIdx: index("bookings_service_id_idx").on(table.serviceId),
     bookingsStatusIdx: index("bookings_status_idx").on(table.status),
     bookingsDateIdx: index("bookings_booking_date_idx").on(table.bookingDate),
+    bookingsTimeSlotIdx: index("idx_bookings_time_slot_label").on(table.timeSlotLabel),
   }),
 );
 
@@ -436,35 +447,35 @@ export const waitlist = pgTable("waitlist", {
 export const products = pgTable(
   "products",
   {
-  id: serial("id").primaryKey(),
-  shopId: integer("shop_id").references(() => users.id),
-  name: text("name").notNull(),
-  description: text("description").notNull(),
-  price: decimal("price").notNull(),
-  mrp: decimal("mrp").notNull(),
-  stock: integer("stock").notNull(),
-  category: text("category").notNull(),
-  images: text("images").array(),
-  isAvailable: boolean("is_available").default(true),
-  isDeleted: boolean("is_deleted").default(false), // Add soft deletion flag
-  sku: text("sku"),
-  barcode: text("barcode"),
-  weight: decimal("weight"),
-  dimensions: jsonb("dimensions").$type<{
-    length: number;
-    width: number;
-    height: number;
-  }>(),
-  specifications: jsonb("specifications").$type<Record<string, string>>(),
-  tags: text("tags").array(),
-  minOrderQuantity: integer("min_order_quantity").default(1),
-  maxOrderQuantity: integer("max_order_quantity"),
-  lowStockThreshold: integer("low_stock_threshold"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-  searchVector: tsvector("search_vector").generatedAlwaysAs(
-    sql`to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '') || ' ' || coalesce(category, ''))`,
-  ),
+    id: serial("id").primaryKey(),
+    shopId: integer("shop_id").references(() => users.id),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    price: decimal("price").notNull(),
+    mrp: decimal("mrp").notNull(),
+    stock: integer("stock").notNull(),
+    category: text("category").notNull(),
+    images: text("images").array(),
+    isAvailable: boolean("is_available").default(true),
+    isDeleted: boolean("is_deleted").default(false), // Add soft deletion flag
+    sku: text("sku"),
+    barcode: text("barcode"),
+    weight: decimal("weight"),
+    dimensions: jsonb("dimensions").$type<{
+      length: number;
+      width: number;
+      height: number;
+    }>(),
+    specifications: jsonb("specifications").$type<Record<string, string>>(),
+    tags: text("tags").array(),
+    minOrderQuantity: integer("min_order_quantity").default(1),
+    maxOrderQuantity: integer("max_order_quantity"),
+    lowStockThreshold: integer("low_stock_threshold"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+    searchVector: tsvector("search_vector").generatedAlwaysAs(
+      sql`to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '') || ' ' || coalesce(category, ''))`,
+    ),
   },
   (table) => ({
     productsShopIdx: index("products_shop_id_idx").on(table.shopId),
@@ -492,40 +503,40 @@ export const wishlist = pgTable("wishlist", {
 export const orders = pgTable(
   "orders",
   {
-  id: serial("id").primaryKey(),
-  customerId: integer("customer_id").references(() => users.id),
-  shopId: integer("shop_id").references(() => users.id),
-  status: text("status")
-    .$type<
-      | "pending"
-      | "cancelled"
-      | "confirmed"
-      | "processing"
-      | "packed"
-      | "dispatched"
-      | "shipped"
-      | "delivered"
-      | "returned"
-    >()
-    .notNull(),
-  paymentStatus: text("payment_status", {
-    enum: ["pending", "verifying", "paid", "failed"],
-  })
-    .$type<"pending" | "verifying" | "paid" | "failed">()
-    .default("pending"),
-  deliveryMethod: text("delivery_method", { enum: ["delivery", "pickup"] }),
-  total: decimal("total").notNull(),
-  shippingAddress: text("shipping_address").notNull(),
-  billingAddress: text("billing_address"),
-  paymentMethod: text("payment_method").$type<PaymentMethodType>(),
-  trackingInfo: text("tracking_info"),
-  notes: text("notes"),
-  eReceiptId: text("e_receipt_id"),
-  eReceiptUrl: text("e_receipt_url"),
-  eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
-  paymentReference: text("payment_reference"),
-  orderDate: timestamp("order_date").defaultNow(),
-  returnRequested: boolean("return_requested").default(false), // Add this line
+    id: serial("id").primaryKey(),
+    customerId: integer("customer_id").references(() => users.id),
+    shopId: integer("shop_id").references(() => users.id),
+    status: text("status")
+      .$type<
+        | "pending"
+        | "cancelled"
+        | "confirmed"
+        | "processing"
+        | "packed"
+        | "dispatched"
+        | "shipped"
+        | "delivered"
+        | "returned"
+      >()
+      .notNull(),
+    paymentStatus: text("payment_status", {
+      enum: ["pending", "verifying", "paid", "failed"],
+    })
+      .$type<"pending" | "verifying" | "paid" | "failed">()
+      .default("pending"),
+    deliveryMethod: text("delivery_method", { enum: ["delivery", "pickup"] }),
+    total: decimal("total").notNull(),
+    shippingAddress: text("shipping_address").notNull(),
+    billingAddress: text("billing_address"),
+    paymentMethod: text("payment_method").$type<PaymentMethodType>(),
+    trackingInfo: text("tracking_info"),
+    notes: text("notes"),
+    eReceiptId: text("e_receipt_id"),
+    eReceiptUrl: text("e_receipt_url"),
+    eReceiptGeneratedAt: timestamp("e_receipt_generated_at"),
+    paymentReference: text("payment_reference"),
+    orderDate: timestamp("order_date").defaultNow(),
+    returnRequested: boolean("return_requested").default(false), // Add this line
   },
   (table) => ({
     ordersCustomerIdx: index("orders_customer_id_idx").on(table.customerId),
@@ -755,50 +766,65 @@ export const insertServiceSchema = createInsertSchema(services, {
     .optional()
     .default("provider_location"),
 }).extend({
-  workingHours: z.object({
-    monday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
-    }),
-    tuesday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
-    }),
-    wednesday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
-    }),
-    thursday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
-    }),
-    friday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
-    }),
-    saturday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
-    }),
-    sunday: z.object({
-      isAvailable: z.boolean(),
-      start: z.string(),
-      end: z.string(),
-    }),
-  }),
-  breakTime: z.array(
-    z.object({
-      start: z.string(),
-      end: z.string(),
-    }),
-  ),
-  maxDailyBookings: z.number().min(1, "Must accept at least 1 booking per day"),
+  workingHours: z
+    .object({
+      monday: z.object({
+        isAvailable: z.boolean(),
+        start: z.string(),
+        end: z.string(),
+      }),
+      tuesday: z.object({
+        isAvailable: z.boolean(),
+        start: z.string(),
+        end: z.string(),
+      }),
+      wednesday: z.object({
+        isAvailable: z.boolean(),
+        start: z.string(),
+        end: z.string(),
+      }),
+      thursday: z.object({
+        isAvailable: z.boolean(),
+        start: z.string(),
+        end: z.string(),
+      }),
+      friday: z.object({
+        isAvailable: z.boolean(),
+        start: z.string(),
+        end: z.string(),
+      }),
+      saturday: z.object({
+        isAvailable: z.boolean(),
+        start: z.string(),
+        end: z.string(),
+      }),
+      sunday: z.object({
+        isAvailable: z.boolean(),
+        start: z.string(),
+        end: z.string(),
+      }),
+    })
+    .optional()
+    .nullable(),
+  breakTime: z
+    .array(
+      z.object({
+        start: z.string(),
+        end: z.string(),
+      }),
+    )
+    .optional()
+    .default([]),
+  maxDailyBookings: z
+    .coerce.number()
+    .min(1, "Must accept at least 1 booking per day")
+    .optional(),
+  isAvailableNow: z.boolean().optional().default(true),
+  availabilityNote: z.string().optional().nullable(),
+  allowedSlots: z
+    .array(timeSlotLabelSchema)
+    .optional()
+    .default(timeSlotLabels as unknown as [TimeSlotLabel, ...TimeSlotLabel[]]),
 }).strict();
 
 export type Service = typeof services.$inferSelect;
@@ -808,6 +834,7 @@ export const insertBookingSchema = createInsertSchema(bookings, {
   // Add specific validation if needed
   serviceLocation: z.enum(["customer", "provider"]).optional(),
   providerAddress: z.string().optional().nullable(), // Allow null
+  timeSlotLabel: timeSlotLabelSchema.optional(),
 }).strict();
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
@@ -899,4 +926,5 @@ export const Booking = z.object({
   serviceLocation: z.enum(["customer", "provider"]).optional(), // Updated service location
   providerAddress: z.string().optional().nullable(), // Updated provider address (nullable)
   disputeReason: z.string().optional(),
+  timeSlotLabel: timeSlotLabelSchema.nullable().optional(),
 });

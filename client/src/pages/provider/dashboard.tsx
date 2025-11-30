@@ -32,7 +32,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -41,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -64,6 +64,7 @@ import {
 import { motion } from "framer-motion";
 import { Booking, Review, Service } from "@shared/schema";
 import { formatIndianDisplay } from "@shared/date-utils";
+import { describeSlotLabel } from "@/lib/time-slots";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -192,7 +193,10 @@ function PendingBookingRequestsList() {
             <p className="font-medium">{booking.service?.name}</p>
             <p className="text-sm text-muted-foreground">
               {booking.bookingDate
-                ? formatIndianDisplay(booking.bookingDate, "date")
+                ? `${formatIndianDisplay(booking.bookingDate, "date")}${booking.timeSlotLabel
+                  ? ` • ${describeSlotLabel(booking.timeSlotLabel) ?? ""}`
+                  : ""
+                }`
                 : "Date not set"}
             </p>
             <div className="flex items-center mt-1">
@@ -344,7 +348,10 @@ function BookingHistoryList() {
             <p className="font-medium">{booking.service?.name}</p>
             <p className="text-sm text-muted-foreground">
               {booking.bookingDate
-                ? formatIndianDisplay(booking.bookingDate, "date")
+                ? `${formatIndianDisplay(booking.bookingDate, "date")}${booking.timeSlotLabel
+                  ? ` • ${describeSlotLabel(booking.timeSlotLabel) ?? ""}`
+                  : ""
+                }`
                 : "Date not set"}
             </p>
             <div className="flex items-center mt-1">
@@ -400,16 +407,15 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
-const DAYS = [
-  { key: "sunday", label: "S" },
-  { key: "monday", label: "M" },
-  { key: "tuesday", label: "T" },
-  { key: "wednesday", label: "W" },
-  { key: "thursday", label: "T" },
-  { key: "friday", label: "F" },
-  { key: "saturday", label: "S" },
-] as const;
-type DayKey = (typeof DAYS)[number]["key"];
+const SLOT_TOGGLES: Array<{
+  label: "morning" | "afternoon" | "evening";
+  title: string;
+  window: string;
+}> = [
+  { label: "morning", title: "Morning", window: "9 AM - 12 PM" },
+  { label: "afternoon", title: "Afternoon", window: "12 PM - 4 PM" },
+  { label: "evening", title: "Evening", window: "4 PM - 8 PM" },
+];
 
 const serviceFormSchema = z.object({
   name: z.string().min(1, "Service name is required"),
@@ -418,32 +424,17 @@ const serviceFormSchema = z.object({
   price: z.string().min(1, "Price is required"),
   duration: z.coerce.number().min(15, "Duration must be at least 15 minutes"),
   isAvailable: z.boolean().default(true),
-  workingHours: z.object(
-    DAYS.reduce(
-      (acc, day) => {
-        acc[day.key] = z.object({
-          isAvailable: z.boolean().default(day.key !== "sunday"),
-          start: z.string().min(1, "Start time is required"),
-          end: z.string().min(1, "End time is required"),
-        });
-        return acc;
-      },
-      {} as Record<DayKey, any>,
-    ),
-  ),
-  breakTime: z
-    .array(
-      z.object({
-        start: z.string().min(1, "Start time is required"),
-        end: z.string().min(1, "End time is required"),
-      }),
-    )
-    .optional()
-    .default([]),
+  isAvailableNow: z.boolean().default(true),
+  availabilityNote: z.string().optional().nullable(),
   maxDailyBookings: z.coerce
     .number()
-    .min(1, "Must accept at least 1 booking per day"),
-  bufferTime: z.coerce.number().min(0, "Buffer time must be non-negative"),
+    .min(1, "Must accept at least 1 booking per day")
+    .optional(),
+  bufferTime: z.coerce.number().min(0, "Buffer time must be non-negative").optional(),
+  allowedSlots: z
+    .array(z.enum(["morning", "afternoon", "evening"]))
+    .min(1, "Select at least one slot")
+    .default(["morning", "afternoon", "evening"]),
   addressStreet: z.string().optional(),
   addressCity: z.string().optional(),
   addressState: z.string().optional(),
@@ -474,23 +465,11 @@ export default function ProviderDashboard() {
       price: "",
       duration: 15,
       isAvailable: true,
-      workingHours: DAYS.reduce(
-        (acc, day) => {
-          acc[day.key] = {
-            isAvailable: day.key !== "sunday",
-            start: "09:00",
-            end: "17:00",
-          };
-          return acc;
-        },
-        {} as Record<
-          DayKey,
-          { isAvailable: boolean; start: string; end: string }
-        >,
-      ),
-      breakTime: [],
+      isAvailableNow: true,
+      availabilityNote: "",
       maxDailyBookings: 1,
       bufferTime: 0,
+      allowedSlots: ["morning", "afternoon", "evening"],
       addressStreet: "",
       addressCity: "",
       addressState: "",
@@ -498,6 +477,26 @@ export default function ProviderDashboard() {
       addressCountry: "",
     },
   });
+
+  const allowedSlotSelection = form.watch("allowedSlots") || [];
+  const toggleAllowedSlot = (label: "morning" | "afternoon" | "evening") => {
+    const next = new Set(allowedSlotSelection);
+    if (next.has(label)) {
+      if (next.size === 1) {
+        toast({
+          title: "Keep at least one slot",
+          description:
+            "Leave one window on or switch to Offline if you cannot take bookings.",
+          variant: "destructive",
+        });
+        return;
+      }
+      next.delete(label);
+    } else {
+      next.add(label);
+    }
+    form.setValue("allowedSlots", Array.from(next));
+  };
 
   // Fetch services, bookings and reviews
   const { data: services, isLoading: servicesLoading } = useQuery<Service[]>({
@@ -833,12 +832,6 @@ export default function ProviderDashboard() {
                               size="icon"
                               onClick={() => {
                                 setEditingService(service);
-                                // Ensure breakTime is mapped correctly, handling potential null/undefined inside the array
-                                const formattedBreakTime =
-                                  service.breakTime?.map((bt) => ({
-                                    start: bt?.start || "",
-                                    end: bt?.end || "",
-                                  })) || [];
                                 form.reset({
                                   name: service.name,
                                   description: service.description ?? "",
@@ -846,11 +839,16 @@ export default function ProviderDashboard() {
                                   price: service.price?.toString() ?? "",
                                   duration: service.duration,
                                   isAvailable: service.isAvailable ?? true,
-                                  workingHours: service.workingHours ?? {},
-                                  breakTime: formattedBreakTime, // Use the formatted array
+                                  isAvailableNow:
+                                    (service as any).isAvailableNow ?? true,
+                                  availabilityNote:
+                                    (service as any).availabilityNote ?? "",
                                   maxDailyBookings:
                                     service.maxDailyBookings ?? 1,
                                   bufferTime: service.bufferTime ?? 0,
+                                  allowedSlots:
+                                    (service as any).allowedSlots ??
+                                    ["morning", "afternoon", "evening"],
                                   addressStreet: service.addressStreet ?? "",
                                   addressCity: service.addressCity ?? "",
                                   addressState: service.addressState ?? "",
@@ -1067,97 +1065,87 @@ export default function ProviderDashboard() {
 
                   <TabsContent value="availability">
                     <div className="space-y-4">
-                      <h3 className="text-lg font-medium">
-                        Working Hours & Availability
-                      </h3>
-                      {DAYS.map((day) => (
-                        <div
-                          key={day.key}
-                          className="grid grid-cols-4 items-center gap-4"
-                        >
-                          <FormField
-                            control={form.control}
-                            name={`workingHours.${day.key}.isAvailable`}
-                            render={({ field }) => (
-                              <FormItem className="flex items-center space-x-2 col-span-1">
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                  />
-                                </FormControl>
-                                <FormLabel className="capitalize">
-                                  {day.key}
-                                </FormLabel>
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name={`workingHours.${day.key}.start`}
-                            render={({ field }) => (
-                              <FormItem className="col-span-1">
-                                <FormControl>
-                                  <Input
-                                    type="time"
-                                    {...field}
-                                    disabled={
-                                      !form.watch(
-                                        `workingHours.${day.key}.isAvailable`,
-                                      )
-                                    }
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name={`workingHours.${day.key}.end`}
-                            render={({ field }) => (
-                              <FormItem className="col-span-1">
-                                <FormControl>
-                                  <Input
-                                    type="time"
-                                    {...field}
-                                    disabled={
-                                      !form.watch(
-                                        `workingHours.${day.key}.isAvailable`,
-                                      )
-                                    }
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                      <div className="flex items-center justify-between gap-4 p-4 border rounded-lg bg-muted/40">
+                        <div>
+                          <h3 className="text-lg font-medium">
+                            Go Online / Offline
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            Flip the switch to show customers you are taking jobs
+                            right now.
+                          </p>
                         </div>
-                      ))}
-                      {/* Buffer time moved to Scheduling tab */}
-                      {/* <FormField
+                        <FormField
+                          control={form.control}
+                          name="isAvailableNow"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center gap-2">
+                              <FormLabel className="font-semibold">
+                                {field.value ? "Available now" : "Offline"}
+                              </FormLabel>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <FormField
                         control={form.control}
-                        name="bufferTime"
+                        name="availabilityNote"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Buffer Time (minutes between bookings)</FormLabel>
+                            <FormLabel>Status note (optional)</FormLabel>
                             <FormControl>
-                              <Input type="number" {...field} />
+                              <Textarea
+                                placeholder="e.g., Stepping out for lunch, back at 2 PM."
+                                {...field}
+                                value={field.value ?? ""}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
-                      /> */}
+                      />
+                    </div>
+                    <div className="space-y-4 pt-4 border-t">
+                      <h3 className="text-lg font-medium">Allowed Slots</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Turn on the windows you want to offer today.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {SLOT_TOGGLES.map((slot) => {
+                          const active = allowedSlotSelection.includes(slot.label);
+                          return (
+                            <Button
+                              key={slot.label}
+                              variant={active ? "default" : "outline"}
+                              type="button"
+                              className="justify-start h-full flex flex-col items-start gap-1"
+                              onClick={() => toggleAllowedSlot(slot.label)}
+                            >
+                              <span className="font-semibold">{slot.title}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {slot.window}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {active ? "On" : "Off"}
+                              </span>
+                            </Button>
+                          );
+                        })}
+                      </div>
                       <FormField
                         control={form.control}
-                        name="maxDailyBookings"
+                        name="allowedSlots"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Max Bookings Per Day</FormLabel>
-                            <FormControl>
-                              <Input type="number" {...field} />
-                            </FormControl>
                             <FormMessage />
+                            {/* Hidden input to satisfy React Hook Form registration */}
+                            <input type="hidden" value={field.value?.join(",") ?? ""} />
                           </FormItem>
                         )}
                       />
@@ -1167,70 +1155,12 @@ export default function ProviderDashboard() {
                   {/* Scheduling Tab Content */}
                   <TabsContent value="scheduling">
                     <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Break Times</h3>
-                      {form.watch("breakTime")?.map((breakItem, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center gap-2 p-2 border rounded"
-                        >
-                          <FormField
-                            control={form.control}
-                            name={`breakTime.${index}.start`}
-                            render={({ field }) => (
-                              <FormItem className="flex-1">
-                                <FormLabel>Start Time</FormLabel>
-                                <FormControl>
-                                  <Input type="time" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name={`breakTime.${index}.end`}
-                            render={({ field }) => (
-                              <FormItem className="flex-1">
-                                <FormLabel>End Time</FormLabel>
-                                <FormControl>
-                                  <Input type="time" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="icon"
-                            onClick={() => {
-                              const currentBreaks =
-                                form.getValues("breakTime") || [];
-                              form.setValue(
-                                "breakTime",
-                                currentBreaks.filter((_, i) => i !== index),
-                              );
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          const currentBreaks =
-                            form.getValues("breakTime") || [];
-                          form.setValue("breakTime", [
-                            ...currentBreaks,
-                            { start: "", end: "" },
-                          ]);
-                        }}
-                      >
-                        <Plus className="mr-2 h-4 w-4" /> Add Break Time
-                      </Button>
-
+                      <div>
+                        <h3 className="text-lg font-medium">Capacity & spacing</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Decide how many requests you take per day and how much buffer you need.
+                        </p>
+                      </div>
                       <FormField
                         control={form.control}
                         name="maxDailyBookings"
@@ -1401,20 +1331,24 @@ export default function ProviderDashboard() {
                             </p>
                             <p className="text-sm text-muted-foreground">
                               <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
-                              {formatIndianDisplay(
-                                booking.bookingDate || "",
-                                "time",
-                              )}
+                              {booking.timeSlotLabel
+                                ? describeSlotLabel(booking.timeSlotLabel)
+                                : formatIndianDisplay(
+                                  booking.bookingDate || "",
+                                  "time",
+                                )}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">
-                            {formatIndianDisplay(
-                              booking.bookingDate || "",
-                              "time",
-                            )}
+                            {booking.timeSlotLabel
+                              ? describeSlotLabel(booking.timeSlotLabel)
+                              : formatIndianDisplay(
+                                booking.bookingDate || "",
+                                "time",
+                              )}
                           </span>
                         </div>
                       </div>

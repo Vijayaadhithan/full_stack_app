@@ -67,6 +67,8 @@ export const serviceDetailSchema = z.object({
   price: z.string(),
   duration: z.number(),
   isAvailable: z.boolean().optional(),
+  isAvailableNow: z.boolean().optional(),
+  availabilityNote: nullableString,
   isDeleted: z.boolean().optional(),
   category: z.string(),
   images: z.array(z.string()).nullable(),
@@ -83,6 +85,7 @@ export const serviceDetailSchema = z.object({
   rating: z.number().nullable(),
   provider: userContactSchema,
   reviews: z.array(serviceReviewSchema),
+  allowedSlots: z.array(z.string()).nullable().optional(),
 });
 
 const productDimensionsSchema = z

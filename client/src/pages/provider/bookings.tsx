@@ -42,6 +42,7 @@ import { Booking, Service, User } from "@shared/schema"; // Import User type
 import { z } from "zod";
 import { useState, useEffect } from "react";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
+import { describeSlotLabel } from "@/lib/time-slots";
 
 const bookingActionSchema = z.object({
   status: z.enum(["accepted", "rejected", "rescheduled", "completed"]),
@@ -457,7 +458,9 @@ export default function ProviderBookings() {
                         <Calendar className="h-4 w-4" />
                         {formatIndianDisplay(booking.bookingDate, "date")}
                         <Clock className="h-4 w-4 ml-2" />
-                        {formatIndianDisplay(booking.bookingDate, "time")}
+                        {booking.timeSlotLabel
+                          ? describeSlotLabel(booking.timeSlotLabel)
+                          : formatIndianDisplay(booking.bookingDate, "time")}
                         <span className="ml-2">
                           ({booking.service.duration} mins)
                         </span>

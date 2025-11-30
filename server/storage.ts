@@ -45,6 +45,7 @@ import {
   InsertPromotion,
   orderStatusUpdates,
   UserRole,
+  TimeSlotLabel,
 } from "@shared/schema";
 import { newIndianDate, formatIndianDisplay } from "../shared/date-utils";
 
@@ -250,7 +251,11 @@ export interface IStorage {
   getPromotionsByShop(shopId: number): Promise<Promotion[]>;
 
   // Additional booking operations
-  checkAvailability(serviceId: number, date: Date): Promise<boolean>;
+  checkAvailability(
+    serviceId: number,
+    date: Date,
+    timeSlotLabel?: TimeSlotLabel | null,
+  ): Promise<boolean>;
   joinWaitlist(
     customerId: number,
     serviceId: number,
@@ -1024,6 +1029,17 @@ export class MemStorage implements IStorage {
       maxDailyBookings:
         service.maxDailyBookings === undefined ? 5 : service.maxDailyBookings,
       isDeleted: false,
+      isAvailableNow:
+        service.isAvailableNow === undefined ? true : service.isAvailableNow,
+      availabilityNote:
+        service.availabilityNote === undefined
+          ? null
+          : service.availabilityNote,
+      allowedSlots:
+        (service as any).allowedSlots === undefined ||
+          (service as any).allowedSlots === null
+          ? ["morning", "afternoon", "evening"]
+          : (service as any).allowedSlots,
     };
     this.services.set(id, newService);
     return newService;
@@ -1185,6 +1201,10 @@ export class MemStorage implements IStorage {
       providerAddress: booking.providerAddress ?? null,
       deliveryMethod: booking.deliveryMethod ?? null,
       bookingDate: booking.bookingDate,
+      timeSlotLabel:
+        (booking as any).timeSlotLabel === undefined
+          ? null
+          : (booking as any).timeSlotLabel ?? null,
       rescheduleDate:
         booking.rescheduleDate === undefined ? null : booking.rescheduleDate,
       comments: booking.comments === undefined ? null : booking.comments,
@@ -2628,7 +2648,10 @@ export class MemStorage implements IStorage {
         category: "Wellness",
         providerId: provider.id,
         isAvailable: true,
+        isAvailableNow: true,
+        availabilityNote: null,
         bufferTime: 15,
+        allowedSlots: ["morning", "afternoon", "evening"],
         images: ["https://example.com/massage.jpg"],
         workingHours: {
           monday: { isAvailable: false, start: "", end: "" },
@@ -2651,9 +2674,11 @@ export class MemStorage implements IStorage {
         category: "Beauty",
         providerId: provider.id,
         isAvailable: true,
+        isAvailableNow: true,
+        availabilityNote: null,
         bufferTime: 10,
+        allowedSlots: ["morning", "afternoon", "evening"],
         images: ["https://example.com/hairstyle.jpg"],
-        location: { lat: 19.076, lng: 72.8777 },
         workingHours: {
           monday: { isAvailable: false, start: "", end: "" },
           tuesday: { isAvailable: false, start: "", end: "" },

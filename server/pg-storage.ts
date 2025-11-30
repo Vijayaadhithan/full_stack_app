@@ -56,6 +56,7 @@ import {
   blockedTimeSlots,
   orderStatusUpdates,
   UserRole,
+  TimeSlotLabel,
 } from "@shared/schema";
 import {
   IStorage,
@@ -2474,8 +2475,31 @@ export class PostgresStorage implements IStorage {
   }
 
   // ─── ADDITIONAL / ENHANCED OPERATIONS ─────────────────────────────
-  async checkAvailability(serviceId: number, date: Date): Promise<boolean> {
-    const dateStr = date.toISOString().split("T")[0];
+  async checkAvailability(
+    serviceId: number,
+    date: Date,
+    timeSlotLabel?: TimeSlotLabel | null,
+  ): Promise<boolean> {
+    const service = await this.getService(serviceId);
+    if (service && (service.isAvailable === false || service.isAvailableNow === false)) {
+      return false;
+    }
+
+    // Check if the requested slot is allowed by the provider
+    if (service && timeSlotLabel && service.allowedSlots) {
+      const allowed = service.allowedSlots as TimeSlotLabel[];
+      if (!allowed.includes(timeSlotLabel)) {
+        return false;
+      }
+    }
+
+    const istDate = toISTForStorage(date) ?? date;
+    const startOfDay = new Date(istDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const nextDay = new Date(startOfDay);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const dateStr = startOfDay.toISOString().split("T")[0];
+    const activeStatusCondition = sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`;
 
     // Check if the slot is blocked by the provider
     const [blocked] = await db
@@ -2490,20 +2514,24 @@ export class PostgresStorage implements IStorage {
     if (blocked) return false;
 
     // Check for existing booking at the exact time
+    const labelCondition = timeSlotLabel
+      ? sql`(${bookings.timeSlotLabel} IS NULL OR ${bookings.timeSlotLabel} = ${timeSlotLabel})`
+      : undefined;
     const [conflict] = await db
       .select({ id: bookings.id })
       .from(bookings)
       .where(
         and(
           eq(bookings.serviceId, serviceId),
-          eq(bookings.bookingDate, date),
-          sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`,
+          gte(bookings.bookingDate, startOfDay),
+          lt(bookings.bookingDate, nextDay),
+          activeStatusCondition,
+          ...(labelCondition ? [labelCondition] : []),
         ),
       );
     if (conflict) return false;
 
     // Enforce max daily bookings
-    const service = await this.getService(serviceId);
     if (service) {
       const [{ value: countForDay }] = await db
         .select({ value: count() })
@@ -2511,8 +2539,9 @@ export class PostgresStorage implements IStorage {
         .where(
           and(
             eq(bookings.serviceId, serviceId),
-            sql`DATE(${bookings.bookingDate}) = ${dateStr}`,
-            sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`,
+            gte(bookings.bookingDate, startOfDay),
+            lt(bookings.bookingDate, nextDay),
+            activeStatusCondition,
           ),
         );
       const max = service.maxDailyBookings ?? 5;
@@ -2612,14 +2641,24 @@ export class PostgresStorage implements IStorage {
     serviceId: number,
     date: Date,
   ): Promise<Booking[]> {
-    // Convert date to start and end of day in IST
-    const istDate = toISTForStorage(date);
-    const startDate = new Date(istDate ?? new Date());
+    const istDate = toISTForStorage(date) ?? date;
+    const startDate = new Date(istDate);
     startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(istDate ?? new Date());
-    endDate.setHours(23, 59, 59, 999);
-    // Implementation for querying bookings by service and date
-    return [];
+    const nextDate = new Date(startDate);
+    nextDate.setDate(nextDate.getDate() + 1);
+
+    return await db
+      .select()
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.serviceId, serviceId),
+          gte(bookings.bookingDate, startDate),
+          lt(bookings.bookingDate, nextDate),
+          sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`,
+        ),
+      )
+      .orderBy(bookings.bookingDate);
   }
 
   async getProviderSchedule(

@@ -65,13 +65,15 @@ import {
   PaymentMethodSchema,
   ShopProfile,
   shopWorkers,
+  TimeSlotLabel,
+  timeSlotLabelSchema,
 } from "@shared/schema";
 import { platformFees } from "@shared/config";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { db } from "./db";
 import crypto from "crypto";
 import { performance } from "node:perf_hooks";
-import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
+import { formatIndianDisplay, toIndianTime } from "@shared/date-utils"; // Import IST utility
 import {
   normalizeCoordinate,
   DEFAULT_NEARBY_RADIUS_KM,
@@ -856,13 +858,35 @@ const bookingCreateSchema = z
     serviceId: z.number().int().positive(),
     bookingDate: dateStringSchema,
     serviceLocation: z.enum(["customer", "provider"]),
+    timeSlotLabel: timeSlotLabelSchema.nullable().optional(),
   })
   .strict();
 
 type ServiceBookingSlot = {
   start: Date;
   end: Date;
+  timeSlotLabel: TimeSlotLabel | null;
 };
+
+const BROAD_TIME_SLOTS: Record<
+  TimeSlotLabel,
+  { startHour: number; endHour: number }
+> = {
+  morning: { startHour: 9, endHour: 12 },
+  afternoon: { startHour: 12, endHour: 16 },
+  evening: { startHour: 16, endHour: 20 },
+};
+
+function buildSlotWindow(date: Date, label?: TimeSlotLabel | null) {
+  if (!label || !BROAD_TIME_SLOTS[label]) {
+    return null;
+  }
+  const start = new Date(toIndianTime(date));
+  start.setHours(BROAD_TIME_SLOTS[label].startHour, 0, 0, 0);
+  const end = new Date(toIndianTime(date));
+  end.setHours(BROAD_TIME_SLOTS[label].endHour, 0, 0, 0);
+  return { start, end };
+}
 
 async function fetchServiceBookingSlots(
   serviceId: number,
@@ -893,8 +917,14 @@ async function fetchServiceBookingSlots(
   const slotDurationMs = slotMinutes * 60_000;
 
   return bookings.map((booking) => ({
-    start: booking.bookingDate,
-    end: new Date(booking.bookingDate.getTime() + slotDurationMs),
+    ...(buildSlotWindow(
+      booking.bookingDate,
+      (booking as any).timeSlotLabel as TimeSlotLabel | null,
+    ) ?? {
+      start: booking.bookingDate,
+      end: new Date(booking.bookingDate.getTime() + slotDurationMs),
+    }),
+    timeSlotLabel: (booking as any).timeSlotLabel ?? null,
   }));
 }
 
@@ -3738,7 +3768,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json(formatValidationError(parsedBody.error));
         }
 
-        const { serviceId, bookingDate, serviceLocation } = parsedBody.data;
+        const { serviceId, bookingDate, serviceLocation, timeSlotLabel } =
+          parsedBody.data;
+        const normalizedSlotLabel =
+          timeSlotLabel === null ? undefined : timeSlotLabel;
 
         // Get service details
         const service = await storage.getService(serviceId);
@@ -3746,10 +3779,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Service not found" });
         }
 
-        const bookingDateTime = new Date(bookingDate);
+        const slotWindow = buildSlotWindow(
+          new Date(bookingDate),
+          normalizedSlotLabel,
+        );
+        if (normalizedSlotLabel && !slotWindow) {
+          return res
+            .status(400)
+            .json({ message: "Invalid time slot selection" });
+        }
+
+        const bookingDateTime = slotWindow
+          ? slotWindow.start
+          : new Date(bookingDate);
         const isAvailable = await storage.checkAvailability(
           serviceId,
           bookingDateTime,
+          normalizedSlotLabel,
         );
         if (!isAvailable) {
           return res
@@ -3761,6 +3807,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerId: req.user!.id,
           serviceId,
           bookingDate: bookingDateTime,
+          timeSlotLabel: normalizedSlotLabel,
           status: "pending",
           paymentStatus: "pending",
           serviceLocation,
