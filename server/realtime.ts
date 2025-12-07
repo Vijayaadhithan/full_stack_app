@@ -1,6 +1,7 @@
 import type { Response } from "express";
 import { setInterval, clearInterval } from "node:timers";
 import logger from "./logger";
+import Redis from "ioredis";
 
 type SseEvent =
   | { event: "connected"; data: { connected: true } }
@@ -85,11 +86,57 @@ function broadcastToUser(userId: number, payload: SseEvent) {
   });
 }
 
+const REDIS_URL = process.env.REDIS_URL;
+const CHANNEL = "realtime:events";
+
+let publisher: any = null;
+let subscriber: any = null;
+
+const disableFlag = (process.env.DISABLE_REDIS ?? "").toLowerCase();
+const redisDisabled =
+  (process.env.NODE_ENV ?? "").toLowerCase() === "test" ||
+  disableFlag === "true" ||
+  disableFlag === "1" ||
+  disableFlag === "yes" ||
+  disableFlag === "on";
+
+if (REDIS_URL && !redisDisabled) {
+  try {
+    publisher = new Redis(REDIS_URL);
+    subscriber = new Redis(REDIS_URL);
+
+    subscriber.subscribe(CHANNEL, (err: unknown) => {
+      if (err) {
+        logger.error({ err }, "Failed to subscribe to realtime channel");
+      } else {
+        logger.info("Subscribed to realtime channel");
+      }
+    });
+
+    subscriber.on("message", (channel: string, message: string) => {
+      if (channel === CHANNEL) {
+        try {
+          const { recipients, keys } = JSON.parse(message);
+          localBroadcastInvalidation(recipients, keys);
+        } catch (err) {
+          logger.warn({ err }, "Failed to parse realtime message");
+        }
+      }
+    });
+
+    logger.info("Redis realtime Pub/Sub initialized");
+  } catch (err) {
+    logger.warn({ err }, "Failed to initialize Redis for realtime");
+    publisher = null;
+    subscriber = null;
+  }
+}
+
 function normalizeKeys(keys: string[]): string[] {
   return Array.from(new Set(keys)).filter((key) => key && key.length > 0);
 }
 
-export function broadcastInvalidation(
+function localBroadcastInvalidation(
   recipients: number | Array<number | null | undefined>,
   keys: string[],
 ) {
@@ -98,8 +145,8 @@ export function broadcastInvalidation(
 
   const targets = Array.isArray(recipients)
     ? recipients
-        .map((value) => (value == null ? null : Number(value)))
-        .filter((value): value is number => Number.isFinite(value))
+      .map((value) => (value == null ? null : Number(value)))
+      .filter((value): value is number => Number.isFinite(value))
     : [Number(recipients)].filter((value) => Number.isFinite(value));
 
   const uniqueTargets: number[] = [];
@@ -116,6 +163,22 @@ export function broadcastInvalidation(
       event: "invalidate",
       data: { keys: normalizedKeys },
     });
+  }
+}
+
+export function broadcastInvalidation(
+  recipients: number | Array<number | null | undefined>,
+  keys: string[],
+) {
+  if (publisher) {
+    publisher
+      .publish(CHANNEL, JSON.stringify({ recipients, keys }))
+      .catch((err: unknown) => {
+        logger.warn({ err }, "Failed to publish realtime event, falling back to local broadcast");
+        localBroadcastInvalidation(recipients, keys);
+      });
+  } else {
+    localBroadcastInvalidation(recipients, keys);
   }
 }
 
