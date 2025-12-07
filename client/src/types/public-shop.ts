@@ -19,4 +19,7 @@ export type PublicShop = {
   returnsEnabled: boolean;
   averageRating: string | number | null;
   totalReviews: number;
+  catalogModeEnabled?: boolean;
+  openOrderMode?: boolean;
+  allowPayLater?: boolean;
 };

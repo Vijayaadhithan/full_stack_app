@@ -50,6 +50,7 @@ import {
   insertPromotionSchema,
   insertBlockedTimeSlotSchema, // Added import
   promotions, // Import promotions table for direct updates
+  orders,
   users, // Import the users table schema
   reviews,
   passwordResetTokens as passwordResetTokensTable,
@@ -208,6 +209,7 @@ type RequestWithAuth = Request & {
 };
 
 function buildPublicShopResponse(shop: User) {
+  const modes = resolveShopModes(shop.shopProfile);
   return {
     id: shop.id,
     name: shop.name,
@@ -227,6 +229,9 @@ function buildPublicShopResponse(shop: User) {
     returnsEnabled: shop.returnsEnabled ?? false,
     averageRating: shop.averageRating ?? null,
     totalReviews: shop.totalReviews ?? 0,
+    catalogModeEnabled: modes.catalogModeEnabled,
+    openOrderMode: modes.openOrderMode,
+    allowPayLater: modes.allowPayLater,
   };
 }
 
@@ -321,6 +326,22 @@ function extractUserCoordinates(
   };
 }
 
+function resolveShopModes(
+  profile: ShopProfile | null | undefined,
+): { catalogModeEnabled: boolean; openOrderMode: boolean; allowPayLater: boolean } {
+  const catalogModeEnabled = Boolean(profile?.catalogModeEnabled);
+  const openOrderMode =
+    profile?.openOrderMode !== undefined
+      ? Boolean(profile.openOrderMode)
+      : catalogModeEnabled;
+  const allowPayLater = Boolean(profile?.allowPayLater);
+  return {
+    catalogModeEnabled,
+    openOrderMode,
+    allowPayLater,
+  };
+}
+
 function buildUserResponse(
   req: RequestWithAuth,
   user: User,
@@ -365,6 +386,10 @@ function buildUserResponse(
     minimal.pickupAvailable = sanitized.pickupAvailable ?? null;
     minimal.deliveryAvailable = sanitized.deliveryAvailable ?? null;
     minimal.returnsEnabled = sanitized.returnsEnabled ?? null;
+    const modes = resolveShopModes(sanitized.shopProfile ?? null);
+    minimal.catalogModeEnabled = modes.catalogModeEnabled;
+    minimal.openOrderMode = modes.openOrderMode;
+    minimal.allowPayLater = modes.allowPayLater;
 
     minimal.addressStreet = sanitized.addressStreet ?? null;
     minimal.addressCity = sanitized.addressCity ?? null;
@@ -1016,6 +1041,15 @@ const notificationsMarkAllSchema = z
   .strict();
 
 const productUpdateSchema = insertProductSchema.partial();
+const quickAddProductSchema = z
+  .object({
+    name: z.string().min(1),
+    price: z.string().or(z.number()),
+    image: z.string().optional(),
+    category: z.string().optional(),
+    mrp: z.string().or(z.number()).optional(),
+  })
+  .strict();
 
 const productBulkUpdateSchema = z
   .object({
@@ -2733,6 +2767,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(201).json(product);
       } catch (error) {
         logger.error("Error creating product:", error);
+        res
+          .status(400)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to create product",
+          });
+      }
+    },
+  );
+
+  app.post(
+    "/api/products/quick-add",
+    requireAuth,
+    requireShopOrWorkerPermission(["products:write"]),
+    async (req, res) => {
+      try {
+        const parsed = quickAddProductSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json(formatValidationError(parsed.error));
+        }
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res
+            .status(403)
+            .json({ message: "Unable to resolve shop context" });
+        }
+
+        const requestWithAuth = req as RequestWithAuth;
+        if (requestWithAuth.user?.role === "shop") {
+          if (
+            !ensureProfileVerified(
+              requestWithAuth,
+              res,
+              "manage your shop listings",
+            )
+          ) {
+            return;
+          }
+        } else if (requestWithAuth.user?.role === "worker") {
+          const shopOwner = await storage.getUser(shopContextId);
+          if (!shopOwner) {
+            return res.status(404).json({ message: "Shop not found" });
+          }
+          if (shopOwner.verificationStatus !== "verified") {
+            return res.status(403).json({
+              message:
+                "The shop must complete profile verification before products can be managed.",
+            });
+          }
+        }
+
+        const shop = await storage.getUser(shopContextId);
+        const shopModes = resolveShopModes(shop?.shopProfile ?? null);
+        const basePrice =
+          typeof parsed.data.price === "number"
+            ? parsed.data.price.toFixed(2)
+            : parsed.data.price;
+        const baseMrp =
+          parsed.data.mrp ??
+          (typeof parsed.data.price === "number"
+            ? parsed.data.price.toFixed(2)
+            : parsed.data.price);
+        const payload = insertProductSchema.parse({
+          name: parsed.data.name,
+          description: "Quick add item",
+          price: basePrice,
+          mrp: typeof baseMrp === "number" ? baseMrp.toFixed(2) : baseMrp,
+          stock: shopModes.catalogModeEnabled ? 0 : 1,
+          category: parsed.data.category ?? "uncategorized",
+          images: parsed.data.image ? [parsed.data.image] : [],
+          isAvailable: true,
+          shopId: shopContextId,
+        });
+        const product = await storage.createProduct(payload);
+        res.status(201).json(product);
+      } catch (error) {
+        logger.error("Error creating quick-add product:", error);
         res
           .status(400)
           .json({
@@ -5298,22 +5411,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        const insufficientEntry = Array.from(quantityByProduct.entries()).find(
-          ([productId, totalQuantity]) => {
-            const product = productMap.get(productId);
-            return product ? product.stock < totalQuantity : true;
-          },
-        );
-        if (insufficientEntry) {
-          const [productId] = insufficientEntry;
-          const product = productMap.get(productId);
-          return res.status(400).json({
-            message: `Insufficient stock for product: ${product?.name ?? productId}`,
-          });
-        }
-
         if (shopId === undefined) {
           return res.status(400).json({ message: "No items provided" });
+        }
+
+        if (typeof shopId !== "number") {
+          return res
+            .status(400)
+            .json({ message: "Unable to determine shop for this order" });
+        }
+
+        const shop = await storage.getUser(shopId);
+        if (!shop) {
+          return res.status(404).json({ message: "Shop not found" });
+        }
+
+        const shopModes = resolveShopModes(shop.shopProfile);
+        const enforceStock = !(shopModes.catalogModeEnabled || shopModes.openOrderMode);
+
+        if (enforceStock) {
+          const insufficientEntry = Array.from(quantityByProduct.entries()).find(
+            ([productId, totalQuantity]) => {
+              const product = productMap.get(productId);
+              return product ? product.stock < totalQuantity : true;
+            },
+          );
+          if (insufficientEntry) {
+            const [productId] = insufficientEntry;
+            const product = productMap.get(productId);
+            return res.status(400).json({
+              message: `Insufficient stock for product: ${product?.name ?? productId}`,
+            });
+          }
         }
 
         const toNumber = (value: string | number) =>
@@ -5411,11 +5540,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Shop information is missing" });
         }
 
-        const shop = await storage.getUser(shopId);
-        if (!shop) {
-          return res.status(404).json({ message: "Shop not found" });
-        }
-
         const customerAddress = formatUserAddress(customer);
         const shopAddress = formatUserAddress(shop);
         const derivedShippingAddress =
@@ -5423,6 +5547,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const shippingAddress = derivedShippingAddress || "";
         const derivedBillingAddress =
           deliveryMethod === "delivery" ? customerAddress : shopAddress;
+
+        const isPayLater = paymentMethod === "pay_later";
+        if (isPayLater) {
+          if (!shopModes.allowPayLater) {
+            return res
+              .status(400)
+              .json({ message: "Pay later is not enabled for this shop." });
+          }
+          const priorOrders = await db
+            .select({ value: sql<number>`count(*)` })
+            .from(orders)
+            .where(
+              and(
+                eq(orders.shopId, shopId),
+                eq(orders.customerId, customer.id),
+                inArray(orders.status, [
+                  "confirmed",
+                  "processing",
+                  "packed",
+                  "dispatched",
+                  "shipped",
+                  "delivered",
+                ]),
+              ),
+            );
+          const isKnownCustomer =
+            Number(priorOrders[0]?.value ?? 0) > 0;
+          if (!isKnownCustomer) {
+            return res.status(403).json({
+              message:
+                "Pay later is only available for repeat customers at this shop.",
+            });
+          }
+        }
 
         const orderItemsPayload = items.map((item) => {
           const numericPrice = toNumber(item.price);
@@ -5448,6 +5606,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             orderDate: new Date(),
             shippingAddress,
             billingAddress: derivedBillingAddress || "",
+            notes:
+              !enforceStock || isPayLater
+                ? [
+                  !enforceStock
+                    ? "Open order: shop owner will confirm availability."
+                    : null,
+                  isPayLater
+                    ? "Pay later requested by known customer."
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ")
+                : undefined,
           },
           orderItemsPayload,
         );
@@ -6007,6 +6178,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Shop confirms payment after manual verification
   app.post(
+    "/api/orders/:id/approve-pay-later",
+    requireAuth,
+    requireShopOrWorkerPermission(["orders:update"]),
+    async (req, res) => {
+      const orderId = getValidatedParam(req, "id");
+      try {
+        const order = await storage.getOrder(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        if (order.paymentMethod !== "pay_later") {
+          return res
+            .status(400)
+            .json({ message: "Order is not marked as pay later" });
+        }
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
+        if (order.shopId !== shopContextId) {
+          return res.status(403).json({ message: "Not authorized" });
+        }
+        let updated = order;
+        if (order.status === "pending") {
+          updated = await storage.updateOrderStatus(orderId, "confirmed");
+        }
+        updated = await storage.updateOrder(orderId, {
+          paymentStatus: "verifying",
+        });
+        if (order.customerId) {
+          await storage.createNotification({
+            userId: order.customerId,
+            type: "order",
+            title: "Pay Later approved",
+            message: `Pay Later approved for Order #${orderId}. Please settle on delivery or pickup.`,
+          });
+        }
+        res.json(updated);
+      } catch (error) {
+        logger.error("Error approving pay-later request:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to approve pay-later request",
+          });
+      }
+    },
+  );
+
+  app.post(
     "/api/orders/:id/confirm-payment",
     requireAuth,
     requireShopOrWorkerPermission(["orders:update"]),
@@ -6021,10 +6243,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         if (order.shopId !== shopContextId)
           return res.status(403).json({ message: "Not authorized" });
-        if (
-          (order.paymentMethod === "upi" && order.paymentStatus !== "verifying") ||
-          (order.paymentMethod === "cash" && order.paymentStatus !== "pending")
-        ) {
+        const isPayLater = order.paymentMethod === "pay_later";
+        const canMarkPaid =
+          (order.paymentMethod === "upi" && order.paymentStatus === "verifying") ||
+          (order.paymentMethod === "cash" && order.paymentStatus === "pending") ||
+          (isPayLater &&
+            (order.paymentStatus === "verifying" ||
+              order.paymentStatus === "pending"));
+
+        if (!canMarkPaid) {
           return res
             .status(400)
             .json({ message: "Order is not awaiting verification" });
@@ -6556,6 +6783,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shopId: product.shopId,
         isAvailable: product.isAvailable ?? true,
         stock: product.stock,
+        catalogModeEnabled: Boolean(product.catalogModeEnabled),
+        openOrderMode: Boolean(
+          product.openOrderMode ?? product.catalogModeEnabled,
+        ),
+        allowPayLater: Boolean(product.allowPayLater),
       }));
 
       res.json({
@@ -6595,6 +6827,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .status(404)
             .json({ message: "Product not found in this shop" });
         }
+        const shop = await storage.getUser(shopId);
+        const modes = resolveShopModes(shop?.shopProfile ?? null);
 
         const payload = productDetailSchema.parse({
           ...product,
@@ -6607,11 +6841,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           createdAt:
             product.createdAt instanceof Date
               ? product.createdAt.toISOString()
-              : product.createdAt ?? null,
+            : product.createdAt ?? null,
           updatedAt:
             product.updatedAt instanceof Date
               ? product.updatedAt.toISOString()
               : product.updatedAt ?? null,
+          catalogModeEnabled: modes.catalogModeEnabled,
+          openOrderMode: modes.openOrderMode,
+          allowPayLater: modes.allowPayLater,
         });
 
         await setCache(cacheKey, payload, PRODUCT_DETAIL_CACHE_TTL_SECONDS);

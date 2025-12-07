@@ -68,6 +68,9 @@ const shopProfileSchema = z.object({
   deliveryAvailable: z.boolean().optional(),
   returnsEnabled: z.boolean().optional(),
   upiQrCodeUrl: z.string().optional(),
+  catalogModeEnabled: z.boolean().optional(),
+  openOrderMode: z.boolean().optional(),
+  allowPayLater: z.boolean().optional(),
   workingHours: z.object({
     from: z.string().min(1, "Opening time is required"),
     to: z.string().min(1, "Closing time is required"),
@@ -107,6 +110,12 @@ export default function ShopProfile() {
       pickupAvailable: user?.pickupAvailable ?? true,
       deliveryAvailable: user?.deliveryAvailable ?? false,
       returnsEnabled: user?.returnsEnabled ?? true,
+      catalogModeEnabled: user?.shopProfile?.catalogModeEnabled ?? false,
+      openOrderMode:
+        user?.shopProfile?.openOrderMode ??
+        user?.shopProfile?.catalogModeEnabled ??
+        false,
+      allowPayLater: user?.shopProfile?.allowPayLater ?? false,
       workingHours: user?.shopProfile?.workingHours || {
         from: "09:00",
         to: "18:00",
@@ -138,6 +147,12 @@ export default function ShopProfile() {
         pickupAvailable: user.pickupAvailable ?? true,
         deliveryAvailable: user.deliveryAvailable ?? false,
         returnsEnabled: user.returnsEnabled ?? true,
+        catalogModeEnabled: user.shopProfile.catalogModeEnabled ?? false,
+        openOrderMode:
+          user.shopProfile.openOrderMode ??
+          user.shopProfile.catalogModeEnabled ??
+          false,
+        allowPayLater: user.shopProfile.allowPayLater ?? false,
         workingHours: user.shopProfile.workingHours || {
           from: "09:00",
           to: "18:00",
@@ -592,6 +607,74 @@ export default function ShopProfile() {
                         <FormItem className="flex items-center justify-between rounded-md border p-3 shadow-sm">
                           <div className="space-y-0.5">
                             <FormLabel>Allow Returns</FormLabel>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              disabled={!editMode}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="catalogModeEnabled"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between rounded-md border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Catalog Mode</FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              Show your catalogue without tracking stock counts.
+                            </p>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked);
+                                if (checked) {
+                                  form.setValue("openOrderMode", true);
+                                }
+                              }}
+                              disabled={!editMode}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="openOrderMode"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between rounded-md border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Allow Open Orders</FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              Let customers place orders even when stock is low or zero. You&apos;ll confirm availability before fulfillment.
+                            </p>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              disabled={!editMode}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="allowPayLater"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between rounded-md border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Enable Pay Later for known customers</FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              Customers with a history can request Pay Later. You must approve before processing.
+                            </p>
                           </div>
                           <FormControl>
                             <Switch

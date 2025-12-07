@@ -46,6 +46,14 @@ type CartItem = {
   quantity: number;
 };
 
+type ShopInfo = {
+  pickupAvailable?: boolean;
+  deliveryAvailable?: boolean;
+  catalogModeEnabled?: boolean;
+  openOrderMode?: boolean;
+  allowPayLater?: boolean;
+};
+
 export default function Cart() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -61,7 +69,7 @@ export default function Cart() {
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethodType>("upi");
 
-  const { data: shopInfo } = useQuery<any>({
+  const { data: shopInfo } = useQuery<ShopInfo>({
     queryKey: ["shop-info", shopId],
     enabled: !!shopId,
     queryFn: async () => {
@@ -97,10 +105,24 @@ export default function Cart() {
   }, [shopInfo]);
 
   useEffect(() => {
-    if (deliveryMethod === "delivery") {
+    if (deliveryMethod === "delivery" && paymentMethod === "cash") {
       setPaymentMethod("upi");
     }
-  }, [deliveryMethod]);
+  }, [deliveryMethod, paymentMethod]);
+
+  const openOrderEnabled = Boolean(
+    shopInfo?.catalogModeEnabled || shopInfo?.openOrderMode,
+  );
+  const payLaterEnabled = Boolean(shopInfo?.allowPayLater);
+  const openOrderWarning =
+    openOrderEnabled &&
+    (cartItems?.some((item) => item.product.stock <= 0) ?? false);
+
+  useEffect(() => {
+    if (!payLaterEnabled && paymentMethod === "pay_later") {
+      setPaymentMethod("upi");
+    }
+  }, [payLaterEnabled, paymentMethod]);
 
   console.log("Cart items:", cartItems); // Debug log
 
@@ -475,7 +497,8 @@ export default function Cart() {
                               }
                               disabled={
                                 updateCartMutation.isPending ||
-                                item.quantity >= item.product.stock
+                                (!openOrderEnabled &&
+                                  item.quantity >= item.product.stock)
                               }
                             >
                               <Plus className="h-4 w-4" />
@@ -622,19 +645,41 @@ export default function Cart() {
               </Card>
             )}
 
-            {deliveryMethod === "pickup" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Payment Method</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <PaymentMethodSelector
-                    value={paymentMethod}
-                    onChange={setPaymentMethod}
-                  />
-                </CardContent>
-              </Card>
+            {openOrderWarning && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm flex gap-3">
+                <Info className="h-4 w-4 text-amber-600 mt-0.5" />
+                <div>
+                  <p className="font-medium text-amber-900">Open order request</p>
+                  <p className="text-amber-800">
+                    Stock counts are not enforced for this shop. The shop owner will confirm availability before processing your order.
+                  </p>
+                </div>
+              </div>
             )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Payment Method</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PaymentMethodSelector
+                  value={paymentMethod}
+                  onChange={setPaymentMethod}
+                  allowPayLater={payLaterEnabled}
+                  disableCash={deliveryMethod === "delivery"}
+                  payLaterDisabledReason={
+                    payLaterEnabled
+                      ? undefined
+                      : "Pay Later is disabled for this shop."
+                  }
+                />
+                {deliveryMethod === "delivery" && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Cash on delivery is disabled. Choose UPI or Pay Later.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Order Summary */}
             <Card>

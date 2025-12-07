@@ -64,6 +64,9 @@ export default function ProductDetails() {
       ? reviews.reduce((total, review) => total + review.rating, 0) /
         reviews.length
       : null;
+  const openOrderAllowed = Boolean(
+    product?.openOrderMode || product?.catalogModeEnabled,
+  );
 
   type CartItem = {
     product: ProductDetail;
@@ -250,6 +253,17 @@ export default function ProductDetails() {
     );
   }
 
+  const inStock = product.isAvailable && product.stock > 0;
+  const availabilityLabel = inStock
+    ? `In Stock (${product.stock} available)`
+    : openOrderAllowed
+      ? "Available on request — shop will confirm availability"
+      : "Out of Stock";
+  const disableAddToCart =
+    !product.isAvailable ||
+    (!openOrderAllowed && product.stock <= 0) ||
+    addToCartMutation.isPending;
+
   return (
     <DashboardLayout>
       <Meta
@@ -327,12 +341,15 @@ export default function ProductDetails() {
                 </div>
               )}
               <p
-                className={`text-sm font-medium ${product.isAvailable && product.stock > 0 ? "text-green-600" : "text-red-600"}`}
+                className={`text-sm font-medium ${inStock ? "text-green-600" : "text-amber-700"}`}
               >
-                {product.isAvailable && product.stock > 0
-                  ? `In Stock (${product.stock} available)`
-                  : "Out of Stock"}
+                {availabilityLabel}
               </p>
+              {!inStock && openOrderAllowed && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                  Stock counts are not enforced for this shop. Add to cart and the shop owner will confirm availability.
+                </p>
+              )}
               {product.category && (
                 <p className="text-sm text-muted-foreground">
                   Category: {product.category}
@@ -343,11 +360,7 @@ export default function ProductDetails() {
                 <Button
                   size="lg"
                   onClick={() => addToCartMutation.mutate(product)}
-                  disabled={
-                    !product.isAvailable ||
-                    product.stock <= 0 ||
-                    addToCartMutation.isPending
-                  }
+                  disabled={disableAddToCart}
                   className="flex-1"
                 >
                   <ShoppingCart className="mr-2 h-5 w-5" /> Add to Cart

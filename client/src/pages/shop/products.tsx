@@ -1,6 +1,6 @@
-import React, { Suspense, lazy, useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { ShopLayout } from "@/components/layout/shop-layout";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,7 +29,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
+import { Loader2, Plus, Edit2, Trash2, Mic } from "lucide-react";
 import { Product } from "@shared/schema";
 import { productFilterConfig } from "@shared/config";
 import { z } from "zod";
@@ -37,6 +37,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { getVerificationError, parseApiError } from "@/lib/api-error";
 import { useShopContext } from "@/hooks/use-shop-context";
+import { Label } from "@/components/ui/label";
 
 const ProductFormDialogLazy = lazy(() => import("./components/ProductFormDialog"));
 
@@ -84,6 +85,11 @@ export default function ShopProducts() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [quickAddName, setQuickAddName] = useState("");
+  const [quickAddPrice, setQuickAddPrice] = useState("");
+  const [quickAddImage, setQuickAddImage] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const speechRecognitionRef = useRef<any>(null);
 
   const findCategory = (value: string) => {
     const lower = value.toLowerCase();
@@ -237,6 +243,68 @@ export default function ShopProducts() {
     );
   };
 
+  const handleQuickImageChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiRequest("POST", "/api/upload", formData);
+      if (!res.ok) {
+        throw new Error("Failed to upload image");
+      }
+      const { path } = await res.json();
+      setQuickAddImage(path);
+    } catch (error) {
+      toast({
+        title: t("error"),
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to upload image for quick add",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startVoiceCapture = () => {
+    const SpeechRecognition =
+      (window as any).webkitSpeechRecognition ||
+      (window as any).SpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({
+        title: t("error"),
+        description: "Your browser does not support speech input.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!speechRecognitionRef.current) {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-IN";
+      recognition.onresult = (event: any) => {
+        const transcript = event.results?.[0]?.[0]?.transcript;
+        if (transcript) {
+          setQuickAddName(transcript);
+        }
+      };
+      recognition.onerror = () => {
+        toast({
+          title: t("error"),
+          description: "Could not capture audio. Please try again.",
+          variant: "destructive",
+        });
+        setIsListening(false);
+      };
+      recognition.onend = () => setIsListening(false);
+      speechRecognitionRef.current = recognition;
+    }
+    setIsListening(true);
+    speechRecognitionRef.current!.start();
+  };
+
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
       if (!shopContextId) {
@@ -299,6 +367,49 @@ export default function ShopProducts() {
       toast({
         title: t("error"),
         description: parsed.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const quickAddMutation = useMutation({
+    mutationFn: async () => {
+      if (!shopContextId) {
+        throw new Error("Unable to determine shop context for this action");
+      }
+      if (!quickAddName.trim()) {
+        throw new Error("Speak or type a product name");
+      }
+      const numericPrice = Number(quickAddPrice);
+      if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+        throw new Error("Enter a valid price");
+      }
+
+      const res = await apiRequest("POST", "/api/products/quick-add", {
+        name: quickAddName.trim(),
+        price: numericPrice.toFixed(2),
+        image: quickAddImage ?? undefined,
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to quick add product");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateProductsQuery();
+      setQuickAddName("");
+      setQuickAddPrice("");
+      setQuickAddImage(null);
+      toast({
+        title: "Product added",
+        description: "Quick add item created. You can enrich details later.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: t("error"),
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -669,6 +780,86 @@ export default function ShopProducts() {
             </Dialog>
           )}
         </div>
+
+        {canWriteProducts && (
+          <Card className="border-dashed">
+            <CardHeader>
+              <CardTitle className="text-lg">Quick Add</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Snap a product photo, speak the name, and set a price. We&apos;ll create a basic listing instantly.
+              </p>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Product photo</Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    disabled={!canWriteProducts}
+                    onChange={handleQuickImageChange}
+                  />
+                  {quickAddImage && (
+                    <img
+                      src={quickAddImage}
+                      alt="Quick add preview"
+                      className="h-20 w-20 rounded-md border object-cover"
+                    />
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Price</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={quickAddPrice}
+                    onChange={(e) => setQuickAddPrice(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Product name</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={quickAddName}
+                      onChange={(e) => setQuickAddName(e.target.value)}
+                      placeholder="Say or type the name"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={startVoiceCapture}
+                      disabled={isListening}
+                    >
+                      <Mic
+                        className={`h-4 w-4 ${isListening ? "text-red-500" : ""}`}
+                      />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Tap the mic and speak the product name.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Quick adds default to open-order friendly stock counts.
+                </p>
+                <Button
+                  onClick={() => quickAddMutation.mutate()}
+                  disabled={quickAddMutation.isPending || !shopContextId}
+                >
+                  {quickAddMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Add with photo &amp; voice
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {productsSection}
       </div>

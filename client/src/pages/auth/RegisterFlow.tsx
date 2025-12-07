@@ -261,6 +261,9 @@ export default function RegisterFlow({
         shopName: data.shopName!.trim(),
         businessType: data.shopBusinessType!.trim(),
         description: data.shopDescription!.trim(),
+        catalogModeEnabled: false,
+        openOrderMode: false,
+        allowPayLater: false,
         workingHours: {
           from: "09:00",
           to: "18:00",

@@ -102,6 +102,43 @@ interface InsertBlockedTimeSlot {
 const PRODUCT_CACHE_PREFIX = "products";
 const PRODUCT_CACHE_TTL_SECONDS = 60; // 60 seconds cache to balance freshness and throughput
 
+const DEFAULT_SHOP_MODES = {
+  catalogModeEnabled: false,
+  openOrderMode: false,
+  allowPayLater: false,
+};
+
+function resolveShopModes(
+  profile: ShopProfile | null | undefined,
+): typeof DEFAULT_SHOP_MODES {
+  const catalogModeEnabled = Boolean(profile?.catalogModeEnabled);
+  const openOrderMode =
+    profile?.openOrderMode !== undefined
+      ? Boolean(profile.openOrderMode)
+      : catalogModeEnabled;
+  const allowPayLater = Boolean(profile?.allowPayLater);
+  return {
+    catalogModeEnabled,
+    openOrderMode,
+    allowPayLater,
+  };
+}
+
+async function loadShopModes(
+  shopId: number | null | undefined,
+): Promise<typeof DEFAULT_SHOP_MODES> {
+  if (typeof shopId !== "number") {
+    return DEFAULT_SHOP_MODES;
+  }
+  const rows = await db
+    .select({ profile: users.shopProfile })
+    .from(users)
+    .where(eq(users.id, shopId))
+    .limit(1);
+  const profile = (rows[0]?.profile as ShopProfile | null | undefined) ?? null;
+  return resolveShopModes(profile);
+}
+
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -696,18 +733,50 @@ export class PostgresStorage implements IStorage {
 
     const hasMore = normalizedResults.length > pageSize;
     const trimmed = normalizedResults.slice(0, pageSize);
-    const items: ProductListItem[] = trimmed.map((product) => ({
-      id: product.id,
-      name: product.name,
-      description: product.description ?? null,
-      price: product.price,
-      mrp: product.mrp ?? null,
-      category: product.category ?? null,
-      images: product.images ?? [],
-      shopId: product.shopId ?? null,
-      isAvailable: product.isAvailable ?? true,
-      stock: product.stock,
-    }));
+
+    const shopIds = Array.from(
+      new Set(
+        trimmed
+          .map((product) => product.shopId)
+          .filter((id): id is number => typeof id === "number"),
+      ),
+    );
+    let shopModes = new Map<number, typeof DEFAULT_SHOP_MODES>();
+    if (shopIds.length) {
+      const shops = await db
+        .select({
+          id: users.id,
+          profile: users.shopProfile,
+        })
+        .from(users)
+        .where(inArray(users.id, shopIds));
+      shopModes = new Map(
+        shops.map((shop) => [
+          shop.id,
+          resolveShopModes(shop.profile as ShopProfile | null | undefined),
+        ]),
+      );
+    }
+
+    const items: ProductListItem[] = trimmed.map((product) => {
+      const modes =
+        (product.shopId && shopModes.get(product.shopId)) || DEFAULT_SHOP_MODES;
+      return {
+        id: product.id,
+        name: product.name,
+        description: product.description ?? null,
+        price: product.price,
+        mrp: product.mrp ?? null,
+        category: product.category ?? null,
+        images: product.images ?? [],
+        shopId: product.shopId ?? null,
+        isAvailable: product.isAvailable ?? true,
+        stock: product.stock,
+        catalogModeEnabled: modes.catalogModeEnabled,
+        openOrderMode: modes.openOrderMode,
+        allowPayLater: modes.allowPayLater,
+      };
+    });
 
     const payload = { items, hasMore };
     await setCache(cacheKey, payload, PRODUCT_CACHE_TTL_SECONDS);
@@ -1827,8 +1896,10 @@ export class PostgresStorage implements IStorage {
         throw new Error("Product not found when trying to add to cart.");
       }
       const availableStock = productDetails[0].stock;
+      const shopModes = await loadShopModes(shopIdToAdd);
+      const enforceStock = !(shopModes.catalogModeEnabled || shopModes.openOrderMode);
 
-      if (quantity > availableStock) {
+      if (enforceStock && quantity > availableStock) {
         logger.error(
           `Requested quantity ${quantity} for product ID ${productId} exceeds available stock ${availableStock}.`,
         );
@@ -2117,6 +2188,8 @@ export class PostgresStorage implements IStorage {
     }
 
     const createdOrder = await db.transaction(async (tx) => {
+      const shopModes = await loadShopModes(order.shopId);
+      const enforceStock = !(shopModes.catalogModeEnabled || shopModes.openOrderMode);
       const productIds = Array.from(
         new Set(items.map((item) => item.productId)),
       );
@@ -2148,14 +2221,16 @@ export class PostgresStorage implements IStorage {
       for (const [productId, quantity] of Array.from(
         quantityByProduct.entries(),
       )) {
-        const updateResult = await tx
-          .update(products)
-          .set({ stock: sql`${products.stock} - ${quantity}` })
-          .where(and(eq(products.id, productId), gte(products.stock, quantity)))
-          .returning({ id: products.id });
+        if (enforceStock) {
+          const updateResult = await tx
+            .update(products)
+            .set({ stock: sql`${products.stock} - ${quantity}` })
+            .where(and(eq(products.id, productId), gte(products.stock, quantity)))
+            .returning({ id: products.id });
 
-        if (updateResult.length === 0) {
-          throw new Error(`Insufficient stock for product ID ${productId}`);
+          if (updateResult.length === 0) {
+            throw new Error(`Insufficient stock for product ID ${productId}`);
+          }
         }
       }
 

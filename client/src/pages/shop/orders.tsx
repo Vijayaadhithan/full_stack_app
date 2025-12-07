@@ -268,6 +268,37 @@ export default function ShopOrders() {
     },
   });
 
+  const approvePayLaterMutation = useMutation({
+    mutationFn: async (orderId: number) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/orders/${orderId}/approve-pay-later`,
+      );
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to approve Pay Later");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders", "shop"] });
+      queryClient.invalidateQueries({
+        queryKey: ["orders", "shop", "active-board"],
+      });
+      toast({
+        title: t("success"),
+        description: "Pay Later approved",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: t("error"),
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleReturnRequest = useMutation({
     mutationFn: async ({
       returnId,
@@ -502,6 +533,9 @@ export default function ShopOrders() {
                   <div className="flex items-center gap-2">
                     {getStatusIcon(order.status)}
                     <span className="text-sm">{t(order.status)}</span>
+                    {order.paymentMethod === "pay_later" && (
+                      <Badge variant="outline">Pay Later</Badge>
+                    )}
                     {order.paymentStatus === "verifying" && (
                       <Badge className="bg-yellow-200 text-yellow-900">
                         Verification Needed
@@ -574,6 +608,30 @@ export default function ShopOrders() {
                   </div>
                 </div>
 
+                {order.paymentMethod === "pay_later" &&
+                  order.paymentStatus === "pending" && (
+                    <div className="p-4 rounded-md bg-blue-50 border text-sm space-y-2">
+                      <p className="font-medium text-blue-900">
+                        Pay Later request from a known customer
+                      </p>
+                      <p className="text-blue-900/80">
+                        Approve to confirm availability and move the order forward.
+                      </p>
+                      {(user?.role === "shop" || can("orders:update")) && (
+                        <Button
+                          size="sm"
+                          onClick={() => approvePayLaterMutation.mutate(order.id)}
+                          disabled={approvePayLaterMutation.isPending}
+                        >
+                          {approvePayLaterMutation.isPending && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          Approve Pay Later
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
                 {(order.paymentStatus === "verifying" ||
                   (order.paymentMethod === "cash" &&
                     order.paymentStatus === "pending")) && (
@@ -581,6 +639,11 @@ export default function ShopOrders() {
                     {order.paymentMethod === "upi" && (
                       <p className="font-medium">
                         Payment Reference: {order.paymentReference}
+                      </p>
+                    )}
+                    {order.paymentMethod === "pay_later" && (
+                      <p className="text-xs text-muted-foreground">
+                        Mark as paid once the customer settles the balance.
                       </p>
                     )}
                     {(user?.role === "shop" || can("orders:update")) && (

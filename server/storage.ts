@@ -46,6 +46,7 @@ import {
   orderStatusUpdates,
   UserRole,
   TimeSlotLabel,
+  ShopProfile,
 } from "@shared/schema";
 import { newIndianDate, formatIndianDisplay } from "../shared/date-utils";
 
@@ -73,7 +74,33 @@ export type ProductListItem = Pick<
   | "shopId"
   | "isAvailable"
   | "stock"
->;
+> & {
+  catalogModeEnabled?: boolean;
+  openOrderMode?: boolean;
+  allowPayLater?: boolean;
+};
+
+const DEFAULT_SHOP_MODES = {
+  catalogModeEnabled: false,
+  openOrderMode: false,
+  allowPayLater: false,
+};
+
+const resolveShopModes = (
+  profile: ShopProfile | null | undefined,
+): typeof DEFAULT_SHOP_MODES => {
+  const catalogModeEnabled = Boolean(profile?.catalogModeEnabled);
+  const openOrderMode =
+    profile?.openOrderMode !== undefined
+      ? Boolean(profile.openOrderMode)
+      : catalogModeEnabled;
+  const allowPayLater = Boolean(profile?.allowPayLater);
+  return {
+    catalogModeEnabled,
+    openOrderMode,
+    allowPayLater,
+  };
+};
 export interface OrderStatusUpdate {
   orderId: number;
   status: OrderStatus;
@@ -660,18 +687,25 @@ export class MemStorage implements IStorage {
     if (!filters) {
       const offset = (page - 1) * pageSize;
       const sliced = results.slice(offset, offset + pageSize + 1);
-      const items: ProductListItem[] = sliced.slice(0, pageSize).map((product) => ({
-        id: product.id,
-        name: product.name,
-        description: product.description ?? null,
-        price: product.price,
-        mrp: product.mrp ?? null,
-        category: product.category ?? null,
-        images: product.images ?? [],
-        shopId: product.shopId ?? null,
-        isAvailable: product.isAvailable ?? true,
-        stock: product.stock,
-      }));
+      const items: ProductListItem[] = sliced.slice(0, pageSize).map((product) => {
+        const shop = product.shopId ? this.users.get(product.shopId) : undefined;
+        const modes = shop ? resolveShopModes(shop.shopProfile as ShopProfile) : DEFAULT_SHOP_MODES;
+        return {
+          id: product.id,
+          name: product.name,
+          description: product.description ?? null,
+          price: product.price,
+          mrp: product.mrp ?? null,
+          category: product.category ?? null,
+          images: product.images ?? [],
+          shopId: product.shopId ?? null,
+          isAvailable: product.isAvailable ?? true,
+          stock: product.stock,
+          catalogModeEnabled: modes.catalogModeEnabled,
+          openOrderMode: modes.openOrderMode,
+          allowPayLater: modes.allowPayLater,
+        };
+      });
       return { items, hasMore: sliced.length > pageSize };
     }
 
@@ -759,18 +793,25 @@ export class MemStorage implements IStorage {
 
     const offset = (page - 1) * pageSize;
     const sliced = results.slice(offset, offset + pageSize + 1);
-    const items: ProductListItem[] = sliced.slice(0, pageSize).map((product) => ({
-      id: product.id,
-      name: product.name,
-      description: product.description ?? null,
-      price: product.price,
-      mrp: product.mrp ?? null,
-      category: product.category ?? null,
-      images: product.images ?? [],
-      shopId: product.shopId ?? null,
-      isAvailable: product.isAvailable ?? true,
-      stock: product.stock,
-    }));
+    const items: ProductListItem[] = sliced.slice(0, pageSize).map((product) => {
+      const shop = product.shopId ? this.users.get(product.shopId) : undefined;
+      const modes = shop ? resolveShopModes(shop.shopProfile as ShopProfile) : DEFAULT_SHOP_MODES;
+      return {
+        id: product.id,
+        name: product.name,
+        description: product.description ?? null,
+        price: product.price,
+        mrp: product.mrp ?? null,
+        category: product.category ?? null,
+        images: product.images ?? [],
+        shopId: product.shopId ?? null,
+        isAvailable: product.isAvailable ?? true,
+        stock: product.stock,
+        catalogModeEnabled: modes.catalogModeEnabled,
+        openOrderMode: modes.openOrderMode,
+        allowPayLater: modes.allowPayLater,
+      };
+    });
     return { items, hasMore: sliced.length > pageSize };
   }
 

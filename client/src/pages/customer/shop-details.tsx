@@ -68,6 +68,9 @@ type ShopProductListItem = {
   shopId: number | null;
   isAvailable: boolean;
   stock: number;
+  catalogModeEnabled?: boolean;
+  openOrderMode?: boolean;
+  allowPayLater?: boolean;
 };
 
 type ShopProductListResponse = {
@@ -455,76 +458,89 @@ export default function ShopDetails() {
             </Card>
           ) : (
             <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredProducts.map((product) => (
-                <motion.div key={product.id} variants={item}>
-                  <Link
-                    href={`/customer/shops/${product.shopId}/products/${product.id}`}
-                    className="block h-full"
-                  >
-                    <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
-                      <div className="aspect-square relative overflow-hidden">
-                        <img
-                          src={
-                            product.images?.[0] ||
-                            "https://via.placeholder.com/400"
-                          }
-                          alt={product.name}
-                          className="object-cover w-full h-full"
-                        />
-                        {product.mrp &&
-                          parseFloat(product.mrp) > parseFloat(product.price) && (
-                            <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
-                              {Math.round(
-                                ((parseFloat(product.mrp) -
-                                  parseFloat(product.price)) /
-                                  parseFloat(product.mrp)) *
-                                  100,
-                              )}
-                              % OFF
-                            </div>
-                          )}
-                      </div>
-                      <CardContent className="flex-1 p-4">
-                        <h3 className="font-semibold truncate">{product.name}</h3>
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                          {product.description ?? "No description"}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <p className="font-semibold">₹{product.price}</p>
-                          <div className="flex gap-2">
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                addToWishlistMutation.mutate(product);
-                              }}
-                              disabled={addToWishlistMutation.isPending}
-                            >
-                              <Heart className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                addToCartMutation.mutate(product);
-                              }}
-                              disabled={
-                                !product.isAvailable ||
-                                addToCartMutation.isPending
-                              }
-                            >
-                              <ShoppingCart className="h-4 w-4" />
-                            </Button>
-                          </div>
+              {filteredProducts.map((product) => {
+                const openOrderAllowed = Boolean(
+                  product.openOrderMode || product.catalogModeEnabled,
+                );
+                const outOfStock =
+                  product.stock <= 0 && !openOrderAllowed;
+                return (
+                  <motion.div key={product.id} variants={item}>
+                    <Link
+                      href={`/customer/shops/${product.shopId}/products/${product.id}`}
+                      className="block h-full"
+                    >
+                      <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
+                        <div className="aspect-square relative overflow-hidden">
+                          <img
+                            src={
+                              product.images?.[0] ||
+                              "https://via.placeholder.com/400"
+                            }
+                            alt={product.name}
+                            className="object-cover w-full h-full"
+                          />
+                          {product.mrp &&
+                            parseFloat(product.mrp) > parseFloat(product.price) && (
+                              <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                                {Math.round(
+                                  ((parseFloat(product.mrp) -
+                                    parseFloat(product.price)) /
+                                    parseFloat(product.mrp)) *
+                                    100,
+                                )}
+                                % OFF
+                              </div>
+                            )}
                         </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                </motion.div>
-              ))}
+                        <CardContent className="flex-1 p-4">
+                          <h3 className="font-semibold truncate">{product.name}</h3>
+                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                            {product.description ?? "No description"}
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold">₹{product.price}</p>
+                            <div className="flex gap-2">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  addToWishlistMutation.mutate(product);
+                                }}
+                                disabled={addToWishlistMutation.isPending}
+                              >
+                                <Heart className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  addToCartMutation.mutate(product);
+                                }}
+                                disabled={
+                                  !product.isAvailable ||
+                                  outOfStock ||
+                                  addToCartMutation.isPending
+                                }
+                              >
+                                <ShoppingCart className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          {product.stock <= 0 && openOrderAllowed && (
+                            <p className="text-xs text-amber-700 mt-1">
+                              Available on request. The shop will confirm availability.
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </div>

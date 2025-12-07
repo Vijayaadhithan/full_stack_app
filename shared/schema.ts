@@ -25,7 +25,7 @@ const tsvector = customType<{ data: string }>({
 });
 
 export type UserRole = "customer" | "provider" | "shop" | "admin" | "worker";
-export const PaymentMethodType = z.enum(["upi", "cash"]);
+export const PaymentMethodType = z.enum(["upi", "cash", "pay_later"]);
 export type PaymentMethodType = z.infer<typeof PaymentMethodType>;
 
 export const PaymentMethodSchema = z.discriminatedUnion("type", [
@@ -38,6 +38,15 @@ export const PaymentMethodSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("cash"),
     details: z.object({}).optional(),
+  }),
+  z.object({
+    type: z.literal("pay_later"),
+    details: z
+      .object({
+        approved: z.boolean().optional(),
+        note: z.string().optional(),
+      })
+      .optional(),
   }),
 ]);
 export type PaymentMethod = z.infer<typeof PaymentMethodSchema>;
@@ -55,6 +64,9 @@ export type ShopProfile = {
   };
   shippingPolicy?: string;
   returnPolicy?: string;
+  catalogModeEnabled: boolean;
+  openOrderMode: boolean;
+  allowPayLater: boolean;
 };
 
 // Add working hours type
@@ -696,6 +708,9 @@ export const shopProfileSchema = z.object({
   }),
   shippingPolicy: z.string().optional().nullable(),
   returnPolicy: z.string().optional().nullable(),
+  catalogModeEnabled: z.boolean().optional().default(false),
+  openOrderMode: z.boolean().optional().default(false),
+  allowPayLater: z.boolean().optional().default(false),
 });
 
 // Generate insert schemas and types

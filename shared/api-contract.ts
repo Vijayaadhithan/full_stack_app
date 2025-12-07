@@ -119,6 +119,9 @@ export const productDetailSchema = z.object({
   lowStockThreshold: z.number().nullable().optional(),
   createdAt: isoDateString.nullable().optional(),
   updatedAt: isoDateString.nullable().optional(),
+  catalogModeEnabled: z.boolean().optional(),
+  openOrderMode: z.boolean().optional(),
+  allowPayLater: z.boolean().optional(),
 });
 
 const orderStatusSchema = z.enum([
