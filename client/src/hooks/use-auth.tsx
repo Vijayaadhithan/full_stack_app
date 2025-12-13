@@ -5,7 +5,7 @@ import {
   useMutation,
   UseMutationResult,
 } from "@tanstack/react-query";
-import { User as SelectUser, InsertUser } from "@shared/schema";
+import { User as SelectUser } from "@shared/schema";
 import {
   getQueryFn,
   apiRequest,
@@ -23,10 +23,24 @@ type AuthContextType = {
   error: Error | null;
   loginMutation: UseMutationResult<PublicUser, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<PublicUser, Error, InsertUser>;
+  registerMutation: UseMutationResult<PublicUser, Error, RegisterData>;
 };
 
-type LoginData = Pick<InsertUser, "username" | "password">;
+export type LoginData = {
+  phone: string;
+  pin: string;
+};
+
+export type RegisterData = {
+  phone: string;
+  otp: string;
+  pin: string;
+  role: "customer" | "provider" | "shop";
+  name: string;
+  language: string;
+  shopName?: string;
+  email?: string;
+};
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -84,8 +98,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const registerMutation = useMutation<PublicUser, Error, InsertUser>({
-    mutationFn: async (credentials: InsertUser) => {
+  const registerMutation = useMutation<PublicUser, Error, RegisterData>({
+    mutationFn: async (credentials: RegisterData) => {
       const res = await apiRequest("POST", "/api/register", credentials);
       return await res.json();
     },

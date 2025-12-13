@@ -883,26 +883,37 @@ export class MemStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const normalizedUsername = normalizeUsername(insertUser.username);
-    const normalizedEmail = normalizeEmail(insertUser.email);
-    const normalizedPhone = normalizePhone(insertUser.phone);
-
+    let normalizedPhone = normalizePhone(insertUser.phone);
+    if (!normalizedPhone) {
+      normalizedPhone = `999${this.currentId}${Date.now()}`.slice(0, 12);
+    }
+    const normalizedUsername =
+      normalizeUsername(insertUser.username) ?? normalizedPhone;
     if (!normalizedUsername) {
       throw new Error("Invalid username");
     }
-    if (!normalizedEmail) {
-      throw new Error("Invalid email");
+    const normalizedEmail = normalizeEmail(insertUser.email);
+    const resolvedPassword = insertUser.password ?? "";
+
+    const existingPhoneUser = await this.getUserByPhone(normalizedPhone);
+    if (existingPhoneUser) {
+      throw new Error("Phone number already exists");
+    }
+
+    const existingUsernameUser = await this.getUserByUsername(normalizedUsername);
+    if (existingUsernameUser) {
+      throw new Error("Username already exists");
     }
 
     const id = this.currentId++;
     const user: User = {
       id,
       username: normalizedUsername,
-      password: insertUser.password!,
+      password: resolvedPassword,
       role: insertUser.role as UserRole,
       name: insertUser.name,
-      phone: normalizedPhone ?? "",
-      email: normalizedEmail,
+      phone: normalizedPhone,
+      email: normalizedEmail ?? "",
       addressStreet:
         insertUser.addressStreet === undefined
           ? null

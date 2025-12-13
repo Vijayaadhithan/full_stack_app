@@ -840,24 +840,43 @@ export class PostgresStorage implements IStorage {
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const normalizedUsername = normalizeUsername(user.username);
-    const normalizedEmail = normalizeEmail(user.email);
-    const normalizedPhone = normalizePhone(user.phone);
-
+    let normalizedPhone = normalizePhone(user.phone);
+    if (!normalizedPhone) {
+      normalizedPhone = `999${Date.now()}`.slice(0, 12);
+    }
+    const normalizedUsername =
+      normalizeUsername(user.username) ?? normalizedPhone;
     if (!normalizedUsername) {
       throw new Error("Invalid username");
     }
-    if (!normalizedEmail) {
-      throw new Error("Invalid email");
+    const normalizedEmail = normalizeEmail(user.email);
+    const resolvedPassword = user.password ?? "";
+
+    const phoneMatch = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.phone, normalizedPhone))
+      .limit(1);
+    if (phoneMatch.length > 0) {
+      throw new Error("Phone number already exists");
+    }
+
+    const usernameMatch = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, normalizedUsername))
+      .limit(1);
+    if (usernameMatch.length > 0) {
+      throw new Error("Username already exists");
     }
 
     const insertData = {
       username: normalizedUsername,
-      password: user.password,
+      password: resolvedPassword,
       role: user.role as UserRole,
       name: user.name,
-      phone: normalizedPhone ?? "",
-      email: normalizedEmail,
+      phone: normalizedPhone,
+      email: normalizedEmail ?? "",
       addressStreet: user.addressStreet,
       addressCity: user.addressCity,
       addressState: user.addressState,

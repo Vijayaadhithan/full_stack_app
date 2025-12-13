@@ -19,24 +19,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { API_BASE_URL, apiRequest } from "@/lib/queryClient";
+import { API_BASE_URL } from "@/lib/queryClient";
 import { translations, type AuthTranslations, type SupportedLanguage } from "./auth/translations";
 
 const RegisterFlow = lazy(() => import("./auth/RegisterFlow"));
-const ForgotPassword = lazy(() => import("./auth/ForgotPassword"));
 
 const loginSchema = z.object({
-  identifier: z.string().min(1, "Required"),
-  password: z.string().min(1, "Required"),
+  phone: z
+    .string()
+    .min(8, "Enter a valid mobile number")
+    .max(16, "Enter a valid mobile number"),
+  pin: z.string().regex(/^\d{4}$/, "Enter your 4-digit PIN"),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
 type AuthTab = "login" | "register";
-
-function isValidEmail(value: string) {
-  return /.+@.+\..+/.test(value.trim());
-}
 
 export default function AuthPage() {
   const {
@@ -48,15 +46,11 @@ export default function AuthPage() {
   const [, setLocation] = useLocation();
   const [language, setLanguage] = useState<SupportedLanguage>("en");
   const [activeTab, setActiveTab] = useState<AuthTab>("login");
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [magicLinkMessage, setMagicLinkMessage] = useState<string | null>(null);
-  const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
-  const [initialForgotEmail, setInitialForgotEmail] = useState<string>("");
   const t: AuthTranslations = translations[language];
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { identifier: "", password: "" },
+    defaultValues: { phone: "", pin: "" },
   });
 
   useEffect(() => {
@@ -77,62 +71,12 @@ export default function AuthPage() {
     setLocation,
   ]);
 
-  const handleSendMagicLink = async () => {
-    setMagicLinkError(null);
-    setMagicLinkMessage(null);
-    const identifier = loginForm.getValues("identifier");
-    if (!isValidEmail(identifier)) {
-      setMagicLinkError(t.magicLinkEmailRequired);
-      return;
-    }
-    try {
-      await apiRequest("POST", "/api/auth/send-magic-link", {
-        email: identifier.trim().toLowerCase(),
-      });
-      setMagicLinkMessage(t.magicLinkSent);
-    } catch (error) {
-      setMagicLinkError(t.magicLinkError);
-    }
-  };
-
   const handleLoginSubmit = loginForm.handleSubmit((data) => {
     loginMutation.mutate({
-      username: data.identifier.trim(),
-      password: data.password,
+      phone: data.phone.replace(/\D+/g, ""),
+      pin: data.pin,
     });
   });
-
-  const handleOpenForgotPassword = () => {
-    const identifier = loginForm.getValues("identifier") ?? "";
-    setInitialForgotEmail(isValidEmail(identifier) ? identifier : "");
-    setMagicLinkError(null);
-    setMagicLinkMessage(null);
-    setShowForgotPassword(true);
-  };
-
-  const handleCloseForgotPassword = () => {
-    setShowForgotPassword(false);
-  };
-
-  if (showForgotPassword) {
-    return (
-      <Suspense
-        fallback={
-          <div className="flex min-h-screen items-center justify-center">
-            Loading...
-          </div>
-        }
-      >
-        <ForgotPassword
-          t={t}
-          language={language}
-          onLanguageChange={setLanguage}
-          onClose={handleCloseForgotPassword}
-          initialEmail={initialForgotEmail}
-        />
-      </Suspense>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -168,57 +112,39 @@ export default function AuthPage() {
             <TabsContent value="login" className="pt-6">
               <form onSubmit={handleLoginSubmit} className="space-y-4">
                 <div className="space-y-1">
-                  <Label htmlFor="identifier">{t.identifierLabel}</Label>
+                  <Label htmlFor="phone">{t.phone}</Label>
                   <Input
-                    id="identifier"
-                    autoComplete="username"
-                    {...loginForm.register("identifier")}
+                    id="phone"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    {...loginForm.register("phone")}
                   />
-                  {loginForm.formState.errors.identifier && (
+                  {loginForm.formState.errors.phone && (
                     <p className="text-red-500 text-sm">
-                      {loginForm.formState.errors.identifier.message}
+                      {loginForm.formState.errors.phone.message}
                     </p>
                   )}
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="login-password">{t.password}</Label>
+                  <Label htmlFor="login-pin">{t.pin}</Label>
                   <Input
-                    id="login-password"
+                    id="login-pin"
                     type="password"
+                    inputMode="numeric"
                     autoComplete="current-password"
-                    {...loginForm.register("password")}
+                    maxLength={4}
+                    {...loginForm.register("pin")}
                   />
-                  {loginForm.formState.errors.password && (
+                  <p className="text-xs text-muted-foreground">
+                    {t.pinHelper}
+                  </p>
+                  {loginForm.formState.errors.pin && (
                     <p className="text-red-500 text-sm">
-                      {loginForm.formState.errors.password.message}
+                      {loginForm.formState.errors.pin.message}
                     </p>
                   )}
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <Button
-                    variant="link"
-                    type="button"
-                    onClick={handleOpenForgotPassword}
-                    className="p-0 h-auto"
-                  >
-                    {t.forgotPassword}
-                  </Button>
-                  <Button
-                    variant="link"
-                    type="button"
-                    className="p-0 h-auto"
-                    onClick={handleSendMagicLink}
-                    disabled={loginMutation.isPending}
-                  >
-                    {t.sendMagicLink}
-                  </Button>
-                </div>
-                {magicLinkMessage && (
-                  <p className="text-sm text-green-600">{magicLinkMessage}</p>
-                )}
-                {magicLinkError && (
-                  <p className="text-sm text-red-500">{magicLinkError}</p>
-                )}
                 <Button
                   type="submit"
                   className="w-full"

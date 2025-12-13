@@ -12,7 +12,6 @@ import { sendEmail, getWelcomeEmailContent } from "./emailService";
 import {
   User as SelectUser,
   type InsertUser,
-  shopProfileSchema,
   emailVerificationTokens as emailVerificationTokensTable,
 } from "@shared/schema";
 import { db } from "./db";
@@ -24,6 +23,8 @@ import {
   verifyEmailLimiter,
   googleAuthLimiter,
   deleteAccountLimiter,
+  otpRequestLimiter,
+  otpVerifyLimiter,
 } from "./security/rateLimiters";
 import { sanitizeUser } from "./security/sanitizeUser";
 import {
@@ -53,6 +54,78 @@ const normalizedGoogleCallbackBaseUrl = GOOGLE_CALLBACK_BASE_URL
   ? GOOGLE_CALLBACK_BASE_URL.replace(/\/$/, "")
   : null;
 
+type OtpRecord = {
+  hash: string;
+  expiresAt: number;
+  attempts: number;
+};
+
+type OtpErrorReason = "missing" | "expired" | "too_many_attempts" | "mismatch";
+
+type OtpValidationResult =
+  | { valid: true }
+  | {
+      valid: false;
+      reason: OtpErrorReason;
+    };
+
+const OTP_TTL_MS = 10 * 60 * 1000;
+const MAX_OTP_ATTEMPTS = 5;
+const otpStore = new Map<string, OtpRecord>();
+
+function createOtpForPhone(phone: string) {
+  const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
+  const hash = createHash("sha256").update(otp).digest("hex");
+  otpStore.set(phone, {
+    hash,
+    expiresAt: Date.now() + OTP_TTL_MS,
+    attempts: 0,
+  });
+  return otp;
+}
+
+function validateOtpForPhone(phone: string, otp: string): OtpValidationResult {
+  const entry = otpStore.get(phone);
+  if (!entry) {
+    return { valid: false, reason: "missing" };
+  }
+  if (entry.expiresAt < Date.now()) {
+    otpStore.delete(phone);
+    return { valid: false, reason: "expired" };
+  }
+  if (entry.attempts >= MAX_OTP_ATTEMPTS) {
+    otpStore.delete(phone);
+    return { valid: false, reason: "too_many_attempts" };
+  }
+
+  const hashedAttempt = createHash("sha256").update(otp).digest("hex");
+  const isMatch = timingSafeEqual(
+    Buffer.from(entry.hash, "hex"),
+    Buffer.from(hashedAttempt, "hex"),
+  );
+  entry.attempts += 1;
+  if (!isMatch) {
+    otpStore.set(phone, entry);
+    return { valid: false, reason: "mismatch" };
+  }
+  otpStore.delete(phone);
+  return { valid: true };
+}
+
+function describeOtpError(reason: OtpErrorReason) {
+  switch (reason) {
+    case "expired":
+      return "The code expired. Please request a new OTP.";
+    case "mismatch":
+      return "Incorrect OTP. Please try again.";
+    case "too_many_attempts":
+      return "Too many OTP attempts. Request a new code.";
+    case "missing":
+    default:
+      return "Please request an OTP to continue.";
+  }
+}
+
 if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
   logger.warn(
     "Google OAuth credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) are not set. Google Sign-In will not work.",
@@ -81,7 +154,37 @@ type PublicRegistrationRole = (typeof PUBLIC_REGISTRATION_ROLES)[number];
 
 const usernameRegex = /^[a-z0-9._-]+$/i;
 
-const registrationSchemaBase = z.object({
+const registrationSchema = z
+  .object({
+    phone: z
+      .string()
+      .trim()
+      .min(8, "Phone number must be at least 8 digits")
+      .max(20, "Phone number must be at most 20 digits")
+      .regex(/^\d+$/, "Phone number must contain digits only"),
+    otp: z
+      .string()
+      .trim()
+      .min(4, "Enter the code sent to your phone")
+      .max(6, "Enter the code sent to your phone"),
+    pin: z
+      .string()
+      .trim()
+      .regex(/^\d{4}$/, "PIN must be 4 digits"),
+    role: z.enum(PUBLIC_REGISTRATION_ROLES).default("customer"),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(100, "Name must be at most 100 characters"),
+    language: z.string().trim().max(10).optional(),
+    shopName: z.string().trim().max(120).optional(),
+    email: z.string().trim().email("Invalid email address").optional(),
+  })
+  .strict();
+
+const legacyRegistrationSchema = z
+  .object({
     username: z
       .string()
       .trim()
@@ -95,36 +198,26 @@ const registrationSchemaBase = z.object({
       .string()
       .min(8, "Password must be at least 8 characters long")
       .max(64, "Password must be at most 64 characters long"),
-    role: z
-      .enum(PUBLIC_REGISTRATION_ROLES)
-      .default("customer"),
+    role: z.enum(PUBLIC_REGISTRATION_ROLES).default("customer"),
     name: z
       .string()
       .trim()
       .min(1, "Name is required")
       .max(100, "Name must be at most 100 characters"),
+    phone: z.string().trim().max(20).optional().default(""),
+    email: z.string().trim().email("Invalid email address").optional(),
+    language: z.string().trim().max(10).optional(),
+  })
+  .strict();
+
+const otpRequestSchema = z
+  .object({
     phone: z
       .string()
       .trim()
       .min(8, "Phone number must be at least 8 digits")
       .max(20, "Phone number must be at most 20 digits")
       .regex(/^\d+$/, "Phone number must contain digits only"),
-    email: z
-      .string()
-      .trim()
-      .email("Invalid email address"),
-    language: z.string().trim().max(10).optional(),
-    bio: z.string().trim().max(1000).optional(),
-    experience: z.string().trim().max(200).optional(),
-    languages: z.string().trim().max(200).optional(),
-    shopProfile: shopProfileSchema.optional(),
-  });
-
-const registrationSchema = registrationSchemaBase
-  .extend({
-    emailVerified: z.boolean().optional(),
-    averageRating: z.string().optional(),
-    totalReviews: z.number().int().optional(),
   })
   .strict();
 
@@ -249,34 +342,66 @@ export function initializeAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
-    new LocalStrategy(async (identifier, password, done) => {
-      const normalizedUsername = normalizeUsername(identifier);
-      const normalizedEmail = normalizeEmail(identifier);
-      const normalizedPhone = normalizePhone(identifier);
+    new LocalStrategy(
+      {
+        usernameField: "phone",
+        passwordField: "pin",
+        passReqToCallback: true,
+      },
+      async (
+        reqOrIdentifier: any,
+        maybeIdentifier: string,
+        maybePin: string,
+        maybeDone: any,
+      ) => {
+        // Support both signatures: (username, password, done) and (req, username, password, done)
+        let req: any = reqOrIdentifier;
+        let identifier = maybeIdentifier;
+        let pin = maybePin;
+        let done = maybeDone;
+        if (typeof reqOrIdentifier === "string" || typeof reqOrIdentifier === "function") {
+          req = undefined;
+          identifier = reqOrIdentifier as unknown as string;
+          pin = maybeIdentifier as unknown as string;
+          done = maybePin as any;
+        }
 
-      let userRecord =
-        normalizedUsername !== null
-          ? await storage.getUserByUsername(normalizedUsername)
-          : undefined;
-      if (!userRecord && normalizedEmail) {
-        userRecord = await storage.getUserByEmail(normalizedEmail);
-      }
-      if (!userRecord && normalizedPhone) {
-        userRecord = await storage.getUserByPhone(normalizedPhone);
-      }
-      if (
-        !userRecord ||
-        !(await comparePasswords(password, (userRecord as SelectUser).password))
-      ) {
-        return done(null, false);
-      }
-      // Block suspended users from logging in
-      if ((userRecord as any)?.isSuspended) {
-        return done(null, false);
-      }
-      const sanitizedUser = sanitizeUser(userRecord);
-      return done(null, sanitizedUser ?? false);
-    }),
+        const providedIdentifier =
+          req?.body?.phone ??
+          req?.body?.identifier ??
+          req?.body?.username ??
+          identifier ??
+          "";
+        const secret = req?.body?.pin ?? req?.body?.password ?? pin ?? "";
+
+        const normalizedPhone = normalizePhone(providedIdentifier);
+        const normalizedEmail = normalizeEmail(providedIdentifier);
+        const normalizedUsername = normalizeUsername(providedIdentifier);
+
+        let userRecord =
+          normalizedPhone !== null
+            ? await storage.getUserByPhone(normalizedPhone)
+            : undefined;
+        if (!userRecord && normalizedEmail) {
+          userRecord = await storage.getUserByEmail(normalizedEmail);
+        }
+        if (!userRecord && normalizedUsername) {
+          userRecord = await storage.getUserByUsername(normalizedUsername);
+        }
+        if (
+          !userRecord ||
+          !(await comparePasswords(secret, (userRecord as SelectUser).password))
+        ) {
+          return done(null, false);
+        }
+        // Block suspended users from logging in
+        if ((userRecord as any)?.isSuspended) {
+          return done(null, false);
+        }
+        const sanitizedUser = sanitizeUser(userRecord);
+        return done(null, sanitizedUser ?? false);
+      },
+    ),
   );
 
   if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && normalizedGoogleCallbackBaseUrl) {
@@ -382,6 +507,7 @@ export function initializeAuth(app: Express) {
               emailVerified: profile.emails?.[0].verified || false, // Capture email_verified status
               profilePicture: profile.photos?.[0].value,
               googleId: profile.id,
+              phone: "",
             };
             logger.info(
               `[Google OAuth] New user data before username check for ${newUser.username}`,
@@ -427,6 +553,12 @@ export function initializeAuth(app: Express) {
             if (normalizedGoogleEmail) {
               newUser.email = normalizedGoogleEmail;
             }
+            const normalizedGooglePhone =
+              normalizePhone(profile._json?.phone_number) ??
+              normalizePhone(profile.id);
+            newUser.phone =
+              normalizedGooglePhone ??
+              Math.floor(1_000_000_000 + Math.random() * 9_000_000_000).toString();
             logger.info(
               `[Google OAuth] Final username for new user: ${newUser.username}`,
             );
@@ -442,7 +574,7 @@ export function initializeAuth(app: Express) {
               password: await hashPasswordInternal(
                 randomBytes(16).toString("hex"),
               ),
-              phone: "", // Ensure phone is provided or handled if it's a required field with no default
+              phone: newUser.phone,
               averageRating: "0",
               totalReviews: 0,
             };
@@ -501,99 +633,190 @@ export function initializeAuth(app: Express) {
 }
 
 export function registerAuthRoutes(app: Express) {
-  app.post("/api/register", registerLimiter, async (req, res, next) => {
-    const parsedBody = registrationSchema.safeParse(req.body);
-    if (!parsedBody.success) {
-      return res.status(400).json({
-        message: "Invalid input",
-        errors: parsedBody.error.errors,
-      });
+  app.post("/api/auth/request-otp", otpRequestLimiter, async (req, res) => {
+    const parsed = otpRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid phone number" });
     }
-
-    const validatedData = parsedBody.data;
-    const normalizedUsername = normalizeUsername(validatedData.username);
-    const normalizedEmail = normalizeEmail(validatedData.email);
-    const normalizedPhone = normalizePhone(validatedData.phone);
-
-    if (!normalizedUsername) {
-      return res.status(400).json({ message: "Username is invalid" });
-    }
-    if (!normalizedEmail) {
-      return res.status(400).json({ message: "Email is invalid" });
-    }
+    const normalizedPhone = normalizePhone(parsed.data.phone);
     if (!normalizedPhone) {
       return res.status(400).json({ message: "Phone number is invalid" });
     }
+    const otp = createOtpForPhone(normalizedPhone);
+    const existingUser = await storage.getUserByPhone(normalizedPhone);
+    logger.info("[Auth] OTP generated for phone %s", normalizedPhone);
+    return res.json({
+      success: true,
+      userExists: Boolean(existingUser),
+      otpPreview:
+        process.env.NODE_ENV === "production" ? undefined : otp,
+    });
+  });
 
-    try {
+  app.post("/api/register", registerLimiter, otpVerifyLimiter, async (req, res, next) => {
+    const parsedNew = registrationSchema.safeParse(req.body);
+    const parsedLegacy = parsedNew.success
+      ? null
+      : legacyRegistrationSchema.safeParse(req.body);
+
+    if (!parsedNew.success && !parsedLegacy?.success) {
+      return res.status(400).json({
+        message: "Invalid input",
+        errors: parsedLegacy?.error?.errors ?? parsedNew.error.errors,
+      });
+    }
+
+    if (parsedLegacy?.success) {
+      const { username, password, role, name, phone, email, language } =
+        parsedLegacy.data;
+      const normalizedUsername = normalizeUsername(username);
+      const normalizedEmail = email ? normalizeEmail(email) : null;
+      const normalizedPhone = normalizePhone(phone);
+
+      if (!normalizedUsername) {
+        return res.status(400).json({ message: "Username is invalid" });
+      }
+
       const existingUser = await storage.getUserByUsername(normalizedUsername);
       if (existingUser) {
         return res.status(400).json({ message: "Username already exists" });
       }
 
-      const existingEmail = await storage.getUserByEmail(normalizedEmail);
-      if (existingEmail) {
-        return res.status(400).json({ message: "Email already in use" });
+      if (normalizedEmail) {
+        const existingEmail = await storage.getUserByEmail(normalizedEmail);
+        if (existingEmail) {
+          return res.status(400).json({ message: "Email already in use" });
+        }
       }
 
-      if (normalizedPhone.length > 0) {
+      if (normalizedPhone) {
         const existingByPhone = await storage.getUserByPhone(normalizedPhone);
         if (existingByPhone) {
           return res.status(400).json({ message: "Phone number already in use" });
         }
       }
 
+      try {
+        const userToCreate: InsertUser = {
+          username: normalizedUsername,
+          password: await hashPasswordInternal(password),
+          role,
+          name: name.trim(),
+          phone: normalizedPhone ?? "",
+          email: normalizedEmail ?? "",
+          language: language ?? "en",
+          emailVerified: false,
+          averageRating: "0",
+          totalReviews: 0,
+        };
+
+        const user = await storage.createUser(userToCreate);
+        const safeUser = sanitizeUser(user);
+        if (!safeUser) {
+          return res
+            .status(500)
+            .json({ message: "Unable to create user. Please try again." });
+        }
+
+        req.login(safeUser as Express.User, (err) => {
+          if (err) return next(err);
+          return res.status(201).json(safeUser);
+        });
+      } catch (error) {
+        logger.error({ err: error }, "Failed to register user");
+        return res.status(500).json({ message: "Failed to register user" });
+      }
+      return;
+    }
+
+    if (!parsedNew.success) {
+      return res.status(400).json({
+        message: "Invalid input",
+        errors: parsedNew.error.errors,
+      });
+    }
+
+    const { phone, otp, pin, role, name, language, shopName, email } =
+      parsedNew.data;
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Phone number is invalid" });
+    }
+    const trimmedOtp = otp.trim();
+
+    const existingByPhone = await storage.getUserByPhone(normalizedPhone);
+    if (existingByPhone) {
+      return res.status(400).json({ message: "Phone number already in use" });
+    }
+
+    const otpResult = validateOtpForPhone(normalizedPhone, trimmedOtp);
+    if (!otpResult.valid) {
+      return res.status(400).json({
+        message: describeOtpError(otpResult.reason),
+      });
+    }
+
+    const normalizedEmail = email ? normalizeEmail(email) : null;
+    if (normalizedEmail) {
+      const existingEmail = await storage.getUserByEmail(normalizedEmail);
+      if (existingEmail) {
+        return res.status(400).json({ message: "Email already in use" });
+      }
+    }
+
+    let usernameBase =
+      normalizeUsername(name.replace(/\s+/g, "")) ??
+      (normalizedPhone ? `user${normalizedPhone.slice(-4)}` : "user");
+    if (!usernameBase || usernameBase.length < 3) {
+      usernameBase = `user${randomBytes(2).toString("hex")}`;
+    }
+    let username = usernameBase;
+    let attempt = 1;
+    while (await storage.getUserByUsername(username)) {
+      username = `${usernameBase}${attempt}`;
+      attempt += 1;
+      if (attempt > 20) {
+        usernameBase = `${usernameBase}${randomBytes(2).toString("hex")}`;
+      }
+    }
+
+    const cleanedName = name.trim();
+    const resolvedShopName =
+      role === "shop"
+        ? shopName?.trim() || `${cleanedName}'s Shop`
+        : null;
+
+    try {
       const userToCreate: InsertUser = {
-        username: normalizedUsername,
-        password: await hashPasswordInternal(validatedData.password),
-        role: validatedData.role,
-        name: validatedData.name.trim(),
+        username,
+        password: await hashPasswordInternal(pin),
+        role,
+        name: cleanedName,
         phone: normalizedPhone,
-        email: normalizedEmail,
-        language: validatedData.language ?? "en",
-        bio:
-          validatedData.role === "provider"
-            ? validatedData.bio?.trim() ?? null
-            : null,
-        experience:
-          validatedData.role === "provider"
-            ? validatedData.experience?.trim() ?? null
-            : null,
-        languages:
-          validatedData.role === "provider"
-            ? validatedData.languages?.trim() ?? null
-            : null,
-        shopProfile:
-          validatedData.role === "shop"
-            ? validatedData.shopProfile ?? null
-            : null,
+        email: normalizedEmail ?? "",
+        language: language ?? "en",
         emailVerified: false,
         averageRating: "0",
         totalReviews: 0,
       };
 
-      const user = await storage.createUser(userToCreate);
-
-      const verificationToken = await generateEmailVerificationToken(user.id);
-      const verificationLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify-email?token=${verificationToken}&userId=${user.id}`;
-
-      const welcomeContent = getWelcomeEmailContent(
-        user.name || user.username,
-        verificationLink,
-      );
-      if (user.email) {
-        await sendEmail({
-          to: user.email,
-          subject: welcomeContent.subject,
-          text: welcomeContent.text,
-          html: welcomeContent.html,
-        });
-      } else {
-        logger.warn(
-          "[Auth] Skipping verification email because registered user has no email address.",
-        );
+      if (role === "shop" && resolvedShopName) {
+        userToCreate.shopProfile = {
+          shopName: resolvedShopName,
+          businessType: "general",
+          description: "Update your shop description in profile settings",
+          catalogModeEnabled: false,
+          openOrderMode: false,
+          allowPayLater: false,
+          workingHours: {
+            from: "09:00",
+            to: "18:00",
+            days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          },
+        };
       }
 
+      const user = await storage.createUser(userToCreate);
       const safeUser = sanitizeUser(user);
       if (!safeUser) {
         return res

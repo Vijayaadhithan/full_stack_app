@@ -93,3 +93,14 @@ export const usernameLookupLimiter = buildLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
   max: 30,
 });
+
+export const otpRequestLimiter = buildLimiter({
+  windowMs: FIFTEEN_MINUTES_MS,
+  max: 5,
+  message: { message: "Too many OTP requests. Try later." },
+});
+
+export const otpVerifyLimiter = buildLimiter({
+  windowMs: FIFTEEN_MINUTES_MS,
+  max: 20,
+});
