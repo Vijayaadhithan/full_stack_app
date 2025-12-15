@@ -247,6 +247,11 @@ export default function OrderDetails() {
     order?.shop?.latitude != null && order?.shop?.longitude != null;
   const customerCoordinatesAvailable =
     order?.customer?.latitude != null && order?.customer?.longitude != null;
+  const numericTotal = order ? Number.parseFloat(String(order.total)) : NaN;
+  const isTextOrderAwaitingQuote =
+    order?.orderType === "text_order" &&
+    (!Number.isFinite(numericTotal) || numericTotal <= 0);
+  const isPayLater = order?.paymentMethod === "pay_later";
 
   return (
     <DashboardLayout>
@@ -266,10 +271,26 @@ export default function OrderDetails() {
         {order?.paymentStatus === "pending" && order?.shopId && (
           <Card>
             <CardHeader>
-              <CardTitle>Complete Payment</CardTitle>
+              <CardTitle>
+                {isTextOrderAwaitingQuote
+                  ? "Waiting for bill price"
+                  : isPayLater
+                    ? "Pay Later (Khata)"
+                    : "Complete Payment"}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {order.paymentMethod === "upi" ? (
+              {isTextOrderAwaitingQuote ? (
+                <p className="text-sm">
+                  The shop will review your quick order and set the final bill
+                  price. You'll be notified once it's ready.
+                </p>
+              ) : isPayLater ? (
+                <p className="text-sm">
+                  Your Pay Later request is pending approval. The shop owner
+                  will approve credit before processing your order.
+                </p>
+              ) : order.paymentMethod === "upi" ? (
                 <>
                   <div>
                     <p className="font-medium">
@@ -301,9 +322,16 @@ export default function OrderDetails() {
                     </Button>
                   </div>
                 </>
-              ) : (
+              ) : order.paymentMethod === "cash" ? (
                 <p className="font-medium">
-                  Pay ₹{order?.total} in cash when you pick up your order.
+                  Pay ₹{order?.total} in cash{" "}
+                  {order.deliveryMethod === "delivery"
+                    ? "on delivery."
+                    : "when you pick up your order."}
+                </p>
+              ) : (
+                <p className="text-sm">
+                  Payment is pending. Please check back shortly.
                 </p>
               )}
             </CardContent>
@@ -313,10 +341,17 @@ export default function OrderDetails() {
         {order?.paymentStatus === "verifying" && (
           <Card>
             <CardContent>
-              <p className="text-sm">
-                Payment verification in progress. The shop owner has been
-                notified and will confirm your payment shortly.
-              </p>
+              {isPayLater ? (
+                <p className="text-sm">
+                  Pay Later has been approved by the shop. Please settle the
+                  amount on delivery or pickup.
+                </p>
+              ) : (
+                <p className="text-sm">
+                  Payment verification in progress. The shop owner has been
+                  notified and will confirm your payment shortly.
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
@@ -388,31 +423,39 @@ export default function OrderDetails() {
             <CardTitle>Items</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {order?.items?.map((item) => (
-              <div
-                key={item.id}
-                className="flex justify-between items-center"
-              >
-                <p>
-                  {item.name} × {item.quantity}
-                </p>
-                {order?.status === "delivered" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      item.productId &&
-                      setSelectedProduct({
-                        id: item.productId,
-                        name: item.name,
-                      })
-                    }
-                  >
-                    Leave Review
-                  </Button>
-                )}
+            {order?.orderType === "text_order" ? (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
+                {order.orderText?.trim().length
+                  ? order.orderText
+                  : "No items provided."}
               </div>
-            ))}
+            ) : (
+              order?.items?.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex justify-between items-center"
+                >
+                  <p>
+                    {item.name} × {item.quantity}
+                  </p>
+                  {order?.status === "delivered" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        item.productId &&
+                        setSelectedProduct({
+                          id: item.productId,
+                          name: item.name,
+                        })
+                      }
+                    >
+                      Leave Review
+                    </Button>
+                  )}
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
         <Card>

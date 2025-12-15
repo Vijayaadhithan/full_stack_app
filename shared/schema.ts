@@ -519,6 +519,11 @@ export const orders = pgTable(
     id: serial("id").primaryKey(),
     customerId: integer("customer_id").references(() => users.id),
     shopId: integer("shop_id").references(() => users.id),
+    orderType: text("order_type")
+      .$type<"product_order" | "text_order">()
+      .notNull()
+      .default("product_order"),
+    orderText: text("order_text"),
     status: text("status")
       .$type<
         | "pending"
@@ -862,6 +867,8 @@ export type InsertProduct = z.infer<typeof insertProductSchema>;
 
 export const insertOrderSchema = createInsertSchema(orders, {
   paymentMethod: PaymentMethodType.nullable().optional(),
+  orderType: z.enum(["product_order", "text_order"]).optional(),
+  orderText: z.string().optional().nullable(),
 }).strict();
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;

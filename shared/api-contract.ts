@@ -165,6 +165,8 @@ export const orderDetailSchema = z.object({
   id: z.number(),
   customerId: z.number().nullable(),
   shopId: z.number().nullable(),
+  orderType: z.enum(["product_order", "text_order"]),
+  orderText: nullableString,
   status: orderStatusSchema,
   paymentStatus: paymentStatusSchema.nullable(),
   deliveryMethod: z.enum(["delivery", "pickup"]).nullable(),

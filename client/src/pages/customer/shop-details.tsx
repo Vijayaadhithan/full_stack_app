@@ -412,6 +412,11 @@ export default function ShopDetails() {
                 <p className="mt-4">
                   {shop.shopProfile?.description ?? "No description available"}
                 </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link href={`/customer/shops/${shop.id}/quick-order`}>
+                    <Button>Quick Order</Button>
+                  </Link>
+                </div>
               </div>
             </div>
           </CardContent>

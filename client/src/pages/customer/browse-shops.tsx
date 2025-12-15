@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Loader2, Store, MapPin, Filter } from "lucide-react";
 import {
   Popover,
@@ -80,6 +80,7 @@ function computeDistance(
 export default function BrowseShops() {
   const locationFilter = useLocationFilter({ storageKey: "shops-radius" });
   const { user } = useAuth();
+  const [, navigate] = useLocation();
   const [filters, setFilters] = useState({
     searchQuery: "",
     locationCity: "",
@@ -316,9 +317,24 @@ export default function BrowseShops() {
                               "No description available"}
                           </p>
                           <div className="mt-auto pt-2">
-                            <Button variant="outline" className="w-full">
-                              View Shop
-                            </Button>
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button variant="outline" className="w-full">
+                                View Shop
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                className="w-full"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  navigate(
+                                    `/customer/shops/${shop.id}/quick-order`,
+                                  );
+                                }}
+                              >
+                                Quick Order
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </CardContent>

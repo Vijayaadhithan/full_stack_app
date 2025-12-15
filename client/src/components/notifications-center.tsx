@@ -13,7 +13,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Notification } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLanguage } from "@/contexts/language-context";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
@@ -25,8 +25,9 @@ export function NotificationsCenter() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [, navigate] = useLocation();
+  const lastSeenNotificationIdRef = useRef<number | null>(null);
 
-  const { data: notificationsData } = useQuery<{
+  const { data: notificationsData, isFetched } = useQuery<{
     data: Notification[];
     total: number;
     totalPages: number;
@@ -34,7 +35,7 @@ export function NotificationsCenter() {
     queryKey: ["/api/notifications"],
   });
 
-  const notifications = notificationsData?.data;
+  const notifications = notificationsData?.data ?? [];
 
   const markAsReadMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -146,14 +147,15 @@ export function NotificationsCenter() {
   });
 
   // Filter notifications based on user role
-  const filteredNotifications =
-    notifications?.filter((notification) => {
-      if (!user) return false;
+  const filteredNotifications = useMemo(() => {
+    if (!user) return [];
 
+    return notifications.filter((notification) => {
       // Shop owners should only see shop/order/return notifications
       if (user.role === "shop") {
         return ["order", "shop", "return"].includes(notification.type);
       }
+
       // Service providers should see service/booking notifications
       // and specifically service request notifications
       if (user.role === "provider") {
@@ -170,25 +172,118 @@ export function NotificationsCenter() {
           notification.type,
         );
       }
+
       // Customers should see all relevant notifications
       return true;
-    }) || [];
+    });
+  }, [notifications, user]);
 
   // Sort notifications with unread first, then by date
-  const sortedNotifications = [...filteredNotifications].sort((a, b) => {
-    // First sort by read status (unread first)
-    if (a.isRead !== b.isRead) {
-      return a.isRead ? 1 : -1;
-    }
-    // Then sort by date (newest first) - ensure we're comparing dates properly
-    return (
-      new Date(b.createdAt || 0).getTime() -
-      new Date(a.createdAt || 0).getTime()
-    );
-  });
+  const sortedNotifications = useMemo(() => {
+    return [...filteredNotifications].sort((a, b) => {
+      // First sort by read status (unread first)
+      if (a.isRead !== b.isRead) {
+        return a.isRead ? 1 : -1;
+      }
+      // Then sort by date (newest first) - ensure we're comparing dates properly
+      return (
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime()
+      );
+    });
+  }, [filteredNotifications]);
 
   const unreadCount =
     filteredNotifications.filter((n) => !n.isRead).length || 0;
+
+  const playAttentionSound = () => {
+    if (typeof window === "undefined") return;
+
+    const AudioContextCtor =
+      window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    try {
+      const context = new AudioContextCtor();
+      void context.resume().catch(() => undefined);
+
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+
+      oscillator.type = "square";
+      oscillator.frequency.setValueAtTime(880, context.currentTime);
+
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.35, context.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.45);
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.5);
+      oscillator.onended = () => {
+        void context.close().catch(() => undefined);
+      };
+    } catch {
+      // Ignore sound errors (browser autoplay restrictions, etc.)
+    }
+  };
+
+  useEffect(() => {
+    if (!user || user.role !== "shop") return;
+    if (!isFetched) return;
+    if (open) return;
+
+    const maxId = filteredNotifications.length
+      ? Math.max(...filteredNotifications.map((n) => n.id))
+      : 0;
+    const lastSeen = lastSeenNotificationIdRef.current;
+
+    if (lastSeen == null) {
+      lastSeenNotificationIdRef.current = maxId;
+      return;
+    }
+
+    if (maxId <= lastSeen) return;
+
+    const newUnread = filteredNotifications.filter(
+      (notification) => notification.id > lastSeen && !notification.isRead,
+    );
+    lastSeenNotificationIdRef.current = maxId;
+
+    const shouldAlert = newUnread.some((notification) => {
+      if (notification.type !== "order") return false;
+      const title = (notification.title || "").toLowerCase();
+      const message = (notification.message || "").toLowerCase();
+      return (
+        title.includes("pay later") ||
+        title.includes("quick order") ||
+        message.includes("credit approval") ||
+        message.includes("quick order")
+      );
+    });
+
+    if (!shouldAlert) return;
+
+    playAttentionSound();
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try {
+        navigator.vibrate?.([250, 120, 250]);
+      } catch {
+        // ignore
+      }
+    }
+
+    const highlight =
+      newUnread.find((notification) => notification.type === "order") ?? newUnread[0];
+    if (highlight) {
+      toast({
+        title: highlight.title || "New order notification",
+        description: highlight.message || "A new order needs your attention.",
+      });
+    }
+  }, [filteredNotifications, isFetched, open, toast, user]);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -205,14 +300,30 @@ export function NotificationsCenter() {
     }
   };
 
+  const extractEntityId = (notification: Notification) => {
+    const haystack = `${notification.title ?? ""} ${notification.message ?? ""}`;
+    const byExplicitId = haystack.match(/ID:\s*(\d+)/i);
+    if (byExplicitId?.[1]) return byExplicitId[1];
+
+    const byOrder = haystack.match(/\border\s*#\s*(\d+)/i);
+    if (byOrder?.[1]) return byOrder[1];
+
+    const byBooking = haystack.match(/\bbooking\s*#\s*(\d+)/i);
+    if (byBooking?.[1]) return byBooking[1];
+
+    const byHash = haystack.match(/#\s*(\d+)/);
+    if (byHash?.[1]) return byHash[1];
+
+    return undefined;
+  };
+
   // Function to navigate to the relevant page based on notification type and content
   const navigateToRelevantPage = (notification: Notification) => {
     // Close the notification panel
     setOpen(false);
 
     // Extract any IDs from the notification message if present
-    const idMatch = notification.message?.match(/ID: (\d+)/) || [];
-    const id = idMatch[1];
+    const id = extractEntityId(notification);
 
     // Navigate based on notification type and user role
     switch (notification.type) {

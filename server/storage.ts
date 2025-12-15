@@ -1715,6 +1715,10 @@ export class MemStorage implements IStorage {
       id,
       customerId: order.customerId === undefined ? null : order.customerId,
       shopId: order.shopId === undefined ? null : order.shopId,
+      orderType: (order.orderType ?? "product_order") as
+        | "product_order"
+        | "text_order",
+      orderText: order.orderText === undefined ? null : order.orderText,
       status: "pending" as "pending",
       paymentStatus: (order.paymentStatus ?? "pending") as
         | "pending"

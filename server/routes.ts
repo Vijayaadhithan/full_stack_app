@@ -5729,6 +5729,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  const textOrderCreateSchema = z
+    .object({
+      shopId: z.number().int().positive(),
+      orderText: z.string().trim().min(3).max(2000),
+      deliveryMethod: z.enum(["delivery", "pickup"]).optional().default("pickup"),
+    })
+    .strict();
+
+  app.post(
+    "/api/orders/text",
+    requireAuth,
+    requireRole(["customer"]),
+    async (req, res) => {
+      if (
+        !ensureProfileVerified(
+          req as RequestWithAuth,
+          res,
+          "place orders",
+        )
+      ) {
+        return;
+      }
+
+      const parsed = textOrderCreateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json(formatValidationError(parsed.error));
+      }
+
+      try {
+        const customer = req.user!;
+        const { shopId, orderText, deliveryMethod } = parsed.data;
+
+        const shop = await storage.getUser(shopId);
+        if (!shop || shop.role !== "shop") {
+          return res.status(404).json({ message: "Shop not found" });
+        }
+
+        const customerAddress = formatUserAddress(customer);
+        const shopAddress = formatUserAddress(shop);
+        const derivedShippingAddress =
+          deliveryMethod === "delivery" ? customerAddress : shopAddress;
+        const shippingAddress = derivedShippingAddress || "";
+        const derivedBillingAddress =
+          deliveryMethod === "delivery" ? customerAddress : shopAddress;
+
+        const newOrder = await storage.createOrder({
+          customerId: customer.id,
+          shopId,
+          orderType: "text_order",
+          orderText,
+          status: "pending",
+          paymentStatus: "pending",
+          deliveryMethod,
+          paymentMethod: "cash",
+          total: "0.00",
+          shippingAddress,
+          billingAddress: derivedBillingAddress || "",
+          notes: "Quick order: shop will confirm price and availability.",
+          orderDate: new Date(),
+        });
+
+        const preview =
+          orderText.length > 180 ? `${orderText.slice(0, 177)}...` : orderText;
+        await storage.createNotification({
+          userId: shopId,
+          type: "order",
+          title: "New Quick Order",
+          message: `Order #${newOrder.id}: ${preview}`,
+        });
+
+        return res.status(201).json({ order: newOrder });
+      } catch (error) {
+        logger.error("Text order creation error:", error);
+        return res.status(400).json({
+          message:
+            error instanceof Error ? error.message : "Failed to create order",
+        });
+      }
+    },
+  );
+
   app.post(
     "/api/orders/:id/payment",
     requireAuth,
@@ -6500,6 +6581,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ? error.message
                 : "Failed to approve pay-later request",
           });
+      }
+    },
+  );
+
+  const quoteTextOrderSchema = z
+    .object({
+      total: z.string().or(z.number()),
+      note: z.string().trim().max(500).optional(),
+    })
+    .strict();
+
+  app.post(
+    "/api/orders/:id/quote-text-order",
+    requireAuth,
+    requireShopOrWorkerPermission(["orders:update"]),
+    async (req, res) => {
+      const orderId = getValidatedParam(req, "id");
+      const parsedBody = quoteTextOrderSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+
+      try {
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res
+            .status(403)
+            .json({ message: "Unable to resolve shop context" });
+        }
+
+        const order = await storage.getOrder(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        if (order.shopId !== shopContextId) {
+          return res.status(403).json({ message: "Not authorized" });
+        }
+        if (order.orderType !== "text_order") {
+          return res
+            .status(400)
+            .json({ message: "Order is not a quick/text order" });
+        }
+
+        const numericTotal =
+          typeof parsedBody.data.total === "number"
+            ? parsedBody.data.total
+            : Number(parsedBody.data.total);
+        if (!Number.isFinite(numericTotal) || numericTotal <= 0) {
+          return res.status(400).json({ message: "Invalid total amount" });
+        }
+        const totalString = Number(numericTotal.toFixed(2)).toFixed(2);
+
+        const note = parsedBody.data.note?.trim();
+        const nextNotes = [
+          order.notes?.trim() ? order.notes.trim() : null,
+          note ? `Shop note: ${note}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        let updated = await storage.updateOrder(orderId, {
+          total: totalString,
+          paymentMethod: order.paymentMethod ?? "cash",
+          notes: nextNotes || null,
+        });
+
+        if (order.status === "pending") {
+          updated = await storage.updateOrderStatus(orderId, "confirmed");
+        }
+
+        if (order.customerId) {
+          await storage.createNotification({
+            userId: order.customerId,
+            type: "order",
+            title: "Quick Order priced",
+            message: `Order #${orderId} has been priced at ₹${totalString}. Please pay on pickup/delivery.`,
+          });
+        }
+
+        res.json(updated);
+      } catch (error) {
+        logger.error("Error quoting text order:", error);
+        res.status(500).json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to quote text order",
+        });
       }
     },
   );

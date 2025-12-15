@@ -29,6 +29,7 @@ const BookService = lazy(() => import("@/pages/customer/book-service"));
 const BrowseProducts = lazy(() => import("@/pages/customer/browse-products"));
 const BrowseShops = lazy(() => import("@/pages/customer/browse-shops"));
 const ShopDetails = lazy(() => import("@/pages/customer/shop-details"));
+const QuickOrder = lazy(() => import("@/pages/customer/quick-order"));
 const ProductDetails = lazy(() => import("./pages/customer/product-details")); // Import the new component
 const Cart = lazy(() => import("@/pages/customer/cart"));
 const Wishlist = lazy(() => import("@/pages/customer/wishlist"));
@@ -147,6 +148,11 @@ function Router() {
       <Route path="/customer/browse-products" component={BrowseProducts} />
       <Route path="/customer/browse-shops" component={BrowseShops} />
       <Route path="/customer/shops/:id" component={ShopDetails} />
+      <ProtectedRoute
+        path="/customer/shops/:id/quick-order"
+        component={QuickOrder}
+        roles={["customer"]}
+      />
       <Route
         path="/customer/shops/:shopId/products/:productId"
         component={ProductDetails}
