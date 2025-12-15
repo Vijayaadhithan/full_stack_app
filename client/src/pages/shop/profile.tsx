@@ -71,6 +71,7 @@ const shopProfileSchema = z.object({
   catalogModeEnabled: z.boolean().optional(),
   openOrderMode: z.boolean().optional(),
   allowPayLater: z.boolean().optional(),
+  payLaterWhitelist: z.array(z.number()).optional(),
   workingHours: z.object({
     from: z.string().min(1, "Opening time is required"),
     to: z.string().min(1, "Closing time is required"),
@@ -116,6 +117,7 @@ export default function ShopProfile() {
         user?.shopProfile?.catalogModeEnabled ??
         false,
       allowPayLater: user?.shopProfile?.allowPayLater ?? false,
+      payLaterWhitelist: user?.shopProfile?.payLaterWhitelist ?? [],
       workingHours: user?.shopProfile?.workingHours || {
         from: "09:00",
         to: "18:00",
@@ -153,6 +155,7 @@ export default function ShopProfile() {
           user.shopProfile.catalogModeEnabled ??
           false,
         allowPayLater: user.shopProfile.allowPayLater ?? false,
+        payLaterWhitelist: user.shopProfile.payLaterWhitelist ?? [],
         workingHours: user.shopProfile.workingHours || {
           from: "09:00",
           to: "18:00",
@@ -671,9 +674,9 @@ export default function ShopProfile() {
                       render={({ field }) => (
                         <FormItem className="flex items-center justify-between rounded-md border p-3 shadow-sm">
                           <div className="space-y-0.5">
-                            <FormLabel>Enable Pay Later for known customers</FormLabel>
+                            <FormLabel>Enable Pay Later / Khata</FormLabel>
                             <p className="text-xs text-muted-foreground">
-                              Customers with a history can request Pay Later. You must approve before processing.
+                              Repeat or whitelisted customers can request Pay Later. Orders stay pending until you approve credit.
                             </p>
                           </div>
                           <FormControl>

@@ -52,6 +52,11 @@ type ShopInfo = {
   catalogModeEnabled?: boolean;
   openOrderMode?: boolean;
   allowPayLater?: boolean;
+  payLaterEligibilityForCustomer?: {
+    eligible: boolean;
+    isKnownCustomer: boolean;
+    isWhitelisted: boolean;
+  };
 };
 
 export default function Cart() {
@@ -113,16 +118,24 @@ export default function Cart() {
   const openOrderEnabled = Boolean(
     shopInfo?.catalogModeEnabled || shopInfo?.openOrderMode,
   );
+  const payLaterEligibility = shopInfo?.payLaterEligibilityForCustomer;
   const payLaterEnabled = Boolean(shopInfo?.allowPayLater);
+  const payLaterAvailable =
+    payLaterEnabled && (payLaterEligibility?.eligible ?? true);
   const openOrderWarning =
     openOrderEnabled &&
     (cartItems?.some((item) => item.product.stock <= 0) ?? false);
+  const payLaterDisabledReason = !payLaterEnabled
+    ? "Pay Later is disabled for this shop."
+    : payLaterEligibility && !payLaterEligibility.eligible
+      ? "Pay Later is limited to repeat or whitelisted customers. Ask the shop owner to whitelist you."
+      : undefined;
 
   useEffect(() => {
-    if (!payLaterEnabled && paymentMethod === "pay_later") {
+    if (!payLaterAvailable && paymentMethod === "pay_later") {
       setPaymentMethod("upi");
     }
-  }, [payLaterEnabled, paymentMethod]);
+  }, [payLaterAvailable, paymentMethod]);
 
   console.log("Cart items:", cartItems); // Debug log
 
@@ -667,12 +680,13 @@ export default function Cart() {
                   onChange={setPaymentMethod}
                   allowPayLater={payLaterEnabled}
                   disableCash={deliveryMethod === "delivery"}
-                  payLaterDisabledReason={
-                    payLaterEnabled
-                      ? undefined
-                      : "Pay Later is disabled for this shop."
-                  }
+                  payLaterDisabledReason={payLaterDisabledReason}
                 />
+                {paymentMethod === "pay_later" && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Pay Later orders are placed as pending approval. The shop owner will approve credit before processing.
+                  </p>
+                )}
                 {deliveryMethod === "delivery" && (
                   <p className="text-xs text-muted-foreground mt-2">
                     Cash on delivery is disabled. Choose UPI or Pay Later.

@@ -890,6 +890,10 @@ export class PostgresStorage implements IStorage {
   }
 
   async updateUser(id: number, updateData: Partial<User>): Promise<User> {
+    const existingUser = await this.getUser(id);
+    if (!existingUser) {
+      throw new Error("User not found");
+    }
     const normalizedUpdate: Partial<User> = { ...updateData };
 
     if (updateData.username !== undefined) {
@@ -921,17 +925,23 @@ export class PostgresStorage implements IStorage {
       normalizedUpdate.longitude = normalizeCoordinate(updateData.longitude);
     }
 
+    if (updateData.shopProfile !== undefined) {
+      normalizedUpdate.shopProfile = {
+        ...(existingUser.shopProfile ?? {}),
+        ...updateData.shopProfile,
+      } as any;
+    }
+
     // Calculate profile completeness if relevant fields are updated
     let profileCompleteness = normalizedUpdate.profileCompleteness;
     if (profileCompleteness === undefined) {
-      const currentUser = await this.getUser(id);
-      if (currentUser) {
-        const combinedData = { ...currentUser, ...normalizedUpdate };
+      if (existingUser) {
+        const combinedData = { ...existingUser, ...normalizedUpdate };
         let completedFields = 0;
         let totalProfileFields = 0;
         // Diagnostic logging to inspect calculation inputs
         logger.info("[updateUser] Combined data for user", id, combinedData);
-        if (currentUser.role === "customer") {
+        if (existingUser.role === "customer") {
           totalProfileFields = 4; // For customer: name, phone, email, full address. Profile picture is optional.
           if (combinedData.name) completedFields++;
           if (combinedData.phone) completedFields++;
@@ -945,15 +955,9 @@ export class PostgresStorage implements IStorage {
           )
             completedFields++;
           // Profile picture contributes if present, but isn't required for 100% of these base fields.
-          // If we want it to contribute to a score > 100 or be part of a 'bonus', that's a different logic.
-          // For now, let's say the base 4 fields make it 100% complete.
-          // If profilePicture is present, we can reflect that, but it won't prevent 100% if others are filled.
-          // To make it contribute but optional for 100%: one way is to have base 100% from 4 fields, and profile pic adds to it, or adjust total fields dynamically.
-          // Let's adjust totalProfileFields if profilePicture is present to reflect its contribution without making it mandatory for 100%.
-          // This approach is a bit complex for simple percentage. Simpler: 4 fields = 100%.
           // If profile picture is present, it's a bonus but doesn't change the 100% from core fields.
           // Let's stick to the 4 core fields for 100% customer completeness.
-        } else if (currentUser.role === "provider") {
+        } else if (existingUser.role === "provider") {
           totalProfileFields = 9; // name, phone, email, full address, bio, qualifications, experience, workingHours, languages
           if (combinedData.name) completedFields++;
           if (combinedData.phone) completedFields++;
@@ -973,7 +977,7 @@ export class PostgresStorage implements IStorage {
           if (combinedData.languages) completedFields++;
 
           // if (combinedData.verificationStatus === 'verified') completedFields++;
-        } else if (currentUser.role === "shop") {
+        } else if (existingUser.role === "shop") {
           totalProfileFields = 10;
           if (combinedData.name) completedFields++;
           if (combinedData.phone) completedFields++;
@@ -1031,10 +1035,8 @@ export class PostgresStorage implements IStorage {
     if (profileCompleteness !== undefined) {
       dataToSet.profileCompleteness = profileCompleteness;
       // If profile is 100% complete and current status is unverified, set to verified
-      const existingUser = await this.getUser(id);
       if (
         profileCompleteness === 100 &&
-        existingUser &&
         (existingUser.verificationStatus === "unverified" ||
           existingUser.verificationStatus === "pending")
       ) {

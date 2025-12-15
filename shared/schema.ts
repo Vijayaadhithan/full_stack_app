@@ -67,6 +67,7 @@ export type ShopProfile = {
   catalogModeEnabled: boolean;
   openOrderMode: boolean;
   allowPayLater: boolean;
+  payLaterWhitelist?: number[];
 };
 
 // Add working hours type
@@ -711,6 +712,7 @@ export const shopProfileSchema = z.object({
   catalogModeEnabled: z.boolean().optional().default(false),
   openOrderMode: z.boolean().optional().default(false),
   allowPayLater: z.boolean().optional().default(false),
+  payLaterWhitelist: z.array(z.number()).optional().default([]),
 });
 
 // Generate insert schemas and types

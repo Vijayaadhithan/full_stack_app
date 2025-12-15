@@ -1008,6 +1008,13 @@ export class MemStorage implements IStorage {
       normalizedUpdate.longitude = normalizeCoordinate(restOfData.longitude);
     }
 
+    if (restOfData.shopProfile !== undefined) {
+      normalizedUpdate.shopProfile = {
+        ...(existing.shopProfile ?? {}),
+        ...restOfData.shopProfile,
+      } as any;
+    }
+
     const updatedUserData = { ...existing, ...normalizedUpdate };
 
     if (password !== undefined) {

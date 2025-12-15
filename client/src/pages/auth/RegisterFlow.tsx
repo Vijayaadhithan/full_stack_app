@@ -257,7 +257,7 @@ export default function RegisterFlow({
     }
 
     if (data.role === "shop") {
-      const shopProfile: ShopProfile = {
+      const shopProfile = {
         shopName: data.shopName!.trim(),
         businessType: data.shopBusinessType!.trim(),
         description: data.shopDescription!.trim(),
@@ -269,7 +269,8 @@ export default function RegisterFlow({
           to: "18:00",
           days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
         },
-      };
+        payLaterWhitelist: [],
+      } satisfies ShopProfile;
       payload.shopProfile = shopProfile;
     }
 

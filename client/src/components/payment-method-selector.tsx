@@ -40,7 +40,7 @@ export function PaymentMethodSelector({
             <Label htmlFor="pay_later">Pay Later</Label>
           </div>
           <p className="text-xs text-muted-foreground ml-6">
-            Known customers can request to pay after pickup/delivery. The shop will approve before processing.
+            Trusted (repeat or whitelisted) customers can request Pay Later. Orders stay pending until the shop approves the credit.
             {payLaterDisabledReason ? ` ${payLaterDisabledReason}` : ""}
           </p>
         </div>

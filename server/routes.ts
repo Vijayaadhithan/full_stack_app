@@ -342,6 +342,67 @@ function resolveShopModes(
   };
 }
 
+function normalizePayLaterWhitelist(
+  profile: ShopProfile | null | undefined,
+): number[] {
+  if (!profile?.payLaterWhitelist) {
+    return [];
+  }
+  const ids = Array.isArray(profile.payLaterWhitelist)
+    ? profile.payLaterWhitelist
+    : [];
+  const normalized = ids
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+  return Array.from(new Set(normalized));
+}
+
+async function evaluatePayLaterEligibility(
+  shop: User,
+  customerId: number,
+): Promise<{
+  allowPayLater: boolean;
+  isKnownCustomer: boolean;
+  isWhitelisted: boolean;
+}> {
+  const shopModes = resolveShopModes(shop.shopProfile ?? null);
+  if (!shopModes.allowPayLater) {
+    return {
+      allowPayLater: false,
+      isKnownCustomer: false,
+      isWhitelisted: false,
+    };
+  }
+
+  const whitelist = normalizePayLaterWhitelist(shop.shopProfile ?? null);
+  const isWhitelisted = whitelist.includes(customerId);
+
+  const priorOrders = await db
+    .select({ value: sql<number>`count(*)` })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.shopId, shop.id),
+        eq(orders.customerId, customerId),
+        inArray(orders.status, [
+          "confirmed",
+          "processing",
+          "packed",
+          "dispatched",
+          "shipped",
+          "delivered",
+        ]),
+      ),
+    );
+  const isKnownCustomer = Number(priorOrders[0]?.value ?? 0) > 0;
+
+  return {
+    allowPayLater: true,
+    isKnownCustomer,
+    isWhitelisted,
+  };
+}
+
 function buildUserResponse(
   req: RequestWithAuth,
   user: User,
@@ -2699,6 +2760,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const safeUser = buildUserResponse(req as RequestWithAuth, user);
       if (!safeUser) {
         return res.status(500).json({ message: "Failed to fetch user" });
+      }
+
+      if (
+        user.role === "shop" &&
+        req.user?.role === "customer"
+      ) {
+        const requesterId =
+          typeof req.user.id === "number"
+            ? req.user.id
+            : Number.parseInt(String(req.user.id), 10);
+        if (Number.isFinite(requesterId)) {
+          const eligibility = await evaluatePayLaterEligibility(
+            user,
+            requesterId,
+          );
+          (safeUser as Record<string, unknown>).payLaterEligibilityForCustomer =
+            {
+              eligible:
+                eligibility.allowPayLater &&
+                (eligibility.isKnownCustomer || eligibility.isWhitelisted),
+              isKnownCustomer: eligibility.isKnownCustomer,
+              isWhitelisted: eligibility.isWhitelisted,
+            };
+        }
       }
 
       res.json(safeUser);
@@ -5549,35 +5634,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           deliveryMethod === "delivery" ? customerAddress : shopAddress;
 
         const isPayLater = paymentMethod === "pay_later";
+        let payLaterEligibility: {
+          isKnownCustomer: boolean;
+          isWhitelisted: boolean;
+          allowPayLater?: boolean;
+        } | null = null;
         if (isPayLater) {
-          if (!shopModes.allowPayLater) {
+          const eligibility = await evaluatePayLaterEligibility(
+            shop,
+            customer.id,
+          );
+          payLaterEligibility = eligibility;
+          if (!eligibility.allowPayLater) {
             return res
               .status(400)
               .json({ message: "Pay later is not enabled for this shop." });
           }
-          const priorOrders = await db
-            .select({ value: sql<number>`count(*)` })
-            .from(orders)
-            .where(
-              and(
-                eq(orders.shopId, shopId),
-                eq(orders.customerId, customer.id),
-                inArray(orders.status, [
-                  "confirmed",
-                  "processing",
-                  "packed",
-                  "dispatched",
-                  "shipped",
-                  "delivered",
-                ]),
-              ),
-            );
-          const isKnownCustomer =
-            Number(priorOrders[0]?.value ?? 0) > 0;
-          if (!isKnownCustomer) {
+          if (!eligibility.isKnownCustomer && !eligibility.isWhitelisted) {
             return res.status(403).json({
               message:
-                "Pay later is only available for repeat customers at this shop.",
+                "Pay later is only available for repeat or whitelisted customers at this shop.",
             });
           }
         }
@@ -5613,7 +5689,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     ? "Open order: shop owner will confirm availability."
                     : null,
                   isPayLater
-                    ? "Pay later requested by known customer."
+                    ? `Pay later requested by ${
+                      payLaterEligibility?.isWhitelisted
+                        ? "whitelisted customer"
+                        : "known customer"
+                    }. Pending approval.`
                     : null,
                 ]
                   .filter(Boolean)
@@ -5623,6 +5703,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           orderItemsPayload,
         );
         logger.info(`Created order ${newOrder.id}`);
+
+        if (isPayLater && shopId) {
+          await storage.createNotification({
+            userId: shopId,
+            type: "order",
+            title: "Pay Later approval needed",
+            message: `Order #${newOrder.id} is waiting for credit approval.`,
+          });
+        }
 
         // Clear cart after order creation
         await storage.clearCart(req.user!.id);
@@ -5741,6 +5830,193 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ? error.message
                 : "Failed to fetch dashboard stats",
           });
+      }
+    },
+  );
+
+  const payLaterWhitelistSchema = z
+    .object({
+      customerId: z.number().int().positive().optional(),
+      phone: z.string().trim().optional(),
+    })
+    .refine(
+      (data) =>
+        typeof data.customerId === "number" ||
+        (data.phone !== undefined && data.phone.trim().length > 0),
+      {
+        message: "Provide a customerId or phone",
+      },
+    );
+
+  async function buildWhitelistResponse(
+    whitelistIds: number[],
+  ): Promise<
+    Array<{
+      id: number;
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+    }>
+  > {
+    if (!whitelistIds.length) return [];
+    const customers = await storage.getUsersByIds(whitelistIds);
+    const customerMap = new Map(
+      customers
+        .filter((customer) => customer.role === "customer")
+        .map((customer) => [customer.id, customer]),
+    );
+
+    return whitelistIds
+      .map((id) => customerMap.get(id))
+      .filter((value): value is User => Boolean(value))
+      .map((customer) => ({
+        id: customer.id,
+        name: customer.name ?? null,
+        phone: customer.phone ?? null,
+        email: customer.email ?? null,
+      }));
+  }
+
+  app.get(
+    "/api/shops/pay-later/whitelist",
+    requireAuth,
+    requireShopOrWorkerPermission(["orders:read"]),
+    async (req, res) => {
+      try {
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res
+            .status(403)
+            .json({ message: "Unable to resolve shop context" });
+        }
+
+        const shop = await storage.getUser(shopContextId);
+        if (!shop) {
+          return res.status(404).json({ message: "Shop not found" });
+        }
+
+        const whitelistIds = normalizePayLaterWhitelist(shop.shopProfile ?? null);
+        const customers = await buildWhitelistResponse(whitelistIds);
+
+        return res.json({
+          allowPayLater: resolveShopModes(shop.shopProfile ?? null).allowPayLater,
+          customers,
+          payLaterWhitelist: whitelistIds,
+        });
+      } catch (error) {
+        logger.error("Error fetching pay-later whitelist:", error);
+        return res
+          .status(500)
+          .json({ message: "Failed to fetch pay-later whitelist" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/shops/pay-later/whitelist",
+    requireAuth,
+    requireShopOrWorkerPermission(["orders:update"]),
+    async (req, res) => {
+      try {
+        const parsed = payLaterWhitelistSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json(formatValidationError(parsed.error));
+        }
+
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res
+            .status(403)
+            .json({ message: "Unable to resolve shop context" });
+        }
+
+        const shop = await storage.getUser(shopContextId);
+        if (!shop) {
+          return res.status(404).json({ message: "Shop not found" });
+        }
+
+        let customer: User | undefined;
+        if (parsed.data.customerId) {
+          customer = await storage.getUser(parsed.data.customerId);
+        } else if (parsed.data.phone) {
+          customer = await storage.getUserByPhone(parsed.data.phone);
+        }
+
+        if (!customer || customer.role !== "customer") {
+          return res
+            .status(404)
+            .json({ message: "Customer not found for Pay Later whitelist" });
+        }
+
+        const whitelistIds = normalizePayLaterWhitelist(shop.shopProfile ?? null);
+        if (!whitelistIds.includes(customer.id)) {
+          const updatedProfile = {
+            ...(shop.shopProfile ?? {}),
+            payLaterWhitelist: [...whitelistIds, customer.id],
+          } as ShopProfile;
+          await storage.updateUser(shopContextId, {
+            shopProfile: updatedProfile,
+          });
+          whitelistIds.push(customer.id);
+        }
+
+        const customers = await buildWhitelistResponse(whitelistIds);
+
+        return res.json({
+          allowPayLater: resolveShopModes(shop.shopProfile ?? null).allowPayLater,
+          customers,
+          payLaterWhitelist: whitelistIds,
+        });
+      } catch (error) {
+        logger.error("Error updating pay-later whitelist:", error);
+        return res
+          .status(500)
+          .json({ message: "Failed to update pay-later whitelist" });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/shops/pay-later/whitelist/:customerId",
+    requireAuth,
+    requireShopOrWorkerPermission(["orders:update"]),
+    async (req, res) => {
+      try {
+        const customerId = getValidatedParam(req, "customerId");
+        const shopContextId = req.shopContextId;
+
+        if (typeof shopContextId !== "number") {
+          return res
+            .status(403)
+            .json({ message: "Unable to resolve shop context" });
+        }
+
+        const shop = await storage.getUser(shopContextId);
+        if (!shop) {
+          return res.status(404).json({ message: "Shop not found" });
+        }
+
+        const whitelistIds = normalizePayLaterWhitelist(shop.shopProfile ?? null);
+        const updatedWhitelist = whitelistIds.filter((id) => id !== customerId);
+
+        const updatedProfile = {
+          ...(shop.shopProfile ?? {}),
+          payLaterWhitelist: updatedWhitelist,
+        } as ShopProfile;
+        await storage.updateUser(shopContextId, { shopProfile: updatedProfile });
+
+        const customers = await buildWhitelistResponse(updatedWhitelist);
+
+        return res.json({
+          allowPayLater: resolveShopModes(shop.shopProfile ?? null).allowPayLater,
+          customers,
+          payLaterWhitelist: updatedWhitelist,
+        });
+      } catch (error) {
+        logger.error("Error removing pay-later whitelist entry:", error);
+        return res
+          .status(500)
+          .json({ message: "Failed to remove pay-later whitelist entry" });
       }
     },
   );

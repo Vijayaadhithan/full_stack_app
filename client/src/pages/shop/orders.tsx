@@ -85,6 +85,19 @@ type ActiveBoardOrder = {
 
 type ActiveBoardResponse = Record<ActiveBoardLane, ActiveBoardOrder[]>;
 
+type PayLaterWhitelistEntry = {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+};
+
+type PayLaterWhitelistResponse = {
+  allowPayLater: boolean;
+  customers: PayLaterWhitelistEntry[];
+  payLaterWhitelist: number[];
+};
+
 const orderStatusSchema = z.object({
   status: z.enum([
     "pending",
@@ -133,6 +146,7 @@ const boardColumns: Record<
 export default function ShopOrders() {
   const { user } = useAuth();
   const { has: can } = useWorkerPermissions();
+  const canManagePayLater = user?.role === "shop" || can("orders:update");
   const { t } = useLanguage();
   const { toast } = useToast();
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
@@ -147,6 +161,7 @@ export default function ShopOrders() {
     orderId: number;
     lane: ActiveBoardLane;
   } | null>(null);
+  const [newWhitelistPhone, setNewWhitelistPhone] = useState("");
 
   const { data: orders, isLoading } = useQuery<OrderWithDetails[]>({
     queryKey: ["orders", "shop", selectedStatus],
@@ -186,6 +201,107 @@ export default function ShopOrders() {
       const res = await apiRequest("GET", "/api/returns/shop");
       if (!res.ok) throw new Error("Network response was not ok");
       return res.json();
+    },
+  });
+
+  const { data: payLaterWhitelist, isLoading: whitelistLoading } =
+    useQuery<PayLaterWhitelistResponse, Error>({
+      queryKey: ["pay-later-whitelist"],
+      enabled: !!user?.id,
+      queryFn: async () => {
+        try {
+          const res = await apiRequest(
+            "GET",
+            "/api/shops/pay-later/whitelist",
+          );
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(
+              (error as { message?: string }).message ||
+                "Failed to load Pay Later whitelist",
+            );
+          }
+          return res.json();
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Failed to load Pay Later whitelist";
+          toast({
+            title: "Unable to load Khata list",
+            description: message,
+            variant: "destructive",
+          });
+          throw error instanceof Error
+            ? error
+            : new Error("Failed to load Pay Later whitelist");
+        }
+      },
+    });
+
+  const addWhitelistMutation = useMutation({
+    mutationFn: async (phone: string) => {
+      const res = await apiRequest("POST", "/api/shops/pay-later/whitelist", {
+        phone,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(
+          (error as { message?: string }).message ||
+            "Failed to whitelist customer",
+        );
+      }
+      return res.json() as Promise<PayLaterWhitelistResponse>;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["pay-later-whitelist"], data);
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setNewWhitelistPhone("");
+      toast({
+        title: "Khata customer added",
+        description:
+          "Customer can now place Pay Later orders pending your approval.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not whitelist customer",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const removeWhitelistMutation = useMutation({
+    mutationFn: async (customerId: number) => {
+      const res = await apiRequest(
+        "DELETE",
+        `/api/shops/pay-later/whitelist/${customerId}`,
+      );
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(
+          (error as { message?: string }).message ||
+            "Failed to remove customer",
+        );
+      }
+      return res.json() as Promise<PayLaterWhitelistResponse>;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["pay-later-whitelist"], data);
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      toast({
+        title: "Removed from Khata",
+        description:
+          "The customer will need approval again before using Pay Later.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not update Khata list",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -612,10 +728,10 @@ export default function ShopOrders() {
                   order.paymentStatus === "pending" && (
                     <div className="p-4 rounded-md bg-blue-50 border text-sm space-y-2">
                       <p className="font-medium text-blue-900">
-                        Pay Later request from a known customer
+                        Pay Later (Khata) pending approval
                       </p>
                       <p className="text-blue-900/80">
-                        Approve to confirm availability and move the order forward.
+                        Approve credit to confirm availability and move the order forward.
                       </p>
                       {(user?.role === "shop" || can("orders:update")) && (
                         <Button
@@ -809,6 +925,113 @@ export default function ShopOrders() {
             </Select>
           </div>
         </div>
+
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Khata / Pay Later approvals</h2>
+                <p className="text-sm text-muted-foreground">
+                  Whitelist trusted customers so they can request Pay Later without prior orders. Every Pay Later order stays pending until you approve credit.
+                </p>
+              </div>
+              <Badge
+                variant={payLaterWhitelist?.allowPayLater ? "secondary" : "outline"}
+                className="whitespace-nowrap"
+              >
+                {payLaterWhitelist?.allowPayLater
+                  ? "Pay Later enabled"
+                  : "Pay Later disabled"}
+              </Badge>
+            </div>
+
+            {!payLaterWhitelist?.allowPayLater && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                Turn on Pay Later in your shop profile to accept Khata requests.
+              </div>
+            )}
+
+            <form
+              className="flex flex-col gap-3 sm:flex-row sm:items-center"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = newWhitelistPhone.trim();
+                if (!trimmed) return;
+                addWhitelistMutation.mutate(trimmed);
+              }}
+            >
+              <Input
+                placeholder="Customer phone number"
+                value={newWhitelistPhone}
+                onChange={(e) => setNewWhitelistPhone(e.target.value)}
+                disabled={
+                  addWhitelistMutation.isPending || !canManagePayLater
+                }
+              />
+              <Button
+                type="submit"
+                disabled={
+                  addWhitelistMutation.isPending ||
+                  !newWhitelistPhone.trim() ||
+                  !canManagePayLater
+                }
+              >
+                {addWhitelistMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Whitelist customer
+              </Button>
+            </form>
+
+            <div className="space-y-2">
+              {whitelistLoading ? (
+                <p className="text-sm text-muted-foreground">
+                  Loading Khata customers...
+                </p>
+              ) : !payLaterWhitelist ? (
+                <p className="text-sm text-amber-800">
+                  Unable to load Khata list right now. Please try again.
+                </p>
+              ) : !payLaterWhitelist.customers.length ? (
+                <p className="text-sm text-muted-foreground">
+                  No whitelisted customers yet.
+                </p>
+              ) : (
+                payLaterWhitelist.customers.map(
+                  (customer: PayLaterWhitelistEntry) => (
+                  <div
+                    key={customer.id}
+                    className="flex items-center justify-between rounded-md border p-3"
+                  >
+                    <div className="space-y-1">
+                      <p className="font-medium">
+                        {customer.name || `Customer #${customer.id}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {customer.phone || customer.email || "No contact info"}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        removeWhitelistMutation.mutate(customer.id)
+                      }
+                      disabled={
+                        removeWhitelistMutation.isPending || !canManagePayLater
+                      }
+                    >
+                      {removeWhitelistMutation.isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Remove
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <Tabs defaultValue="orders">
           <TabsList>
