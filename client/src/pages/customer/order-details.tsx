@@ -256,26 +256,46 @@ export default function OrderDetails() {
 
   const whatsappHref = (() => {
     if (!order) return null;
-    const rawPhone = order.shop?.phone ?? "";
+    const isDelivery = order.deliveryMethod === "delivery";
+    const isPickup = order.deliveryMethod === "pickup";
+    if (!isDelivery && !isPickup) {
+      return null;
+    }
+
+    const rawPhone = isDelivery ? order.shop?.phone ?? "" : "";
     const digits = rawPhone.replace(/\D/g, "");
     const target =
       digits.length === 10 ? `91${digits}` : digits.length >= 11 ? digits : "";
 
-    const locationUrl = customerCoordinatesAvailable
-      ? `https://www.google.com/maps?q=${order.customer?.latitude},${order.customer?.longitude}`
-      : null;
-    const address = order.customer?.address?.trim() || "";
+    const locationUrl = isDelivery
+      ? customerCoordinatesAvailable
+        ? `https://www.google.com/maps?q=${order.customer?.latitude},${order.customer?.longitude}`
+        : null
+      : shopCoordinatesAvailable
+        ? `https://www.google.com/maps?q=${order.shop?.latitude},${order.shop?.longitude}`
+        : null;
+    const address = (isDelivery ? order.customer?.address : order.shop?.address)?.trim() || "";
     const message = [
       `Order #${order.id}`,
-      locationUrl ? `My delivery location: ${locationUrl}` : null,
-      !locationUrl && address ? `Delivery address: ${address}` : null,
+      locationUrl
+        ? isDelivery
+          ? `My delivery location: ${locationUrl}`
+          : `Pickup shop location: ${locationUrl}`
+        : null,
+      !locationUrl && address
+        ? isDelivery
+          ? `Delivery address: ${address}`
+          : `Pickup address: ${address}`
+        : null,
     ]
       .filter(Boolean)
       .join("\n");
 
     if (!message) return null;
     const encoded = encodeURIComponent(message);
-    return target ? `https://wa.me/${target}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    return target
+      ? `https://wa.me/${target}?text=${encoded}`
+      : `https://api.whatsapp.com/send?text=${encoded}`;
   })();
 
   return (
@@ -430,7 +450,7 @@ export default function OrderDetails() {
                       longitude={order.customer?.longitude}
                     />
                   ) : null}
-                  {order.deliveryMethod === "delivery" && whatsappHref ? (
+                  {whatsappHref ? (
                     <Button asChild variant="outline" size="sm">
                       <a
                         href={whatsappHref}

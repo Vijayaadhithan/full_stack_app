@@ -25,6 +25,7 @@ import {
   Sun,
   Moon,
   Navigation,
+  MessageCircle,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react"; // Add useMemo
 import {
@@ -89,6 +90,22 @@ const getSlotStartForDate = (
   const slotStart = new Date(zoned);
   slotStart.setHours(slot.startHour, 0, 0, 0);
   return fromZonedTime(slotStart, timeZone);
+};
+
+const buildGoogleMapsSearchHref = (query: string): string =>
+  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+
+const buildWhatsAppShareHref = (
+  phone: string | null | undefined,
+  message: string,
+): string => {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  const target =
+    digits.length === 10 ? `91${digits}` : digits.length >= 11 ? digits : null;
+  const encoded = encodeURIComponent(message);
+  return target
+    ? `https://wa.me/${target}?text=${encoded}`
+    : `https://api.whatsapp.com/send?text=${encoded}`;
 };
 
 export default function BookService() {
@@ -196,6 +213,26 @@ type BookingService = ServiceDetail & {
     setBookingLandmark(user?.addressLandmark ?? "");
   }, [user?.addressLandmark]);
 
+  const providerName = service?.provider?.name ?? "Provider";
+  const providerFullAddress = useMemo(() => {
+    const provider = service?.provider;
+    return [
+      provider?.addressStreet,
+      provider?.addressCity,
+      provider?.addressState,
+      provider?.addressPostalCode,
+      provider?.addressCountry,
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }, [
+    service?.provider?.addressStreet,
+    service?.provider?.addressCity,
+    service?.provider?.addressState,
+    service?.provider?.addressPostalCode,
+    service?.provider?.addressCountry,
+  ]);
+
   const providerOnline =
     (service?.isAvailableNow ?? true) && (service?.isAvailable ?? true);
   const maxDailyBookings = service?.maxDailyBookings ?? null;
@@ -215,6 +252,44 @@ type BookingService = ServiceDetail & {
   const selectedSlotMeta = SLOT_OPTIONS.find(
     (slot) => slot.label === selectedSlot,
   );
+  const providerHasCoords =
+    service?.provider?.latitude != null && service?.provider?.longitude != null;
+  const providerMapsHref = providerHasCoords
+    ? null
+    : providerFullAddress
+      ? buildGoogleMapsSearchHref(providerFullAddress)
+      : null;
+  const customerMapsUrl =
+    user?.latitude != null && user?.longitude != null
+      ? `https://www.google.com/maps?q=${user.latitude},${user.longitude}`
+      : null;
+  const whatsappLocationHref = useMemo(() => {
+    if (!service) return null;
+    if (serviceLocation !== "customer") return null;
+
+    const parts = [
+      `Booking request: ${service.name}`,
+      `Date: ${formatBase(selectedDate, "PPP")}`,
+      selectedSlotMeta
+        ? `Time: ${selectedSlotMeta.title} (${selectedSlotMeta.window})`
+        : null,
+      bookingLandmark.trim() ? `Landmark: ${bookingLandmark.trim()}` : null,
+      customerMapsUrl ? `My location: ${customerMapsUrl}` : null,
+    ].filter(Boolean);
+
+    if (parts.length === 0) {
+      return null;
+    }
+
+    return buildWhatsAppShareHref(service.provider?.phone, parts.join("\n"));
+  }, [
+    bookingLandmark,
+    customerMapsUrl,
+    selectedDate,
+    selectedSlotMeta,
+    service,
+    serviceLocation,
+  ]);
 
   useEffect(() => {
     if (selectedSlot && !allowedSlotSet.has(selectedSlot)) {
@@ -485,18 +560,6 @@ type BookingService = ServiceDetail & {
     );
   }
 
-  // Format provider address
-  const providerName = service.provider.name ?? "Provider";
-  const providerFullAddress = [
-    service.provider.addressStreet,
-    service.provider.addressCity,
-    service.provider.addressState,
-    service.provider.addressPostalCode,
-    service.provider.addressCountry,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
   return (
     <DashboardLayout>
       <motion.div
@@ -705,10 +768,29 @@ type BookingService = ServiceDetail & {
                 </RadioGroup>
                 {/* Display provider address when provider location is selected */}
                 {serviceLocation === "provider" && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Service will be at:{" "}
-                    {providerFullAddress || "Provider address not specified"}
-                  </p>
+                  <div className="mt-2 space-y-1">
+                    <p className="text-sm text-muted-foreground">
+                      Service will be at:{" "}
+                      {providerFullAddress || "Provider address not specified"}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <MapLink
+                        latitude={service.provider?.latitude}
+                        longitude={service.provider?.longitude}
+                        label="View on Google Maps"
+                      />
+                      {!providerHasCoords && providerMapsHref ? (
+                        <a
+                          href={providerMapsHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium text-blue-600 hover:underline"
+                        >
+                          View on Google Maps
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
                 )}
                 {serviceLocation === "customer" && (
                   <div className="mt-3 space-y-3 rounded-md border bg-muted/20 p-4">
@@ -828,6 +910,37 @@ type BookingService = ServiceDetail & {
                 <div className="flex flex-wrap items-center gap-2">
                   <strong>Map:</strong>
                   <MapLink latitude={user?.latitude} longitude={user?.longitude} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const hasCoords = Boolean(customerMapsUrl);
+                      const hasLandmark = bookingLandmark.trim().length > 0;
+                      if (!hasCoords && !hasLandmark) {
+                        toast({
+                          title: "Add your location first",
+                          description:
+                            "Use 'Use My Current Location' or add a landmark, then send on WhatsApp.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      if (!whatsappLocationHref) {
+                        toast({
+                          title: "WhatsApp link unavailable",
+                          description: "Please try again in a moment.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      window.open(whatsappLocationHref, "_blank");
+                    }}
+                    disabled={!whatsappLocationHref}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Send Location on WhatsApp
+                  </Button>
                 </div>
               ) : null}
               <div className="flex justify-between py-2">
