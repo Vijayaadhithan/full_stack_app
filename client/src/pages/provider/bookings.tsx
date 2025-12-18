@@ -61,6 +61,7 @@ type BookingProximityInfo = {
 
 type AddressLike = {
   addressStreet?: string | null;
+  addressLandmark?: string | null;
   addressCity?: string | null;
   addressState?: string | null;
   addressPostalCode?: string | null;
@@ -79,6 +80,9 @@ const formatAddressSegments = (source: AddressLike): string[] => {
   };
 
   pushIfPresent(source.addressStreet);
+  if (source.addressLandmark && source.addressLandmark.trim()) {
+    segments.unshift(`Landmark: ${source.addressLandmark.trim()}`);
+  }
   pushIfPresent(source.addressCity);
 
   const stateAndPostal = [source.addressState, source.addressPostalCode]
@@ -881,6 +885,7 @@ type BookingWithDetails = Booking & {
   customer?: User | null; // Add customer details
   relevantAddress?: {
     addressStreet?: string | null;
+    addressLandmark?: string | null;
     addressCity?: string | null;
     addressState?: string | null;
     addressPostalCode?: string | null;

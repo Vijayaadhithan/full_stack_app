@@ -3,6 +3,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -17,6 +18,8 @@ import {
   HeartPulse,
   BookOpen,
   Wrench,
+  CalendarDays,
+  Siren,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Service } from "@shared/schema";
@@ -161,6 +164,7 @@ export default function BrowseServices() {
     maxPrice: "",
     locationCity: "",
     locationState: "",
+    urgency: "scheduled" as "scheduled" | "emergency",
   });
 
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
@@ -190,6 +194,9 @@ export default function BrowseServices() {
         params.append("locationCity", filters.locationCity);
       if (filters.locationState)
         params.append("locationState", filters.locationState);
+      if (filters.urgency === "emergency") {
+        params.append("availableNow", "true");
+      }
       if (locationQuery) {
         params.append("lat", locationQuery.lat.toString());
         params.append("lng", locationQuery.lng.toString());
@@ -240,6 +247,33 @@ export default function BrowseServices() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3 w-full md:w-auto items-center">
+            <ToggleGroup
+              type="single"
+              value={filters.urgency}
+              onValueChange={(value) => {
+                if (value) {
+                  handleFilterChange("urgency", value);
+                }
+              }}
+              className="w-full sm:w-auto justify-start"
+            >
+              <ToggleGroupItem
+                value="scheduled"
+                aria-label="Book for later"
+                className="flex-1 sm:flex-none"
+              >
+                <CalendarDays className="h-4 w-4" />
+                Book for later
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="emergency"
+                aria-label="Emergency (need it now)"
+                className="flex-1 sm:flex-none data-[state=on]:bg-destructive data-[state=on]:text-destructive-foreground"
+              >
+                <Siren className="h-4 w-4" />
+                Emergency (Now)
+              </ToggleGroupItem>
+            </ToggleGroup>
             <div className="relative flex-1 min-w-[220px] md:w-auto">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
@@ -305,6 +339,22 @@ export default function BrowseServices() {
             <LocationFilterPopover state={locationFilter} />
           </div>
         </div>
+
+        {filters.urgency === "emergency" ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
+            <div className="flex items-start gap-2">
+              <Siren className="h-5 w-5 text-destructive mt-0.5" />
+              <div>
+                <p className="font-medium text-foreground">
+                  Emergency mode: showing providers available now
+                </p>
+                <p className="text-muted-foreground">
+                  Turn this off to schedule for later.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {categoryTiles.map((tile) => {

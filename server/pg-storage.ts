@@ -859,6 +859,7 @@ export class PostgresStorage implements IStorage {
       phone: normalizedPhone ?? "",
       email: normalizedEmail,
       addressStreet: user.addressStreet,
+      addressLandmark: user.addressLandmark,
       addressCity: user.addressCity,
       addressState: user.addressState,
       addressPostalCode: user.addressPostalCode,
@@ -1391,6 +1392,13 @@ export class PostgresStorage implements IStorage {
       // Note: availabilityDate filtering would be more complex and might require checking bookings or a serviceAvailability table.
       if (filters.availabilityDate) {
         conditions.push(eq(services.isAvailable, true));
+      }
+      if (filters.availableNow !== undefined) {
+        const desired = Boolean(filters.availableNow);
+        conditions.push(eq(services.isAvailableNow, desired));
+        if (desired) {
+          conditions.push(sql`${services.isAvailable} IS NOT FALSE`);
+        }
       }
       if (filters.lat !== undefined && filters.lng !== undefined) {
         if (!joinedProviders) {

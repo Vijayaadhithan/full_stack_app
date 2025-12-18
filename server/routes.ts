@@ -278,6 +278,7 @@ const formatUserAddress = (
     | Pick<
       User,
       | "addressStreet"
+      | "addressLandmark"
       | "addressCity"
       | "addressState"
       | "addressPostalCode"
@@ -288,6 +289,7 @@ const formatUserAddress = (
   if (!user) return null;
   const parts = [
     user.addressStreet,
+    user.addressLandmark,
     user.addressCity,
     user.addressState,
     user.addressPostalCode,
@@ -305,6 +307,7 @@ function pickAddressFields(
   if (!user) return null;
   const address = {
     addressStreet: user.addressStreet ?? null,
+    addressLandmark: user.addressLandmark ?? null,
     addressCity: user.addressCity ?? null,
     addressState: user.addressState ?? null,
     addressPostalCode: user.addressPostalCode ?? null,
@@ -587,6 +590,7 @@ type ProviderBookingHydrated = Booking & {
     name: string | null;
     phone: string | null;
     addressStreet?: string | null;
+    addressLandmark?: string | null;
     addressCity?: string | null;
     addressState?: string | null;
     addressPostalCode?: string | null;
@@ -653,6 +657,7 @@ async function hydrateProviderBookings(
           name: customer.name,
           phone: customer.phone,
           addressStreet: customer.addressStreet,
+          addressLandmark: customer.addressLandmark,
           addressCity: customer.addressCity,
           addressState: customer.addressState,
           addressPostalCode: customer.addressPostalCode,
@@ -854,6 +859,18 @@ function getBoardLaneForStatus(
 const dateStringSchema = z
   .string()
   .refine(isValidDateString, { message: "Invalid date format" });
+
+const optionalBooleanQuerySchema = z.preprocess((value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "y"].includes(normalized)) return true;
+    if (["false", "0", "no", "n"].includes(normalized)) return false;
+  }
+  return value;
+}, z.boolean().optional());
 
 const bookingStatusSchema = z.enum([
   "pending",
@@ -1173,6 +1190,7 @@ const servicesQuerySchema = z
     maxPrice: z.coerce.number().nonnegative().optional(),
     searchTerm: z.string().trim().max(200).optional(),
     providerId: z.coerce.number().int().positive().optional(),
+    availableNow: optionalBooleanQuerySchema,
     locationCity: z.string().trim().max(100).optional(),
     locationState: z.string().trim().max(100).optional(),
     locationPostalCode: z.string().trim().max(20).optional(),
@@ -3254,6 +3272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxPrice,
         searchTerm,
         providerId,
+        availableNow,
         locationCity,
         locationState,
         locationPostalCode,
@@ -3269,6 +3288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (maxPrice !== undefined) filters.maxPrice = maxPrice;
       if (searchTerm) filters.searchTerm = searchTerm;
       if (providerId !== undefined) filters.providerId = providerId;
+      if (availableNow !== undefined) filters.availableNow = availableNow;
       if (locationCity) filters.locationCity = locationCity;
       if (locationState) filters.locationState = locationState;
       if (locationPostalCode)

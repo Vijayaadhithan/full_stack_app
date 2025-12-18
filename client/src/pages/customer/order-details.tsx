@@ -29,6 +29,7 @@ import {
   AlertCircle,
   ArrowLeft,
   RefreshCw,
+  MessageCircle,
 } from "lucide-react";
 import { z } from "zod";
 import { formatIndianDisplay } from "@shared/date-utils";
@@ -253,6 +254,30 @@ export default function OrderDetails() {
     (!Number.isFinite(numericTotal) || numericTotal <= 0);
   const isPayLater = order?.paymentMethod === "pay_later";
 
+  const whatsappHref = (() => {
+    if (!order) return null;
+    const rawPhone = order.shop?.phone ?? "";
+    const digits = rawPhone.replace(/\D/g, "");
+    const target =
+      digits.length === 10 ? `91${digits}` : digits.length >= 11 ? digits : "";
+
+    const locationUrl = customerCoordinatesAvailable
+      ? `https://www.google.com/maps?q=${order.customer?.latitude},${order.customer?.longitude}`
+      : null;
+    const address = order.customer?.address?.trim() || "";
+    const message = [
+      `Order #${order.id}`,
+      locationUrl ? `My delivery location: ${locationUrl}` : null,
+      !locationUrl && address ? `Delivery address: ${address}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (!message) return null;
+    const encoded = encodeURIComponent(message);
+    return target ? `https://wa.me/${target}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+  })();
+
   return (
     <DashboardLayout>
       <motion.div
@@ -404,6 +429,18 @@ export default function OrderDetails() {
                       latitude={order.customer?.latitude}
                       longitude={order.customer?.longitude}
                     />
+                  ) : null}
+                  {order.deliveryMethod === "delivery" && whatsappHref ? (
+                    <Button asChild variant="outline" size="sm">
+                      <a
+                        href={whatsappHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        Send Location on WhatsApp
+                      </a>
+                    </Button>
                   ) : null}
                   {order.deliveryMethod === "pickup" &&
                   shopCoordinatesAvailable ? (

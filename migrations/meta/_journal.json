@@ -50,6 +50,13 @@
       "when": 1765796048818,
       "tag": "0006_clumsy_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1765799809326,
+      "tag": "0007_address_landmark",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -14,17 +14,29 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { motion } from "framer-motion";
-import { Loader2, MapPin, Clock, Star, AlertCircle } from "lucide-react";
+import {
+  Loader2,
+  MapPin,
+  Clock,
+  Star,
+  AlertCircle,
+  Sun,
+  Moon,
+  Navigation,
+} from "lucide-react";
 import { useState, useEffect, useMemo } from "react"; // Add useMemo
 import {
   format as formatBase,
   format,
+  addDays,
 } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz"; // Import date-fns-tz functions
 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import MapLink from "@/components/location/MapLink";
 // Remove Input import if no longer needed elsewhere
 // import { Input } from "@/components/ui/input";
 import { ServiceDetail } from "@shared/api-contract";
@@ -82,13 +94,21 @@ const getSlotStartForDate = (
 export default function BookService() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
+  const { user } = useAuth();
   const platformFee = platformFees.serviceBooking;
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date()); // Represents the *day* selected, time part is ignored
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const initial = new Date();
+    initial.setHours(0, 0, 0, 0);
+    return initial;
+  }); // Represents the *day* selected, time part is ignored
   const [selectedSlot, setSelectedSlot] = useState<BroadSlotLabel | null>(null);
   const [serviceLocation, setServiceLocation] = useState<
     "customer" | "provider"
   >("provider"); // Default to provider location
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [bookingLandmark, setBookingLandmark] = useState("");
+  const [isCapturingDeviceLocation, setIsCapturingDeviceLocation] =
+    useState(false);
 
 type BookingService = ServiceDetail & {
   isAvailableNow?: boolean | null;
@@ -140,7 +160,7 @@ type BookingService = ServiceDetail & {
     queryKey: [
       "/api/bookings/service",
       id,
-      selectedDate.toISOString().split("T")[0],
+      formatBase(selectedDate, "yyyy-MM-dd"),
     ], // Use ISO date string for consistent cache key
     queryFn: async () => {
       const dateStr = formatBase(selectedDate, "yyyy-MM-dd");
@@ -171,6 +191,10 @@ type BookingService = ServiceDetail & {
   useEffect(() => {
     setSelectedSlot(null);
   }, [selectedDate]);
+
+  useEffect(() => {
+    setBookingLandmark(user?.addressLandmark ?? "");
+  }, [user?.addressLandmark]);
 
   const providerOnline =
     (service?.isAvailableNow ?? true) && (service?.isAvailable ?? true);
@@ -262,6 +286,59 @@ type BookingService = ServiceDetail & {
     },
   });
 
+  type LocationUpdateResponse = { message?: string; user: unknown };
+
+  const saveLandmarkMutation = useMutation({
+    mutationFn: async (landmark: string | null) => {
+      if (!user?.id) {
+        throw new Error("User not loaded");
+      }
+      const res = await apiRequest("PATCH", `/api/users/${user.id}`, {
+        addressLandmark: landmark,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || "Failed to save landmark");
+      }
+      return res.json();
+    },
+    onSuccess: (updatedUser) => {
+      queryClient.setQueryData(["/api/user"], updatedUser);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Unable to save landmark",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const saveLocationMutation = useMutation({
+    mutationFn: async (coords: { latitude: number; longitude: number }) => {
+      const res = await apiRequest("POST", "/api/profile/location", coords);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || "Failed to save location");
+      }
+      return (await res.json()) as LocationUpdateResponse;
+    },
+    onSuccess: ({ user: updatedUser, message }) => {
+      queryClient.setQueryData(["/api/user"], updatedUser);
+      toast({
+        title: "Location saved",
+        description: message || "Current location saved to your profile.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Unable to save location",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const [, navigate] = useLocation();
 
   const handleBookingRequest = () => {
@@ -296,8 +373,23 @@ type BookingService = ServiceDetail & {
     setDialogOpen(true); // Open confirmation dialog
   };
 
-  const confirmBooking = () => {
+  const confirmBooking = async () => {
     if (!selectedSlot || !service || !selectedSlotStart) return;
+
+    const trimmedLandmark = bookingLandmark.trim();
+    const existingLandmark = (user?.addressLandmark ?? "").trim();
+    if (
+      serviceLocation === "customer" &&
+      trimmedLandmark !== existingLandmark
+    ) {
+      try {
+        await saveLandmarkMutation.mutateAsync(
+          trimmedLandmark.length ? trimmedLandmark : null,
+        );
+      } catch {
+        // Landmark is best-effort; still proceed with booking.
+      }
+    }
 
     createBookingMutation.mutate({
       serviceId: service.id,
@@ -308,6 +400,40 @@ type BookingService = ServiceDetail & {
     });
   };
 
+  const handleUseDeviceLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      toast({
+        title: "Geolocation unavailable",
+        description: "Your browser does not support the Geolocation API.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCapturingDeviceLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsCapturingDeviceLocation(false);
+        saveLocationMutation.mutate({
+          latitude: Number(position.coords.latitude.toFixed(7)),
+          longitude: Number(position.coords.longitude.toFixed(7)),
+        });
+      },
+      (error) => {
+        setIsCapturingDeviceLocation(false);
+        toast({
+          title: "Unable to fetch location",
+          description: error.message,
+          variant: "destructive",
+        });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15_000,
+      },
+    );
+  };
+
   // Calculate average rating
   const averageRating =
     service?.reviews && service.reviews.length > 0
@@ -315,12 +441,22 @@ type BookingService = ServiceDetail & {
         service.reviews.length
       : 0;
 
-  // --- Calendar disabling logic ---
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // Set to start of today
+  const today = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
 
-  const disabledDays = [{ before: today }];
-  // --- End Calendar disabling logic ---
+  const dateOptions = useMemo(
+    () => Array.from({ length: 14 }, (_, index) => addDays(today, index)),
+    [today],
+  );
+
+  const getDateChipLabel = (date: Date, index: number) => {
+    if (index === 0) return "Today";
+    if (index === 1) return "Tomorrow";
+    return formatBase(date, "EEEE");
+  };
 
   if (serviceLoading) {
     return (
@@ -417,14 +553,40 @@ type BookingService = ServiceDetail & {
             {/* Calendar Section (Left Column) */}
             <div>
               <h3 className="font-medium mb-2">Select Date</h3>
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => date && setSelectedDate(date)}
-                disabled={disabledDays}
-                className="rounded-md border p-0"
-                fromDate={today}
-              />
+              <div className="rounded-md border p-3">
+                <div className="flex gap-2 overflow-x-auto pb-2 [-webkit-overflow-scrolling:touch]">
+                  {dateOptions.map((date, index) => {
+                    const dateKey = formatBase(date, "yyyy-MM-dd");
+                    const selectedKey = formatBase(selectedDate, "yyyy-MM-dd");
+                    const isSelected = dateKey === selectedKey;
+                    return (
+                      <Button
+                        key={dateKey}
+                        type="button"
+                        variant={isSelected ? "default" : "outline"}
+                        onClick={() => setSelectedDate(date)}
+                        className="min-w-[120px] flex-col items-start gap-0 h-auto py-3"
+                      >
+                        <span className="font-semibold">
+                          {getDateChipLabel(date, index)}
+                        </span>
+                        <span
+                          className={
+                            isSelected
+                              ? "text-xs text-primary-foreground/80"
+                              : "text-xs text-muted-foreground"
+                          }
+                        >
+                          {formatBase(date, "d MMM")}
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Scroll to pick another day.
+                </p>
+              </div>
             </div>
             {/* Time Slots, Location, and Button Section (Right Column) */}
             <div className="space-y-4">
@@ -461,6 +623,12 @@ type BookingService = ServiceDetail & {
                             : !isAllowed
                               ? "Disabled"
                             : "Flexible arrival";
+                      const SlotIcon =
+                        slot.label === "morning"
+                          ? Sun
+                          : slot.label === "evening"
+                            ? Moon
+                            : Clock;
                       return (
                         <Button
                           key={slot.label}
@@ -471,11 +639,12 @@ type BookingService = ServiceDetail & {
                         >
                           <div className="flex w-full items-start justify-between gap-2">
                             <div>
-                              <div className="font-semibold text-base">
-                                {slot.title}
-                              </div>
-                              <div className="text-xs text-muted-foreground whitespace-normal break-words">
-                                {slot.window}
+                              <div className="flex items-center gap-2">
+                                <SlotIcon className="h-5 w-5" aria-hidden="true" />
+                                <span className="sr-only">{slot.title}</span>
+                                <div className="font-semibold text-base">
+                                  {slot.window}
+                                </div>
                               </div>
                             </div>
                             <span
@@ -540,6 +709,49 @@ type BookingService = ServiceDetail & {
                     Service will be at:{" "}
                     {providerFullAddress || "Provider address not specified"}
                   </p>
+                )}
+                {serviceLocation === "customer" && (
+                  <div className="mt-3 space-y-3 rounded-md border bg-muted/20 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Rural addresses can be tricky—share your GPS location and a
+                      landmark so the provider can find you easily.
+                    </p>
+                    <Button
+                      type="button"
+                      size="lg"
+                      variant="secondary"
+                      onClick={handleUseDeviceLocation}
+                      disabled={isCapturingDeviceLocation || saveLocationMutation.isPending}
+                      className="w-full h-14 text-base"
+                    >
+                      {isCapturingDeviceLocation || saveLocationMutation.isPending ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Navigation className="h-5 w-5" />
+                      )}
+                      Use My Current Location
+                    </Button>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span>Saved GPS:</span>
+                      <MapLink latitude={user?.latitude} longitude={user?.longitude} />
+                      {!user?.latitude || !user?.longitude ? (
+                        <span>(not saved yet)</span>
+                      ) : null}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="booking_landmark">Landmark</Label>
+                      <Input
+                        id="booking_landmark"
+                        value={bookingLandmark}
+                        onChange={(e) => setBookingLandmark(e.target.value)}
+                        placeholder='Example: "Near the big Banyan tree, opposite the temple"'
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        This helps the provider navigate in areas without clear
+                        street addresses.
+                      </p>
+                    </div>
+                  </div>
                 )}
                 {/* Remove the input field for provider address */}
                 {/* 
@@ -607,6 +819,17 @@ type BookingService = ServiceDetail & {
                   ? `Provider's Location (${providerFullAddress || "Not specified"})`
                   : "Your Location"}
               </p>
+              {serviceLocation === "customer" && bookingLandmark.trim() ? (
+                <p>
+                  <strong>Landmark:</strong> {bookingLandmark.trim()}
+                </p>
+              ) : null}
+              {serviceLocation === "customer" ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong>Map:</strong>
+                  <MapLink latitude={user?.latitude} longitude={user?.longitude} />
+                </div>
+              ) : null}
               <div className="flex justify-between py-2">
                 <span>Service Price:</span>
                 <span>₹{service?.price}</span>
@@ -631,7 +854,9 @@ type BookingService = ServiceDetail & {
               </Button>
               <Button
                 onClick={confirmBooking}
-                disabled={createBookingMutation.isPending}
+                disabled={
+                  createBookingMutation.isPending || saveLandmarkMutation.isPending
+                }
               >
                 {createBookingMutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

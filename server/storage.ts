@@ -907,6 +907,10 @@ export class MemStorage implements IStorage {
         insertUser.addressStreet === undefined
           ? null
           : insertUser.addressStreet,
+      addressLandmark:
+        insertUser.addressLandmark === undefined
+          ? null
+          : insertUser.addressLandmark,
       addressCity:
         insertUser.addressCity === undefined ? null : insertUser.addressCity,
       addressState:
@@ -1208,6 +1212,15 @@ export class MemStorage implements IStorage {
       }
       if (filters.availabilityDate) {
         results = results.filter((service) => service.isAvailable === true);
+      }
+      if (filters.availableNow !== undefined) {
+        const desired = Boolean(filters.availableNow);
+        results = results.filter(
+          (service) => Boolean(service.isAvailableNow) === desired,
+        );
+        if (desired) {
+          results = results.filter((service) => service.isAvailable !== false);
+        }
       }
       if (filters.lat !== undefined && filters.lng !== undefined) {
         const lat = Number(filters.lat);

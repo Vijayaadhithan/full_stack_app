@@ -42,6 +42,7 @@ const profileSchema = z.object({
   phone: z.string().min(10, "Invalid phone number"),
   email: z.string().email("Invalid email"),
   addressStreet: z.string().optional(),
+  addressLandmark: z.string().optional(),
   addressCity: z.string().optional(),
   addressState: z.string().optional(),
   addressPostalCode: z.string().optional(),
@@ -62,6 +63,7 @@ export default function CustomerProfile() {
       phone: user?.phone || "",
       email: user?.email || "",
       addressStreet: user?.addressStreet || "",
+      addressLandmark: user?.addressLandmark || "",
       addressCity: user?.addressCity || "",
       addressState: user?.addressState || "",
       addressPostalCode: user?.addressPostalCode || "",
@@ -236,6 +238,13 @@ export default function CustomerProfile() {
                           </span>
                         </Label>
                         <Input {...form.register("addressStreet")} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="addressLandmark">Landmark</Label>
+                        <Input
+                          {...form.register("addressLandmark")}
+                          placeholder='Example: "Opposite the temple"'
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="addressCity">City</Label>
