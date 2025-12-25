@@ -67,7 +67,7 @@ type ShopProductListItem = {
   images: string[];
   shopId: number | null;
   isAvailable: boolean;
-  stock: number;
+  stock: number | null;
   catalogModeEnabled?: boolean;
   openOrderMode?: boolean;
   allowPayLater?: boolean;
@@ -467,8 +467,8 @@ export default function ShopDetails() {
                 const openOrderAllowed = Boolean(
                   product.openOrderMode || product.catalogModeEnabled,
                 );
-                const outOfStock =
-                  product.stock <= 0 && !openOrderAllowed;
+                const stockCount = Number(product.stock ?? 0);
+                const outOfStock = stockCount <= 0 && !openOrderAllowed;
                 return (
                   <motion.div key={product.id} variants={item}>
                     <Link
@@ -535,7 +535,7 @@ export default function ShopDetails() {
                               </Button>
                             </div>
                           </div>
-                          {product.stock <= 0 && openOrderAllowed && (
+                          {stockCount <= 0 && openOrderAllowed && (
                             <p className="text-xs text-amber-700 mt-1">
                               Available on request. The shop will confirm availability.
                             </p>

@@ -1905,7 +1905,7 @@ export class PostgresStorage implements IStorage {
         logger.error(`Product ID ${productId} not found for stock validation.`);
         throw new Error("Product not found when trying to add to cart.");
       }
-      const availableStock = productDetails[0].stock;
+      const availableStock = productDetails[0].stock ?? 0;
       const shopModes = await loadShopModes(shopIdToAdd);
       const enforceStock = !(shopModes.catalogModeEnabled || shopModes.openOrderMode);
 
@@ -2425,7 +2425,7 @@ export class PostgresStorage implements IStorage {
     if (!productResult.length)
       throw new Error(`Product with ID ${productId} not found`);
     const product = productResult[0];
-    const newStock = product.stock - quantity;
+    const newStock = (product.stock ?? 0) - quantity;
     if (newStock < 0)
       throw new Error(`Insufficient stock for product ID ${productId}`);
     await db

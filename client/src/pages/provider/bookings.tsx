@@ -2,6 +2,7 @@ import React from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import MapLink from "@/components/location/MapLink";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -440,23 +441,28 @@ export default function ProviderBookings() {
                         <h3 className="font-semibold">
                           {booking.service.name}
                         </h3>
-                        <span
-                          className={`text-sm font-medium ${
-                            booking.status === "accepted"
-                              ? "text-green-600"
-                              : booking.status === "rejected"
-                                ? "text-red-600"
-                                : booking.status === "rescheduled"
-                                  ? "text-yellow-600"
-                                  : booking.status === "en_route"
-                                    ? "text-blue-600"
-                                    : booking.status === "completed"
-                                      ? "text-blue-600"
-                                      : "text-gray-600"
+                        <Badge
+                          variant="outline"
+                          className={`text-xs font-bold uppercase tracking-wide ${
+                            booking.status === "pending"
+                              ? "animate-pulse border-yellow-500 bg-yellow-300 text-black"
+                              : booking.status === "accepted"
+                                ? "border-green-700 bg-green-600 text-white"
+                                : booking.status === "rejected"
+                                  ? "border-red-700 bg-red-600 text-white"
+                                  : booking.status === "rescheduled"
+                                    ? "border-amber-700 bg-amber-500 text-white"
+                                    : booking.status === "awaiting_payment"
+                                      ? "border-yellow-400 bg-yellow-200 text-black"
+                                      : booking.status === "en_route"
+                                        ? "border-blue-700 bg-blue-600 text-white"
+                                        : booking.status === "completed"
+                                          ? "border-slate-700 bg-slate-700 text-white"
+                                          : "border-gray-300 bg-gray-100 text-gray-900"
                           }`}
                         >
                           {t(booking.status)}
-                        </span>
+                        </Badge>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Calendar className="h-4 w-4" />

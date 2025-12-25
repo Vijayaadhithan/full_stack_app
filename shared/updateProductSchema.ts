@@ -14,6 +14,7 @@ export const updateProductSchema = z
     stock: z.coerce
       .number()
       .min(0, "Stock must be a positive number")
+      .nullable()
       .optional(),
     category: z.string().min(1, "Category is required").optional(),
     images: z.array(z.string()).optional(),

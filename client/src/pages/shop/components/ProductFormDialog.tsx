@@ -176,7 +176,19 @@ export default function ProductFormDialog({
                   <FormItem>
                     <FormLabel>{t("stock_quantity")}</FormLabel>
                     <FormControl>
-                      <Input {...field} type="number" min="0" />
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="Leave blank to not track a count"
+                        value={field.value ?? ""}
+                        onChange={(e) => {
+                          const nextValue = e.target.valueAsNumber;
+                          field.onChange(Number.isNaN(nextValue) ? null : nextValue);
+                        }}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

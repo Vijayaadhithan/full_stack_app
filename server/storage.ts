@@ -1465,7 +1465,7 @@ export class MemStorage implements IStorage {
   ): Promise<void> {
     const product = this.products.get(productId);
     if (!product) throw new Error("Product not found");
-    product.stock -= quantity;
+    product.stock = (product.stock ?? 0) - quantity;
     this.products.set(productId, product);
   }
 
@@ -1792,7 +1792,7 @@ export class MemStorage implements IStorage {
         throw new Error(`Product with ID ${item.productId} not found`);
       }
       const totalQuantity = (quantityByProduct.get(item.productId) ?? 0) + item.quantity;
-      if (product.stock < totalQuantity) {
+      if (Number(product.stock ?? 0) < totalQuantity) {
         throw new Error(`Insufficient stock for product ID ${item.productId}`);
       }
       quantityByProduct.set(item.productId, totalQuantity);
@@ -1803,7 +1803,7 @@ export class MemStorage implements IStorage {
       if (!product) {
         return;
       }
-      product.stock -= totalQuantity;
+      product.stock = (product.stock ?? 0) - totalQuantity;
       this.products.set(productId, product);
     });
 
@@ -1881,7 +1881,7 @@ export class MemStorage implements IStorage {
       (p) => p.shopId === shopId,
     );
     const totalProducts = productsByShop.length;
-    const lowStockItems = productsByShop.filter((p) => p.stock < 10).length;
+    const lowStockItems = productsByShop.filter((p) => Number(p.stock ?? 0) < 10).length;
 
     return {
       pendingOrders,

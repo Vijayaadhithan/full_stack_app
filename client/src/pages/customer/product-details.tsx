@@ -253,15 +253,21 @@ export default function ProductDetails() {
     );
   }
 
-  const inStock = product.isAvailable && product.stock > 0;
-  const availabilityLabel = inStock
-    ? `In Stock (${product.stock} available)`
-    : openOrderAllowed
-      ? "Available on request — shop will confirm availability"
-      : "Out of Stock";
+  const stockCount = Number(product.stock ?? 0);
+  const hasTrackedStock = typeof product.stock === "number";
+  const isAvailable = product.isAvailable !== false;
+  const inStock = isAvailable && hasTrackedStock && stockCount > 0;
+
+  const availabilityLabel = !isAvailable
+    ? "Out of Stock"
+    : inStock
+      ? `In Stock (${stockCount} available)`
+      : openOrderAllowed
+        ? "Available on request — shop will confirm availability"
+        : "Out of Stock";
   const disableAddToCart =
-    !product.isAvailable ||
-    (!openOrderAllowed && product.stock <= 0) ||
+    !isAvailable ||
+    (!openOrderAllowed && stockCount <= 0) ||
     addToCartMutation.isPending;
 
   return (

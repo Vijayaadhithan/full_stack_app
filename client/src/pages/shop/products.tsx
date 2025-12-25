@@ -46,7 +46,11 @@ const productFormSchema = z.object({
   description: z.string().optional(),
   price: z.coerce.number().positive("Price must be a positive number"),
   mrp: z.coerce.number().positive("MRP must be a positive number"),
-  stock: z.coerce.number().min(0, "Stock must be a positive number"),
+  stock: z.coerce
+    .number()
+    .min(0, "Stock must be a positive number")
+    .nullable()
+    .optional(),
   category: z.string().min(1, "Category is required"),
   images: z.array(z.string()).default([]),
   shopId: z.number().optional(),
@@ -144,7 +148,7 @@ export default function ShopProducts() {
       description: "",
       price: 0,
       mrp: 0,
-      stock: 0,
+      stock: null,
       category: "",
       isAvailable: true,
       images: [],
@@ -554,7 +558,7 @@ export default function ShopProducts() {
       description: "",
       price: 0,
       mrp: 0,
-      stock: 0,
+      stock: null,
       category: "",
       isAvailable: true,
       images: [],
@@ -658,15 +662,22 @@ export default function ShopProducts() {
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span>{t("stock")}</span>
-                  <span
-                    className={`font-semibold ${
-                      product.stock <= (product.lowStockThreshold || 5)
-                        ? "text-red-500"
-                        : ""
-                    }`}
-                  >
-                    {product.stock} {t("units")}
-                  </span>
+                  {(() => {
+                    const trackedStock =
+                      typeof product.stock === "number" ? product.stock : null;
+                    const lowStock =
+                      trackedStock !== null &&
+                      trackedStock <= (product.lowStockThreshold || 5);
+                    return (
+                      <span
+                        className={`font-semibold ${lowStock ? "text-red-500" : ""}`}
+                      >
+                        {trackedStock === null
+                          ? "—"
+                          : `${trackedStock} ${t("units")}`}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span>{t("category")}</span>
@@ -683,7 +694,7 @@ export default function ShopProducts() {
                   </span>
                 </div>
                 <Switch
-                  checked={product.isAvailable ?? false}
+                  checked={product.isAvailable !== false}
                   disabled={!canWriteProducts}
                   onCheckedChange={(checked) => {
                     if (!canWriteProducts) return;

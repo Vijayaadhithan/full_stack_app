@@ -467,7 +467,7 @@ export const products = pgTable(
     description: text("description").notNull(),
     price: decimal("price").notNull(),
     mrp: decimal("mrp").notNull(),
-    stock: integer("stock").notNull(),
+    stock: integer("stock"),
     category: text("category").notNull(),
     images: text("images").array(),
     isAvailable: boolean("is_available").default(true),
@@ -863,7 +863,14 @@ export const insertBookingSchema = createInsertSchema(bookings, {
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
-export const insertProductSchema = createInsertSchema(products).strict();
+export const insertProductSchema = createInsertSchema(products, {
+  stock: z.coerce
+    .number()
+    .int()
+    .min(0, "Stock must be a positive number")
+    .nullable()
+    .optional(),
+}).strict();
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 

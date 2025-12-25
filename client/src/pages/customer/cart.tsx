@@ -124,7 +124,7 @@ export default function Cart() {
     payLaterEnabled && (payLaterEligibility?.eligible ?? true);
   const openOrderWarning =
     openOrderEnabled &&
-    (cartItems?.some((item) => item.product.stock <= 0) ?? false);
+    (cartItems?.some((item) => Number(item.product.stock ?? 0) <= 0) ?? false);
   const payLaterDisabledReason = !payLaterEnabled
     ? "Pay Later is disabled for this shop."
     : payLaterEligibility && !payLaterEligibility.eligible
@@ -511,7 +511,8 @@ export default function Cart() {
                               disabled={
                                 updateCartMutation.isPending ||
                                 (!openOrderEnabled &&
-                                  item.quantity >= item.product.stock)
+                                  item.quantity >=
+                                    Number(item.product.stock ?? 0))
                               }
                             >
                               <Plus className="h-4 w-4" />

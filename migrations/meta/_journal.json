@@ -57,6 +57,13 @@
       "when": 1765799809326,
       "tag": "0007_address_landmark",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1766062555979,
+      "tag": "0008_breezy_bushwacker",
+      "breakpoints": true
     }
   ]
 }

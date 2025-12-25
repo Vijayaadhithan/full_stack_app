@@ -3087,8 +3087,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const updateData: Record<string, unknown> = { ...parsedBody.data };
 
-        // Sanitize numeric fields to prevent 'undefined' string errors
-        const numericFields = ["price", "mrp", "stock"];
+        // Sanitize numeric fields to prevent 'undefined' string errors.
+        // Note: products.stock is nullable (shops may not track exact counts).
+        const numericFields = ["price", "mrp"];
         for (const field of numericFields) {
           if (Object.prototype.hasOwnProperty.call(updateData, field)) {
             const value = updateData[field];
@@ -3097,6 +3098,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } else if (typeof value === "string" && value.trim() === "") {
               delete updateData[field];
             }
+          }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(updateData, "stock")) {
+          const value = updateData.stock;
+          if (value === "undefined") {
+            delete updateData.stock;
+          } else if (typeof value === "string" && value.trim() === "") {
+            delete updateData.stock;
           }
         }
 
@@ -5538,7 +5548,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const insufficientEntry = Array.from(quantityByProduct.entries()).find(
             ([productId, totalQuantity]) => {
               const product = productMap.get(productId);
-              return product ? product.stock < totalQuantity : true;
+              return product ? Number(product.stock ?? 0) < totalQuantity : true;
             },
           );
           if (insufficientEntry) {

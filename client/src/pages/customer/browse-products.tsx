@@ -106,7 +106,7 @@ export default function BrowseProducts() {
   images: string[];
   shopId: number | null;
   isAvailable: boolean;
-  stock: number;
+  stock: number | null;
   catalogModeEnabled?: boolean;
   openOrderMode?: boolean;
   allowPayLater?: boolean;
@@ -476,13 +476,13 @@ export default function BrowseProducts() {
         ) : (
           <>
             <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredProducts.map((product) => {
-                const openOrderAllowed = Boolean(
-                  product.openOrderMode || product.catalogModeEnabled,
-                );
-                const outOfStock =
-                  product.stock <= 0 && !openOrderAllowed;
-                return (
+	              {filteredProducts.map((product) => {
+	                const openOrderAllowed = Boolean(
+	                  product.openOrderMode || product.catalogModeEnabled,
+	                );
+	                const stockCount = Number(product.stock ?? 0);
+	                const outOfStock = stockCount <= 0 && !openOrderAllowed;
+	                return (
                   <motion.div key={product.id} variants={item}>
                     <Link
                       href={`/customer/shops/${product.shopId}/products/${product.id}`}
@@ -542,11 +542,11 @@ export default function BrowseProducts() {
                               Currently unavailable
                             </p>
                           )}
-                          {product.stock <= 0 && openOrderAllowed && (
-                            <p className="text-xs text-amber-700 mt-1">
-                              Available on request. The shop will confirm availability.
-                            </p>
-                          )}
+	                          {stockCount <= 0 && openOrderAllowed && (
+	                            <p className="text-xs text-amber-700 mt-1">
+	                              Available on request. The shop will confirm availability.
+	                            </p>
+	                          )}
                         </CardContent>
                       </Card>
                     </Link>
