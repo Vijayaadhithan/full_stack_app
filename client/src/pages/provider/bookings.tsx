@@ -69,10 +69,18 @@ type AddressLike = {
   addressCountry?: string | null;
 } | null;
 
-const formatAddressSegments = (source: AddressLike): string[] => {
+type AddressFormatOptions = {
+  includeLandmark?: boolean;
+};
+
+const formatAddressSegments = (
+  source: AddressLike,
+  options: AddressFormatOptions = {},
+): string[] => {
   if (!source) return [];
 
   const segments: string[] = [];
+  const includeLandmark = options.includeLandmark !== false;
 
   const pushIfPresent = (value?: string | null) => {
     if (value && value.trim()) {
@@ -81,7 +89,7 @@ const formatAddressSegments = (source: AddressLike): string[] => {
   };
 
   pushIfPresent(source.addressStreet);
-  if (source.addressLandmark && source.addressLandmark.trim()) {
+  if (includeLandmark && source.addressLandmark && source.addressLandmark.trim()) {
     segments.unshift(`Landmark: ${source.addressLandmark.trim()}`);
   }
   pushIfPresent(source.addressCity);
@@ -103,13 +111,14 @@ const formatAddressSegments = (source: AddressLike): string[] => {
 const formatCustomerAddress = (
   customer: AddressLike,
   fallback: AddressLike,
+  options: AddressFormatOptions = {},
 ): string => {
-  const customerSegments = formatAddressSegments(customer);
+  const customerSegments = formatAddressSegments(customer, options);
   if (customerSegments.length > 0) {
     return customerSegments.join(", ");
   }
 
-  const fallbackSegments = formatAddressSegments(fallback);
+  const fallbackSegments = formatAddressSegments(fallback, options);
   return fallbackSegments.join(", ");
 };
 
@@ -420,9 +429,14 @@ export default function ProviderBookings() {
         ) : (
           <div className="space-y-4">
             {filteredBookings.map((booking) => {
+              const customerLandmark =
+                booking.customer?.addressLandmark?.trim() ||
+                booking.relevantAddress?.addressLandmark?.trim() ||
+                null;
               const formattedCustomerAddress = formatCustomerAddress(
                 booking.customer ?? null,
                 booking.relevantAddress ?? null,
+                { includeLandmark: false },
               );
 
               return (
@@ -487,12 +501,20 @@ export default function ProviderBookings() {
                           {booking.serviceLocation === "customer" ? (
                             <>
                               <span>{t("service_at_customer_location")}</span>
+                              <div className="mt-2 rounded-md border border-blue-200 bg-blue-50 p-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-blue-900">
+                                  Landmark
+                                </p>
+                                <p className="text-xl font-extrabold text-blue-950">
+                                  {customerLandmark || "(not provided)"}
+                                </p>
+                              </div>
                               {booking.customer ? (
                                 formattedCustomerAddress ? (
                                   <p className="font-medium">
                                     {formattedCustomerAddress}
                                   </p>
-                                ) : (
+                                ) : customerLandmark ? null : (
                                   <p className="font-medium text-muted-foreground">
                                     {t("customer_address_not_provided")}
                                   </p>

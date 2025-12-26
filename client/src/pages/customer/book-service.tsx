@@ -46,6 +46,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { getVerificationError, parseApiError } from "@/lib/api-error";
 
 const timeZone = "Asia/Kolkata"; // Define IST timezone
+const GPS_WEAK_ACCURACY_METERS = 150;
 
 type BroadSlotLabel = "morning" | "afternoon" | "evening";
 
@@ -142,6 +143,9 @@ export default function BookService() {
   const [bookingLandmark, setBookingLandmark] = useState("");
   const [isCapturingDeviceLocation, setIsCapturingDeviceLocation] =
     useState(false);
+  const [lastGpsAccuracyMeters, setLastGpsAccuracyMeters] = useState<
+    number | null
+  >(null);
 
 type BookingService = ServiceDetail & {
   isAvailableNow?: boolean | null;
@@ -487,6 +491,14 @@ type BookingService = ServiceDetail & {
       });
       return;
     }
+    if (serviceLocation === "customer" && !bookingLandmark.trim()) {
+      toast({
+        title: "Landmark required",
+        description: "Please type a landmark so the provider can find you.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!providerOnline) {
       toast({
         title: "Provider is offline",
@@ -522,13 +534,12 @@ type BookingService = ServiceDetail & {
     const trimmedLandmark = bookingLandmark.trim();
     const existingLandmark = (user?.addressLandmark ?? "").trim();
     if (serviceLocation === "customer") {
-      const hasCoords = Boolean(customerMapsUrl);
       const hasLandmark = trimmedLandmark.length > 0;
-      if (!hasCoords && !hasLandmark) {
+      if (!hasLandmark) {
         toast({
-          title: "Add your location",
+          title: "Landmark required",
           description:
-            "Use 'Use My Current Location' or add a landmark so the provider can find you.",
+            "Please type a landmark so the provider can find you.",
           variant: "destructive",
         });
         return;
@@ -542,8 +553,16 @@ type BookingService = ServiceDetail & {
         await saveLandmarkMutation.mutateAsync(
           trimmedLandmark.length ? trimmedLandmark : null,
         );
-      } catch {
-        // Landmark is best-effort; still proceed with booking.
+      } catch (error) {
+        toast({
+          title: "Unable to save landmark",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Please try again to save your landmark.",
+          variant: "destructive",
+        });
+        return;
       }
     }
 
@@ -570,6 +589,19 @@ type BookingService = ServiceDetail & {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setIsCapturingDeviceLocation(false);
+        const accuracyMeters = Number(position.coords.accuracy);
+        if (Number.isFinite(accuracyMeters)) {
+          setLastGpsAccuracyMeters(accuracyMeters);
+          if (accuracyMeters > GPS_WEAK_ACCURACY_METERS) {
+            toast({
+              title: "GPS is weak",
+              description: "GPS is weak. Please type a landmark.",
+              variant: "destructive",
+            });
+          }
+        } else {
+          setLastGpsAccuracyMeters(null);
+        }
         saveLocationMutation.mutate({
           latitude: Number(position.coords.latitude.toFixed(7)),
           longitude: Number(position.coords.longitude.toFixed(7)),
@@ -812,9 +844,46 @@ type BookingService = ServiceDetail & {
                 {serviceLocation === "customer" && (
                   <div className="mt-3 space-y-3 rounded-md border bg-muted/20 p-4">
                     <p className="text-sm text-muted-foreground">
-                      Rural addresses can be tricky—share your GPS location and a
-                      landmark so the provider can find you easily.
+                      Rural addresses can be tricky—your landmark is the most
+                      important detail for the provider to find you.
                     </p>
+                    {lastGpsAccuracyMeters !== null &&
+                    lastGpsAccuracyMeters > GPS_WEAK_ACCURACY_METERS ? (
+                      <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="font-semibold">
+                            GPS is weak (±{Math.round(lastGpsAccuracyMeters)}m).
+                          </p>
+                          <p>GPS is weak. Please type a landmark.</p>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="booking_landmark"
+                        className="text-base font-semibold"
+                      >
+                        Landmark <span className="text-red-600">*</span>
+                      </Label>
+                      <Input
+                        id="booking_landmark"
+                        value={bookingLandmark}
+                        onChange={(e) => setBookingLandmark(e.target.value)}
+                        placeholder='Example: "Near the big temple, behind the ration shop"'
+                        required={serviceLocation === "customer"}
+                        className="h-12 text-base"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Use something locals recognize (temple, school, ration
+                        shop, main bus stop).
+                      </p>
+                      {serviceLocation === "customer" && !bookingLandmark.trim() ? (
+                        <p className="text-xs font-medium text-red-700">
+                          Landmark is required.
+                        </p>
+                      ) : null}
+                    </div>
                     <Button
                       type="button"
                       size="lg"
@@ -836,19 +905,6 @@ type BookingService = ServiceDetail & {
                       {!user?.latitude || !user?.longitude ? (
                         <span>(not saved yet)</span>
                       ) : null}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="booking_landmark">Landmark</Label>
-                      <Input
-                        id="booking_landmark"
-                        value={bookingLandmark}
-                        onChange={(e) => setBookingLandmark(e.target.value)}
-                        placeholder='Example: "Near the big Banyan tree, opposite the temple"'
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        This helps the provider navigate in areas without clear
-                        street addresses.
-                      </p>
                     </div>
                   </div>
                 )}
@@ -878,6 +934,7 @@ type BookingService = ServiceDetail & {
               bookingsLoading ||
               dailyLimitReached ||
               !resolvedSlotLabel ||
+              (serviceLocation === "customer" && !bookingLandmark.trim()) ||
               createBookingMutation.isPending
             }
           >

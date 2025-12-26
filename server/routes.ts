@@ -4003,6 +4003,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const normalizedSlotLabel =
           timeSlotLabel === null ? undefined : timeSlotLabel;
 
+        if (serviceLocation === "customer") {
+          const landmark = String((req.user as any)?.addressLandmark ?? "").trim();
+          if (!landmark) {
+            return res.status(400).json({
+              message: "Landmark is required for bookings at customer location.",
+            });
+          }
+        }
+
         // Get service details
         const service = await storage.getService(serviceId);
         if (!service) {

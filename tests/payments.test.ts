@@ -33,6 +33,7 @@ const customer = await memStorage.createUser({
 });
 await memStorage.updateUser(customer.id, {
   verificationStatus: "verified",
+  addressLandmark: "Near the big temple",
 });
 const provider = await memStorage.createUser({
   username: "provider",
