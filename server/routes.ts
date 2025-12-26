@@ -4031,6 +4031,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const bookingDateTime = slotWindow
           ? slotWindow.start
           : new Date(bookingDate);
+
+        const existingForDay = await storage.getBookingsByService(
+          serviceId,
+          bookingDateTime,
+        );
+        const slotKey = normalizedSlotLabel ?? null;
+        const customerHasActiveBookingForSlot = existingForDay.some(
+          (booking) =>
+            booking.customerId === req.user!.id &&
+            booking.status !== "completed" &&
+            (slotKey === null ||
+              booking.timeSlotLabel === null ||
+              booking.timeSlotLabel === slotKey),
+        );
+        if (customerHasActiveBookingForSlot) {
+          return res.status(409).json({
+            message:
+              "You already have an active booking request for this service on the selected day.",
+          });
+        }
+
         const isAvailable = await storage.checkAvailability(
           serviceId,
           bookingDateTime,

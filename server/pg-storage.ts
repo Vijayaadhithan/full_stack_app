@@ -2611,12 +2611,9 @@ export class PostgresStorage implements IStorage {
       );
     if (blocked) return false;
 
-    // Check for existing booking at the exact time
-    const labelCondition = timeSlotLabel
-      ? sql`(${bookings.timeSlotLabel} IS NULL OR ${bookings.timeSlotLabel} = ${timeSlotLabel})`
-      : undefined;
-    const [conflict] = await db
-      .select({ id: bookings.id })
+    // Enforce max daily + per-slot capacity
+    const [{ value: countForDay }] = await db
+      .select({ value: count() })
       .from(bookings)
       .where(
         and(
@@ -2624,28 +2621,42 @@ export class PostgresStorage implements IStorage {
           gte(bookings.bookingDate, startOfDay),
           lt(bookings.bookingDate, nextDay),
           activeStatusCondition,
-          ...(labelCondition ? [labelCondition] : []),
         ),
       );
-    if (conflict) return false;
 
-    // Enforce max daily bookings
-    if (service) {
-      const [{ value: countForDay }] = await db
-        .select({ value: count() })
-        .from(bookings)
-        .where(
-          and(
-            eq(bookings.serviceId, serviceId),
-            gte(bookings.bookingDate, startOfDay),
-            lt(bookings.bookingDate, nextDay),
-            activeStatusCondition,
-          ),
-        );
-      const max = service.maxDailyBookings ?? 5;
-      if (Number(countForDay) >= max) return false;
+    const maxDailyBookings = service?.maxDailyBookings ?? 5;
+    if (Number(countForDay) >= maxDailyBookings) {
+      return false;
     }
-    return true;
+
+    if (!timeSlotLabel) {
+      return true;
+    }
+
+    const allowedSlots =
+      Array.isArray(service?.allowedSlots) && service.allowedSlots.length > 0
+        ? (service.allowedSlots as TimeSlotLabel[])
+        : (["morning", "afternoon", "evening"] as TimeSlotLabel[]);
+    const perSlotCapacity = Math.max(
+      1,
+      Math.ceil(maxDailyBookings / Math.max(1, allowedSlots.length)),
+    );
+
+    const slotCondition = sql`(${bookings.timeSlotLabel} IS NULL OR ${bookings.timeSlotLabel} = ${timeSlotLabel})`;
+    const [{ value: countForSlot }] = await db
+      .select({ value: count() })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.serviceId, serviceId),
+          gte(bookings.bookingDate, startOfDay),
+          lt(bookings.bookingDate, nextDay),
+          activeStatusCondition,
+          slotCondition,
+        ),
+      );
+
+    return Number(countForSlot) < perSlotCapacity;
   }
 
   async joinWaitlist(

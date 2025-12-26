@@ -217,17 +217,44 @@ type BookingService = ServiceDetail & {
     enabled: !!id && !!service, // Enable when service is loaded
   });
 
-  const bookedSlotLabels = useMemo(() => {
-    return new Set(
-      (bookedSlots || [])
-        .map((slot) => slot.timeSlotLabel)
-        .filter(Boolean) as BroadSlotLabel[],
-    );
+  const effectiveMaxDailyBookings = useMemo(() => {
+    const raw = service?.maxDailyBookings ?? null;
+    return typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : 5;
+  }, [service?.maxDailyBookings]);
+
+  const perSlotCapacity = useMemo(() => {
+    const allowed =
+      (service?.allowedSlots as BroadSlotLabel[] | undefined | null) ??
+      SLOT_OPTIONS.map((s) => s.label);
+    const allowedCount = allowed.length > 0 ? allowed.length : SLOT_OPTIONS.length;
+    return Math.max(1, Math.ceil(effectiveMaxDailyBookings / allowedCount));
+  }, [effectiveMaxDailyBookings, service?.allowedSlots]);
+
+  const bookedSlotCounts = useMemo(() => {
+    const base = new Map<BroadSlotLabel, number>();
+    for (const slot of SLOT_OPTIONS) {
+      base.set(slot.label, 0);
+    }
+
+    const slots = bookedSlots ?? [];
+    const unlabeledCount = slots.filter((slot) => !slot.timeSlotLabel).length;
+
+    for (const slot of slots) {
+      if (slot.timeSlotLabel) {
+        base.set(
+          slot.timeSlotLabel,
+          (base.get(slot.timeSlotLabel) ?? 0) + 1,
+        );
+      }
+    }
+
+    for (const slot of SLOT_OPTIONS) {
+      const label = slot.label;
+      base.set(label, (base.get(label) ?? 0) + unlabeledCount);
+    }
+
+    return base;
   }, [bookedSlots]);
-  const hasUnlabeledBooking = useMemo(
-    () => (bookedSlots || []).some((slot) => !slot.timeSlotLabel),
-    [bookedSlots],
-  );
 
   useEffect(() => {
     setBookingLandmark(user?.addressLandmark ?? "");
@@ -254,11 +281,8 @@ type BookingService = ServiceDetail & {
 
   const providerOnline =
     (service?.isAvailableNow ?? true) && (service?.isAvailable ?? true);
-  const maxDailyBookings = service?.maxDailyBookings ?? null;
   const dailyLimitReached =
-    maxDailyBookings !== null
-      ? (bookedSlots?.length ?? 0) >= maxDailyBookings
-      : false;
+    (bookedSlots?.length ?? 0) >= effectiveMaxDailyBookings;
   const allowedSlotSet = useMemo(() => {
     const allowed =
       (service?.allowedSlots as BroadSlotLabel[] | undefined | null) ??
@@ -268,7 +292,6 @@ type BookingService = ServiceDetail & {
   const resolvedSlotLabel = useMemo((): BroadSlotLabel | null => {
     if (!selectedUrgency) return null;
     if (!providerOnline || dailyLimitReached) return null;
-    if (hasUnlabeledBooking) return null;
 
     const labels = SLOT_OPTIONS.map((slot) => slot.label);
     const now = toZonedTime(new Date(), timeZone);
@@ -284,16 +307,17 @@ type BookingService = ServiceDetail & {
 
     for (const label of candidateLabels) {
       if (!allowedSlotSet.has(label)) continue;
-      if (bookedSlotLabels.has(label)) continue;
+      const countForLabel = bookedSlotCounts.get(label) ?? 0;
+      if (countForLabel >= perSlotCapacity) continue;
       return label;
     }
 
     return null;
   }, [
     allowedSlotSet,
-    bookedSlotLabels,
+    bookedSlotCounts,
     dailyLimitReached,
-    hasUnlabeledBooking,
+    perSlotCapacity,
     providerOnline,
     selectedUrgency,
   ]);
@@ -390,6 +414,7 @@ type BookingService = ServiceDetail & {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/service"] });
       const bookingId = (data as any)?.booking?.id;
       setLastBookingId(typeof bookingId === "number" ? bookingId : null);
       toast({

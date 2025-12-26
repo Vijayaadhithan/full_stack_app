@@ -338,6 +338,7 @@ export default function Bookings() {
       }).then((r) => r.json()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/service"] });
       toast({
         title: "Booking cancelled",
         description: "Your booking has been cancelled successfully.",
@@ -371,6 +372,7 @@ export default function Bookings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/service"] });
       toast({
         title: "Reschedule Requested",
         description:

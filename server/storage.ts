@@ -2267,18 +2267,61 @@ export class MemStorage implements IStorage {
   }
 
   // Availability and waitlist operations
-  async checkAvailability(serviceId: number, date: Date): Promise<boolean> {
-    const bookings = Array.from(this.bookings.values()).filter(
-      (booking) =>
-        booking.serviceId === serviceId &&
-        booking.bookingDate.toDateString() === date.toDateString(),
-    );
-
+  async checkAvailability(
+    serviceId: number,
+    date: Date,
+    timeSlotLabel?: TimeSlotLabel | null,
+  ): Promise<boolean> {
     const service = await this.getService(serviceId);
     if (!service) return false;
+    if (service.isAvailable === false || service.isAvailableNow === false) {
+      return false;
+    }
 
-    // Simple availability check - can be enhanced with more complex logic
-    return bookings.length < 5; // Assuming max 5 bookings per day
+    if (
+      timeSlotLabel &&
+      Array.isArray((service as any).allowedSlots) &&
+      (service as any).allowedSlots.length > 0 &&
+      !(service as any).allowedSlots.includes(timeSlotLabel)
+    ) {
+      return false;
+    }
+
+    const activeBookings = Array.from(this.bookings.values()).filter(
+      (booking) =>
+        booking.serviceId === serviceId &&
+        booking.bookingDate.toDateString() === date.toDateString() &&
+        booking.status !== "cancelled" &&
+        booking.status !== "rejected" &&
+        booking.status !== "expired",
+    );
+
+    const maxDailyBookings = service.maxDailyBookings ?? 5;
+    if (activeBookings.length >= maxDailyBookings) {
+      return false;
+    }
+
+    if (!timeSlotLabel) {
+      return true;
+    }
+
+    const allowedSlots = Array.isArray((service as any).allowedSlots) &&
+      (service as any).allowedSlots.length > 0
+      ? ((service as any).allowedSlots as TimeSlotLabel[])
+      : (["morning", "afternoon", "evening"] as TimeSlotLabel[]);
+
+    const perSlotCapacity = Math.max(
+      1,
+      Math.ceil(maxDailyBookings / Math.max(1, allowedSlots.length)),
+    );
+
+    const countForSlot = activeBookings.filter(
+      (booking) =>
+        booking.timeSlotLabel === null ||
+        (booking.timeSlotLabel as any) === timeSlotLabel,
+    ).length;
+
+    return countForSlot < perSlotCapacity;
   }
 
   async joinWaitlist(
@@ -2556,7 +2599,10 @@ export class MemStorage implements IStorage {
     return Array.from(this.bookings.values()).filter(
       (booking) =>
         booking.serviceId === serviceId &&
-        booking.bookingDate.toDateString() === date.toDateString(),
+        booking.bookingDate.toDateString() === date.toDateString() &&
+        booking.status !== "cancelled" &&
+        booking.status !== "rejected" &&
+        booking.status !== "expired",
     );
   }
 
