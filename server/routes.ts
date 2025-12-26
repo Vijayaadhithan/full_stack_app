@@ -69,7 +69,7 @@ import {
   TimeSlotLabel,
   timeSlotLabelSchema,
 } from "@shared/schema";
-import { platformFees } from "@shared/config";
+import { featureFlags, platformFees } from "@shared/config";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { db } from "./db";
 import crypto from "crypto";
@@ -123,7 +123,9 @@ import {
   ProductDetail,
 } from "@shared/api-contract";
 
-const PLATFORM_SERVICE_FEE = platformFees.productOrder;
+const PLATFORM_SERVICE_FEE = featureFlags.platformFeesEnabled
+  ? platformFees.productOrder
+  : 0;
 const SERVICE_DETAIL_CACHE_TTL_SECONDS = 60;
 const PRODUCT_DETAIL_CACHE_TTL_SECONDS = 60;
 const SHOP_DETAIL_CACHE_TTL_SECONDS = 120;

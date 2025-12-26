@@ -28,7 +28,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       enabled: !!user,
     });
 
-  const allNotifications = notificationsData?.data || [];
+  const allNotifications = React.useMemo(
+    () => notificationsData?.data ?? [],
+    [notificationsData?.data],
+  );
 
   const { data: pendingBookings = [] } = useQuery<Booking[]>({
     queryKey: ["/api/bookings/provider/pending"],

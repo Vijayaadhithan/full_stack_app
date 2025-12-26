@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Product, Promotion, PaymentMethodType } from "@shared/schema";
-import { platformFees } from "@shared/config";
+import { featureFlags, platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -248,9 +248,9 @@ export default function Cart() {
       0,
     ) ?? 0; // Use nullish coalescing for default value
 
-  const platformFee = platformFees.productOrder;
+  const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
 
-  // Calculate the final total after applying promotion and adding platform fee
+  // Calculate the final total after applying promotion and adding platform fee (if enabled)
   const totalAmount = subtotal - discountAmount + platformFee;
 
   // Handle promotion selection
@@ -722,26 +722,30 @@ export default function Cart() {
                   </div>
                 )}
 
-                <div className="flex justify-between text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    Platform Service Fee
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground focus:outline-none"
-                          aria-label="Learn more about the platform service fee"
-                        >
-                          <Info className="h-4 w-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs text-sm">
-                        This small fee helps us operate the platform and provide you with support.
-                      </TooltipContent>
-                    </Tooltip>
-                  </span>
-                  <span>₹{platformFee.toFixed(2)}</span>
-                </div>
+                {featureFlags.platformFeesEnabled &&
+                featureFlags.platformFeeBreakdownEnabled ? (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      Platform Service Fee
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground focus:outline-none"
+                            aria-label="Learn more about the platform service fee"
+                          >
+                            <Info className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-sm">
+                          This small fee helps us operate the platform and provide
+                          you with support.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                    <span>₹{platformFee.toFixed(2)}</span>
+                  </div>
+                ) : null}
 
                 <Separator />
 

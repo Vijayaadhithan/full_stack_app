@@ -222,7 +222,7 @@ This section guides you through setting up the project environment.
 - **Authentication:** Login, Registration pages.
 - **Dashboard Layout:** A common layout (`DashboardLayout`) for authenticated users, likely including navigation.
 - **Customer Pages:**
-  - Booking services (`book-service.tsx`): Displays service details, allows selecting date/time using a calendar and time slots, handles booking creation and payment initiation.
+  - Booking services (`book-service.tsx`): Displays service details, collects urgency (Come Now / Today / Tomorrow) and location preference, creates booking requests, and prompts customers to share GPS/landmark via WhatsApp.
   - Viewing booking history.
   - Managing profile.
   - Browsing products/shops.

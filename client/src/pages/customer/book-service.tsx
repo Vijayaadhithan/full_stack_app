@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useParams, Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { platformFees } from "@shared/config";
+import { featureFlags, platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -48,6 +48,18 @@ import { getVerificationError, parseApiError } from "@/lib/api-error";
 const timeZone = "Asia/Kolkata"; // Define IST timezone
 
 type BroadSlotLabel = "morning" | "afternoon" | "evening";
+
+type BookingUrgency = "now" | "today" | "tomorrow";
+
+const URGENCY_OPTIONS: Array<{
+  label: BookingUrgency;
+  title: string;
+  description: string;
+}> = [
+  { label: "now", title: "Come Now", description: "Emergency • ASAP" },
+  { label: "today", title: "Today", description: "Anytime today" },
+  { label: "tomorrow", title: "Tomorrow", description: "Anytime tomorrow" },
+];
 
 const SLOT_OPTIONS: Array<{
   label: BroadSlotLabel;
@@ -112,17 +124,21 @@ export default function BookService() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const { user } = useAuth();
-  const platformFee = platformFees.serviceBooking;
+  const platformFee = featureFlags.platformFeesEnabled ? platformFees.serviceBooking : 0;
+  const [selectedUrgency, setSelectedUrgency] = useState<BookingUrgency | null>(
+    null,
+  );
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const initial = new Date();
     initial.setHours(0, 0, 0, 0);
     return initial;
   }); // Represents the *day* selected, time part is ignored
-  const [selectedSlot, setSelectedSlot] = useState<BroadSlotLabel | null>(null);
   const [serviceLocation, setServiceLocation] = useState<
     "customer" | "provider"
   >("provider"); // Default to provider location
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogStep, setDialogStep] = useState<"confirm" | "sent">("confirm");
+  const [lastBookingId, setLastBookingId] = useState<number | null>(null);
   const [bookingLandmark, setBookingLandmark] = useState("");
   const [isCapturingDeviceLocation, setIsCapturingDeviceLocation] =
     useState(false);
@@ -204,10 +220,10 @@ type BookingService = ServiceDetail & {
         .filter(Boolean) as BroadSlotLabel[],
     );
   }, [bookedSlots]);
-
-  useEffect(() => {
-    setSelectedSlot(null);
-  }, [selectedDate]);
+  const hasUnlabeledBooking = useMemo(
+    () => (bookedSlots || []).some((slot) => !slot.timeSlotLabel),
+    [bookedSlots],
+  );
 
   useEffect(() => {
     setBookingLandmark(user?.addressLandmark ?? "");
@@ -215,13 +231,12 @@ type BookingService = ServiceDetail & {
 
   const providerName = service?.provider?.name ?? "Provider";
   const providerFullAddress = useMemo(() => {
-    const provider = service?.provider;
     return [
-      provider?.addressStreet,
-      provider?.addressCity,
-      provider?.addressState,
-      provider?.addressPostalCode,
-      provider?.addressCountry,
+      service?.provider?.addressStreet,
+      service?.provider?.addressCity,
+      service?.provider?.addressState,
+      service?.provider?.addressPostalCode,
+      service?.provider?.addressCountry,
     ]
       .filter(Boolean)
       .join(", ");
@@ -246,12 +261,41 @@ type BookingService = ServiceDetail & {
       SLOT_OPTIONS.map((s) => s.label);
     return new Set(allowed);
   }, [service?.allowedSlots]);
-  const selectedSlotStart = selectedSlot
-    ? getSlotStartForDate(selectedDate, selectedSlot)
+  const resolvedSlotLabel = useMemo((): BroadSlotLabel | null => {
+    if (!selectedUrgency) return null;
+    if (!providerOnline || dailyLimitReached) return null;
+    if (hasUnlabeledBooking) return null;
+
+    const labels = SLOT_OPTIONS.map((slot) => slot.label);
+    const now = toZonedTime(new Date(), timeZone);
+    const hour = now.getHours();
+    const startIndex = hour >= 16 ? 2 : hour >= 12 ? 1 : 0;
+
+    const candidateLabels =
+      selectedUrgency === "tomorrow"
+        ? labels
+        : selectedUrgency === "now"
+          ? labels.slice(startIndex)
+          : [...labels.slice(startIndex), ...labels.slice(0, startIndex)];
+
+    for (const label of candidateLabels) {
+      if (!allowedSlotSet.has(label)) continue;
+      if (bookedSlotLabels.has(label)) continue;
+      return label;
+    }
+
+    return null;
+  }, [
+    allowedSlotSet,
+    bookedSlotLabels,
+    dailyLimitReached,
+    hasUnlabeledBooking,
+    providerOnline,
+    selectedUrgency,
+  ]);
+  const resolvedSlotStart = resolvedSlotLabel
+    ? getSlotStartForDate(selectedDate, resolvedSlotLabel)
     : null;
-  const selectedSlotMeta = SLOT_OPTIONS.find(
-    (slot) => slot.label === selectedSlot,
-  );
   const providerHasCoords =
     service?.provider?.latitude != null && service?.provider?.longitude != null;
   const providerMapsHref = providerHasCoords
@@ -259,43 +303,62 @@ type BookingService = ServiceDetail & {
     : providerFullAddress
       ? buildGoogleMapsSearchHref(providerFullAddress)
       : null;
+  const providerMapsUrl =
+    service?.provider?.latitude != null && service?.provider?.longitude != null
+      ? `https://www.google.com/maps?q=${service.provider.latitude},${service.provider.longitude}`
+      : null;
   const customerMapsUrl =
     user?.latitude != null && user?.longitude != null
       ? `https://www.google.com/maps?q=${user.latitude},${user.longitude}`
       : null;
-  const whatsappLocationHref = useMemo(() => {
+  const whatsappShareHref = useMemo(() => {
     if (!service) return null;
-    if (serviceLocation !== "customer") return null;
+
+    const urgencyLabel =
+      selectedUrgency === "now"
+        ? "Come Now (Emergency)"
+        : selectedUrgency === "today"
+          ? "Today (Anytime)"
+          : selectedUrgency === "tomorrow"
+            ? "Tomorrow (Anytime)"
+            : null;
 
     const parts = [
       `Booking request: ${service.name}`,
-      `Date: ${formatBase(selectedDate, "PPP")}`,
-      selectedSlotMeta
-        ? `Time: ${selectedSlotMeta.title} (${selectedSlotMeta.window})`
+      urgencyLabel ? `When: ${urgencyLabel}` : null,
+      `Preferred day: ${formatBase(selectedDate, "PPP")}`,
+      `Service location: ${serviceLocation === "customer" ? "My location" : "Provider location"}`,
+      serviceLocation === "customer" && bookingLandmark.trim()
+        ? `Landmark: ${bookingLandmark.trim()}`
         : null,
-      bookingLandmark.trim() ? `Landmark: ${bookingLandmark.trim()}` : null,
-      customerMapsUrl ? `My location: ${customerMapsUrl}` : null,
+      serviceLocation === "customer" && customerMapsUrl
+        ? `My location: ${customerMapsUrl}`
+        : null,
+      serviceLocation === "provider" && providerFullAddress
+        ? `Provider address: ${providerFullAddress}`
+        : null,
+      serviceLocation === "provider"
+        ? providerMapsUrl
+          ? `Provider location: ${providerMapsUrl}`
+          : providerMapsHref
+            ? `Provider location: ${providerMapsHref}`
+            : null
+        : null,
+      "Please confirm arrival time on WhatsApp.",
     ].filter(Boolean);
-
-    if (parts.length === 0) {
-      return null;
-    }
 
     return buildWhatsAppShareHref(service.provider?.phone, parts.join("\n"));
   }, [
     bookingLandmark,
     customerMapsUrl,
+    providerFullAddress,
     selectedDate,
-    selectedSlotMeta,
+    selectedUrgency,
+    providerMapsHref,
+    providerMapsUrl,
     service,
     serviceLocation,
   ]);
-
-  useEffect(() => {
-    if (selectedSlot && !allowedSlotSet.has(selectedSlot)) {
-      setSelectedSlot(null);
-    }
-  }, [allowedSlotSet, selectedSlot]);
 
   // Remove getNoSlotsReason function as logic is moved to JSX
   /*
@@ -323,14 +386,14 @@ type BookingService = ServiceDetail & {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      const bookingId = (data as any)?.booking?.id;
+      setLastBookingId(typeof bookingId === "number" ? bookingId : null);
       toast({
         title: "Booking Request Sent",
         description:
           data.message || "Your booking request has been sent to the provider.",
       });
-      // Optionally redirect or close modal
-      // setLocation('/customer/bookings');
-      setDialogOpen(false); // Close the confirmation dialog
+      setDialogStep("sent");
     },
     onError: (error: Error) => {
       const verificationError = getVerificationError(error);
@@ -417,22 +480,17 @@ type BookingService = ServiceDetail & {
   const [, navigate] = useLocation();
 
   const handleBookingRequest = () => {
-    if (!selectedSlot) {
-      toast({ title: "Please select a time slot", variant: "destructive" });
+    if (!selectedUrgency) {
+      toast({
+        title: "Select when you need the service",
+        variant: "destructive",
+      });
       return;
     }
     if (!providerOnline) {
       toast({
         title: "Provider is offline",
         description: "Please try again when the provider is available.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!selectedSlotStart) {
-      toast({
-        title: "Unable to schedule",
-        description: "Please pick a different slot and try again.",
         variant: "destructive",
       });
       return;
@@ -445,14 +503,37 @@ type BookingService = ServiceDetail & {
       });
       return;
     }
+    if (!resolvedSlotLabel || !resolvedSlotStart) {
+      toast({
+        title: "No availability",
+        description: "Please try a different day or provider.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setDialogStep("confirm");
+    setLastBookingId(null);
     setDialogOpen(true); // Open confirmation dialog
   };
 
   const confirmBooking = async () => {
-    if (!selectedSlot || !service || !selectedSlotStart) return;
+    if (!resolvedSlotLabel || !service || !resolvedSlotStart) return;
 
     const trimmedLandmark = bookingLandmark.trim();
     const existingLandmark = (user?.addressLandmark ?? "").trim();
+    if (serviceLocation === "customer") {
+      const hasCoords = Boolean(customerMapsUrl);
+      const hasLandmark = trimmedLandmark.length > 0;
+      if (!hasCoords && !hasLandmark) {
+        toast({
+          title: "Add your location",
+          description:
+            "Use 'Use My Current Location' or add a landmark so the provider can find you.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     if (
       serviceLocation === "customer" &&
       trimmedLandmark !== existingLandmark
@@ -468,9 +549,9 @@ type BookingService = ServiceDetail & {
 
     createBookingMutation.mutate({
       serviceId: service.id,
-      bookingDate: selectedSlotStart.toISOString(), // Send UTC ISO string
+      bookingDate: resolvedSlotStart.toISOString(), // Send UTC ISO string
       serviceLocation: serviceLocation,
-      timeSlotLabel: selectedSlot,
+      timeSlotLabel: resolvedSlotLabel,
       // No providerAddress needed here
     });
   };
@@ -515,23 +596,6 @@ type BookingService = ServiceDetail & {
       ? service.reviews.reduce((acc: number, review) => acc + review.rating, 0) /
         service.reviews.length
       : 0;
-
-  const today = useMemo(() => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    return date;
-  }, []);
-
-  const dateOptions = useMemo(
-    () => Array.from({ length: 14 }, (_, index) => addDays(today, index)),
-    [today],
-  );
-
-  const getDateChipLabel = (date: Date, index: number) => {
-    if (index === 0) return "Today";
-    if (index === 1) return "Tomorrow";
-    return formatBase(date, "EEEE");
-  };
 
   if (serviceLoading) {
     return (
@@ -589,7 +653,9 @@ type BookingService = ServiceDetail & {
               <MapPin className="h-4 w-4 mr-2 mt-0.5 text-muted-foreground" />
               <span>Location: {providerFullAddress || "Not specified"}</span>
             </div>
-            <div className="text-lg font-semibold">Price: ₹{service.price}</div>
+            <div className="text-lg font-semibold">
+              Estimated Price: ₹{service.price}
+            </div>
             <div>
               <h3 className="font-medium mb-2">Service Provider</h3>
               <div className="flex items-center space-x-3">
@@ -609,144 +675,95 @@ type BookingService = ServiceDetail & {
         <Card>
           <CardHeader>
             {/* Removed grid layout from CardContent to prevent heading wrapping */}
-            <CardTitle>Book Your Slot</CardTitle>
+            <CardTitle>Request a Visit</CardTitle>
           </CardHeader>
           {/* Reverted CardContent and added Grid for layout */}
           <CardContent className="grid md:grid-cols-2 gap-6">
-            {/* Calendar Section (Left Column) */}
+            {/* Timing Section (Left Column) */}
             <div>
-              <h3 className="font-medium mb-2">Select Date</h3>
-              <div className="rounded-md border p-3">
-                <div className="flex gap-2 overflow-x-auto pb-2 [-webkit-overflow-scrolling:touch]">
-                  {dateOptions.map((date, index) => {
-                    const dateKey = formatBase(date, "yyyy-MM-dd");
-                    const selectedKey = formatBase(selectedDate, "yyyy-MM-dd");
-                    const isSelected = dateKey === selectedKey;
-                    return (
-                      <Button
-                        key={dateKey}
-                        type="button"
-                        variant={isSelected ? "default" : "outline"}
-                        onClick={() => setSelectedDate(date)}
-                        className="min-w-[120px] flex-col items-start gap-0 h-auto py-3"
-                      >
-                        <span className="font-semibold">
-                          {getDateChipLabel(date, index)}
-                        </span>
-                        <span
+              <h3 className="font-medium mb-2">When do you need help?</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Rural timings are flexible—your provider will coordinate the
+                exact arrival time after you request.
+              </p>
+              <div className="grid gap-3">
+                {URGENCY_OPTIONS.map((option) => {
+                  const isSelected = selectedUrgency === option.label;
+                  const Icon =
+                    option.label === "now"
+                      ? AlertCircle
+                      : option.label === "tomorrow"
+                        ? Clock
+                        : Sun;
+                  const optionDateLabel =
+                    option.label === "tomorrow"
+                      ? formatBase(addDays(new Date(), 1), "PPP")
+                      : formatBase(new Date(), "PPP");
+
+                  return (
+                    <Button
+                      key={option.label}
+                      type="button"
+                      variant={isSelected ? "default" : "outline"}
+                      onClick={() => {
+                        const base = new Date();
+                        base.setHours(0, 0, 0, 0);
+                        setSelectedUrgency(option.label);
+                        setSelectedDate(
+                          option.label === "tomorrow" ? addDays(base, 1) : base,
+                        );
+                      }}
+                      disabled={!providerOnline}
+                      className="w-full h-auto justify-start p-4 text-left flex items-start gap-3"
+                    >
+                      <Icon className="h-5 w-5 mt-0.5" aria-hidden="true" />
+                      <div className="flex-1">
+                        <div className="font-semibold">{option.title}</div>
+                        <div
                           className={
                             isSelected
                               ? "text-xs text-primary-foreground/80"
                               : "text-xs text-muted-foreground"
                           }
                         >
-                          {formatBase(date, "d MMM")}
-                        </span>
-                      </Button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Scroll to pick another day.
-                </p>
+                          {option.description} • {optionDateLabel}
+                        </div>
+                      </div>
+                    </Button>
+                  );
+                })}
               </div>
+              {bookingsLoading ? (
+                <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking availability…
+                </div>
+              ) : null}
+              {!providerOnline ? (
+                <p className="text-sm text-red-600 mt-3">
+                  This provider is offline right now.
+                </p>
+              ) : dailyLimitReached ? (
+                <p className="text-sm text-muted-foreground mt-3">
+                  Daily booking limit reached for{" "}
+                  {formatBase(selectedDate, "PPP")}.
+                </p>
+              ) : selectedUrgency && !resolvedSlotLabel ? (
+                <p className="text-sm text-muted-foreground mt-3">
+                  No availability for {formatBase(selectedDate, "PPP")}.
+                </p>
+              ) : null}
+              {!providerOnline && service.availabilityNote ? (
+                <p className="text-xs text-muted-foreground mt-2">
+                  {service.availabilityNote}
+                </p>
+              ) : null}
             </div>
-            {/* Time Slots, Location, and Button Section (Right Column) */}
+            {/* Location and Button Section (Right Column) */}
             <div className="space-y-4">
               {" "}
               {/* Use space-y for vertical spacing within the right column */}
               <div>
-                <h3 className="font-medium mb-2">
-              Available Time Slots ({formatBase(selectedDate, "PPP")})
-            </h3>
-            <p className="text-sm text-muted-foreground mb-3">
-              Pick a broad window—your provider will confirm the exact arrival time.
-            </p>
-            {bookingsLoading || serviceLoading ? (
-              <div className="flex items-center justify-center h-20">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {SLOT_OPTIONS.map((slot) => {
-                      const isSelected = selectedSlot === slot.label;
-                      const isBooked = bookedSlotLabels.has(slot.label);
-                      const isAllowed = allowedSlotSet.has(slot.label);
-                      const slotDisabled =
-                        !providerOnline ||
-                        dailyLimitReached ||
-                        isBooked ||
-                        !isAllowed;
-                      const badgeCopy = !providerOnline
-                        ? "Offline"
-                        : dailyLimitReached
-                          ? "Full"
-                          : isBooked
-                            ? "Booked"
-                            : !isAllowed
-                              ? "Disabled"
-                            : "Flexible arrival";
-                      const SlotIcon =
-                        slot.label === "morning"
-                          ? Sun
-                          : slot.label === "evening"
-                            ? Moon
-                            : Clock;
-                      return (
-                        <Button
-                          key={slot.label}
-                          variant={isSelected ? "default" : "outline"}
-                          onClick={() => setSelectedSlot(slot.label)}
-                          disabled={slotDisabled}
-                          className="w-full h-full justify-start p-4 text-left flex flex-col items-start space-y-2 shadow-sm"
-                        >
-                          <div className="flex w-full items-start justify-between gap-2">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <SlotIcon className="h-5 w-5" aria-hidden="true" />
-                                <span className="sr-only">{slot.title}</span>
-                                <div className="font-semibold text-base">
-                                  {slot.window}
-                                </div>
-                              </div>
-                            </div>
-                            <span
-                              className={`text-[11px] px-2 py-1 rounded-full border ${
-                                slotDisabled
-                                  ? "text-muted-foreground border-muted"
-                                  : "text-primary border-primary/30 bg-primary/5"
-                              }`}
-                            >
-                              {badgeCopy === "Flexible arrival"
-                                ? "Flexible"
-                                : badgeCopy}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground leading-snug whitespace-normal break-words">
-                            Provider arrives within this window; exact timing is
-                            coordinated after you book.
-                          </p>
-                        </Button>
-                      );
-                    })}
-                  </div>
-            )}
-            {!providerOnline ? (
-              <p className="text-sm text-red-600 mt-2">
-                This provider is offline right now.
-              </p>
-            ) : dailyLimitReached ? (
-              <p className="text-sm text-muted-foreground mt-2">
-                Daily booking limit reached for this date.
-              </p>
-            ) : null}
-            {!providerOnline && service.availabilityNote ? (
-              <p className="text-xs text-muted-foreground">
-                {service.availabilityNote}
-              </p>
-            ) : null}
-          </div>
-          <div>
             <h3 className="font-medium mb-2">Service Location</h3>
             <RadioGroup
               value={serviceLocation}
@@ -856,9 +873,11 @@ type BookingService = ServiceDetail & {
             onClick={handleBookingRequest}
             className="w-full mt-4" /* Reverted margin */
             disabled={
-              !selectedSlot ||
+              !selectedUrgency ||
               !providerOnline ||
+              bookingsLoading ||
               dailyLimitReached ||
+              !resolvedSlotLabel ||
               createBookingMutation.isPending
             }
           >
@@ -877,106 +896,135 @@ type BookingService = ServiceDetail & {
         </Card>
 
         {/* Confirmation Dialog */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) {
+              setDialogStep("confirm");
+              setLastBookingId(null);
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Confirm Booking</DialogTitle>
+              <DialogTitle>
+                {dialogStep === "sent" ? "Booking Requested" : "Confirm Booking"}
+              </DialogTitle>
             </DialogHeader>
-            <div className="space-y-2">
-              <p>
-                <strong>Service:</strong> {service.name}
-              </p>
-              <p>
-                <strong>Date:</strong> {formatBase(selectedDate, "PPP")}
-              </p>
-              <p>
-                <strong>Time:</strong>{" "}
-                {selectedSlotMeta
-                  ? `${selectedSlotMeta.title} (${selectedSlotMeta.window})`
-                  : "N/A"}
-              </p>
-              <p>
-                <strong>Location:</strong>{" "}
-                {serviceLocation === "provider"
-                  ? `Provider's Location (${providerFullAddress || "Not specified"})`
-                  : "Your Location"}
-              </p>
-              {serviceLocation === "customer" && bookingLandmark.trim() ? (
-                <p>
-                  <strong>Landmark:</strong> {bookingLandmark.trim()}
-                </p>
-              ) : null}
-              {serviceLocation === "customer" ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <strong>Map:</strong>
-                  <MapLink latitude={user?.latitude} longitude={user?.longitude} />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const hasCoords = Boolean(customerMapsUrl);
-                      const hasLandmark = bookingLandmark.trim().length > 0;
-                      if (!hasCoords && !hasLandmark) {
-                        toast({
-                          title: "Add your location first",
-                          description:
-                            "Use 'Use My Current Location' or add a landmark, then send on WhatsApp.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      if (!whatsappLocationHref) {
-                        toast({
-                          title: "WhatsApp link unavailable",
-                          description: "Please try again in a moment.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      window.open(whatsappLocationHref, "_blank");
-                    }}
-                    disabled={!whatsappLocationHref}
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    Send Location on WhatsApp
-                  </Button>
-                </div>
-              ) : null}
-              <div className="flex justify-between py-2">
-                <span>Service Price:</span>
-                <span>₹{service?.price}</span>
-              </div>
-              <div className="flex justify-between py-2 text-gray-600">
-                <span>Platform Fee:</span>
-                <span>₹{platformFee.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between py-2 font-bold">
-                <span>Total:</span>
-                <span>
-                  ₹{(
-                    parseFloat(service?.price || "0") +
-                    platformFee
-                  ).toFixed(2)}
-                </span>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={confirmBooking}
-                disabled={
-                  createBookingMutation.isPending || saveLandmarkMutation.isPending
-                }
-              >
-                {createBookingMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {dialogStep === "sent" ? (
+              <div className="space-y-4">
+                {lastBookingId ? (
+                  <p className="text-sm text-muted-foreground">
+                    Booking #{lastBookingId}
+                  </p>
                 ) : null}
-                Confirm & Request
-              </Button>
-            </DialogFooter>
+                <p className="text-sm text-muted-foreground">
+                  {serviceLocation === "customer"
+                    ? "Next step: send your GPS location + landmark on WhatsApp so the provider can find you quickly."
+                    : "Next step: message the provider on WhatsApp to coordinate the visit."}
+                </p>
+                <Button
+                  type="button"
+                  size="lg"
+                  onClick={() => {
+                    if (!whatsappShareHref) return;
+                    window.open(whatsappShareHref, "_blank");
+                  }}
+                  disabled={!whatsappShareHref}
+                  className="w-full h-14 text-base bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  {serviceLocation === "customer"
+                    ? `Send Location to ${providerName} on WhatsApp`
+                    : `Message ${providerName} on WhatsApp`}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setDialogOpen(false)}
+                >
+                  Done
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <p>
+                    <strong>Service:</strong> {service.name}
+                  </p>
+                  <p>
+                    <strong>When:</strong>{" "}
+                    {selectedUrgency === "now"
+                      ? "Come Now (Emergency)"
+                      : selectedUrgency === "today"
+                        ? "Today (Anytime)"
+                        : selectedUrgency === "tomorrow"
+                          ? "Tomorrow (Anytime)"
+                          : "N/A"}
+                  </p>
+                  <p>
+                    <strong>Preferred day:</strong>{" "}
+                    {formatBase(selectedDate, "PPP")}
+                  </p>
+                  <p>
+                    <strong>Location:</strong>{" "}
+                    {serviceLocation === "provider"
+                      ? `Provider's Location (${providerFullAddress || "Not specified"})`
+                      : "Your Location"}
+                  </p>
+                  {serviceLocation === "customer" && bookingLandmark.trim() ? (
+                    <p>
+                      <strong>Landmark:</strong> {bookingLandmark.trim()}
+                    </p>
+                  ) : null}
+                  {serviceLocation === "customer" ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <strong>Map:</strong>
+                      <MapLink
+                        latitude={user?.latitude}
+                        longitude={user?.longitude}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="rounded-md border bg-muted/10 p-4 space-y-2">
+                    <div className="flex justify-between">
+                      <span>Estimated price:</span>
+                      <span>₹{service?.price}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Final labour and material cost is confirmed in person by
+                      the provider.
+                    </p>
+                    {featureFlags.platformFeesEnabled &&
+                    featureFlags.platformFeeBreakdownEnabled ? (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Platform Fee:</span>
+                        <span>₹{platformFee.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={confirmBooking}
+                    disabled={
+                      createBookingMutation.isPending ||
+                      saveLandmarkMutation.isPending
+                    }
+                  >
+                    {createBookingMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Confirm & Request
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
           </DialogContent>
         </Dialog>
 

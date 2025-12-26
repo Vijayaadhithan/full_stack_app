@@ -35,7 +35,10 @@ export function NotificationsCenter() {
     queryKey: ["/api/notifications"],
   });
 
-  const notifications = notificationsData?.data ?? [];
+  const notifications = useMemo<Notification[]>(
+    () => notificationsData?.data ?? [],
+    [notificationsData?.data],
+  );
 
   const markAsReadMutation = useMutation({
     mutationFn: async (id: number) => {

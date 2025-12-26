@@ -18,12 +18,15 @@ type ProfileLocationSectionProps = {
   className?: string;
 };
 
-function toCoordinates(user: ProfileLocationSectionProps["user"]): Coordinates | null {
-  if (!user?.latitude || !user?.longitude) {
+function toCoordinates(
+  latitudeValue: unknown | null | undefined,
+  longitudeValue: unknown | null | undefined,
+): Coordinates | null {
+  if (latitudeValue == null || longitudeValue == null) {
     return null;
   }
-  const latitude = Number(user.latitude);
-  const longitude = Number(user.longitude);
+  const latitude = Number(latitudeValue);
+  const longitude = Number(longitudeValue);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return null;
   }
@@ -53,14 +56,19 @@ export function ProfileLocationSection({
   const resolvedDescription =
     description ??
     "Set your exact position so that distance-based search works accurately.";
-  const initialLocation = useMemo(() => toCoordinates(user), [user?.latitude, user?.longitude]);
+  const userLatitude = user?.latitude;
+  const userLongitude = user?.longitude;
+  const initialLocation = useMemo(
+    () => toCoordinates(userLatitude, userLongitude),
+    [userLatitude, userLongitude],
+  );
   const [location, setLocation] = useState<Coordinates | null>(initialLocation);
   const [isCapturingDeviceLocation, setIsCapturingDeviceLocation] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     setLocation(initialLocation);
-  }, [initialLocation?.latitude, initialLocation?.longitude]);
+  }, [initialLocation]);
 
   const mutation = useMutation({
     mutationFn: async (coords: Coordinates) => {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import request from "supertest";
 import type { MemStorage } from "../server/storage";
-import { platformFees } from "../shared/config";
+import { featureFlags, platformFees } from "../shared/config";
 
 process.env.USE_IN_MEMORY_DB = "true";
 process.env.SESSION_SECRET = "test";
@@ -67,7 +67,8 @@ describe("Orders API", () => {
       .post("/api/login")
       .send({ username: customer.username, password: "pass" });
     const productPrice = Number(product.price);
-    const totalWithFee = productPrice + platformFees.productOrder;
+    const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
+    const totalWithFee = productPrice + platformFee;
     const res = await agent.post("/api/orders").send({
       items: [{ productId: product.id, quantity: 1, price: product.price }],
       total: totalWithFee.toString(),
@@ -86,7 +87,8 @@ describe("Orders API", () => {
       .send({ username: unverifiedCustomer.username, password: "pass" });
 
     const productPrice = Number(product.price);
-    const totalWithFee = productPrice + platformFees.productOrder;
+    const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
+    const totalWithFee = productPrice + platformFee;
     const res = await agent.post("/api/orders").send({
       items: [{ productId: product.id, quantity: 1, price: product.price }],
       total: totalWithFee.toString(),
@@ -116,9 +118,8 @@ describe("Orders API", () => {
       deliveryMethod: "delivery",
     });
 
-    const expectedTotal = (
-      productPrice + platformFees.productOrder
-    ).toFixed(2);
+    const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
+    const expectedTotal = (productPrice + platformFee).toFixed(2);
     assert.equal(res.status, 400);
     assert.equal(res.body.expectedTotal, expectedTotal);
     assert.equal(

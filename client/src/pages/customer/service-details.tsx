@@ -77,6 +77,15 @@ export default function ServiceDetails() {
 
   const providerName = service.provider?.name ?? "Provider";
   const providerInitial = providerName.charAt(0).toUpperCase();
+  const providerAddress = [
+    service.provider?.addressStreet,
+    service.provider?.addressCity,
+    service.provider?.addressState,
+    service.provider?.addressPostalCode,
+    service.provider?.addressCountry,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <DashboardLayout>
@@ -150,9 +159,7 @@ export default function ServiceDetails() {
                   <MapPin className="h-4 w-4" />
                   <span>
                     Location:{" "}
-                    {service.addressStreet
-                      ? `${service.addressStreet}, ${service.addressCity}, ${service.addressState} ${service.addressPostalCode}, ${service.addressCountry}`
-                      : "Not specified"}
+                    {providerAddress || "Not specified"}
                   </span>
                 </div>
               </div>

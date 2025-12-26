@@ -19,6 +19,13 @@ export const platformFees = {
   serviceBooking: 1,
 } as const;
 
+export const featureFlags = {
+  /** Disable platform fees until pricing is finalized. */
+  platformFeesEnabled: false,
+  /** Show a line-item breakdown when legally required. */
+  platformFeeBreakdownEnabled: false,
+} as const;
+
 export const productFilterConfig: {
   categories: FilterOption[];
   attributeFilters: AttributeFilterConfig[];

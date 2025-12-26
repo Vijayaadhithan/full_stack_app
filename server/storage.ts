@@ -1196,18 +1196,33 @@ export class MemStorage implements IStorage {
         );
       }
       if (filters.locationCity) {
+        const desiredCity = String(filters.locationCity);
         results = results.filter(
-          (service) => service.addressCity === filters.locationCity,
+          (service) => {
+            if (!service.providerId) return false;
+            const provider = this.users.get(service.providerId);
+            return provider?.addressCity === desiredCity;
+          },
         );
       }
       if (filters.locationState) {
+        const desiredState = String(filters.locationState);
         results = results.filter(
-          (service) => service.addressState === filters.locationState,
+          (service) => {
+            if (!service.providerId) return false;
+            const provider = this.users.get(service.providerId);
+            return provider?.addressState === desiredState;
+          },
         );
       }
       if (filters.locationPostalCode) {
+        const desiredPostalCode = String(filters.locationPostalCode);
         results = results.filter(
-          (service) => service.addressPostalCode === filters.locationPostalCode,
+          (service) => {
+            if (!service.providerId) return false;
+            const provider = this.users.get(service.providerId);
+            return provider?.addressPostalCode === desiredPostalCode;
+          },
         );
       }
       if (filters.availabilityDate) {

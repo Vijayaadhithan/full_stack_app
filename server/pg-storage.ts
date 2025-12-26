@@ -1336,6 +1336,11 @@ export class PostgresStorage implements IStorage {
     let joinedProviders = false;
     const escapeLikePattern = (value: string) =>
       value.replace(/[%_]/g, (char) => `\\${char}`);
+    const ensureProviderJoin = () => {
+      if (joinedProviders) return;
+      query = query.leftJoin(users, eq(services.providerId, users.id));
+      joinedProviders = true;
+    };
 
     if (filters) {
       if (filters.category) {
@@ -1384,14 +1389,17 @@ export class PostgresStorage implements IStorage {
         conditions.push(eq(services.providerId, filters.providerId));
       }
       if (filters.locationCity) {
-        conditions.push(eq(services.addressCity, filters.locationCity));
+        ensureProviderJoin();
+        conditions.push(eq(users.addressCity, filters.locationCity));
       }
       if (filters.locationState) {
-        conditions.push(eq(services.addressState, filters.locationState));
+        ensureProviderJoin();
+        conditions.push(eq(users.addressState, filters.locationState));
       }
       if (filters.locationPostalCode) {
+        ensureProviderJoin();
         conditions.push(
-          eq(services.addressPostalCode, filters.locationPostalCode),
+          eq(users.addressPostalCode, filters.locationPostalCode),
         );
       }
       // Note: availabilityDate filtering would be more complex and might require checking bookings or a serviceAvailability table.

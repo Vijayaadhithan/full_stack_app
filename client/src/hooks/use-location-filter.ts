@@ -40,10 +40,13 @@ const persistRadius = (key: string, value: number) => {
   }
 };
 
-const parseUserCoordinates = (user: { latitude?: unknown; longitude?: unknown } | null) => {
-  if (!user?.latitude || !user?.longitude) return null;
-  const lat = Number(user.latitude);
-  const lng = Number(user.longitude);
+const parseCoordinates = (
+  latitudeValue: unknown | null | undefined,
+  longitudeValue: unknown | null | undefined,
+) => {
+  if (latitudeValue == null || longitudeValue == null) return null;
+  const lat = Number(latitudeValue);
+  const lng = Number(longitudeValue);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return null;
   }
@@ -88,9 +91,11 @@ export function useLocationFilter(
   const { user } = useAuth();
   const { toast } = useToast();
 
+  const profileLatitude = user?.latitude;
+  const profileLongitude = user?.longitude;
   const profileCoords = useMemo(
-    () => parseUserCoordinates(user),
-    [user?.latitude, user?.longitude],
+    () => parseCoordinates(profileLatitude, profileLongitude),
+    [profileLatitude, profileLongitude],
   );
   const [hasProfileLocation, setHasProfileLocation] = useState(
     Boolean(profileCoords),
@@ -119,12 +124,12 @@ export function useLocationFilter(
     if (!location || source === "profile") {
       setLocation(profileCoords);
       setSource("profile");
+      setManualInputs({
+        latitude: profileCoords.latitude.toFixed(6),
+        longitude: profileCoords.longitude.toFixed(6),
+      });
     }
-    setManualInputs({
-      latitude: profileCoords.latitude.toFixed(6),
-      longitude: profileCoords.longitude.toFixed(6),
-    });
-  }, [profileCoords?.latitude, profileCoords?.longitude]);
+  }, [location, profileCoords, source]);
 
   useEffect(() => {
     if (!location) {
@@ -135,7 +140,7 @@ export function useLocationFilter(
       latitude: location.latitude.toFixed(6),
       longitude: location.longitude.toFixed(6),
     });
-  }, [location?.latitude, location?.longitude]);
+  }, [location]);
 
   useEffect(() => {
     persistRadius(storageKey, radius);

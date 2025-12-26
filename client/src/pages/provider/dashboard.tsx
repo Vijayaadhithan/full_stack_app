@@ -63,7 +63,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Booking, Review, Service } from "@shared/schema";
-import { formatIndianDisplay } from "@shared/date-utils";
+import { formatIndianDisplay, formatInIndianTime } from "@shared/date-utils";
 import { describeSlotLabel } from "@/lib/time-slots";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -407,16 +407,6 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
-const SLOT_TOGGLES: Array<{
-  label: "morning" | "afternoon" | "evening";
-  title: string;
-  window: string;
-}> = [
-  { label: "morning", title: "Morning", window: "9 AM - 12 PM" },
-  { label: "afternoon", title: "Afternoon", window: "12 PM - 4 PM" },
-  { label: "evening", title: "Evening", window: "4 PM - 8 PM" },
-];
-
 const serviceFormSchema = z.object({
   name: z.string().min(1, "Service name is required"),
   description: z.string().min(1, "Description is required"),
@@ -426,20 +416,6 @@ const serviceFormSchema = z.object({
   isAvailable: z.boolean().default(true),
   isAvailableNow: z.boolean().default(true),
   availabilityNote: z.string().optional().nullable(),
-  maxDailyBookings: z.coerce
-    .number()
-    .min(1, "Must accept at least 1 booking per day")
-    .optional(),
-  bufferTime: z.coerce.number().min(0, "Buffer time must be non-negative").optional(),
-  allowedSlots: z
-    .array(z.enum(["morning", "afternoon", "evening"]))
-    .min(1, "Select at least one slot")
-    .default(["morning", "afternoon", "evening"]),
-  addressStreet: z.string().optional(),
-  addressCity: z.string().optional(),
-  addressState: z.string().optional(),
-  addressPostalCode: z.string().optional(),
-  addressCountry: z.string().optional(),
 });
 type ServiceFormData = z.infer<typeof serviceFormSchema>;
 
@@ -449,12 +425,19 @@ export default function ProviderDashboard() {
   const { toast } = useToast();
   const { t } = useLanguage();
   const [, navigate] = useLocation();
+  const providerProfileAddress = [
+    user?.addressStreet,
+    user?.addressCity,
+    user?.addressState,
+    user?.addressPostalCode,
+    user?.addressCountry,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
-  const [activeTab, setActiveTab] = useState<
-    "basic" | "availability" | "scheduling" | "location"
-  >("basic"); // Added scheduling tab type
+  const [activeTab, setActiveTab] = useState<"basic" | "availability">("basic");
 
   const form = useForm<ServiceFormData>({
     resolver: zodResolver(serviceFormSchema),
@@ -467,36 +450,8 @@ export default function ProviderDashboard() {
       isAvailable: true,
       isAvailableNow: true,
       availabilityNote: "",
-      maxDailyBookings: 1,
-      bufferTime: 0,
-      allowedSlots: ["morning", "afternoon", "evening"],
-      addressStreet: "",
-      addressCity: "",
-      addressState: "",
-      addressPostalCode: "",
-      addressCountry: "",
     },
   });
-
-  const allowedSlotSelection = form.watch("allowedSlots") || [];
-  const toggleAllowedSlot = (label: "morning" | "afternoon" | "evening") => {
-    const next = new Set(allowedSlotSelection);
-    if (next.has(label)) {
-      if (next.size === 1) {
-        toast({
-          title: "Keep at least one slot",
-          description:
-            "Leave one window on or switch to Offline if you cannot take bookings.",
-          variant: "destructive",
-        });
-        return;
-      }
-      next.delete(label);
-    } else {
-      next.add(label);
-    }
-    form.setValue("allowedSlots", Array.from(next));
-  };
 
   // Fetch services, bookings and reviews
   const { data: services, isLoading: servicesLoading } = useQuery<Service[]>({
@@ -531,13 +486,24 @@ export default function ProviderDashboard() {
     reviews && reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
+
+  const INDIAN_DAY_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+  const getIndianDayKey = (date: Date | string | null | undefined) => {
+    if (!date) return null;
+    const key = formatInIndianTime(date, "yyyy-MM-dd");
+    return INDIAN_DAY_KEY_REGEX.test(key) ? key : null;
+  };
+  const todayIndianKey = getIndianDayKey(new Date());
+
   const upcomingBookings = bookings
     ? bookings
       .filter(
-        (b) =>
-          activeBookingStatuses.includes(b.status) &&
-          b.bookingDate &&
-          new Date(b.bookingDate) > new Date(),
+        (b) => {
+          if (!activeBookingStatuses.includes(b.status)) return false;
+          if (!todayIndianKey) return false;
+          const bookingKey = getIndianDayKey(b.bookingDate);
+          return !!bookingKey && bookingKey >= todayIndianKey;
+        },
       )
       .sort(
         (a, b) =>
@@ -701,6 +667,7 @@ export default function ProviderDashboard() {
               onClick={() => {
                 setEditingService(null);
                 form.reset();
+                setActiveTab("basic");
                 setDialogOpen(true);
               }}
             >
@@ -787,6 +754,7 @@ export default function ProviderDashboard() {
                 onClick={() => {
                   setEditingService(null);
                   form.reset();
+                  setActiveTab("basic");
                   setDialogOpen(true);
                 }}
               >
@@ -808,6 +776,7 @@ export default function ProviderDashboard() {
                     onClick={() => {
                       setEditingService(null);
                       form.reset();
+                      setActiveTab("basic");
                       setDialogOpen(true);
                     }}
                   >
@@ -843,18 +812,6 @@ export default function ProviderDashboard() {
                                     (service as any).isAvailableNow ?? true,
                                   availabilityNote:
                                     (service as any).availabilityNote ?? "",
-                                  maxDailyBookings:
-                                    service.maxDailyBookings ?? 1,
-                                  bufferTime: service.bufferTime ?? 0,
-                                  allowedSlots:
-                                    (service as any).allowedSlots ??
-                                    ["morning", "afternoon", "evening"],
-                                  addressStreet: service.addressStreet ?? "",
-                                  addressCity: service.addressCity ?? "",
-                                  addressState: service.addressState ?? "",
-                                  addressPostalCode:
-                                    service.addressPostalCode ?? "",
-                                  addressCountry: service.addressCountry ?? "",
                                 });
                                 setActiveTab("basic"); // Reset to basic tab when opening for edit
                                 setDialogOpen(true);
@@ -909,15 +866,13 @@ export default function ProviderDashboard() {
                             <span>{service.category}</span>
                           </div>
                           <div className="flex justify-between text-sm">
-                            <span>Address</span>
+                            <span>Location</span>
                             <span className="text-right">
-                              {service.addressStreet}, {service.addressCity}
-                              {service.addressState &&
-                                `, ${service.addressState}`}
-                              {service.addressPostalCode &&
-                                ` - ${service.addressPostalCode}`}
-                              {service.addressCountry &&
-                                `, ${service.addressCountry}`}
+                              {providerProfileAddress || (
+                                <span className="text-muted-foreground">
+                                  Set your address in profile
+                                </span>
+                              )}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
@@ -967,19 +922,12 @@ export default function ProviderDashboard() {
                 <Tabs
                   value={activeTab}
                   onValueChange={(value) =>
-                    setActiveTab(value as "basic" | "availability" | "location")
+                    setActiveTab(value as "basic" | "availability")
                   }
                 >
-                  <TabsList className="grid w-full grid-cols-4">
-                    {" "}
-                    {/* Adjusted grid-cols if needed, currently 4 */}
+                  <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="basic">Basic Info</TabsTrigger>
                     <TabsTrigger value="availability">Availability</TabsTrigger>
-                    <TabsTrigger value="location">Location</TabsTrigger>
-                    <TabsTrigger value="scheduling">
-                      Scheduling
-                    </TabsTrigger>{" "}
-                    {/* Added Scheduling Tab */}
                   </TabsList>
 
                   <TabsContent value="basic">
@@ -1110,164 +1058,10 @@ export default function ProviderDashboard() {
                           </FormItem>
                         )}
                       />
-                    </div>
-                    <div className="space-y-4 pt-4 border-t">
-                      <h3 className="text-lg font-medium">Allowed Slots</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Turn on the windows you want to offer today.
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {SLOT_TOGGLES.map((slot) => {
-                          const active = allowedSlotSelection.includes(slot.label);
-                          return (
-                            <Button
-                              key={slot.label}
-                              variant={active ? "default" : "outline"}
-                              type="button"
-                              className="justify-start h-full flex flex-col items-start gap-1"
-                              onClick={() => toggleAllowedSlot(slot.label)}
-                            >
-                              <span className="font-semibold">{slot.title}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {slot.window}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground">
-                                {active ? "On" : "Off"}
-                              </span>
-                            </Button>
-                          );
-                        })}
+                      <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+                        Service location is taken from your profile address.
+                        Update it from <span className="font-medium">Manage Profile</span>.
                       </div>
-                      <FormField
-                        control={form.control}
-                        name="allowedSlots"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormMessage />
-                            {/* Hidden input to satisfy React Hook Form registration */}
-                            <input type="hidden" value={field.value?.join(",") ?? ""} />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </TabsContent>
-
-                  {/* Scheduling Tab Content */}
-                  <TabsContent value="scheduling">
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-lg font-medium">Capacity & spacing</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Decide how many requests you take per day and how much buffer you need.
-                        </p>
-                      </div>
-                      <FormField
-                        control={form.control}
-                        name="maxDailyBookings"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Max Daily Bookings</FormLabel>
-                            <FormControl>
-                              <Input type="number" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      {/* Buffer time moved from Availability tab */}
-                      <FormField
-                        control={form.control}
-                        name="bufferTime"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              Buffer Time (minutes between bookings)
-                            </FormLabel>
-                            <FormControl>
-                              <Input type="number" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </TabsContent>
-
-                  {/* Location Tab Content */}
-                  <TabsContent value="location">
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Service Location</h3>
-                      <FormField
-                        control={form.control}
-                        name="addressStreet"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Street Address</FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="e.g., 123 Main St"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="addressCity"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>City</FormLabel>
-                            <FormControl>
-                              <Input placeholder="e.g., Mumbai" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="addressState"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>State</FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="e.g., Maharashtra"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="addressPostalCode"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Postal Code</FormLabel>
-                            <FormControl>
-                              <Input placeholder="e.g., 400001" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="addressCountry"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Country</FormLabel>
-                            <FormControl>
-                              <Input placeholder="e.g., India" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
                     </div>
                   </TabsContent>
                 </Tabs>

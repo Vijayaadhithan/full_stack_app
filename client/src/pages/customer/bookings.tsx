@@ -36,7 +36,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { format, isAfter, isBefore, addDays } from "date-fns";
-import { formatIndianDisplay } from "@shared/date-utils";
+import { formatIndianDisplay, formatInIndianTime } from "@shared/date-utils";
 import { describeSlotLabel } from "@/lib/time-slots";
 import { DialogTrigger } from "@radix-ui/react-dialog";
 import { Input } from "@/components/ui/input"; // Added Input for datetime-local
@@ -595,16 +595,34 @@ export default function Bookings() {
     ? bookings.bookings
     : [];
 
+  const INDIAN_DAY_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+  const getIndianDayKey = (date: Date | string | null | undefined) => {
+    if (!date) return null;
+    const key = formatInIndianTime(date, "yyyy-MM-dd");
+    return INDIAN_DAY_KEY_REGEX.test(key) ? key : null;
+  };
+  const todayIndianKey = getIndianDayKey(new Date());
+  const isArchivedBookingStatus = (status: CustomerBookingStatus) =>
+    status === "completed" ||
+    status === "cancelled" ||
+    status === "rejected" ||
+    status === "expired";
+
   const upcomingBookings = bookingsData.filter(
-    (b) =>
-      b.status !== "cancelled" &&
-      b.status !== "completed" &&
-      isAfter(new Date(b.bookingDate), new Date()),
+    (b) => {
+      if (isArchivedBookingStatus(b.status)) return false;
+      if (!todayIndianKey) return false;
+      const bookingKey = getIndianDayKey(b.bookingDate);
+      return !!bookingKey && bookingKey >= todayIndianKey;
+    },
   );
   const pastBookings = bookingsData.filter(
-    (b) =>
-      b.status === "completed" ||
-      isBefore(new Date(b.bookingDate), new Date()),
+    (b) => {
+      if (isArchivedBookingStatus(b.status)) return true;
+      if (!todayIndianKey) return false;
+      const bookingKey = getIndianDayKey(b.bookingDate);
+      return !!bookingKey && bookingKey < todayIndianKey;
+    },
   );
 
   return (

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import request from "supertest";
 import type { MemStorage } from "../server/storage";
-import { platformFees } from "../shared/config";
+import { featureFlags, platformFees } from "../shared/config";
 
 process.env.USE_IN_MEMORY_DB = "true";
 process.env.SESSION_SECRET = "test";
@@ -126,7 +126,8 @@ describe("Payment APIs", () => {
       .send({ username: customer.username, password: "pass" });
 
     const productPrice = Number(product.price);
-    const totalWithFee = productPrice + platformFees.productOrder;
+    const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
+    const totalWithFee = productPrice + platformFee;
     const orderRes = await customerAgent.post("/api/orders").send({
       items: [{ productId: product.id, quantity: 1, price: product.price }],
       total: totalWithFee.toString(),
@@ -163,7 +164,8 @@ describe("Payment APIs", () => {
       .send({ username: customer.username, password: "pass" });
 
     const productPrice = Number(product.price);
-    const totalWithFee = productPrice + platformFees.productOrder;
+    const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
+    const totalWithFee = productPrice + platformFee;
     const orderRes = await customerAgent.post("/api/orders").send({
       items: [{ productId: product.id, quantity: 1, price: product.price }],
       total: totalWithFee.toString(),
