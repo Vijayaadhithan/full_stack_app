@@ -733,13 +733,31 @@ export default function ShopOrders() {
 
                 <div>
                   <h4 className="font-medium mb-2">Delivery Details</h4>
-                  <p className="text-sm">
-                    {order.deliveryMethod === "delivery"
-                      ? "Home Delivery"
-                      : order.deliveryMethod === "pickup"
-                        ? "In-Store Pickup"
-                        : "Not specified"}
-                  </p>
+                  <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
+                    <span className="text-2xl leading-none" aria-hidden="true">
+                      {order.deliveryMethod === "delivery"
+                        ? "🛵"
+                        : order.deliveryMethod === "pickup"
+                          ? "🛍️"
+                          : "📦"}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {order.deliveryMethod === "delivery"
+                          ? "Deliver to customer's house"
+                          : order.deliveryMethod === "pickup"
+                            ? "Customer will pick up at shop"
+                            : "Delivery method not specified"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {order.deliveryMethod === "delivery"
+                          ? "Home delivery"
+                          : order.deliveryMethod === "pickup"
+                            ? "In-store pickup"
+                            : "Please confirm with the customer"}
+                      </p>
+                    </div>
+                  </div>
                   {order.deliveryMethod === "delivery" ? (
                     <div className="text-sm text-muted-foreground whitespace-pre-line flex flex-col gap-2">
                       <span>
@@ -813,8 +831,7 @@ export default function ShopOrders() {
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      After setting the bill, update status and complete payment
-                      when settled.
+                      After setting the bill, the customer will choose Cash/UPI/Pay Later. Confirm payment when settled, then update order status.
                     </p>
                   </div>
                 ) : (

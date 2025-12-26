@@ -6686,7 +6686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId: order.customerId,
             type: "order",
             title: "Quick Order priced",
-            message: `Order #${orderId} has been priced at ₹${totalString}. Please pay on pickup/delivery.`,
+            message: `Order #${orderId} has been priced at ₹${totalString}. Open the order to choose a payment method and pay.`,
           });
         }
 
@@ -6698,6 +6698,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
             error instanceof Error
               ? error.message
               : "Failed to quote text order",
+        });
+      }
+    },
+  );
+
+  const updateTextOrderPaymentMethodSchema = z
+    .object({
+      paymentMethod: PaymentMethodType,
+    })
+    .strict();
+
+  app.post(
+    "/api/orders/:id/payment-method",
+    requireAuth,
+    requireRole(["customer"]),
+    async (req, res) => {
+      const orderId = getValidatedParam(req, "id");
+      const parsedBody = updateTextOrderPaymentMethodSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+
+      try {
+        const order = await storage.getOrder(orderId);
+        if (!order) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+        if (order.customerId !== req.user!.id) {
+          return res.status(403).json({ message: "Not authorized" });
+        }
+        if (order.orderType !== "text_order") {
+          return res.status(400).json({
+            message: "Payment method updates are only supported for quick orders.",
+          });
+        }
+        if (order.paymentStatus !== "pending") {
+          return res.status(400).json({
+            message: "Payment method cannot be updated after payment has started.",
+          });
+        }
+        if (!["pending", "confirmed"].includes(order.status)) {
+          return res.status(400).json({
+            message: "Payment method cannot be updated once the order is processing.",
+          });
+        }
+        if (order.shopId == null) {
+          return res.status(400).json({ message: "Shop information is missing" });
+        }
+
+        const paymentMethod = parsedBody.data.paymentMethod;
+
+        const shop = await storage.getUser(order.shopId);
+        if (!shop || shop.role !== "shop") {
+          return res.status(404).json({ message: "Shop not found" });
+        }
+
+        if (paymentMethod === "upi") {
+          const upiId = (shop as any).upiId;
+          if (!upiId || typeof upiId !== "string" || !upiId.trim()) {
+            return res.status(400).json({
+              message: "This shop has not configured UPI payments yet.",
+            });
+          }
+        }
+
+        let nextNotes = order.notes ?? null;
+        if (paymentMethod === "pay_later") {
+          const eligibility = await evaluatePayLaterEligibility(
+            shop,
+            req.user!.id,
+          );
+
+          if (!eligibility.allowPayLater) {
+            return res.status(400).json({
+              message: "Pay later is not enabled for this shop.",
+            });
+          }
+          if (!eligibility.isKnownCustomer && !eligibility.isWhitelisted) {
+            return res.status(403).json({
+              message:
+                "Pay later is only available for repeat or whitelisted customers at this shop.",
+            });
+          }
+
+          const descriptor = eligibility.isWhitelisted
+            ? "whitelisted customer"
+            : "known customer";
+          const payLaterLine = `Pay later requested by ${descriptor}. Pending approval.`;
+          const existing = (order.notes ?? "").trim();
+          nextNotes = [existing || null, existing.includes(payLaterLine) ? null : payLaterLine]
+            .filter(Boolean)
+            .join("\n");
+        }
+
+        const updated = await storage.updateOrder(orderId, {
+          paymentMethod,
+          notes: nextNotes,
+        });
+
+        if (paymentMethod === "pay_later" && order.shopId) {
+          await storage.createNotification({
+            userId: order.shopId,
+            type: "order",
+            title: "Pay Later approval needed",
+            message: `Order #${orderId} is waiting for credit approval.`,
+          });
+        }
+
+        return res.json(updated);
+      } catch (error) {
+        logger.error("Error updating text order payment method:", error);
+        return res.status(500).json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to update payment method",
         });
       }
     },

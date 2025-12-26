@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PaymentMethodSelector } from "@/components/payment-method-selector";
+import { DeliveryMethodSelector } from "@/components/delivery-method-selector";
 import {
   Tooltip,
   TooltipContent,
@@ -636,25 +637,12 @@ export default function Cart() {
                   <CardTitle className="text-lg">Delivery Method</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <RadioGroup
+                  <DeliveryMethodSelector
                     value={deliveryMethod}
-                    onValueChange={(value: "delivery" | "pickup") =>
-                      setDeliveryMethod(value)
-                    }
-                  >
-                    {shopInfo.pickupAvailable && (
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="pickup" id="pickup" />
-                        <Label htmlFor="pickup">In-Store Pickup</Label>
-                      </div>
-                    )}
-                    {shopInfo.deliveryAvailable && (
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="delivery" id="delivery" />
-                        <Label htmlFor="delivery">Home Delivery</Label>
-                      </div>
-                    )}
-                  </RadioGroup>
+                    onChange={(value) => setDeliveryMethod(value)}
+                    pickupAvailable={shopInfo.pickupAvailable}
+                    deliveryAvailable={shopInfo.deliveryAvailable}
+                  />
                 </CardContent>
               </Card>
             )}

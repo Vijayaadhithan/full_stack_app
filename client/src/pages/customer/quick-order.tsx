@@ -3,7 +3,6 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -13,17 +12,47 @@ import { ArrowLeft, Send, Store } from "lucide-react";
 import type { PublicShop } from "@/types/public-shop";
 import { getVerificationError, parseApiError } from "@/lib/api-error";
 import { ToastAction } from "@/components/ui/toast";
+import { useAuth } from "@/hooks/use-auth";
+import { DeliveryMethodSelector } from "@/components/delivery-method-selector";
 
 type DeliveryMethod = "delivery" | "pickup";
 
+type CustomerOrderForSuggestions = {
+  id: number;
+  shopId: number | null;
+  status:
+    | "pending"
+    | "cancelled"
+    | "confirmed"
+    | "processing"
+    | "packed"
+    | "dispatched"
+    | "shipped"
+    | "delivered"
+    | "returned";
+  orderType: "product_order" | "text_order";
+  orderText: string | null;
+  orderDate?: string | null;
+  items: Array<{
+    id: number;
+    productId: number | null;
+    name: string;
+    quantity: number;
+    price: string;
+    total: string;
+  }>;
+};
+
 export default function QuickOrder() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [, navigate] = useLocation();
   const { id } = useParams<{ id: string }>();
   const shopId = id ? Number(id) : NaN;
 
   const [orderText, setOrderText] = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("pickup");
+  const [monthlyList, setMonthlyList] = useState("");
 
   const { data: shop, isLoading: shopLoading } = useQuery<PublicShop, Error>({
     queryKey: [`/api/shops/${id}`],
@@ -48,6 +77,115 @@ export default function QuickOrder() {
       setDeliveryMethod("delivery");
     }
   }, [shop, deliveryOptions.pickupAvailable, deliveryOptions.deliveryAvailable]);
+
+  const monthlyListStorageKey = useMemo(() => {
+    const userKey = typeof user?.id === "number" ? user.id : "anon";
+    if (!Number.isFinite(shopId)) return null;
+    return `quick_order_monthly_list:${userKey}:${shopId}`;
+  }, [shopId, user?.id]);
+
+  useEffect(() => {
+    if (!monthlyListStorageKey) return;
+    if (typeof window === "undefined") return;
+    try {
+      setMonthlyList(window.localStorage.getItem(monthlyListStorageKey) ?? "");
+    } catch {
+      setMonthlyList("");
+    }
+  }, [monthlyListStorageKey]);
+
+  const { data: customerOrders } = useQuery<CustomerOrderForSuggestions[]>({
+    queryKey: ["/api/orders/customer", "all"],
+    enabled: Number.isFinite(shopId),
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/orders/customer");
+      if (!res.ok) {
+        throw new Error("Failed to fetch order history");
+      }
+      return res.json();
+    },
+  });
+
+  const frequentItemChips = useMemo(() => {
+    if (!Number.isFinite(shopId) || !customerOrders?.length) return [];
+    const counts = new Map<string, number>();
+
+    const bump = (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
+    };
+
+    for (const order of customerOrders) {
+      if (order.shopId !== shopId) continue;
+      if (order.status === "cancelled") continue;
+
+      if (order.orderType === "product_order") {
+        for (const item of order.items ?? []) {
+          if (!item.name?.trim()) continue;
+          if (item.quantity > 1) {
+            bump(`${item.quantity} ${item.name}`);
+          } else {
+            bump(item.name);
+          }
+        }
+      }
+
+      if (order.orderType === "text_order" && order.orderText?.trim()) {
+        const parts = order.orderText
+          .split(/[\n,]+/g)
+          .map((part) => part.trim())
+          .filter(Boolean);
+        for (const part of parts) {
+          bump(part);
+        }
+      }
+    }
+
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([value]) => value)
+      .slice(0, 12);
+  }, [customerOrders, shopId]);
+
+  const appendToOrderText = (value: string) => {
+    setOrderText((prev) => {
+      const trimmedPrev = prev.trim();
+      if (!trimmedPrev) return value;
+      const needsSeparator = !/[,\n]\s*$/.test(prev);
+      return `${prev}${needsSeparator ? ", " : ""}${value}`;
+    });
+  };
+
+  const saveMonthlyList = () => {
+    if (!monthlyListStorageKey) return;
+    const trimmed = orderText.trim();
+    if (!trimmed) return;
+    try {
+      window.localStorage.setItem(monthlyListStorageKey, trimmed);
+      setMonthlyList(trimmed);
+      toast({
+        title: "Monthly list saved",
+        description: "You can reuse it anytime for quick ordering.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not save monthly list",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const useMonthlyList = () => {
+    const trimmed = monthlyList.trim();
+    if (!trimmed) return;
+    setOrderText(trimmed);
+    toast({
+      title: "Monthly list loaded",
+      description: "Review and send when ready.",
+    });
+  };
 
   const createTextOrderMutation = useMutation({
     mutationFn: async () => {
@@ -141,23 +279,12 @@ export default function QuickOrder() {
             {shop && (deliveryOptions.pickupAvailable || deliveryOptions.deliveryAvailable) && (
               <div className="space-y-2">
                 <Label>Delivery Method</Label>
-                <RadioGroup
+                <DeliveryMethodSelector
                   value={deliveryMethod}
-                  onValueChange={(value) => setDeliveryMethod(value as DeliveryMethod)}
-                >
-                  {deliveryOptions.pickupAvailable && (
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="pickup" id="pickup" />
-                      <Label htmlFor="pickup">Pickup</Label>
-                    </div>
-                  )}
-                  {deliveryOptions.deliveryAvailable && (
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="delivery" id="delivery" />
-                      <Label htmlFor="delivery">Delivery</Label>
-                    </div>
-                  )}
-                </RadioGroup>
+                  onChange={setDeliveryMethod}
+                  pickupAvailable={deliveryOptions.pickupAvailable}
+                  deliveryAvailable={deliveryOptions.deliveryAvailable}
+                />
               </div>
             )}
 
@@ -175,6 +302,65 @@ export default function QuickOrder() {
               </p>
             </div>
 
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 p-3">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">Monthly list</p>
+                  <p className="text-xs text-muted-foreground">
+                    Save your repeat items once and reuse anytime.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={useMonthlyList}
+                    disabled={!monthlyList.trim().length}
+                  >
+                    Use
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={saveMonthlyList}
+                    disabled={!orderText.trim().length}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Tap to add</p>
+                {frequentItemChips.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {frequentItemChips.map((chip) => (
+                      <Button
+                        key={chip}
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-auto whitespace-normal rounded-full px-3 py-2 text-left"
+                        onClick={() => appendToOrderText(chip)}
+                      >
+                        {chip}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No frequent items yet. After a couple orders, you'll see quick add
+                    options here.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Based on your past orders from this shop.
+                </p>
+              </div>
+            </div>
+
             <Button
               className="w-full"
               onClick={() => createTextOrderMutation.mutate()}
@@ -189,4 +375,3 @@ export default function QuickOrder() {
     </DashboardLayout>
   );
 }
-

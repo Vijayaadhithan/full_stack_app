@@ -37,6 +37,7 @@ import {
   OrderDetail,
   OrderTimelineEntry,
 } from "@shared/api-contract";
+import type { PaymentMethodType } from "@shared/schema";
 import { apiClient } from "@/lib/apiClient";
 const ProductReviewDialogLazy = lazy(() => import("./components/ProductReviewDialog"));
 // Define the type for timeline updates
@@ -51,6 +52,15 @@ const returnRequestSchema = z.object({
 });
 
 type ReturnRequestForm = z.infer<typeof returnRequestSchema>;
+
+type ShopInfoForPayment = {
+  allowPayLater?: boolean;
+  payLaterEligibilityForCustomer?: {
+    eligible: boolean;
+    isKnownCustomer: boolean;
+    isWhitelisted: boolean;
+  };
+};
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
@@ -73,6 +83,17 @@ export default function OrderDetails() {
         params: { id: numericId },
       }),
     enabled: !!order && Number.isFinite(numericId),
+  });
+
+  const shopId = order?.shopId ?? null;
+  const { data: shopInfo } = useQuery<ShopInfoForPayment>({
+    queryKey: ["shop-info", shopId],
+    enabled: typeof shopId === "number",
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/users/${shopId}`);
+      if (!res.ok) throw new Error("Failed to fetch shop info");
+      return res.json();
+    },
   });
 
   const form = useForm<ReturnRequestForm>({
@@ -156,6 +177,36 @@ export default function OrderDetails() {
       queryClient.invalidateQueries({ queryKey: [`/api/orders/${id}`] });
       toast({ title: "Payment reference submitted" });
       setReference("");
+    },
+    onError: (e: Error) => {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const updatePaymentMethodMutation = useMutation<
+    unknown,
+    Error,
+    PaymentMethodType
+  >({
+    mutationFn: async (paymentMethod) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/orders/${id}/payment-method`,
+        { paymentMethod },
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const message =
+          data && typeof data === "object" && "message" in data
+            ? String((data as any).message)
+            : "Failed to update payment method";
+        throw new Error(message);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${id}`] });
+      toast({ title: "Payment method updated" });
     },
     onError: (e: Error) => {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -253,6 +304,15 @@ export default function OrderDetails() {
     order?.orderType === "text_order" &&
     (!Number.isFinite(numericTotal) || numericTotal <= 0);
   const isPayLater = order?.paymentMethod === "pay_later";
+  const payLaterEligibility = shopInfo?.payLaterEligibilityForCustomer;
+  const payLaterEnabled = Boolean(shopInfo?.allowPayLater);
+  const payLaterAvailable =
+    payLaterEnabled && (payLaterEligibility?.eligible ?? true);
+  const payLaterDisabledReason = !payLaterEnabled
+    ? "Pay Later is disabled for this shop."
+    : payLaterEligibility && !payLaterEligibility.eligible
+      ? "Pay Later is limited to repeat or whitelisted customers. Ask the shop owner to whitelist you."
+      : undefined;
 
   const whatsappHref = (() => {
     if (!order) return null;
@@ -319,9 +379,11 @@ export default function OrderDetails() {
               <CardTitle>
                 {isTextOrderAwaitingQuote
                   ? "Waiting for bill price"
-                  : isPayLater
-                    ? "Pay Later (Khata)"
-                    : "Complete Payment"}
+                  : order.orderType === "text_order"
+                    ? "Choose payment method"
+                    : isPayLater
+                      ? "Pay Later (Khata)"
+                      : "Complete Payment"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -330,54 +392,174 @@ export default function OrderDetails() {
                   The shop will review your quick order and set the final bill
                   price. You'll be notified once it's ready.
                 </p>
-              ) : isPayLater ? (
-                <p className="text-sm">
-                  Your Pay Later request is pending approval. The shop owner
-                  will approve credit before processing your order.
-                </p>
-              ) : order.paymentMethod === "upi" ? (
-                <>
-                  <div>
-                    <p className="font-medium">
-                      Step 1: Pay ₹{order?.total} to {order?.shop?.upiId}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={copyUpiIdToClipboard}
-                    >
-                      Copy UPI ID
-                    </Button>
-                  </div>
-                  <div className="space-y-2">
-                    <Input
-                      value={reference}
-                      onChange={(e) => setReference(e.target.value)}
-                      placeholder="Transaction ID"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => submitPaymentMutation.mutate()}
-                      disabled={submitPaymentMutation.isPending || !reference}
-                    >
-                      {submitPaymentMutation.isPending && (
-                        <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                      )}
-                      Submit Confirmation
-                    </Button>
-                  </div>
-                </>
-              ) : order.paymentMethod === "cash" ? (
-                <p className="font-medium">
-                  Pay ₹{order?.total} in cash{" "}
-                  {order.deliveryMethod === "delivery"
-                    ? "on delivery."
-                    : "when you pick up your order."}
-                </p>
               ) : (
-                <p className="text-sm">
-                  Payment is pending. Please check back shortly.
-                </p>
+                <>
+                  {order.orderType === "text_order" && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Select how you want to pay. You can change it until payment
+                        starts.
+                      </p>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (order.paymentMethod === "cash") return;
+                            updatePaymentMethodMutation.mutate("cash");
+                          }}
+                          disabled={updatePaymentMethodMutation.isPending}
+                          className={`flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors ${
+                            order.paymentMethod === "cash"
+                              ? "border-primary bg-primary/5"
+                              : "bg-background hover:bg-muted/40"
+                          }`}
+                        >
+                          <span className="text-2xl leading-none" aria-hidden="true">
+                            💵
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium leading-tight">Cash</div>
+                            <div className="text-xs text-muted-foreground">
+                              Pay on pickup/delivery
+                            </div>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (order.paymentMethod === "upi") return;
+                            updatePaymentMethodMutation.mutate("upi");
+                          }}
+                          disabled={
+                            updatePaymentMethodMutation.isPending ||
+                            !order.shop?.upiId?.trim()
+                          }
+                          className={`flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors ${
+                            order.paymentMethod === "upi"
+                              ? "border-primary bg-primary/5"
+                              : "bg-background hover:bg-muted/40"
+                          } ${
+                            !order.shop?.upiId?.trim() ? "opacity-50" : ""
+                          }`}
+                        >
+                          <span className="text-2xl leading-none" aria-hidden="true">
+                            📲
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium leading-tight">UPI</div>
+                            <div className="text-xs text-muted-foreground">
+                              Pay now and submit Txn ID
+                            </div>
+                          </div>
+                        </button>
+
+                        {payLaterEnabled && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (order.paymentMethod === "pay_later") return;
+                              updatePaymentMethodMutation.mutate("pay_later");
+                            }}
+                            disabled={
+                              updatePaymentMethodMutation.isPending ||
+                              !payLaterAvailable
+                            }
+                            className={`flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors ${
+                              order.paymentMethod === "pay_later"
+                                ? "border-primary bg-primary/5"
+                                : "bg-background hover:bg-muted/40"
+                            } ${!payLaterAvailable ? "opacity-50" : ""}`}
+                          >
+                            <span
+                              className="text-2xl leading-none"
+                              aria-hidden="true"
+                            >
+                              🧾
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium leading-tight">
+                                Pay Later
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Needs shop approval
+                              </div>
+                            </div>
+                          </button>
+                        )}
+                      </div>
+
+                      {!order.shop?.upiId?.trim() && (
+                        <p className="text-xs text-muted-foreground">
+                          UPI is not available for this shop yet.
+                        </p>
+                      )}
+
+                      {payLaterEnabled && payLaterDisabledReason && (
+                        <p className="text-xs text-muted-foreground">
+                          {payLaterDisabledReason}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {isPayLater ? (
+                    <p className="text-sm">
+                      Your Pay Later request is pending approval. The shop owner
+                      will approve credit before processing your order.
+                    </p>
+                  ) : order.paymentMethod === "upi" ? (
+                    order.shop?.upiId?.trim() ? (
+                      <>
+                        <div>
+                          <p className="font-medium">
+                            Step 1: Pay ₹{order?.total} to {order?.shop?.upiId}
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={copyUpiIdToClipboard}
+                          >
+                            Copy UPI ID
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          <Input
+                            value={reference}
+                            onChange={(e) => setReference(e.target.value)}
+                            placeholder="Transaction ID"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => submitPaymentMutation.mutate()}
+                            disabled={submitPaymentMutation.isPending || !reference}
+                          >
+                            {submitPaymentMutation.isPending && (
+                              <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                            )}
+                            Submit Confirmation
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm">
+                        This shop has not configured UPI payments yet. Please choose
+                        Cash or Pay Later.
+                      </p>
+                    )
+                  ) : order.paymentMethod === "cash" ? (
+                    <p className="font-medium">
+                      Pay ₹{order?.total} in cash{" "}
+                      {order.deliveryMethod === "delivery"
+                        ? "on delivery."
+                        : "when you pick up your order."}
+                    </p>
+                  ) : (
+                    <p className="text-sm">
+                      Payment is pending. Please check back shortly.
+                    </p>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -415,8 +597,10 @@ export default function OrderDetails() {
                 <span className="text-muted-foreground">Delivery Method</span>
                 <span className="font-medium">
                   {order.deliveryMethod === "delivery"
-                    ? "Home Delivery"
-                    : "In-Store Pickup"}
+                    ? "🛵 Bring to my house"
+                    : order.deliveryMethod === "pickup"
+                      ? "🛍️ I will come take it"
+                      : "Not specified"}
                 </span>
               </div>
               <div className="flex justify-between">
