@@ -259,7 +259,8 @@ Add these to `.env` (prefix with `VITE_` for client-side usage when noted):
 | `FRONTEND_URL` / `APP_BASE_URL` | Must be HTTPS in production for secure cookies |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` | Nodemailer SMTP configuration for transactional email |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Bootstrap admin account (required in production) |
-| `REDIS_URL`, `DISABLE_REDIS` | Enable the shared Redis cache or force in-memory caching |
+| `REDIS_URL`, `DISABLE_REDIS` | Enable Redis-backed caching and session storage (recommended for production) |
+| `SESSION_STORE` | Force `redis` or `postgres` for express-session storage |
 | `DISABLE_RATE_LIMITERS` | Set to `true` only during load tests to bypass login/signup rate limits |
 | `CAPACITOR_*` | Mobile bridge options; see [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md) |
 

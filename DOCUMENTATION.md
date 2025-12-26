@@ -338,6 +338,7 @@ The command recreates the database state captured at the time of the dump.
 - Set `REDIS_URL` in `.env` (e.g. `redis://localhost:6379`).
 - The `server/cache.ts` helper now prioritises Redis and falls back to the in-memory cache if Redis is unreachable.
 - Cached collections (services/products by category) automatically hydrate from Redis and respect the configured TTL. Use the exported `invalidateCache` or `flushCache` helpers when adding new high-traffic lookups.
+- Express sessions use Redis when `REDIS_URL` is set (override with `SESSION_STORE=postgres`).
 
 ### 10.2 Rate Limiting
 - `express-rate-limit` guards login, registration, password resets, Google OAuth flows, and admin login attempts. Limits can be tuned in `server/security/rateLimiters.ts`.

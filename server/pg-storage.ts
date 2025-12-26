@@ -4,6 +4,7 @@ import { db } from "./db";
 import type { SQL } from "drizzle-orm";
 import logger from "./logger";
 import { getCache, setCache } from "./services/cache.service";
+import { createSessionStore } from "./services/sessionStore.service";
 import { createHash } from "crypto";
 import {
   notifyBookingChange,
@@ -292,7 +293,7 @@ export class PostgresStorage implements IStorage {
     const connectionString = process.env.DATABASE_URL?.trim();
     if (!connectionString) {
       throw new Error(
-        "DATABASE_URL must be configured to use the PostgreSQL-backed session store.",
+        "DATABASE_URL must be configured to use the PostgreSQL storage backend.",
       );
     }
 
@@ -334,17 +335,21 @@ export class PostgresStorage implements IStorage {
       storeOptions.schemaName = schemaName;
     }
 
-    this.sessionStore = new PgStore(storeOptions);
+    const fallbackFactory = () => {
+      const pgStore = new PgStore(storeOptions);
+      logger.info(
+        {
+          tableName,
+          schemaName: schemaName ?? "public",
+          pruneSessionInterval: storeOptions.pruneSessionInterval,
+          ttlSeconds: storeOptions.ttl ?? null,
+        },
+        "Initialized PostgreSQL session store",
+      );
+      return pgStore;
+    };
 
-    logger.info(
-      {
-        tableName,
-        schemaName: schemaName ?? "public",
-        pruneSessionInterval: storeOptions.pruneSessionInterval,
-        ttlSeconds: storeOptions.ttl ?? null,
-      },
-      "Initialized PostgreSQL session store",
-    );
+    this.sessionStore = createSessionStore({ fallbackFactory });
   }
   async getUserByEmail(email: string): Promise<User | undefined> {
     const normalized = normalizeEmail(email);

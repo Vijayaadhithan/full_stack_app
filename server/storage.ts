@@ -2832,7 +2832,7 @@ const shouldUseInMemory = isTestEnv || (!runningUnderPm2 && requestedInMemory);
 
 if (!isTestEnv && runningUnderPm2 && requestedInMemory) {
   logger.warn(
-    "Detected PM2 cluster mode. Ignoring USE_IN_MEMORY_DB and using the PostgreSQL session store instead.",
+    "Detected PM2 cluster mode. Ignoring USE_IN_MEMORY_DB and using the PostgreSQL storage backend instead.",
   );
 }
 
@@ -2860,6 +2860,6 @@ if (shouldUseInMemory) {
     {
       pm2: runningUnderPm2,
     },
-    "Using PostgreSQL-backed storage for application data and sessions.",
+    "Using PostgreSQL-backed storage for application data. Session storage is configured separately (Redis when available).",
   );
 }
