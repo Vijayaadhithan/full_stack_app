@@ -43,6 +43,7 @@ const ProviderProfile = lazy(() => import("@/pages/provider/profile"));
 const ProviderServices = lazy(() => import("@/pages/provider/services"));
 const ProviderBookings = lazy(() => import("@/pages/provider/bookings"));
 const ProviderReviews = lazy(() => import("@/pages/provider/reviews"));
+const ProviderEarnings = lazy(() => import("@/pages/provider/earnings"));
 const ShopDashboard = lazy(() => import("@/pages/shop/dashboard"));
 const ShopProfile = lazy(() => import("@/pages/shop/profile"));
 const ShopProducts = lazy(() => import("@/pages/shop/products"));
@@ -181,6 +182,7 @@ function Router() {
       <ProtectedRoute path="/provider/services" component={ProviderServices} roles={["provider"]} />
       <ProtectedRoute path="/provider/bookings" component={ProviderBookings} roles={["provider"]} />
       <ProtectedRoute path="/provider/reviews" component={ProviderReviews} roles={["provider"]} />
+      <ProtectedRoute path="/provider/earnings" component={ProviderEarnings} roles={["provider"]} />
       {/* Shop Routes */}
       <ProtectedRoute path="/shop" component={ShopDashboard} roles={["shop", "worker"]} />
       <ProtectedRoute path="/shop/profile" component={ShopProfile} roles={["shop", "worker"]} />

@@ -1162,6 +1162,13 @@ const serviceUpdateSchema = insertServiceSchema
       .optional(),
   });
 
+const providerAvailabilitySchema = z
+  .object({
+    isAvailableNow: z.boolean(),
+    availabilityNote: z.string().optional().nullable(),
+  })
+  .strict();
+
 const orderPaymentReferenceSchema = z
   .object({
     paymentReference: z.string().trim().min(1).max(100),
@@ -2018,14 +2025,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ? userMap.get(service.providerId)
               : undefined;
 
-          let relevantAddress = {} as any;
+          let relevantAddress: Record<string, string | null> | null = null;
           if (b.serviceLocation === "customer" && customer) {
             relevantAddress = {
-              addressStreet: customer.addressStreet,
-              addressCity: customer.addressCity,
-              addressState: customer.addressState,
-              addressPostalCode: customer.addressPostalCode,
-              addressCountry: customer.addressCountry,
+              addressStreet: customer.addressStreet ?? null,
+              addressLandmark: customer.addressLandmark ?? null,
+              addressCity: customer.addressCity ?? null,
+              addressState: customer.addressState ?? null,
+              addressPostalCode: customer.addressPostalCode ?? null,
+              addressCountry: customer.addressCountry ?? null,
+            };
+          } else if (b.serviceLocation === "provider" && provider) {
+            relevantAddress = {
+              addressStreet: provider.addressStreet ?? null,
+              addressLandmark: provider.addressLandmark ?? null,
+              addressCity: provider.addressCity ?? null,
+              addressState: provider.addressState ?? null,
+              addressPostalCode: provider.addressPostalCode ?? null,
+              addressCountry: provider.addressCountry ?? null,
             };
           }
 
@@ -3217,6 +3234,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
     }
   });
+
+  app.patch(
+    "/api/provider/availability",
+    requireAuth,
+    requireRole(["provider"]),
+    async (req, res) => {
+      const parsedBody = providerAvailabilitySchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+
+      try {
+        const providerId = req.user!.id;
+        const services = await storage.getServicesByProvider(providerId);
+        if (services.length === 0) {
+          return res.json({ updated: 0, services: [] });
+        }
+
+        const updates: Partial<Service> = {
+          isAvailableNow: parsedBody.data.isAvailableNow,
+        };
+        if (parsedBody.data.availabilityNote !== undefined) {
+          updates.availabilityNote = parsedBody.data.availabilityNote;
+        }
+
+        const updatedServices = await Promise.all(
+          services.map((service) => storage.updateService(service.id, updates)),
+        );
+
+        await Promise.all(
+          updatedServices.map((service) =>
+            invalidateCache(`service_detail_${service.id}`),
+          ),
+        );
+
+        res.json({ updated: updatedServices.length, services: updatedServices });
+      } catch (error) {
+        logger.error("Error updating provider availability:", error);
+        res.status(400).json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to update availability",
+        });
+      }
+    },
+  );
 
   // Add PATCH endpoint for updating services
   app.patch(

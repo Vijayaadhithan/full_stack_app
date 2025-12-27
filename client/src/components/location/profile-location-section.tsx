@@ -10,6 +10,7 @@ import { User } from "@shared/schema";
 import { LocationPicker, Coordinates } from "./location-picker";
 import { cn } from "@/lib/utils";
 import MapLink from "@/components/location/MapLink";
+import { useLanguage } from "@/contexts/language-context";
 
 type ProfileLocationSectionProps = {
   user: Pick<User, "latitude" | "longitude" | "role"> | null;
@@ -51,11 +52,14 @@ export function ProfileLocationSection({
   description,
   className,
 }: ProfileLocationSectionProps) {
+  const { t } = useLanguage();
   const resolvedTitle =
-    title ?? (user?.role === "customer" ? "My Location" : "Business Location");
+    title ??
+    (user?.role === "customer"
+      ? t("profile_location_title_customer")
+      : t("profile_location_title_provider"));
   const resolvedDescription =
-    description ??
-    "Set your exact position so that distance-based search works accurately.";
+    description ?? t("profile_location_description");
   const userLatitude = user?.latitude;
   const userLongitude = user?.longitude;
   const initialLocation = useMemo(
@@ -78,13 +82,13 @@ export function ProfileLocationSection({
     onSuccess: ({ user: updatedUser, message }) => {
       queryClient.setQueryData(["/api/user"], updatedUser);
       toast({
-        title: "Location saved",
-        description: message ?? "Profile location updated successfully.",
+        title: t("location_saved_title"),
+        description: message ?? t("location_saved_description"),
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Location update failed",
+        title: t("location_update_failed"),
         description: error.message,
         variant: "destructive",
       });
@@ -96,8 +100,8 @@ export function ProfileLocationSection({
   const handleUseDeviceLocation = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       toast({
-        title: "Geolocation unavailable",
-        description: "Your browser does not support the Geolocation API.",
+        title: t("geolocation_unavailable_title"),
+        description: t("geolocation_unavailable_description"),
         variant: "destructive",
       });
       return;
@@ -114,7 +118,7 @@ export function ProfileLocationSection({
       (error) => {
         setIsCapturingDeviceLocation(false);
         toast({
-          title: "Unable to fetch location",
+          title: t("location_fetch_failed_title"),
           description: error.message,
           variant: "destructive",
         });
@@ -129,8 +133,8 @@ export function ProfileLocationSection({
   const handleSave = () => {
     if (!location) {
       toast({
-        title: "Select a location first",
-        description: "Drag the pin on the map or use your device location.",
+        title: t("location_select_first_title"),
+        description: t("location_select_first_description"),
         variant: "destructive",
       });
       return;
@@ -159,7 +163,7 @@ export function ProfileLocationSection({
             {isCapturingDeviceLocation ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
-            Use My Current Location
+            {t("use_current_location")}
           </Button>
           <Button
             type="button"
@@ -170,23 +174,23 @@ export function ProfileLocationSection({
             {mutation.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
-            Save Location
+            {t("save_location")}
           </Button>
         </div>
         <div className="rounded-lg border bg-muted/40 p-3 text-sm">
           {location ? (
             <div className="flex flex-col gap-1">
               <span className="font-medium text-muted-foreground">
-                Selected coordinates
+                {t("selected_coordinates")}
               </span>
               <span>
-                Latitude:{" "}
+                {t("latitude_label")}:{" "}
                 <span className="font-mono">
                   {location.latitude.toFixed(6)}
                 </span>
               </span>
               <span>
-                Longitude:{" "}
+                {t("longitude_label")}:{" "}
                 <span className="font-mono">
                   {location.longitude.toFixed(6)}
                 </span>
@@ -197,13 +201,13 @@ export function ProfileLocationSection({
               />
               {initialLocation && !isDirty ? (
                 <span className="text-xs text-muted-foreground">
-                  This matches your saved location.
+                  {t("location_matches_saved")}
                 </span>
               ) : null}
             </div>
           ) : (
             <p className="text-muted-foreground">
-              No saved location yet. Drag the pin or use your device to begin.
+              {t("location_empty_state")}
             </p>
           )}
         </div>

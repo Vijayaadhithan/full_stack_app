@@ -1,7 +1,13 @@
 import React from 'react';
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import MapLink from "@/components/location/MapLink";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +47,7 @@ import {
 import { MapPin as LocationIcon } from "lucide-react"; // Use a different alias for MapPin
 import { Booking, Service, User } from "@shared/schema"; // Import User type
 import { z } from "zod";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
 import { describeSlotLabel } from "@/lib/time-slots";
 
@@ -343,6 +349,47 @@ export default function ProviderBookings() {
     return true;
   });
 
+  const statusOptions = useMemo(
+    () => [
+      { value: "all", label: t("all") },
+      { value: "pending", label: t("pending") },
+      { value: "accepted", label: t("accepted") },
+      { value: "en_route", label: t("en_route") },
+      { value: "awaiting_payment", label: t("awaiting_payment") },
+      { value: "rescheduled", label: t("rescheduled") },
+      { value: "rescheduled_by_provider", label: t("rescheduled_by_provider") },
+      {
+        value: "rescheduled_pending_provider_approval",
+        label: t("rescheduled_pending_provider_approval"),
+      },
+      { value: "rejected", label: t("rejected") },
+      { value: "completed", label: t("completed") },
+    ],
+    [t],
+  );
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    bookings?.forEach((booking) => {
+      counts[booking.status] = (counts[booking.status] ?? 0) + 1;
+    });
+    return counts;
+  }, [bookings]);
+
+  const totalBookings = bookings?.length ?? 0;
+  const filteredCount = filteredBookings?.length ?? 0;
+  const activeStatusLabel =
+    statusOptions.find((option) => option.value === selectedStatus)?.label ??
+    t("all");
+  const dateFilterLabel = dateFilter
+    ? formatIndianDisplay(new Date(dateFilter), "date")
+    : null;
+
+  const clearFilters = () => {
+    setSelectedStatus("all");
+    setDateFilter("");
+  };
+
   const handleAction = (data: BookingActionData) => {
     if (!selectedBooking) return;
 
@@ -392,192 +439,272 @@ export default function ProviderBookings() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">{t("service_bookings")}</h1>
-          <div className="flex items-center gap-4">
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-            />
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="border rounded p-2"
-            >
-              <option value="all">{t("all_bookings")}</option>
-              <option value="pending">{t("pending")}</option>
-              <option value="accepted">{t("accepted")}</option>
-              <option value="en_route">{t("en_route")}</option>
-              <option value="rejected">{t("rejected")}</option>
-              <option value="rescheduled">{t("rescheduled")}</option>
-              <option value="completed">{t("completed")}</option>
-            </select>
+        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">
+              {t("provider_bookings_title")}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t("provider_bookings_subtitle")}
+            </p>
           </div>
+          <Badge variant="secondary" className="w-fit">
+            {t("bookings_showing_count").replace(
+              "{count}",
+              String(filteredCount),
+            )}
+          </Badge>
         </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-        ) : !filteredBookings?.length ? (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">{t("no_bookings_found")}</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {filteredBookings.map((booking) => {
-              const customerLandmark =
-                booking.customer?.addressLandmark?.trim() ||
-                booking.relevantAddress?.addressLandmark?.trim() ||
-                null;
-              const formattedCustomerAddress = formatCustomerAddress(
-                booking.customer ?? null,
-                booking.relevantAddress ?? null,
-                { includeLandmark: false },
-              );
-
-              return (
-                <Card
-                  key={booking.id}
-                  className={
-                    booking.status === "awaiting_payment"
-                      ? "border-yellow-500 bg-yellow-50"
-                      : ""
-                  }
-                >
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">
-                          {booking.service.name}
-                        </h3>
-                        <Badge
-                          variant="outline"
-                          className={`text-xs font-bold uppercase tracking-wide ${
-                            booking.status === "pending"
-                              ? "animate-pulse border-yellow-500 bg-yellow-300 text-black"
-                              : booking.status === "accepted"
-                                ? "border-green-700 bg-green-600 text-white"
-                                : booking.status === "rejected"
-                                  ? "border-red-700 bg-red-600 text-white"
-                                  : booking.status === "rescheduled"
-                                    ? "border-amber-700 bg-amber-500 text-white"
-                                    : booking.status === "awaiting_payment"
-                                      ? "border-yellow-400 bg-yellow-200 text-black"
-                                      : booking.status === "en_route"
-                                        ? "border-blue-700 bg-blue-600 text-white"
-                                        : booking.status === "completed"
-                                          ? "border-slate-700 bg-slate-700 text-white"
-                                          : "border-gray-300 bg-gray-100 text-gray-900"
-                          }`}
+        <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+          <aside className="space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  {t("booking_filters_title")}
+                </CardTitle>
+                <CardDescription>
+                  {t("booking_filters_subtitle")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">
+                    {t("booking_filters_date")}
+                  </p>
+                  <Input
+                    type="date"
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">
+                    {t("booking_filters_status")}
+                  </p>
+                  <div className="space-y-2">
+                    {statusOptions.map((option) => {
+                      const count =
+                        option.value === "all"
+                          ? totalBookings
+                          : statusCounts[option.value] ?? 0;
+                      const isActive = selectedStatus === option.value;
+                      return (
+                        <Button
+                          key={option.value}
+                          type="button"
+                          variant={isActive ? "default" : "outline"}
+                          onClick={() => setSelectedStatus(option.value)}
+                          className="w-full justify-between text-sm"
                         >
-                          {t(booking.status)}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        {formatIndianDisplay(booking.bookingDate, "date")}
-                        <Clock className="h-4 w-4 ml-2" />
-                        {booking.timeSlotLabel
-                          ? describeSlotLabel(booking.timeSlotLabel)
-                          : formatIndianDisplay(booking.bookingDate, "time")}
-                        <span className="ml-2">
-                          ({booking.service.duration} mins)
-                        </span>
-                      </div>
-                      {/* Display Service Location */}
-                      <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                        {" "}
-                        {/* Use items-start for multi-line */}
-                        <LocationIcon className="h-4 w-4 mt-1 flex-shrink-0" />{" "}
-                        {/* Adjust icon alignment */}
-                        <div>
-                          {" "}
-                          {/* Wrap text content */}
-                          {booking.serviceLocation === "customer" ? (
-                            <>
-                              <span>{t("service_at_customer_location")}</span>
-                              <div className="mt-2 rounded-md border border-blue-200 bg-blue-50 p-3">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-blue-900">
-                                  Landmark
-                                </p>
-                                <p className="text-xl font-extrabold text-blue-950">
-                                  {customerLandmark || "(not provided)"}
-                                </p>
-                              </div>
-                              {booking.customer ? (
-                                formattedCustomerAddress ? (
-                                  <p className="font-medium">
-                                    {formattedCustomerAddress}
-                                  </p>
-                                ) : customerLandmark ? null : (
-                                  <p className="font-medium text-muted-foreground">
-                                    {t("customer_address_not_provided")}
-                                  </p>
-                                )
-                              ) : (
-                                <p className="font-medium text-muted-foreground">
-                                  ({t("customer_address_not_available")})
-                                </p>
+                          <span>{option.label}</span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs ${
+                              isActive
+                                ? "bg-white/20 text-white"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={clearFilters}
+                >
+                  {t("clear_filters")}
+                </Button>
+              </CardContent>
+            </Card>
+          </aside>
+
+          <div className="space-y-4">
+            {(selectedStatus !== "all" || dateFilterLabel) && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span>{t("filters_active_label")}</span>
+                <Badge variant="outline">{activeStatusLabel}</Badge>
+                {dateFilterLabel && (
+                  <Badge variant="outline">{dateFilterLabel}</Badge>
+                )}
+              </div>
+            )}
+
+            {isLoading ? (
+              <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : !filteredBookings?.length ? (
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <p className="text-muted-foreground">
+                    {t("no_bookings_found")}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {filteredBookings.map((booking) => {
+                  const customerLandmark =
+                    booking.customer?.addressLandmark?.trim() ||
+                    booking.relevantAddress?.addressLandmark?.trim() ||
+                    null;
+                  const formattedCustomerAddress = formatCustomerAddress(
+                    booking.customer ?? null,
+                    booking.relevantAddress ?? null,
+                    { includeLandmark: false },
+                  );
+
+                  return (
+                    <Card
+                      key={booking.id}
+                      className={
+                        booking.status === "awaiting_payment"
+                          ? "border-yellow-500 bg-yellow-50"
+                          : ""
+                      }
+                    >
+                      <CardContent className="p-6">
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">
+                                {booking.service.name}
+                              </h3>
+                              <Badge
+                                variant="outline"
+                                className={`text-xs font-bold uppercase tracking-wide ${
+                                  booking.status === "pending"
+                                    ? "animate-pulse border-yellow-500 bg-yellow-300 text-black"
+                                    : booking.status === "accepted"
+                                      ? "border-green-700 bg-green-600 text-white"
+                                      : booking.status === "rejected"
+                                        ? "border-red-700 bg-red-600 text-white"
+                                        : booking.status === "rescheduled"
+                                          ? "border-amber-700 bg-amber-500 text-white"
+                                          : booking.status ===
+                                              "awaiting_payment"
+                                            ? "border-yellow-400 bg-yellow-200 text-black"
+                                            : booking.status === "en_route"
+                                              ? "border-blue-700 bg-blue-600 text-white"
+                                              : booking.status === "completed"
+                                                ? "border-slate-700 bg-slate-700 text-white"
+                                                : "border-gray-300 bg-gray-100 text-gray-900"
+                                }`}
+                              >
+                                {t(booking.status)}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              {formatIndianDisplay(
+                                booking.bookingDate,
+                                "date",
                               )}
-                              <MapLink
-                                latitude={booking.customer?.latitude}
-                                longitude={booking.customer?.longitude}
-                                className="mt-1"
-                              />
-                            </>
-                          ) : (
-                            <span>
-                              {booking.providerAddress
-                                ? `${t("service_at_provider_location")}: ${booking.providerAddress}`
-                                : t("service_at_provider_location")}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {booking.proximityInfo && (
-                        <div className="mt-2 flex items-center text-xs text-blue-700">
-                          <AlertCircle className="h-4 w-4 mr-1" />
-                          <span>{booking.proximityInfo.message}</span>
-                        </div>
-                      )}
-                      {/* Display Customer Information (Name and Phone) */}
-                      {booking.customer && (
-                        <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
-                          <p className="flex items-center">
-                            <UserIcon className="h-4 w-4 mr-1" />{" "}
-                            <strong>{t("customer")}:</strong>{" "}
-                            {booking.customer.name}
-                          </p>
-                          <p>
-                            <strong>{t("phone")}:</strong>{" "}
-                            {booking.customer.phone}
-                          </p>{" "}
-                          {/* Keep phone here for all cases */}
-                          {/* Address is now shown in the location section if applicable */}
-                        </div>
-                      )}
-                      {booking.status === "rescheduled" &&
-                        booking.rescheduleDate && (
-                          <div className="text-sm text-yellow-600">
-                            Rescheduled to:{" "}
-                            {formatIndianDisplay(
-                              booking.rescheduleDate,
-                              "datetime",
+                              <Clock className="h-4 w-4 ml-2" />
+                              {booking.timeSlotLabel
+                                ? describeSlotLabel(booking.timeSlotLabel)
+                                : formatIndianDisplay(
+                                  booking.bookingDate,
+                                  "time",
+                                )}
+                              <span className="ml-2">
+                                ({booking.service.duration} mins)
+                              </span>
+                            </div>
+                            {/* Display Service Location */}
+                            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                              <LocationIcon className="h-4 w-4 mt-1 flex-shrink-0" />
+                              <div>
+                                {booking.serviceLocation === "customer" ? (
+                                  <>
+                                    <span>
+                                      {t("service_at_customer_location")}
+                                    </span>
+                                    <div className="mt-2 rounded-md border border-blue-200 bg-blue-50 p-3">
+                                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-900">
+                                        {t("landmark_title")}
+                                      </p>
+                                      <p className="text-xl font-extrabold text-blue-950">
+                                        {customerLandmark || t("not_provided")}
+                                      </p>
+                                    </div>
+                                    {booking.customer ? (
+                                      formattedCustomerAddress ? (
+                                        <p className="font-medium">
+                                          {formattedCustomerAddress}
+                                        </p>
+                                      ) : customerLandmark ? null : (
+                                        <p className="font-medium text-muted-foreground">
+                                          {t("customer_address_not_provided")}
+                                        </p>
+                                      )
+                                    ) : (
+                                      <p className="font-medium text-muted-foreground">
+                                        ({t("customer_address_not_available")})
+                                      </p>
+                                    )}
+                                    <MapLink
+                                      latitude={booking.customer?.latitude}
+                                      longitude={booking.customer?.longitude}
+                                      className="mt-1"
+                                    />
+                                  </>
+                                ) : (
+                                  <span>
+                                    {booking.providerAddress
+                                      ? `${t("service_at_provider_location")}: ${booking.providerAddress}`
+                                      : t("service_at_provider_location")}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {booking.proximityInfo && (
+                              <div className="mt-2 flex items-center text-xs text-blue-700">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                <span>{booking.proximityInfo.message}</span>
+                              </div>
                             )}
+                            {/* Display Customer Information (Name and Phone) */}
+                            {booking.customer && (
+                              <div className="mt-2 text-sm text-muted-foreground border-t pt-2">
+                                <p className="flex items-center">
+                                  <UserIcon className="h-4 w-4 mr-1" />{" "}
+                                  <strong>{t("customer")}:</strong>{" "}
+                                  {booking.customer.name}
+                                </p>
+                                <p>
+                                  <strong>{t("phone")}:</strong>{" "}
+                                  {booking.customer.phone}
+                                </p>{" "}
+                                {/* Keep phone here for all cases */}
+                                {/* Address is now shown in the location section if applicable */}
+                              </div>
+                            )}
+                            {booking.status === "rescheduled" &&
+                              booking.rescheduleDate && (
+                                <div className="text-sm text-yellow-600">
+                                  {t("reschedule_date")}:{" "}
+                                  {formatIndianDisplay(
+                                    booking.rescheduleDate,
+                                    "datetime",
+                                  )}
+                                </div>
+                              )}
+                            {booking.status === "rejected" &&
+                              booking.rejectionReason && (
+                                <div className="text-sm text-red-600">
+                                  {t("reason_for_rejection")}:{" "}
+                                  {booking.rejectionReason}
+                                </div>
+                              )}
                           </div>
-                        )}
-                      {booking.status === "rejected" &&
-                        booking.rejectionReason && (
-                          <div className="text-sm text-red-600">
-                            Reason: {booking.rejectionReason}
-                          </div>
-                        )}
-                      </div>
 
                       {(booking.status === "pending" ||
                         booking.status ===
@@ -775,7 +902,7 @@ export default function ProviderBookings() {
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                           )}
                           <Navigation className="h-4 w-4 mr-2" />
-                          Start Job
+                          {t("start_job")}
                         </Button>
                       </div>
                     )}
@@ -783,7 +910,7 @@ export default function ProviderBookings() {
                     {booking.status === "en_route" && (
                       <div className="flex items-center gap-2 text-blue-700">
                         <Navigation className="h-4 w-4" />
-                        <span>On the way to the customer</span>
+                        <span>{t("on_the_way_to_customer")}</span>
                       </div>
                     )}
 
@@ -841,7 +968,7 @@ export default function ProviderBookings() {
                     {booking.status === "awaiting_payment" && (
                       <div className="space-x-2">
                         <p className="text-sm">
-                          Ref: {booking.paymentReference}
+                          {t("reference_label")}: {booking.paymentReference}
                         </p>
                         <Button
                           variant="outline"
@@ -853,7 +980,7 @@ export default function ProviderBookings() {
                           {confirmPaymentMutation.isPending && (
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                           )}
-                          Confirm Payment & Complete
+                          {t("confirm_payment_complete")}
                         </Button>
                         <Dialog>
                           <DialogTrigger asChild>
@@ -861,12 +988,12 @@ export default function ProviderBookings() {
                               variant="destructive"
                               onClick={() => setSelectedBooking(booking)}
                             >
-                              Report Issue
+                              {t("report_issue")}
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Report Issue</DialogTitle>
+                              <DialogTitle>{t("report_issue")}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 pt-4">
                               <Textarea
@@ -874,7 +1001,7 @@ export default function ProviderBookings() {
                                 onChange={(e) =>
                                   setDisputeReason(e.target.value)
                                 }
-                                placeholder="Describe the issue"
+                                placeholder={t("issue_placeholder")}
                               />
                               <Button
                                 onClick={() =>
@@ -888,7 +1015,7 @@ export default function ProviderBookings() {
                                 {disputeMutation.isPending && (
                                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                                 )}
-                                Submit
+                                {t("submit")}
                               </Button>
                             </div>
                           </DialogContent>
@@ -902,6 +1029,8 @@ export default function ProviderBookings() {
             })}
           </div>
         )}
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );

@@ -1,6 +1,6 @@
 // src/pages/provider/dashboard.tsx
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,15 +40,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/contexts/language-context";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
   Loader2,
   Plus,
-  Calendar,
   Star,
   Bell,
   Settings,
@@ -59,6 +58,14 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  Fan,
+  Droplets,
+  Plug,
+  Wrench,
+  Phone,
+  MessageCircle,
+  MapPin,
+  IndianRupee,
   Calendar as CalendarIcon,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -71,8 +78,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { getVerificationError, parseApiError } from "@/lib/api-error";
+import { cn } from "@/lib/utils";
+import { SERVICE_CATEGORY_OPTIONS } from "@/lib/service-categories";
 import { z } from "zod";
-import { useLanguage } from "@/contexts/language-context";
 
 type BookingProximityInfo = {
   nearestBookingId: number;
@@ -81,13 +89,163 @@ type BookingProximityInfo = {
   message: string;
 };
 
-type PendingBooking = Booking & {
-  service?: Service;
+type ProviderBookingService =
+  | Service
+  | {
+    name: string;
+    price?: string | number | null;
+    category?: string | null;
+  };
+
+type ProviderBookingCustomer = {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  addressStreet?: string | null;
+  addressLandmark?: string | null;
+  addressCity?: string | null;
+  addressState?: string | null;
+  addressPostalCode?: string | null;
+  addressCountry?: string | null;
+};
+
+type ProviderBookingAddress = {
+  addressStreet?: string | null;
+  addressLandmark?: string | null;
+  addressCity?: string | null;
+  addressState?: string | null;
+  addressPostalCode?: string | null;
+  addressCountry?: string | null;
+} | null;
+
+type ProviderBooking = Booking & {
+  service?: ProviderBookingService | null;
+  customer?: ProviderBookingCustomer | null;
+  relevantAddress?: ProviderBookingAddress;
+};
+
+type PendingBooking = ProviderBooking & {
   proximityInfo?: BookingProximityInfo | null;
 };
 
+type CustomerEarnings = {
+  name: string;
+  total: number;
+  count: number;
+};
+
+const currencyFormatter = new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: 0,
+});
+
+const normalizePhoneNumber = (phone?: string | null): string | null => {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  return digits.length > 0 ? digits : null;
+};
+
+const buildWhatsAppHref = (
+  phone?: string | null,
+  message?: string,
+): string | null => {
+  const digits = normalizePhoneNumber(phone);
+  if (!digits) return null;
+  if (message && message.trim().length > 0) {
+    return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  }
+  return `https://wa.me/${digits}`;
+};
+
+const readServicePrice = (
+  service?: ProviderBookingService | null,
+): number | null => {
+  if (!service || !("price" in service)) return null;
+  const raw = service.price;
+  const value =
+    typeof raw === "string" ? Number(raw) : typeof raw === "number" ? raw : NaN;
+  return Number.isFinite(value) ? value : null;
+};
+
+const formatRupees = (amount?: number | null): string => {
+  if (amount == null || !Number.isFinite(amount)) return "Price TBD";
+  return `₹${currencyFormatter.format(amount)}`;
+};
+
+const INDIAN_DAY_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const getIndianDayKey = (date: Date | string | null | undefined): string | null => {
+  if (!date) return null;
+  const key = formatInIndianTime(date, "yyyy-MM-dd");
+  return INDIAN_DAY_KEY_REGEX.test(key) ? key : null;
+};
+
+const getIndianMonthKey = (date: Date | string | null | undefined): string | null => {
+  if (!date) return null;
+  return formatInIndianTime(date, "yyyy-MM");
+};
+
+const resolveLandmark = (address?: ProviderBookingAddress): string => {
+  if (!address) return "Location not shared";
+  const landmark = address.addressLandmark?.trim();
+  if (landmark) return landmark;
+  const street = address.addressStreet?.trim();
+  if (street) return street;
+  const city = address.addressCity?.trim();
+  if (city) return city;
+  const state = address.addressState?.trim();
+  if (state) return state;
+  return "Location not shared";
+};
+
+const formatAddressLine = (address?: ProviderBookingAddress): string => {
+  if (!address) return "Address not shared";
+  const parts = [
+    address.addressStreet,
+    address.addressCity,
+    address.addressState,
+    address.addressPostalCode,
+  ]
+    .map((part) => (part ?? "").trim())
+    .filter((part) => part.length > 0);
+  return parts.length > 0 ? parts.join(", ") : "Address not shared";
+};
+
+const resolveServiceIcon = (
+  service?: ProviderBookingService | null,
+): React.ElementType => {
+  const label = [
+    service?.name ?? "",
+    "category" in (service ?? {}) ? service?.category ?? "" : "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (label.includes("fan")) return Fan;
+  if (
+    label.includes("tap") ||
+    label.includes("plumb") ||
+    label.includes("pipe") ||
+    label.includes("water")
+  ) {
+    return Droplets;
+  }
+  if (
+    label.includes("electric") ||
+    label.includes("wire") ||
+    label.includes("light") ||
+    label.includes("ac")
+  ) {
+    return Plug;
+  }
+  return Wrench;
+};
+
 // ─── PENDING BOOKING REQUESTS COMPONENT ───────────────────────────────
-function PendingBookingRequestsList() {
+function PendingBookingRequestsList({
+  showFooterAction = true,
+}: {
+  showFooterAction?: boolean;
+}) {
   const { toast } = useToast();
   const [selectedBooking, setSelectedBooking] = useState<PendingBooking | null>(
     null,
@@ -183,67 +341,203 @@ function PendingBookingRequestsList() {
   }
 
   return (
-    <div className="space-y-3">
-      {pendingBookings.map((booking) => (
-        <div
-          key={booking.id}
-          className="flex items-center justify-between border rounded-md p-3"
-        >
-          <div>
-            <p className="font-medium">{booking.service?.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {booking.bookingDate
-                ? `${formatIndianDisplay(booking.bookingDate, "date")}${booking.timeSlotLabel
-                  ? ` • ${describeSlotLabel(booking.timeSlotLabel) ?? ""}`
-                  : ""
-                }`
-                : "Date not set"}
-            </p>
-            <div className="flex items-center mt-1">
-              <Clock className="h-3 w-3 mr-1 text-yellow-500" />
-              <span className="text-xs">
-                {booking.expiresAt
-                  ? `Expires in ${Math.ceil((new Date(booking.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days`
-                  : "Expiration not set"}
-              </span>
-            </div>
-            {booking.proximityInfo && (
-              <div className="mt-1 flex items-center text-xs text-blue-700">
-                <AlertCircle className="h-3 w-3 mr-1 text-blue-500" />
-                <span>{booking.proximityInfo.message}</span>
+    <div className="space-y-4">
+      {pendingBookings.map((booking) => {
+        const serviceName = booking.service?.name ?? "Service";
+        const serviceCategory =
+          booking.service && "category" in booking.service
+            ? booking.service.category
+            : null;
+        const ServiceIcon = resolveServiceIcon(booking.service);
+        const priceValue = readServicePrice(booking.service);
+        const priceLabel = formatRupees(priceValue);
+        const customerName = booking.customer?.name?.trim() || "Customer";
+        const phoneDigits = normalizePhoneNumber(booking.customer?.phone);
+        const callHref = phoneDigits ? `tel:${phoneDigits}` : null;
+        const whatsappMessage = `Hello ${customerName === "Customer" ? "there" : customerName}, I am coming in 10 mins for ${serviceName}.`;
+        const whatsappHref = buildWhatsAppHref(
+          booking.customer?.phone,
+          whatsappMessage,
+        );
+        const landmark = resolveLandmark(booking.relevantAddress);
+        const addressLine = formatAddressLine(booking.relevantAddress);
+        const whenLabel = booking.bookingDate
+          ? `${formatIndianDisplay(booking.bookingDate, "date")}${booking.timeSlotLabel
+            ? ` • ${describeSlotLabel(booking.timeSlotLabel) ?? ""}`
+            : ""
+          }`
+          : "Date not set";
+        const locationTypeLabel =
+          booking.serviceLocation === "provider"
+            ? "At your location"
+            : "At customer location";
+        const expiresInDays = booking.expiresAt
+          ? Math.ceil(
+            (new Date(booking.expiresAt).getTime() - Date.now()) /
+              (1000 * 60 * 60 * 24),
+          )
+          : null;
+
+        return (
+          <div
+            key={booking.id}
+            className="rounded-xl border bg-background p-4 shadow-sm"
+          >
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Where
+                  </p>
+                  <p className="text-3xl font-bold sm:text-4xl">
+                    {landmark}
+                  </p>
+                  <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin className="h-4 w-4" />
+                    <span>{addressLine}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locationTypeLabel}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <Badge
+                    variant="secondary"
+                    className="bg-amber-100 text-amber-800"
+                  >
+                    Call to confirm
+                  </Badge>
+                  <div className="text-xs text-muted-foreground">
+                    {whenLabel}
+                  </div>
+                  {expiresInDays !== null && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      <span>
+                        Expires in {expiresInDays}{" "}
+                        {expiresInDays === 1 ? "day" : "days"}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+
+              <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                    <ServiceIcon className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      What
+                    </p>
+                    <p className="text-lg font-semibold">{serviceName}</p>
+                    {serviceCategory && (
+                      <p className="text-sm text-muted-foreground">
+                        {serviceCategory}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Money
+                  </p>
+                  <p className="text-2xl font-bold">{priceLabel}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Estimated cash
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                {callHref ? (
+                  <Button
+                    asChild
+                    className="h-14 flex-1 justify-center gap-3 bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700 [&_svg]:size-6"
+                  >
+                    <a href={callHref}>
+                      <Phone />
+                      Call now
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    disabled
+                    className="h-14 flex-1 justify-center gap-3 bg-emerald-200 text-base font-semibold text-emerald-900 [&_svg]:size-6"
+                  >
+                    <Phone />
+                    Call now
+                  </Button>
+                )}
+                {whatsappHref ? (
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="h-14 flex-1 justify-center gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                  >
+                    <a href={whatsappHref} target="_blank" rel="noreferrer">
+                      <MessageCircle />
+                      WhatsApp
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    disabled
+                    className="h-14 flex-1 justify-center gap-2 border-emerald-100 text-emerald-400"
+                  >
+                    <MessageCircle />
+                    WhatsApp
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs text-muted-foreground">
+                  {customerName}
+                  {booking.customer?.phone ? ` • ${booking.customer.phone}` : ""}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex items-center gap-1"
+                    onClick={() => {
+                      setSelectedBooking(booking);
+                      setActionType("accept");
+                      setActionDialogOpen(true);
+                    }}
+                  >
+                    <CheckCircle className="h-3 w-3" />
+                    Accept
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex items-center gap-1"
+                    onClick={() => {
+                      setSelectedBooking(booking);
+                      setActionType("reject");
+                      setActionDialogOpen(true);
+                    }}
+                  >
+                    <XCircle className="h-3 w-3" />
+                    Reject
+                  </Button>
+                </div>
+              </div>
+
+              {booking.proximityInfo && (
+                <div className="flex items-center text-xs text-blue-700">
+                  <AlertCircle className="h-3 w-3 mr-1 text-blue-500" />
+                  <span>{booking.proximityInfo.message}</span>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex items-center gap-1"
-              onClick={() => {
-                setSelectedBooking(booking);
-                setActionType("accept");
-                setActionDialogOpen(true);
-              }}
-            >
-              <CheckCircle className="h-3 w-3" />
-              Accept
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex items-center gap-1"
-              onClick={() => {
-                setSelectedBooking(booking);
-                setActionType("reject");
-                setActionDialogOpen(true);
-              }}
-            >
-              <XCircle className="h-3 w-3" />
-              Reject
-            </Button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
         <DialogContent>
@@ -298,17 +592,23 @@ function PendingBookingRequestsList() {
         </DialogContent>
       </Dialog>
 
-      <Button variant="outline" size="sm" asChild className="w-full">
-        <Link href="/provider/bookings?status=accepted">
-          View All Upcoming Bookings
-        </Link>
-      </Button>
+      {showFooterAction ? (
+        <Button variant="outline" size="sm" asChild className="w-full">
+          <Link href="/provider/bookings?status=pending">
+            View All Requests
+          </Link>
+        </Button>
+      ) : null}
     </div>
   );
 }
 
 // ─── BOOKING HISTORY COMPONENT ─────────────────────────────────────────
-function BookingHistoryList() {
+function BookingHistoryList({
+  showFooterAction = true,
+}: {
+  showFooterAction?: boolean;
+}) {
   const { data: bookingHistoryData, isLoading } = useQuery<{
     data: (Booking & { service?: Service })[];
     total: number;
@@ -390,9 +690,11 @@ function BookingHistoryList() {
           </Badge>
         </div>
       ))}
-      <Button variant="outline" size="sm" asChild className="w-full">
-        <Link href="/provider/bookings">View Full History</Link>
-      </Button>
+      {showFooterAction ? (
+        <Button variant="outline" size="sm" asChild className="w-full">
+          <Link href="/provider/bookings">View Full History</Link>
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -422,8 +724,8 @@ type ServiceFormData = z.infer<typeof serviceFormSchema>;
 // ─── PROVIDER DASHBOARD PAGE ─────────────────────────────────────────────
 export default function ProviderDashboard() {
   const { user } = useAuth();
-  const { toast } = useToast();
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [, navigate] = useLocation();
   const providerProfileAddress = [
     user?.addressStreet,
@@ -438,6 +740,9 @@ export default function ProviderDashboard() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [activeTab, setActiveTab] = useState<"basic" | "availability">("basic");
+  const [availabilityTarget, setAvailabilityTarget] = useState<boolean | null>(
+    null,
+  );
 
   const form = useForm<ServiceFormData>({
     resolver: zodResolver(serviceFormSchema),
@@ -453,15 +758,18 @@ export default function ProviderDashboard() {
     },
   });
 
+  const servicesQueryKey = [`/api/services/provider/${user?.id}`];
+  const bookingsQueryKey = [`/api/bookings/provider/${user?.id}`];
+
   // Fetch services, bookings and reviews
   const { data: services, isLoading: servicesLoading } = useQuery<Service[]>({
-    queryKey: [`/api/services/provider/${user?.id}`],
+    queryKey: servicesQueryKey,
     enabled: !!user?.id,
   });
   const { data: bookings, isLoading: bookingsLoading } = useQuery<
-    (Booking & { service?: Service })[]
+    ProviderBooking[]
   >({
-    queryKey: [`/api/bookings/provider/${user?.id}`],
+    queryKey: bookingsQueryKey,
     enabled: !!user?.id,
   });
   const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
@@ -470,9 +778,6 @@ export default function ProviderDashboard() {
   });
 
   // Metrics
-  const activeServicesCount = services
-    ? services.filter((s) => s.isAvailable).length
-    : 0;
   const pendingBookingsCount = bookings
     ? bookings.filter((b) => b.status === "pending").length
     : 0;
@@ -486,14 +791,13 @@ export default function ProviderDashboard() {
     reviews && reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
+  const hasServices = (services?.length ?? 0) > 0;
+  const isWorkingToday = services
+    ? services.some((service) => service.isAvailableNow !== false)
+    : true;
 
-  const INDIAN_DAY_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-  const getIndianDayKey = (date: Date | string | null | undefined) => {
-    if (!date) return null;
-    const key = formatInIndianTime(date, "yyyy-MM-dd");
-    return INDIAN_DAY_KEY_REGEX.test(key) ? key : null;
-  };
   const todayIndianKey = getIndianDayKey(new Date());
+  const currentMonthKey = getIndianMonthKey(new Date());
 
   const upcomingBookings = bookings
     ? bookings
@@ -513,7 +817,114 @@ export default function ProviderDashboard() {
       .slice(0, 5)
     : [];
 
+  const earningsSummary = useMemo(() => {
+    const base = {
+      todayEarnings: 0,
+      monthEarnings: 0,
+      topCustomers: [] as CustomerEarnings[],
+    };
+    if (!bookings || !todayIndianKey || !currentMonthKey) return base;
+
+    const earningsStatuses = new Set<Booking["status"]>([
+      "completed",
+      "awaiting_payment",
+    ]);
+    const totalsByCustomer = new Map<string, CustomerEarnings>();
+    let todayTotal = 0;
+    let monthTotal = 0;
+
+    bookings.forEach((booking) => {
+      if (!earningsStatuses.has(booking.status)) return;
+      const amount = readServicePrice(booking.service);
+      if (amount == null) return;
+
+      const bookingDayKey = getIndianDayKey(booking.bookingDate);
+      if (bookingDayKey && bookingDayKey === todayIndianKey) {
+        todayTotal += amount;
+      }
+
+      const bookingMonthKey = getIndianMonthKey(booking.bookingDate);
+      if (bookingMonthKey && bookingMonthKey === currentMonthKey) {
+        monthTotal += amount;
+      }
+
+      const customerName = booking.customer?.name?.trim() || "Customer";
+      const key = booking.customer?.id
+        ? `customer-${booking.customer.id}`
+        : `booking-${booking.id}`;
+      const entry = totalsByCustomer.get(key) ?? {
+        name: customerName,
+        total: 0,
+        count: 0,
+      };
+      entry.total += amount;
+      entry.count += 1;
+      totalsByCustomer.set(key, entry);
+    });
+
+    const topCustomers = Array.from(totalsByCustomer.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 4);
+
+    return {
+      todayEarnings: todayTotal,
+      monthEarnings: monthTotal,
+      topCustomers,
+    };
+  }, [bookings, todayIndianKey, currentMonthKey]);
+  const { todayEarnings, monthEarnings, topCustomers } = earningsSummary;
+
   // Mutations
+  const updateAvailabilityMutation = useMutation({
+    mutationFn: async (nextStatus: boolean) => {
+      const res = await apiRequest("PATCH", "/api/provider/availability", {
+        isAvailableNow: nextStatus,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to update availability");
+      }
+      return res.json();
+    },
+    onMutate: async (nextStatus) => {
+      setAvailabilityTarget(nextStatus);
+      await queryClient.cancelQueries({ queryKey: servicesQueryKey });
+      const previous = queryClient.getQueryData<Service[]>(servicesQueryKey);
+      if (previous) {
+        queryClient.setQueryData(
+          servicesQueryKey,
+          previous.map((service) => ({
+            ...service,
+            isAvailableNow: nextStatus,
+          })),
+        );
+      }
+      return { previous };
+    },
+    onSuccess: (_data, nextStatus) => {
+      toast({
+        title: nextStatus ? "You're working today" : "Requests paused",
+        description: nextStatus
+          ? "Customers can send you new booking requests."
+          : "Customers will see you as busy.",
+      });
+    },
+    onError: (error: Error, _nextStatus, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(servicesQueryKey, context.previous);
+      }
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setAvailabilityTarget(null);
+      queryClient.invalidateQueries({ queryKey: servicesQueryKey });
+    },
+  });
+
   const createServiceMutation = useMutation({
     mutationFn: async (data: ServiceFormData) => {
       const res = await apiRequest("POST", "/api/services", {
@@ -528,7 +939,7 @@ export default function ProviderDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/services/provider/${user?.id}`],
+        queryKey: servicesQueryKey,
       });
       toast({ title: "Success", description: "Service created successfully" });
       form.reset();
@@ -580,7 +991,7 @@ export default function ProviderDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/services/provider/${user?.id}`],
+        queryKey: servicesQueryKey,
       });
       toast({ title: "Success", description: "Service updated successfully" });
       setDialogOpen(false);
@@ -606,7 +1017,7 @@ export default function ProviderDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/services/provider/${user?.id}`],
+        queryKey: servicesQueryKey,
       });
       toast({ title: "Success", description: "Service deleted successfully" });
     },
@@ -631,7 +1042,7 @@ export default function ProviderDashboard() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/services"] });
       queryClient.invalidateQueries({
-        queryKey: [`/api/services/provider/${user?.id}`],
+        queryKey: servicesQueryKey,
       });
       setDialogOpen(false);
       form.reset();
@@ -651,16 +1062,18 @@ export default function ProviderDashboard() {
         variants={container}
         initial="hidden"
         animate="show"
-        className="p-6 space-y-6"
+        className="p-6 space-y-8"
       >
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Welcome, {user?.name}</h1>
-          <div className="flex gap-2">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <h1 className="text-2xl font-bold">
+            {t("dashboard_greeting").replace("{name}", user?.name ?? "")}
+          </h1>
+          <div className="flex flex-wrap gap-2">
             <Link href="/provider/profile">
               <Button variant="outline">
                 <Settings className="h-4 w-4 mr-2" />
-                Manage Profile
+                {t("go_to_profile")}
               </Button>
             </Link>
             <Button
@@ -671,33 +1084,136 @@ export default function ProviderDashboard() {
                 setDialogOpen(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" /> Add Service
+              <Plus className="mr-2 h-4 w-4" /> {t("add_service")}
             </Button>
           </div>
         </div>
 
-        {/* Metrics */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+          {/* Availability */}
           <motion.div variants={item}>
-            <Card>
+            <Card
+              className={cn(
+                "border-2",
+                isWorkingToday
+                  ? "border-emerald-200 bg-emerald-50/40"
+                  : "border-red-200 bg-red-50/40",
+              )}
+            >
+              <CardContent className="p-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("availability")}
+                    </p>
+                    <h2 className="text-2xl font-bold">
+                      {isWorkingToday ? "I am Working Today" : "I am Busy"}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      One tap to pause all new requests. Applies to every service.
+                    </p>
+                  </div>
+                  <div className="flex w-full flex-col gap-2 md:w-auto">
+                    <div className="flex w-full max-w-lg items-center gap-2 rounded-full bg-background/80 p-1 shadow-sm">
+                      <Button
+                        type="button"
+                        disabled={
+                          servicesLoading ||
+                          !hasServices ||
+                          updateAvailabilityMutation.isPending
+                        }
+                        onClick={() => updateAvailabilityMutation.mutate(true)}
+                        className={cn(
+                          "h-16 flex-1 rounded-full text-lg font-semibold",
+                          isWorkingToday
+                            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                            : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200",
+                        )}
+                      >
+                        {availabilityTarget === true &&
+                          updateAvailabilityMutation.isPending && (
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          )}
+                        I am Working Today
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={
+                          servicesLoading ||
+                          !hasServices ||
+                          updateAvailabilityMutation.isPending
+                        }
+                        onClick={() => updateAvailabilityMutation.mutate(false)}
+                        className={cn(
+                          "h-16 flex-1 rounded-full text-lg font-semibold",
+                          !isWorkingToday
+                            ? "bg-red-600 text-white hover:bg-red-700"
+                            : "bg-red-100 text-red-700 hover:bg-red-200",
+                        )}
+                      >
+                        {availabilityTarget === false &&
+                          updateAvailabilityMutation.isPending && (
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          )}
+                        I am Busy
+                      </Button>
+                    </div>
+                    {!servicesLoading && !hasServices && (
+                      <p className="text-xs text-muted-foreground">
+                        Add at least one service to go online.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Metrics */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <motion.div variants={item}>
+              <Card className="border-emerald-200/60">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Active Services
+                  {t("earnings_today")}
                 </CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <IndianRupee className="h-4 w-4 text-emerald-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{activeServicesCount}</div>
+                <div className="text-2xl font-bold">
+                  {formatRupees(todayEarnings)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Completed + awaiting payment
+                </p>
               </CardContent>
             </Card>
           </motion.div>
           <motion.div variants={item}>
-            <Card>
+            <Card className="border-sky-200/60">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Pending Bookings
+                  {t("earnings_month")}
                 </CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <IndianRupee className="h-4 w-4 text-sky-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatRupees(monthEarnings)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total completed jobs
+                </p>
+              </CardContent>
+            </Card>
+            </motion.div>
+            <motion.div variants={item}>
+              <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {t("pending_requests")}
+                </CardTitle>
+                <Bell className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{pendingBookingsCount}</div>
@@ -708,7 +1224,7 @@ export default function ProviderDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Average Rating
+                  {t("average_rating")}
                 </CardTitle>
                 <Star className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -717,39 +1233,210 @@ export default function ProviderDashboard() {
                   {averageRating ? averageRating.toFixed(1) : "N/A"}
                 </div>
               </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+        </div>
+
+        <motion.div variants={item}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>{t("pending_requests")}</CardTitle>
+              <Link href="/provider/bookings?status=pending">
+                <Button variant="ghost" size="sm">
+                  {t("view_all")}
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <PendingBookingRequestsList showFooterAction={false} />
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Earnings by customer */}
+        <motion.div variants={item}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <IndianRupee className="h-5 w-5 text-emerald-600" />
+                {t("earnings_by_customer")}
+              </CardTitle>
+              <Link href="/provider/earnings">
+                <Button variant="ghost" size="sm">
+                  {t("view_all")}
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {topCustomers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t("earnings_empty_state")}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {topCustomers.map((customer, index) => (
+                    <div
+                      key={`${customer.name}-${index}`}
+                      className="flex items-center justify-between border-b border-border/60 pb-3 last:border-b-0 last:pb-0"
+                    >
+                      <div>
+                        <p className="font-medium">{customer.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {customer.count}{" "}
+                          {customer.count === 1
+                            ? t("job_single")
+                            : t("job_plural")}
+                        </p>
+                      </div>
+                      <div className="text-lg font-semibold">
+                        {formatRupees(customer.total)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          </motion.div>
+          <motion.div variants={item}>
+            <Card>
+              <CardHeader className="flex justify-between items-center">
+                <CardTitle>Recent Booking History</CardTitle>
+                <Link href="/provider/bookings">
+                  <Button variant="ghost" size="sm">
+                    {t("view_all")}
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent>
+                <BookingHistoryList showFooterAction={false} />
+              </CardContent>
             </Card>
           </motion.div>
         </div>
 
-        {/* Requests & History */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Bell className="mr-2 h-5 w-5" /> Pending Booking Requests
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PendingBookingRequestsList />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <CalendarIcon className="mr-2 h-5 w-5" /> Recent Booking History
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <BookingHistoryList />
-            </CardContent>
-          </Card>
+        {/* Upcoming Bookings & Recent Reviews */}
+        <div className="grid gap-6 md:grid-cols-2">
+          <motion.div variants={item}>
+            <Card>
+              <CardHeader className="flex justify-between items-center">
+                <CardTitle>Upcoming Bookings</CardTitle>
+                <Link href="/provider/bookings?status=accepted">
+                  <Button variant="ghost" size="sm">
+                    {t("view_all")}
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent>
+                {bookingsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                  </div>
+                ) : !upcomingBookings || upcomingBookings.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">
+                    No upcoming bookings
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {upcomingBookings.map((booking) => (
+                      <div
+                        key={booking.id}
+                        className="flex items-center justify-between p-4 border rounded-lg"
+                      >
+                        <div className="flex items-center gap-4">
+                          <Users className="h-8 w-8 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">
+                              {booking.service?.name}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
+                              {formatIndianDisplay(
+                                booking.bookingDate || "",
+                                "date",
+                              )}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
+                              {booking.timeSlotLabel
+                                ? describeSlotLabel(booking.timeSlotLabel)
+                                : formatIndianDisplay(
+                                    booking.bookingDate || "",
+                                    "time",
+                                  )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {booking.timeSlotLabel
+                              ? describeSlotLabel(booking.timeSlotLabel)
+                              : formatIndianDisplay(
+                                  booking.bookingDate || "",
+                                  "time",
+                                )}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+          <motion.div variants={item}>
+            <Card>
+              <CardHeader className="flex justify-between items-center">
+                <CardTitle>Recent Reviews</CardTitle>
+                <Link href="/provider/reviews">
+                  <Button variant="ghost" size="sm">
+                    {t("view_all")}
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent>
+                {reviewsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                  </div>
+                ) : !reviews || reviews.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">
+                    No reviews yet
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {reviews.slice(0, 5).map((review) => (
+                      <div key={review.id} className="p-4 border rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          {Array.from({ length: review.rating }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className="h-4 w-4 fill-yellow-400 text-yellow-400"
+                            />
+                          ))}
+                        </div>
+                        <p className="text-sm">{review.review}</p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Reviewed on:{" "}
+                          {formatIndianDisplay(review.createdAt || "", "date")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
 
         {/* Services Offered */}
         <motion.div variants={item}>
           <Card>
             <CardHeader className="flex justify-between items-center">
-              <CardTitle>Services Offered</CardTitle>
+              <CardTitle>{t("my_services")}</CardTitle>
               <Button
                 onClick={() => {
                   setEditingService(null);
@@ -758,7 +1445,7 @@ export default function ProviderDashboard() {
                   setDialogOpen(true);
                 }}
               >
-                <Plus className="h-4 w-4 mr-2" /> Add Service
+                <Plus className="h-4 w-4 mr-2" /> {t("add_service")}
               </Button>
             </CardHeader>
             <CardContent>
@@ -769,7 +1456,7 @@ export default function ProviderDashboard() {
               ) : !services || services.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-4">
-                    No services added yet
+                    {t("provider_services_empty")}
                   </p>
                   <Button
                     variant="outline"
@@ -780,7 +1467,7 @@ export default function ProviderDashboard() {
                       setDialogOpen(true);
                     }}
                   >
-                    <Plus className="h-4 w-4 mr-2" /> Add Your First Service
+                    <Plus className="h-4 w-4 mr-2" /> {t("add_service")}
                   </Button>
                 </div>
               ) : (
@@ -809,9 +1496,8 @@ export default function ProviderDashboard() {
                                   duration: service.duration,
                                   isAvailable: service.isAvailable ?? true,
                                   isAvailableNow:
-                                    (service as any).isAvailableNow ?? true,
-                                  availabilityNote:
-                                    (service as any).availabilityNote ?? "",
+                                    service.isAvailableNow ?? true,
+                                  availabilityNote: service.availabilityNote ?? "",
                                 });
                                 setActiveTab("basic"); // Reset to basic tab when opening for edit
                                 setDialogOpen(true);
@@ -852,17 +1538,19 @@ export default function ProviderDashboard() {
                         </div>
                         <div className="mt-4 space-y-2">
                           <div className="flex justify-between text-sm">
-                            <span>Price</span>
+                            <span>{t("service_price")}</span>
                             <span className="font-medium">
                               ₹{service.price}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
-                            <span>Duration</span>
-                            <span>{service.duration} minutes</span>
+                            <span>{t("service_duration")}</span>
+                            <span>
+                              {service.duration} {t("minutes")}
+                            </span>
                           </div>
                           <div className="flex justify-between text-sm">
-                            <span>Category</span>
+                            <span>{t("service_category")}</span>
                             <span>{service.category}</span>
                           </div>
                           <div className="flex justify-between text-sm">
@@ -876,17 +1564,19 @@ export default function ProviderDashboard() {
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
-                            <span>Status</span>
+                            <span>{t("status")}</span>
                             <span
                               className={
-                                service.isAvailable
+                                service.isAvailable &&
+                                  service.isAvailableNow !== false
                                   ? "text-green-600"
                                   : "text-red-600"
                               }
                             >
-                              {service.isAvailable
-                                ? "Available"
-                                : "Unavailable"}
+                              {service.isAvailable &&
+                                service.isAvailableNow !== false
+                                ? t("status_online")
+                                : t("status_paused")}
                             </span>
                           </div>
                         </div>
@@ -898,7 +1588,7 @@ export default function ProviderDashboard() {
               {services && services.length > 4 && (
                 <div className="mt-4 text-center">
                   <Link href="/provider/services">
-                    <Button variant="outline">View All Services</Button>
+                    <Button variant="outline">{t("view_all")}</Button>
                   </Link>
                 </div>
               )}
@@ -926,8 +1616,10 @@ export default function ProviderDashboard() {
                   }
                 >
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                    <TabsTrigger value="availability">Availability</TabsTrigger>
+                    <TabsTrigger value="basic">{t("basic_info")}</TabsTrigger>
+                    <TabsTrigger value="availability">
+                      {t("availability")}
+                    </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="basic">
@@ -937,7 +1629,7 @@ export default function ProviderDashboard() {
                         name="name"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Service Name</FormLabel>
+                            <FormLabel>{t("service_name")}</FormLabel>
                             <FormControl>
                               <Input {...field} />
                             </FormControl>
@@ -950,7 +1642,7 @@ export default function ProviderDashboard() {
                         name="description"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Description</FormLabel>
+                            <FormLabel>{t("service_description")}</FormLabel>
                             <FormControl>
                               <Textarea {...field} />
                             </FormControl>
@@ -963,13 +1655,29 @@ export default function ProviderDashboard() {
                         name="category"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Category</FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="e.g., Barber, Salon, Plumber"
-                                {...field}
-                              />
-                            </FormControl>
+                            <FormLabel>{t("service_category")}</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value || undefined}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue
+                                    placeholder={t("select_category")}
+                                  />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {SERVICE_CATEGORY_OPTIONS.map((option) => (
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {t(option.labelKey)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -979,7 +1687,7 @@ export default function ProviderDashboard() {
                         name="price"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Price (INR)</FormLabel>
+                            <FormLabel>{t("service_price")} (₹)</FormLabel>
                             <FormControl>
                               <Input
                                 type="number"
@@ -996,7 +1704,9 @@ export default function ProviderDashboard() {
                         name="duration"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Duration (minutes)</FormLabel>
+                            <FormLabel>
+                              {t("service_duration")} ({t("minutes")})
+                            </FormLabel>
                             <FormControl>
                               <Input
                                 type="number"
@@ -1016,11 +1726,10 @@ export default function ProviderDashboard() {
                       <div className="flex items-center justify-between gap-4 p-4 border rounded-lg bg-muted/40">
                         <div>
                           <h3 className="text-lg font-medium">
-                            Go Online / Offline
+                            {t("service_availability_advanced")}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            Flip the switch to show customers you are taking jobs
-                            right now.
+                            {t("service_availability_hint")}
                           </p>
                         </div>
                         <FormField
@@ -1029,7 +1738,9 @@ export default function ProviderDashboard() {
                           render={({ field }) => (
                             <FormItem className="flex items-center gap-2">
                               <FormLabel className="font-semibold">
-                                {field.value ? "Available now" : "Offline"}
+                                {field.value
+                                  ? t("available_now")
+                                  : t("offline")}
                               </FormLabel>
                               <FormControl>
                                 <Switch
@@ -1046,10 +1757,10 @@ export default function ProviderDashboard() {
                         name="availabilityNote"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Status note (optional)</FormLabel>
+                            <FormLabel>{t("availability_note_optional")}</FormLabel>
                             <FormControl>
                               <Textarea
-                                placeholder="e.g., Stepping out for lunch, back at 2 PM."
+                                placeholder={t("availability_note_placeholder")}
                                 {...field}
                                 value={field.value ?? ""}
                               />
@@ -1059,8 +1770,7 @@ export default function ProviderDashboard() {
                         )}
                       />
                       <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
-                        Service location is taken from your profile address.
-                        Update it from <span className="font-medium">Manage Profile</span>.
+                        {t("service_location_profile_note")}
                       </div>
                     </div>
                   </TabsContent>
@@ -1071,10 +1781,10 @@ export default function ProviderDashboard() {
                     variant="outline"
                     onClick={() => setDialogOpen(false)}
                   >
-                    Cancel
+                    {t("cancel")}
                   </Button>
                   <Button type="submit">
-                    {editingService ? "Update Service" : "Create Service"}
+                    {editingService ? t("update_service") : t("create_service")}
                   </Button>
                 </div>
               </form>
@@ -1082,120 +1792,6 @@ export default function ProviderDashboard() {
           </DialogContent>
         </Dialog>
 
-        {/* Upcoming Bookings & Recent Reviews */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <motion.div variants={item}>
-            <Card>
-              <CardHeader className="flex justify-between items-center">
-                <CardTitle>Upcoming Bookings</CardTitle>
-                <Link href="/provider/bookings?status=accepted">
-                  <Button variant="ghost" size="sm">
-                    View All
-                  </Button>
-                </Link>
-              </CardHeader>
-              <CardContent>
-                {bookingsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  </div>
-                ) : !upcomingBookings || upcomingBookings.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    No upcoming bookings
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {upcomingBookings.map((booking) => (
-                      <div
-                        key={booking.id}
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                      >
-                        <div className="flex items-center gap-4">
-                          <Users className="h-8 w-8 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">
-                              {booking.service?.name}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              <CalendarIcon className="inline h-4 w-4 mr-1 align-text-bottom" />
-                              {formatIndianDisplay(
-                                booking.bookingDate || "",
-                                "date",
-                              )}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
-                              {booking.timeSlotLabel
-                                ? describeSlotLabel(booking.timeSlotLabel)
-                                : formatIndianDisplay(
-                                  booking.bookingDate || "",
-                                  "time",
-                                )}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">
-                            {booking.timeSlotLabel
-                              ? describeSlotLabel(booking.timeSlotLabel)
-                              : formatIndianDisplay(
-                                booking.bookingDate || "",
-                                "time",
-                              )}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
-          <motion.div variants={item}>
-            <Card>
-              <CardHeader className="flex justify-between items-center">
-                <CardTitle>Recent Reviews</CardTitle>
-                <Link href="/provider/reviews">
-                  <Button variant="ghost" size="sm">
-                    View All
-                  </Button>
-                </Link>
-              </CardHeader>
-              <CardContent>
-                {reviewsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  </div>
-                ) : !reviews || reviews.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    No reviews yet
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {reviews.slice(0, 5).map((review) => (
-                      <div key={review.id} className="p-4 border rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                          {Array.from({ length: review.rating }).map((_, i) => (
-                            <Star
-                              key={i}
-                              className="h-4 w-4 fill-yellow-400 text-yellow-400"
-                            />
-                          ))}
-                        </div>
-                        <p className="text-sm">{review.review}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Reviewed on:{" "}
-                          {formatIndianDisplay(review.createdAt || "", "date")}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
       </motion.div>
     </DashboardLayout>
   );
