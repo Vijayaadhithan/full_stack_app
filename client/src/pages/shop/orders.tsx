@@ -1,7 +1,7 @@
 import React from 'react';
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { ShopLayout } from "@/components/layout/shop-layout";
 import MapLink from "@/components/location/MapLink";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -91,6 +91,7 @@ type PayLaterWhitelistEntry = {
   name: string | null;
   phone: string | null;
   email: string | null;
+  amountDue: number;
 };
 
 type PayLaterWhitelistResponse = {
@@ -158,6 +159,25 @@ export default function ShopOrders() {
     null,
   );
   const [viewMode, setViewMode] = useState<"board" | "list">("board");
+
+  const formatCurrency = (value: number | null | undefined) => {
+    const numeric = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(numeric)) return "₹0.00";
+    return `₹${numeric.toFixed(2)}`;
+  };
+  const statusOptions = [
+    { value: "all", label: t("all_orders") },
+    { value: "pending", label: t("pending") },
+    {
+      value: "awaiting_customer_agreement",
+      label: t("awaiting_customer_agreement"),
+    },
+    { value: "confirmed", label: t("confirmed") },
+    { value: "packed", label: t("packed") },
+    { value: "dispatched", label: t("dispatched") },
+    { value: "delivered", label: t("delivered") },
+    { value: "cancelled", label: t("cancelled") },
+  ];
   const [draggedOrder, setDraggedOrder] = useState<{
     orderId: number;
     lane: ActiveBoardLane;
@@ -293,6 +313,7 @@ export default function ShopOrders() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["pay-later-whitelist"], data);
+      queryClient.invalidateQueries({ queryKey: ["pay-later-whitelist"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       toast({
         title: "Removed from Khata",
@@ -1063,26 +1084,21 @@ export default function ShopOrders() {
     );
   };
   return (
-    <DashboardLayout>
+    <ShopLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold">{t("order_management")}</h1>
-          <div className="flex gap-4">
+          <div className="flex w-full sm:w-auto lg:hidden">
             <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[220px]">
                 <SelectValue placeholder={t("filter_by_status")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{t("all_orders")}</SelectItem>
-                <SelectItem value="pending">{t("pending")}</SelectItem>
-                <SelectItem value="awaiting_customer_agreement">
-                  {t("awaiting_customer_agreement")}
-                </SelectItem>
-                <SelectItem value="confirmed">{t("confirmed")}</SelectItem>
-                <SelectItem value="packed">{t("packed")}</SelectItem>
-                <SelectItem value="dispatched">{t("dispatched")}</SelectItem>
-                <SelectItem value="delivered">{t("delivered")}</SelectItem>
-                <SelectItem value="cancelled">{t("cancelled")}</SelectItem>
+                {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1092,9 +1108,11 @@ export default function ShopOrders() {
           <CardContent className="p-6 space-y-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Khata / Pay Later approvals</h2>
+                <h2 className="text-lg font-semibold">
+                  {t("pay_later_approvals_title")}
+                </h2>
                 <p className="text-sm text-muted-foreground">
-                  Whitelist trusted customers so they can request Pay Later without prior orders. Every Pay Later order stays pending until you approve credit.
+                  {t("pay_later_approvals_description")}
                 </p>
               </div>
               <Badge
@@ -1102,14 +1120,14 @@ export default function ShopOrders() {
                 className="whitespace-nowrap"
               >
                 {payLaterWhitelist?.allowPayLater
-                  ? "Pay Later enabled"
-                  : "Pay Later disabled"}
+                  ? t("pay_later_enabled_badge")
+                  : t("pay_later_disabled_badge")}
               </Badge>
             </div>
 
             {!payLaterWhitelist?.allowPayLater && (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Turn on Pay Later in your shop profile to accept Khata requests.
+                {t("pay_later_enable_hint")}
               </div>
             )}
 
@@ -1123,7 +1141,7 @@ export default function ShopOrders() {
               }}
             >
               <Input
-                placeholder="Customer phone number"
+                placeholder={t("pay_later_customer_phone_placeholder")}
                 value={newWhitelistPhone}
                 onChange={(e) => setNewWhitelistPhone(e.target.value)}
                 disabled={
@@ -1141,52 +1159,62 @@ export default function ShopOrders() {
                 {addWhitelistMutation.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Whitelist customer
+                {t("pay_later_whitelist_button")}
               </Button>
             </form>
 
             <div className="space-y-2">
               {whitelistLoading ? (
                 <p className="text-sm text-muted-foreground">
-                  Loading Khata customers...
+                  {t("pay_later_whitelist_loading")}
                 </p>
               ) : !payLaterWhitelist ? (
                 <p className="text-sm text-amber-800">
-                  Unable to load Khata list right now. Please try again.
+                  {t("pay_later_whitelist_error")}
                 </p>
               ) : !payLaterWhitelist.customers.length ? (
                 <p className="text-sm text-muted-foreground">
-                  No whitelisted customers yet.
+                  {t("pay_later_whitelist_empty")}
                 </p>
               ) : (
                 payLaterWhitelist.customers.map(
                   (customer: PayLaterWhitelistEntry) => (
                   <div
                     key={customer.id}
-                    className="flex items-center justify-between rounded-md border p-3"
+                    className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="space-y-1">
                       <p className="font-medium">
                         {customer.name || `Customer #${customer.id}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {customer.phone || customer.email || "No contact info"}
+                        {customer.phone ||
+                          customer.email ||
+                          t("pay_later_no_contact")}
+                      </p>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {t("amount_due")}:{" "}
+                        <span className="text-foreground">
+                          {formatCurrency(customer.amountDue)}
+                        </span>
                       </p>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
+                      type="button"
                       onClick={() =>
-                        removeWhitelistMutation.mutate(customer.id)
+                        removeWhitelistMutation.mutate(Number(customer.id))
                       }
                       disabled={
                         removeWhitelistMutation.isPending || !canManagePayLater
                       }
+                      className="w-full sm:w-auto"
                     >
                       {removeWhitelistMutation.isPending && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      Remove
+                      {t("remove")}
                     </Button>
                   </div>
                 ))
@@ -1195,129 +1223,155 @@ export default function ShopOrders() {
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="orders">
-          <TabsList>
-            <TabsTrigger value="orders">{t("orders")}</TabsTrigger>
-            <TabsTrigger value="returns">{t("returns")}</TabsTrigger>
-          </TabsList>
+        <div className="grid gap-6 lg:grid-cols-[220px,1fr]">
+          <aside className="hidden lg:block">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("filter_by_status")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                {statusOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={
+                      selectedStatus === option.value ? "secondary" : "ghost"
+                    }
+                    className="w-full justify-start"
+                    onClick={() => setSelectedStatus(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </CardContent>
+            </Card>
+          </aside>
 
-          <TabsContent value="orders">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  Drag cards to update status without opening order details.
-                </p>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-md border bg-muted/60 p-1">
-                <Button
-                  variant={viewMode === "board" ? "default" : "ghost"}
-                  size="sm"
-                  className="flex items-center gap-2"
-                  onClick={() => setViewMode("board")}
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                  KDS Board
-                </Button>
-                <Button
-                  variant={viewMode === "list" ? "default" : "ghost"}
-                  size="sm"
-                  className="flex items-center gap-2"
-                  onClick={() => setViewMode("list")}
-                >
-                  <List className="h-4 w-4" />
-                  List view
-                </Button>
-              </div>
-            </div>
-            {viewMode === "board" ? renderBoardView() : renderOrdersList()}
-          </TabsContent>
+          <div className="space-y-6">
+            <Tabs defaultValue="orders">
+              <TabsList>
+                <TabsTrigger value="orders">{t("orders")}</TabsTrigger>
+                <TabsTrigger value="returns">{t("returns")}</TabsTrigger>
+              </TabsList>
 
-          <TabsContent value="returns">
-            {!returns?.length ? (
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <p className="text-muted-foreground">
-                    {t("no_return_requests")}
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {returns.map((returnRequest) => (
-                  <Card key={returnRequest.id}>
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="font-semibold">
-                            {t("return_request")} #{returnRequest.id}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {returnRequest.createdAt
-                              ? formatIndianDisplay(
-                                  returnRequest.createdAt,
-                                  "date",
-                                )
-                              : "N/A"}{" "}
-                            {/* Use formatIndianDisplay */}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          {(user?.role === 'shop' || can('returns:manage')) && (
-                          <Button
-                            variant="outline"
-                            onClick={() =>
-                              handleReturnRequest.mutate({
-                                returnId: returnRequest.id,
-                                action: "approve",
-                              })
-                            }
-                            disabled={returnRequest.status !== "requested"}
-                          >
-                            {t("approve_return")}
-                          </Button>
-                          )}
-                          {(user?.role === 'shop' || can('returns:manage')) && (
-                          <Button
-                            variant="outline"
-                            className="text-red-600"
-                            onClick={() =>
-                              handleReturnRequest.mutate({
-                                returnId: returnRequest.id,
-                                action: "reject",
-                              })
-                            }
-                            disabled={returnRequest.status !== "requested"}
-                          >
-                            {t("reject_return")}
-                          </Button>
-                          )}
-                        </div>
-                      </div>
+              <TabsContent value="orders">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Drag cards to update status without opening order details.
+                    </p>
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-md border bg-muted/60 p-1">
+                    <Button
+                      variant={viewMode === "board" ? "default" : "ghost"}
+                      size="sm"
+                      className="flex items-center gap-2"
+                      onClick={() => setViewMode("board")}
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                      KDS Board
+                    </Button>
+                    <Button
+                      variant={viewMode === "list" ? "default" : "ghost"}
+                      size="sm"
+                      className="flex items-center gap-2"
+                      onClick={() => setViewMode("list")}
+                    >
+                      <List className="h-4 w-4" />
+                      List view
+                    </Button>
+                  </div>
+                </div>
+                {viewMode === "board" ? renderBoardView() : renderOrdersList()}
+              </TabsContent>
 
-                      <div className="space-y-2">
-                        <p>
-                          <span className="font-medium">{t("reason")}:</span>{" "}
-                          {returnRequest.reason}
-                        </p>
-                        <p>
-                          <span className="font-medium">
-                            {t("description")}:
-                          </span>{" "}
-                          {returnRequest.description}
-                        </p>
-                        <p>
-                          <span className="font-medium">{t("status")}:</span>{" "}
-                          {t(returnRequest.status)}
-                        </p>
-                      </div>
+              <TabsContent value="returns">
+                {!returns?.length ? (
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <p className="text-muted-foreground">
+                        {t("no_return_requests")}
+                      </p>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+                ) : (
+                  <div className="space-y-4">
+                    {returns.map((returnRequest) => (
+                      <Card key={returnRequest.id}>
+                        <CardContent className="p-6">
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h3 className="font-semibold">
+                                {t("return_request")} #{returnRequest.id}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {returnRequest.createdAt
+                                  ? formatIndianDisplay(
+                                      returnRequest.createdAt,
+                                      "date",
+                                    )
+                                  : "N/A"}{" "}
+                                {/* Use formatIndianDisplay */}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              {(user?.role === 'shop' || can('returns:manage')) && (
+                              <Button
+                                variant="outline"
+                                onClick={() =>
+                                  handleReturnRequest.mutate({
+                                    returnId: returnRequest.id,
+                                    action: "approve",
+                                  })
+                                }
+                                disabled={returnRequest.status !== "requested"}
+                              >
+                                {t("approve_return")}
+                              </Button>
+                              )}
+                              {(user?.role === 'shop' || can('returns:manage')) && (
+                              <Button
+                                variant="outline"
+                                className="text-red-600"
+                                onClick={() =>
+                                  handleReturnRequest.mutate({
+                                    returnId: returnRequest.id,
+                                    action: "reject",
+                                  })
+                                }
+                                disabled={returnRequest.status !== "requested"}
+                              >
+                                {t("reject_return")}
+                              </Button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p>
+                              <span className="font-medium">{t("reason")}:</span>{" "}
+                              {returnRequest.reason}
+                            </p>
+                            <p>
+                              <span className="font-medium">
+                                {t("description")}:
+                              </span>{" "}
+                              {returnRequest.description}
+                            </p>
+                            <p>
+                              <span className="font-medium">{t("status")}:</span>{" "}
+                              {t(returnRequest.status)}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
       </div>
-    </DashboardLayout>
+    </ShopLayout>
   );
 }

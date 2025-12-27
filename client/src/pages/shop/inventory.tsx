@@ -10,6 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { useShopContext } from "@/hooks/use-shop-context";
+import { useLanguage } from "@/contexts/language-context";
 
 export default function ShopInventory() {
   const {
@@ -18,6 +19,7 @@ export default function ShopInventory() {
     permissionsLoading: workerPermissionsLoading,
     hasPermission,
   } = useShopContext();
+  const { t } = useLanguage();
   const { toast } = useToast();
   const [stockDrafts, setStockDrafts] = useState<Record<number, string>>({});
 
@@ -169,9 +171,11 @@ export default function ShopInventory() {
           <CardContent className="p-6 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-lg font-semibold">Availability</h3>
+                <h3 className="text-lg font-semibold">
+                  {t("inventory_status_title")}
+                </h3>
                 <p className="text-sm text-muted-foreground">
-                  Toggle In Stock / Out of Stock. Exact counts are optional.
+                  {t("inventory_status_description")}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -194,6 +198,7 @@ export default function ShopInventory() {
           const lowStock =
             trackedStock !== null &&
             trackedStock <= (product.lowStockThreshold ?? 5);
+          const isAvailable = product.isAvailable !== false;
           const stockInputValue =
             stockDrafts[product.id] ??
             (trackedStock === null ? "" : String(trackedStock));
@@ -218,13 +223,19 @@ export default function ShopInventory() {
 
                   <div className="flex flex-col gap-3 sm:items-end">
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium">
-                        {product.isAvailable === false
-                          ? "Out of stock"
-                          : "In stock"}
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          isAvailable
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {isAvailable
+                          ? t("inventory_have_it")
+                          : t("inventory_finished")}
                       </span>
                       <Switch
-                        checked={product.isAvailable !== false}
+                        checked={isAvailable}
                         onCheckedChange={(checked) =>
                           handleAvailabilityToggle(product.id, checked)
                         }
@@ -237,12 +248,12 @@ export default function ShopInventory() {
 
                     <details className="w-full rounded-lg border bg-muted/30 px-3 py-2">
                       <summary className="cursor-pointer select-none text-sm font-medium">
-                        Exact stock count (optional)
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">
-                          {trackedStock === null
-                            ? "(not set)"
-                            : `(current: ${trackedStock})`}
-                        </span>
+                        {t("inventory_exact_count_label")}
+                        {trackedStock !== null && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            (current: {trackedStock})
+                          </span>
+                        )}
                       </summary>
 
                       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -250,7 +261,7 @@ export default function ShopInventory() {
                           type="number"
                           inputMode="numeric"
                           min={0}
-                          placeholder="Leave blank to not track a count"
+                          placeholder={t("inventory_exact_count_placeholder")}
                           value={stockInputValue}
                           onChange={(e) => {
                             if (!canAdjustInventory) return;
@@ -274,7 +285,7 @@ export default function ShopInventory() {
                             }
                             disabled={!canAdjustInventory}
                           >
-                            Clear
+                            {t("inventory_clear")}
                           </Button>
                           <Button
                             size="sm"
@@ -288,7 +299,7 @@ export default function ShopInventory() {
                             {updateProductMutation.isPending ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
-                              "Save count"
+                              t("inventory_save_count")
                             )}
                           </Button>
                         </div>
@@ -316,10 +327,11 @@ export default function ShopInventory() {
   return (
     <ShopLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Inventory</h1>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-bold">{t("inventory")}</h1>
+        </div>
         {inventoryContent}
       </div>
     </ShopLayout>
   );
 }
-

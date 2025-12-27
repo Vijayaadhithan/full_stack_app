@@ -1,5 +1,5 @@
 import React from 'react';
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { ShopLayout } from "@/components/layout/shop-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
@@ -292,12 +292,12 @@ export default function ShopProfile() {
   };
 
   return (
-    <DashboardLayout>
+    <ShopLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold">Manage Shop Profile</h1>
           {!editMode && (
-            <Button type="button" onClick={toggleEditMode}>
+            <Button type="button" onClick={toggleEditMode} className="w-full sm:w-auto">
               <Edit className="mr-2 h-4 w-4" />
               Edit Profile
             </Button>
@@ -925,6 +925,6 @@ export default function ShopProfile() {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+    </ShopLayout>
   );
 }

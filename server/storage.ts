@@ -20,6 +20,7 @@ import {
   toNumericCoordinate,
   DEFAULT_NEARBY_RADIUS_KM,
 } from "./utils/geo";
+import { getCurrentISTDate } from "./ist-utils";
 import {
   User,
   InsertUser,
@@ -108,12 +109,32 @@ export interface OrderStatusUpdate {
   trackingInfo?: string | null;
   timestamp: Date;
 }
+export interface CustomerSpendTotal {
+  customerId: number;
+  name: string | null;
+  phone: string | null;
+  totalSpent: number;
+  orderCount: number;
+}
+
+export interface ItemSalesTotal {
+  productId: number;
+  name: string | null;
+  quantity: number;
+  totalAmount: number;
+}
+
 export interface DashboardStats {
   pendingOrders: number;
   ordersInProgress: number;
   completedOrders: number;
   totalProducts: number;
   lowStockItems: number;
+  earningsToday: number;
+  earningsMonth: number;
+  earningsTotal: number;
+  customerSpendTotals: CustomerSpendTotal[];
+  itemSalesTotals: ItemSalesTotal[];
 }
 interface BlockedTimeSlot {
   id: number;
@@ -231,6 +252,10 @@ export interface IStorage {
   getOrdersByShop(shopId: number, status?: string): Promise<Order[]>;
   getRecentOrdersByShop(shopId: number): Promise<Order[]>;
   getShopDashboardStats(shopId: number): Promise<DashboardStats>;
+  getPayLaterOutstandingAmounts(
+    shopId: number,
+    customerIds: number[],
+  ): Promise<Record<number, number>>;
   updateOrder(id: number, order: Partial<Order>): Promise<Order>;
 
   // Order items operations
@@ -1884,6 +1909,27 @@ export class MemStorage implements IStorage {
     const ordersByShop = Array.from(this.orders.values()).filter(
       (o) => o.shopId === shopId,
     );
+    const paidOrders = ordersByShop.filter(
+      (o) =>
+        o.paymentStatus === "paid" &&
+        o.status !== "cancelled" &&
+        o.status !== "returned",
+    );
+    const parseTotal = (value: unknown) => {
+      const numeric = typeof value === "number" ? value : Number(value);
+      return Number.isFinite(numeric) ? numeric : 0;
+    };
+    const parseDate = (value: unknown) => {
+      if (!value) return null;
+      const date = value instanceof Date ? value : new Date(value as Date);
+      return Number.isNaN(date.getTime()) ? null : date;
+    };
+    const now = getCurrentISTDate();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now);
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
     const pendingOrders = ordersByShop.filter(
       (o) => o.status === "pending",
     ).length;
@@ -1897,7 +1943,77 @@ export class MemStorage implements IStorage {
       (p) => p.shopId === shopId,
     );
     const totalProducts = productsByShop.length;
-    const lowStockItems = productsByShop.filter((p) => Number(p.stock ?? 0) < 10).length;
+    const lowStockItems = productsByShop.filter(
+      (p) => typeof p.stock === "number" && p.stock < 10,
+    ).length;
+    const earningsToday = paidOrders.reduce((total, order) => {
+      const orderDate = parseDate(order.orderDate);
+      if (!orderDate || orderDate < startOfDay) return total;
+      return total + parseTotal(order.total);
+    }, 0);
+    const earningsMonth = paidOrders.reduce((total, order) => {
+      const orderDate = parseDate(order.orderDate);
+      if (!orderDate || orderDate < startOfMonth) return total;
+      return total + parseTotal(order.total);
+    }, 0);
+    const earningsTotal = paidOrders.reduce(
+      (total, order) => total + parseTotal(order.total),
+      0,
+    );
+    const customerTotals = new Map<
+      number,
+      { totalSpent: number; orderCount: number }
+    >();
+    paidOrders.forEach((order) => {
+      if (order.customerId == null) return;
+      const current = customerTotals.get(order.customerId) ?? {
+        totalSpent: 0,
+        orderCount: 0,
+      };
+      current.totalSpent += parseTotal(order.total);
+      current.orderCount += 1;
+      customerTotals.set(order.customerId, current);
+    });
+    const customerSpendTotals = Array.from(customerTotals.entries())
+      .map(([customerId, totals]) => {
+        const customer = this.users.get(customerId);
+        return {
+          customerId,
+          name: customer?.name ?? null,
+          phone: customer?.phone ?? null,
+          totalSpent: totals.totalSpent,
+          orderCount: totals.orderCount,
+        };
+      })
+      .sort((a, b) => b.totalSpent - a.totalSpent);
+    const paidOrderIds = new Set(paidOrders.map((order) => order.id));
+    const itemTotals = new Map<
+      number,
+      { quantity: number; totalAmount: number }
+    >();
+    Array.from(this.orderItems.values()).forEach((item) => {
+      if (!paidOrderIds.has(item.orderId ?? -1)) return;
+      if (item.status && item.status !== "ordered") return;
+      if (item.productId == null) return;
+      const current = itemTotals.get(item.productId) ?? {
+        quantity: 0,
+        totalAmount: 0,
+      };
+      current.quantity += Number(item.quantity ?? 0);
+      current.totalAmount += parseTotal(item.total);
+      itemTotals.set(item.productId, current);
+    });
+    const itemSalesTotals = Array.from(itemTotals.entries())
+      .map(([productId, totals]) => {
+        const product = this.products.get(productId);
+        return {
+          productId,
+          name: product?.name ?? null,
+          quantity: totals.quantity,
+          totalAmount: totals.totalAmount,
+        };
+      })
+      .sort((a, b) => b.totalAmount - a.totalAmount);
 
     return {
       pendingOrders,
@@ -1905,7 +2021,33 @@ export class MemStorage implements IStorage {
       completedOrders,
       totalProducts,
       lowStockItems,
+      earningsToday,
+      earningsMonth,
+      earningsTotal,
+      customerSpendTotals,
+      itemSalesTotals,
     };
+  }
+
+  async getPayLaterOutstandingAmounts(
+    shopId: number,
+    customerIds: number[],
+  ): Promise<Record<number, number>> {
+    const outstanding: Record<number, number> = {};
+    if (!customerIds.length) return outstanding;
+    const targetCustomers = new Set(customerIds);
+    Array.from(this.orders.values()).forEach((order) => {
+      if (order.shopId !== shopId) return;
+      if (order.paymentMethod !== "pay_later") return;
+      if (order.paymentStatus === "paid") return;
+      if (order.status === "cancelled" || order.status === "returned") return;
+      if (order.customerId == null) return;
+      if (!targetCustomers.has(order.customerId)) return;
+      const total = Number(order.total);
+      if (!Number.isFinite(total)) return;
+      outstanding[order.customerId] = (outstanding[order.customerId] ?? 0) + total;
+    });
+    return outstanding;
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {

@@ -1507,6 +1507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     serviceId: z.coerce.number().int().positive(),
     shopId: z.coerce.number().int().positive(),
     slotId: z.coerce.number().int().positive(),
+    customerId: z.coerce.number().int().positive(),
     workerUserId: z.coerce.number().int().positive(),
     userId: z.coerce.number().int().positive(),
     reviewId: z.coerce.number().int().positive(),
@@ -6066,16 +6067,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   async function buildWhitelistResponse(
     whitelistIds: number[],
+    shopContextId: number,
   ): Promise<
     Array<{
       id: number;
       name: string | null;
       phone: string | null;
       email: string | null;
+      amountDue: number;
     }>
   > {
     if (!whitelistIds.length) return [];
     const customers = await storage.getUsersByIds(whitelistIds);
+    const outstandingAmounts = await storage.getPayLaterOutstandingAmounts(
+      shopContextId,
+      whitelistIds,
+    );
     const customerMap = new Map(
       customers
         .filter((customer) => customer.role === "customer")
@@ -6090,6 +6097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: customer.name ?? null,
         phone: customer.phone ?? null,
         email: customer.email ?? null,
+        amountDue: outstandingAmounts[customer.id] ?? 0,
       }));
   }
 
@@ -6112,7 +6120,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const whitelistIds = normalizePayLaterWhitelist(shop.shopProfile ?? null);
-        const customers = await buildWhitelistResponse(whitelistIds);
+        const customers = await buildWhitelistResponse(
+          whitelistIds,
+          shopContextId,
+        );
 
         return res.json({
           allowPayLater: resolveShopModes(shop.shopProfile ?? null).allowPayLater,
@@ -6176,7 +6187,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           whitelistIds.push(customer.id);
         }
 
-        const customers = await buildWhitelistResponse(whitelistIds);
+        const customers = await buildWhitelistResponse(
+          whitelistIds,
+          shopContextId,
+        );
 
         return res.json({
           allowPayLater: resolveShopModes(shop.shopProfile ?? null).allowPayLater,
@@ -6221,7 +6235,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } as ShopProfile;
         await storage.updateUser(shopContextId, { shopProfile: updatedProfile });
 
-        const customers = await buildWhitelistResponse(updatedWhitelist);
+        const customers = await buildWhitelistResponse(
+          updatedWhitelist,
+          shopContextId,
+        );
 
         return res.json({
           allowPayLater: resolveShopModes(shop.shopProfile ?? null).allowPayLater,

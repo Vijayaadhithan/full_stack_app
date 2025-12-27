@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -99,47 +100,17 @@ export default function ProductFormDialog({
 
             <FormField
               control={form.control}
-              name="description"
+              name="price"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("product_description")}</FormLabel>
+                  <FormLabel>{t("selling_price")} (₹)</FormLabel>
                   <FormControl>
-                    <Textarea {...field} />
+                    <Input {...field} type="number" min="0" step="0.01" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("selling_price")} (₹)</FormLabel>
-                    <FormControl>
-                      <Input {...field} type="number" min="0" step="0.01" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="mrp"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("mrp")} (₹)</FormLabel>
-                    <FormControl>
-                      <Input {...field} type="number" min="0" step="0.01" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
@@ -171,34 +142,45 @@ export default function ProductFormDialog({
 
               <FormField
                 control={form.control}
-                name="stock"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("stock_quantity")}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder="Leave blank to not track a count"
-                        value={field.value ?? ""}
-                        onChange={(e) => {
-                          const nextValue = e.target.valueAsNumber;
-                          field.onChange(Number.isNaN(nextValue) ? null : nextValue);
-                        }}
-                        onBlur={field.onBlur}
-                        name={field.name}
-                        ref={field.ref}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                name="isAvailable"
+                render={({ field }) => {
+                  const isAvailable = field.value !== false;
+                  return (
+                    <FormItem className="flex h-full flex-col justify-between rounded-md border p-3">
+                      <div className="space-y-1">
+                        <FormLabel>{t("availability")}</FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          {t("inventory_status_hint")}
+                        </p>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between">
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                            isAvailable
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {isAvailable
+                            ? t("inventory_have_it")
+                            : t("inventory_finished")}
+                        </span>
+                        <FormControl>
+                          <Switch
+                            checked={isAvailable}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </div>
+                    </FormItem>
+                  );
+                }}
               />
             </div>
 
             <div className="space-y-4">
               <FormLabel>{t("product_images")}</FormLabel>
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 {(form.watch("images") as string[] | undefined)?.map(
                   (image, index) => (
                     <div key={index} className="relative">
@@ -236,6 +218,54 @@ export default function ProductFormDialog({
                 <p className="text-sm text-destructive">{imageUploadError}</p>
               )}
             </div>
+
+            <details className="rounded-md border bg-muted/30 p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                {t("product_optional_details")}
+              </summary>
+              <div className="mt-3 space-y-4">
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("product_description")}</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="mrp"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("mrp")} (₹)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={field.value ?? ""}
+                          onChange={(e) => {
+                            const nextValue = e.target.valueAsNumber;
+                            field.onChange(
+                              Number.isNaN(nextValue) ? undefined : nextValue,
+                            );
+                          }}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </details>
 
             <div className="space-y-4">
               <Button

@@ -24,10 +24,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NotificationsCenter } from "@/components/notifications-center";
+import { LanguageSelector } from "@/components/language-selector";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/contexts/language-context";
 
 type NavConfig = {
-  name: string;
+  labelKey: string;
   href: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   shopOnly?: boolean;
@@ -36,43 +38,43 @@ type NavConfig = {
 
 const NAV_ITEMS: NavConfig[] = [
   {
-    name: "Dashboard",
+    labelKey: "dashboard",
     href: "/shop",
     icon: BarChart3,
   },
   {
-    name: "Products",
+    labelKey: "products",
     href: "/shop/products",
     icon: Package,
   },
   {
-    name: "Orders",
+    labelKey: "orders",
     href: "/shop/orders",
     icon: ShoppingCart,
   },
   {
-    name: "Inventory",
+    labelKey: "inventory",
     href: "/shop/inventory",
     icon: Box,
   },
   {
-    name: "Promotions",
+    labelKey: "promotions",
     href: "/shop/promotions",
     icon: Gift,
   },
   {
-    name: "Workers",
+    labelKey: "workers",
     href: "/shop/workers",
     icon: Settings,
     shopOnly: true,
   },
   {
-    name: "Reviews",
+    labelKey: "reviews",
     href: "/shop/reviews",
     icon: Star,
   },
   {
-    name: "Settings",
+    labelKey: "settings",
     href: "/shop/profile",
     icon: Settings,
     hideForWorker: true,
@@ -82,6 +84,7 @@ const NAV_ITEMS: NavConfig[] = [
 export function ShopLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, logoutMutation } = useAuth();
+  const { t } = useLanguage();
   const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
 
   const navigation = React.useMemo(() => {
@@ -107,14 +110,14 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
       const Icon = item.icon;
       const isActive = location === item.href;
       return (
-        <Link key={item.name} href={item.href}>
+        <Link key={item.href} href={item.href}>
           <Button
             variant={isActive ? "secondary" : "ghost"}
             className="w-full justify-start"
             onClick={onNavigate}
           >
             <Icon className="mr-3 h-5 w-5" />
-            {item.name}
+            {t(item.labelKey)}
           </Button>
         </Link>
       );
@@ -125,7 +128,7 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:fixed md:inset-y-0 md:left-0 md:flex md:w-64 md:flex-col md:border-r md:bg-card">
         <div className="border-b p-6">
           <h2 className="text-lg font-semibold">
-            {user?.shopProfile?.shopName || "My Shop"}
+            {user?.shopProfile?.shopName || t("my_shop")}
           </h2>
           {user?.name && (
             <p className="mt-1 text-sm text-muted-foreground">{user.name}</p>
@@ -155,7 +158,7 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
                   <SheetContent side="left" className="flex flex-col p-0">
                     <SheetHeader className="px-4 py-4 text-left">
                       <SheetTitle className="text-base font-semibold">
-                        {user?.shopProfile?.shopName || "My Shop"}
+                        {user?.shopProfile?.shopName || t("my_shop")}
                       </SheetTitle>
                       {user?.name && (
                         <p className="text-sm text-muted-foreground truncate">
@@ -181,17 +184,18 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
                         className="justify-start"
                       >
                         <LogOut className="mr-2 h-5 w-5" />
-                        Sign out
+                        {t("logout")}
                       </Button>
                     </div>
                   </SheetContent>
                 </Sheet>
               )}
               <span className="text-base font-semibold leading-none">
-                {user?.shopProfile?.shopName || "My Shop"}
+                {user?.shopProfile?.shopName || t("my_shop")}
               </span>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
+              <LanguageSelector />
               <NotificationsCenter />
               <div className="hidden items-center gap-2 truncate sm:flex">
                 <User className="h-5 w-5" />
@@ -202,7 +206,7 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
                 variant="outline"
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                aria-label="Sign out"
+                aria-label={t("logout")}
                 className="sm:hidden"
               >
                 <LogOut className="h-5 w-5" />
@@ -214,7 +218,7 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
                 className="hidden sm:inline-flex"
               >
                 <LogOut className="mr-2 h-5 w-5" />
-                Sign out
+                {t("logout")}
               </Button>
             </div>
           </div>

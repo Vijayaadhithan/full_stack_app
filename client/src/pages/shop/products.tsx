@@ -45,7 +45,7 @@ const productFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   price: z.coerce.number().positive("Price must be a positive number"),
-  mrp: z.coerce.number().positive("MRP must be a positive number"),
+  mrp: z.coerce.number().positive("MRP must be a positive number").optional(),
   stock: z.coerce
     .number()
     .min(0, "Stock must be a positive number")
@@ -147,7 +147,7 @@ export default function ShopProducts() {
       name: "",
       description: "",
       price: 0,
-      mrp: 0,
+      mrp: undefined,
       stock: null,
       category: "",
       isAvailable: true,
@@ -430,8 +430,8 @@ export default function ShopProducts() {
       const formattedData = {
         name: data.name,
         description: data.description,
-        price: String(data.price),
-        mrp: String(data.mrp),
+        price: data.price !== undefined ? String(data.price) : undefined,
+        mrp: data.mrp !== undefined ? String(data.mrp) : undefined,
         stock: data.stock,
         category: data.category,
         images: data.images,
@@ -539,8 +539,13 @@ export default function ShopProducts() {
       });
       return;
     }
+    const resolvedMrp =
+      typeof data.mrp === "number" && Number.isFinite(data.mrp) && data.mrp > 0
+        ? data.mrp
+        : data.price;
     const payload = {
       ...data,
+      mrp: resolvedMrp,
       category: normalizeCategoryValue(data.category),
     };
 
@@ -557,7 +562,7 @@ export default function ShopProducts() {
       name: "",
       description: "",
       price: 0,
-      mrp: 0,
+      mrp: undefined,
       stock: null,
       category: "",
       isAvailable: true,
@@ -595,119 +600,111 @@ export default function ShopProducts() {
     if (!products?.length) return null;
     return (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {products.map((product) => (
-          <Card key={product.id}>
-            <CardContent className="p-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-semibold">{product.name}</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {product.description}
-                  </p>
-                </div>
-                {canWriteProducts && (
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setEditingProduct(product);
-                        resetFormWithProduct(product);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            {t("delete_product_confirmation")}
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {t("delete_product_warning")}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDeleteProduct(product.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            {t("delete")}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+        {products.map((product) => {
+          const isAvailable = product.isAvailable !== false;
+          return (
+            <Card key={product.id}>
+              <CardContent className="p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold break-words">{product.name}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                      {product.description}
+                    </p>
                   </div>
-                )}
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between items-center text-sm">
-                  <span>{t("price")}</span>
-                  <div>
-                    <span className="font-semibold">₹{product.price}</span>
-                    {product.mrp > product.price && (
-                      <span className="ml-2 line-through text-muted-foreground">
-                        ₹{product.mrp}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span>{t("stock")}</span>
-                  {(() => {
-                    const trackedStock =
-                      typeof product.stock === "number" ? product.stock : null;
-                    const lowStock =
-                      trackedStock !== null &&
-                      trackedStock <= (product.lowStockThreshold || 5);
-                    return (
-                      <span
-                        className={`font-semibold ${lowStock ? "text-red-500" : ""}`}
+                  {canWriteProducts && (
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingProduct(product);
+                          resetFormWithProduct(product);
+                          setDialogOpen(true);
+                        }}
                       >
-                        {trackedStock === null
-                          ? "—"
-                          : `${trackedStock} ${t("units")}`}
-                      </span>
-                    );
-                  })()}
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              {t("delete_product_confirmation")}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {t("delete_product_warning")}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteProduct(product.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {t("delete")}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span>{t("category")}</span>
-                  <span className="font-semibold">
-                    {getCategoryLabel(product.category)}
-                  </span>
-                </div>
-              </div>
 
-              <div className="mt-4 flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-medium">
-                    {t("availability")}
-                  </span>
+                <div className="mt-4 space-y-2">
+                  <div className="flex justify-between items-center text-sm">
+                    <span>{t("price")}</span>
+                    <div>
+                      <span className="font-semibold">₹{product.price}</span>
+                      {product.mrp > product.price && (
+                        <span className="ml-2 line-through text-muted-foreground">
+                          ₹{product.mrp}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span>{t("availability")}</span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          isAvailable
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {isAvailable
+                          ? t("inventory_have_it")
+                          : t("inventory_finished")}
+                      </span>
+                      <Switch
+                        checked={isAvailable}
+                        disabled={!canWriteProducts}
+                        onCheckedChange={(checked) => {
+                          if (!canWriteProducts) return;
+                          updateProductMutation.mutate({
+                            id: product.id,
+                            data: { isAvailable: checked },
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span>{t("category")}</span>
+                    <span className="font-semibold">
+                      {getCategoryLabel(product.category)}
+                    </span>
+                  </div>
                 </div>
-                <Switch
-                  checked={product.isAvailable !== false}
-                  disabled={!canWriteProducts}
-                  onCheckedChange={(checked) => {
-                    if (!canWriteProducts) return;
-                    updateProductMutation.mutate({
-                      id: product.id,
-                      data: { isAvailable: checked },
-                    });
-                  }}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     );
   };
@@ -740,7 +737,7 @@ export default function ShopProducts() {
   return (
     <ShopLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold">{t("my_products")}</h1>
           {canWriteProducts && shopContextId && (
             <Dialog
@@ -752,13 +749,13 @@ export default function ShopProducts() {
                   resetForm();
                 }
               }}
-            >
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  {t("add_product")}
-                </Button>
-              </DialogTrigger>
+              >
+                <DialogTrigger asChild>
+                  <Button className="w-full sm:w-auto">
+                    <Plus className="h-4 w-4 mr-2" />
+                    {t("add_product")}
+                  </Button>
+                </DialogTrigger>
               <Suspense
                 fallback={
                   <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
@@ -854,13 +851,14 @@ export default function ShopProducts() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
-                  Quick adds default to open-order friendly stock counts.
+                  {t("inventory_quick_add_hint")}
                 </p>
                 <Button
                   onClick={() => quickAddMutation.mutate()}
                   disabled={quickAddMutation.isPending || !shopContextId}
+                  className="w-full sm:w-auto"
                 >
                   {quickAddMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

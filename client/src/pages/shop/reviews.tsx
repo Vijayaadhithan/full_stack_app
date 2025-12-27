@@ -81,7 +81,7 @@ export default function ShopReviews() {
   return (
     <ShopLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold">Product Reviews</h1>
         </div>
 
@@ -100,7 +100,7 @@ export default function ShopReviews() {
             {reviews.map((review) => (
               <Card key={review.id}>
                 <CardContent className="p-6">
-                  <div className="flex justify-between items-start">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <div className="flex text-yellow-500">

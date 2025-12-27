@@ -66,7 +66,18 @@ import {
   ProductListItem,
   OrderItemInput,
 } from "./storage";
-import { eq, and, lt, ne, sql, desc, count, inArray, gte } from "drizzle-orm";
+import {
+  eq,
+  and,
+  lt,
+  ne,
+  sql,
+  desc,
+  count,
+  inArray,
+  gte,
+  isNotNull,
+} from "drizzle-orm";
 import {
   toISTForStorage,
   getCurrentISTDate,
@@ -2368,34 +2379,161 @@ export class PostgresStorage implements IStorage {
   }
 
   async getShopDashboardStats(shopId: number) {
-    const [pendingResult] = await db
-      .select({ value: count() })
-      .from(orders)
-      .where(and(eq(orders.shopId, shopId), eq(orders.status, "pending")));
-    const [inProgressResult] = await db
-      .select({ value: count() })
-      .from(orders)
-      .where(and(eq(orders.shopId, shopId), eq(orders.status, "packed")));
-    const [completedResult] = await db
-      .select({ value: count() })
-      .from(orders)
-      .where(and(eq(orders.shopId, shopId), eq(orders.status, "delivered")));
-    const [totalProductsResult] = await db
-      .select({ value: count() })
-      .from(products)
-      .where(eq(products.shopId, shopId));
-    const [lowStockResult] = await db
-      .select({ value: count() })
-      .from(products)
-      .where(and(eq(products.shopId, shopId), lt(products.stock, 10)));
+    const now = getCurrentISTDate();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now);
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const paidOrderFilters = and(
+      eq(orders.shopId, shopId),
+      eq(orders.paymentStatus, "paid"),
+      ne(orders.status, "cancelled"),
+      ne(orders.status, "returned"),
+    );
+    const totalRevenueSql = sql<number>`coalesce(sum(${orders.total}::double precision), 0)`;
+    const itemRevenueSql = sql<number>`coalesce(sum(${orderItems.total}::double precision), 0)`;
+    const itemQuantitySql = sql<number>`coalesce(sum(${orderItems.quantity}), 0)`;
+    const customerSpendSql = sql<number>`coalesce(sum(${orders.total}::double precision), 0)`;
+
+    const [
+      pendingResult,
+      inProgressResult,
+      completedResult,
+      totalProductsResult,
+      lowStockResult,
+      todayEarningsResult,
+      monthEarningsResult,
+      totalEarningsResult,
+      customerSpendRows,
+      itemSalesRows,
+    ] = await Promise.all([
+      db
+        .select({ value: count() })
+        .from(orders)
+        .where(and(eq(orders.shopId, shopId), eq(orders.status, "pending"))),
+      db
+        .select({ value: count() })
+        .from(orders)
+        .where(and(eq(orders.shopId, shopId), eq(orders.status, "packed"))),
+      db
+        .select({ value: count() })
+        .from(orders)
+        .where(and(eq(orders.shopId, shopId), eq(orders.status, "delivered"))),
+      db
+        .select({ value: count() })
+        .from(products)
+        .where(eq(products.shopId, shopId)),
+      db
+        .select({ value: count() })
+        .from(products)
+        .where(and(eq(products.shopId, shopId), lt(products.stock, 10))),
+      db
+        .select({ value: totalRevenueSql })
+        .from(orders)
+        .where(and(paidOrderFilters, gte(orders.orderDate, startOfDay))),
+      db
+        .select({ value: totalRevenueSql })
+        .from(orders)
+        .where(and(paidOrderFilters, gte(orders.orderDate, startOfMonth))),
+      db.select({ value: totalRevenueSql }).from(orders).where(paidOrderFilters),
+      db
+        .select({
+          customerId: orders.customerId,
+          name: users.name,
+          phone: users.phone,
+          totalSpent: customerSpendSql,
+          orderCount: sql<number>`count(${orders.id})`,
+        })
+        .from(orders)
+        .leftJoin(users, eq(orders.customerId, users.id))
+        .where(and(paidOrderFilters, isNotNull(orders.customerId)))
+        .groupBy(orders.customerId, users.name, users.phone)
+        .orderBy(desc(customerSpendSql)),
+      db
+        .select({
+          productId: orderItems.productId,
+          name: products.name,
+          quantity: itemQuantitySql,
+          totalAmount: itemRevenueSql,
+        })
+        .from(orderItems)
+        .innerJoin(orders, eq(orderItems.orderId, orders.id))
+        .leftJoin(products, eq(orderItems.productId, products.id))
+        .where(
+          and(
+            eq(orders.shopId, shopId),
+            eq(orders.paymentStatus, "paid"),
+            ne(orders.status, "cancelled"),
+            ne(orders.status, "returned"),
+            eq(orderItems.status, "ordered"),
+          ),
+        )
+        .groupBy(orderItems.productId, products.name)
+        .orderBy(desc(itemRevenueSql)),
+    ]);
 
     return {
-      pendingOrders: pendingResult.value,
-      ordersInProgress: inProgressResult.value,
-      completedOrders: completedResult.value,
-      totalProducts: totalProductsResult.value,
-      lowStockItems: lowStockResult.value,
+      pendingOrders: pendingResult[0]?.value ?? 0,
+      ordersInProgress: inProgressResult[0]?.value ?? 0,
+      completedOrders: completedResult[0]?.value ?? 0,
+      totalProducts: totalProductsResult[0]?.value ?? 0,
+      lowStockItems: lowStockResult[0]?.value ?? 0,
+      earningsToday: Number(todayEarningsResult[0]?.value ?? 0),
+      earningsMonth: Number(monthEarningsResult[0]?.value ?? 0),
+      earningsTotal: Number(totalEarningsResult[0]?.value ?? 0),
+      customerSpendTotals: customerSpendRows
+        .filter((row) => row.customerId != null)
+        .map((row) => ({
+          customerId: row.customerId as number,
+          name: row.name ?? null,
+          phone: row.phone ?? null,
+          totalSpent: Number(row.totalSpent ?? 0),
+          orderCount: Number(row.orderCount ?? 0),
+        })),
+      itemSalesTotals: itemSalesRows
+        .filter((row) => row.productId != null)
+        .map((row) => ({
+          productId: row.productId as number,
+          name: row.name ?? null,
+          quantity: Number(row.quantity ?? 0),
+          totalAmount: Number(row.totalAmount ?? 0),
+        })),
     };
+  }
+
+  async getPayLaterOutstandingAmounts(
+    shopId: number,
+    customerIds: number[],
+  ): Promise<Record<number, number>> {
+    const outstanding: Record<number, number> = {};
+    if (!customerIds.length) return outstanding;
+
+    const amountDueSql = sql<number>`coalesce(sum(${orders.total}::double precision), 0)`;
+    const rows = await db
+      .select({
+        customerId: orders.customerId,
+        amountDue: amountDueSql,
+      })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.shopId, shopId),
+          eq(orders.paymentMethod, "pay_later"),
+          ne(orders.paymentStatus, "paid"),
+          ne(orders.status, "cancelled"),
+          ne(orders.status, "returned"),
+          inArray(orders.customerId, customerIds),
+        ),
+      )
+      .groupBy(orders.customerId);
+
+    rows.forEach((row) => {
+      if (row.customerId == null) return;
+      outstanding[row.customerId] = Number(row.amountDue ?? 0);
+    });
+
+    return outstanding;
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {

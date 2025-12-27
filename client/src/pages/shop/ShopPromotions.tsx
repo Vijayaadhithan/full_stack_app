@@ -305,7 +305,7 @@ export default function ShopPromotions() {
   return (
     <ShopLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold">Promotions & Discounts</h1>
 
           {/* Dialog trigger button */}
@@ -314,6 +314,7 @@ export default function ShopPromotions() {
             <DialogTrigger asChild>
               <Button
                 type="button"
+                className="w-full sm:w-auto"
                 onClick={() => {
                   setEditingPromotion(null);
                   form.reset({
