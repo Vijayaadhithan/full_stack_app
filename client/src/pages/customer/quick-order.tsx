@@ -207,8 +207,8 @@ export default function QuickOrder() {
       queryClient.invalidateQueries({ queryKey: ["orders", "shop"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders/customer"] });
       toast({
-        title: "Quick order placed",
-        description: "Sent to the shop for pricing and confirmation.",
+        title: "Quick order sent to shop",
+        description: "The shop will confirm the final bill amount shortly.",
       });
       navigate(`/customer/order/${data.order.id}`);
     },

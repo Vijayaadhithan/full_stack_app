@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { Loader2, Store, MapPin, Filter } from "lucide-react";
+import { Loader2, Store, MapPin, Filter, Search } from "lucide-react";
 import {
   Popover,
   PopoverTrigger,
@@ -22,17 +22,7 @@ import {
 import { LocationFilterPopover } from "@/components/location/location-filter-popover";
 import { useAuth } from "@/hooks/use-auth";
 import type { PublicShop } from "@/types/public-shop";
-
-const formatAddress = (user: PublicShop): string => {
-  const parts = [
-    user.addressStreet,
-    user.addressCity,
-    user.addressState,
-    user.addressPostalCode,
-    user.addressCountry,
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(", ") : "Location not specified";
-};
+import { useLanguage } from "@/contexts/language-context";
 
 const container = {
   hidden: { opacity: 0 },
@@ -80,6 +70,7 @@ function computeDistance(
 export default function BrowseShops() {
   const locationFilter = useLocationFilter({ storageKey: "shops-radius" });
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [, navigate] = useLocation();
   const [filters, setFilters] = useState({
     searchQuery: "",
@@ -96,6 +87,17 @@ export default function BrowseShops() {
       }
     : null;
   const canUseNearbySearch = Boolean(user && locationQuery);
+
+  const formatAddress = (shop: PublicShop): string => {
+    const parts = [
+      shop.addressStreet,
+      shop.addressCity,
+      shop.addressState,
+      shop.addressPostalCode,
+      shop.addressCountry,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(", ") : t("location_not_specified");
+  };
 
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -200,68 +202,90 @@ export default function BrowseShops() {
         animate="show"
         className="space-y-6 p-6"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold">Browse Shops</h1>
-          <div className="relative flex-1 w-full sm:max-w-xs">
-            <Input
-              placeholder="Search shops..."
-              value={filters.searchQuery}
-              onChange={(e) =>
-                handleFilterChange("searchQuery", e.target.value)
-              }
-            />
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold">{t("browse_shops_title")}</h1>
+            <p className="text-sm text-muted-foreground">
+              {t("browse_shops_subtitle")}
+            </p>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                <Filter className="mr-2 h-4 w-4" /> More Filters
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-4 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="city">City</Label>
-                <Input
-                  id="city"
-                  value={filters.locationCity}
-                  onChange={(e) =>
-                    handleFilterChange("locationCity", e.target.value)
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="state">State</Label>
-                <Input
-                  id="state"
-                  value={filters.locationState}
-                  onChange={(e) =>
-                    handleFilterChange("locationState", e.target.value)
-                  }
-                />
-              </div>
-            </PopoverContent>
-          </Popover>
-          <LocationFilterPopover state={locationFilter} />
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" className="h-11 px-4">
+              {t("browse_shops")}
+            </Button>
+            <Button asChild variant="outline" className="h-11 px-4">
+              <Link href="/customer/browse-products">
+                {t("browse_products_title")}
+              </Link>
+            </Button>
+          </div>
         </div>
-        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground space-y-1">
-          {customerLocation ? (
-            <>
-              Showing shops within{" "}
-              <span className="font-semibold">{radius} km</span> of{" "}
-              <span className="font-mono">
-                {customerLocation.latitude.toFixed(3)},{" "}
-                {customerLocation.longitude.toFixed(3)}
-              </span>
-              .
-              {!user && (
+
+        <Card className="border-0 bg-gradient-to-br from-emerald-50 via-white to-slate-50 shadow-sm">
+          <CardContent className="space-y-4 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder={t("browse_shops_search_placeholder")}
+                  value={filters.searchQuery}
+                  onChange={(e) =>
+                    handleFilterChange("searchQuery", e.target.value)
+                  }
+                  className="pl-10"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full sm:w-auto">
+                      <Filter className="mr-2 h-4 w-4" />
+                      {t("more_filters")}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-4 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="city">{t("city_label")}</Label>
+                      <Input
+                        id="city"
+                        value={filters.locationCity}
+                        onChange={(e) =>
+                          handleFilterChange("locationCity", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="state">{t("state_label")}</Label>
+                      <Input
+                        id="state"
+                        value={filters.locationState}
+                        onChange={(e) =>
+                          handleFilterChange("locationState", e.target.value)
+                        }
+                      />
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <LocationFilterPopover state={locationFilter} />
+              </div>
+            </div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground space-y-1">
+              {customerLocation
+                ? t("shops_location_within")
+                    .replace("{radius}", String(radius))
+                    .replace("{lat}", customerLocation.latitude.toFixed(3))
+                    .replace("{lng}", customerLocation.longitude.toFixed(3))
+                : user
+                  ? t("shops_location_empty_signed_in")
+                  : t("shops_location_empty_guest")}
+              {!user && customerLocation ? (
                 <span className="block text-xs text-muted-foreground/80">
-                  Sign in to load location-based results.
+                  {t("shops_location_sign_in_hint")}
                 </span>
-              )}
-            </>
-          ) : (
-            <>{user ? "Set a location filter to focus on nearby shops." : "Sign in or use the text filters to browse shops."}</>
-          )}
-        </div>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
 
         {isLoading ? (
           <div className="flex items-center justify-center min-h-[320px]">
@@ -271,7 +295,7 @@ export default function BrowseShops() {
           <Card>
             <CardContent className="p-6 text-center">
               <p className="text-muted-foreground">
-                No shops matched your filters. Try widening your radius or adjusting the search.
+                {t("shops_empty_state")}
               </p>
             </CardContent>
           </Card>
@@ -279,10 +303,19 @@ export default function BrowseShops() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredShops.map((shop) => {
               const distance = computeDistance(customerLocation, shop);
+              const distanceLabel =
+                distance !== null
+                  ? t("distance_km_away").replace("{distance}", distance.toFixed(1))
+                  : null;
               return (
-                <motion.div key={shop.id} variants={item}>
+                <motion.div
+                  key={shop.id}
+                  variants={item}
+                  whileHover={{ y: -4 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                >
                   <Link href={`/customer/shops/${shop.id}`}>
-                    <Card className="h-full cursor-pointer transition-shadow hover:shadow-lg">
+                    <Card className="h-full cursor-pointer overflow-hidden rounded-2xl border bg-white/80 shadow-sm transition-shadow hover:shadow-lg">
                       <CardContent className="p-6">
                         <div className="flex flex-col gap-4 h-full">
                           <div className="flex items-center gap-3">
@@ -290,7 +323,11 @@ export default function BrowseShops() {
                               {shop.profilePicture ? (
                                 <img
                                   src={shop.profilePicture}
-                                  alt={shop.shopProfile?.shopName || shop.name || "Shop"}
+                                  alt={
+                                    shop.shopProfile?.shopName ||
+                                    shop.name ||
+                                    t("shop_alt_fallback")
+                                  }
                                   className="h-full w-full rounded-full object-cover"
                                 />
                               ) : (
@@ -305,25 +342,25 @@ export default function BrowseShops() {
                                 <MapPin className="mr-1 h-3 w-3" />
                                 <span>{formatAddress(shop)}</span>
                               </div>
-                              {distance !== null ? (
+                              {distanceLabel ? (
                                 <p className="text-xs text-muted-foreground">
-                                  {distance.toFixed(1)} km away
+                                  {distanceLabel}
                                 </p>
                               ) : null}
                             </div>
                           </div>
                           <p className="text-sm text-muted-foreground line-clamp-2">
                             {shop.shopProfile?.description ||
-                              "No description available"}
+                              t("shop_description_fallback")}
                           </p>
                           <div className="mt-auto pt-2">
                             <div className="grid grid-cols-2 gap-2">
-                              <Button variant="outline" className="w-full">
-                                View Shop
+                              <Button variant="outline" className="w-full h-11">
+                                {t("view_shop")}
                               </Button>
                               <Button
                                 variant="secondary"
-                                className="w-full"
+                                className="w-full h-11"
                                 onClick={(event) => {
                                   event.preventDefault();
                                   event.stopPropagation();
@@ -332,7 +369,7 @@ export default function BrowseShops() {
                                   );
                                 }}
                               >
-                                Quick Order
+                                {t("quick_order")}
                               </Button>
                             </div>
                           </div>

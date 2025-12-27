@@ -3,6 +3,7 @@ import type { ShopProfile } from "@shared/schema";
 export type PublicShop = {
   id: number;
   name: string | null;
+  phone: string | null;
   shopProfile: ShopProfile | null;
   profilePicture: string | null;
   shopBannerImageUrl: string | null;

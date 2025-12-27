@@ -44,6 +44,7 @@ import { ServiceDetail } from "@shared/api-contract";
 import { apiClient } from "@/lib/apiClient";
 import { ToastAction } from "@/components/ui/toast";
 import { getVerificationError, parseApiError } from "@/lib/api-error";
+import { useLanguage } from "@/contexts/language-context";
 
 const timeZone = "Asia/Kolkata"; // Define IST timezone
 const GPS_WEAK_ACCURACY_METERS = 150;
@@ -52,15 +53,6 @@ type BroadSlotLabel = "morning" | "afternoon" | "evening";
 
 type BookingUrgency = "now" | "today" | "tomorrow";
 
-const URGENCY_OPTIONS: Array<{
-  label: BookingUrgency;
-  title: string;
-  description: string;
-}> = [
-  { label: "now", title: "Come Now", description: "Emergency • ASAP" },
-  { label: "today", title: "Today", description: "Anytime today" },
-  { label: "tomorrow", title: "Tomorrow", description: "Anytime tomorrow" },
-];
 
 const SLOT_OPTIONS: Array<{
   label: BroadSlotLabel;
@@ -125,6 +117,7 @@ export default function BookService() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const platformFee = featureFlags.platformFeesEnabled ? platformFees.serviceBooking : 0;
   const [selectedUrgency, setSelectedUrgency] = useState<BookingUrgency | null>(
     null,
@@ -146,6 +139,27 @@ export default function BookService() {
   const [lastGpsAccuracyMeters, setLastGpsAccuracyMeters] = useState<
     number | null
   >(null);
+
+  const urgencyOptions = useMemo(
+    () => [
+      {
+        label: "now" as const,
+        title: t("urgency_now_title"),
+        description: t("urgency_now_desc"),
+      },
+      {
+        label: "today" as const,
+        title: t("urgency_today_title"),
+        description: t("urgency_today_desc"),
+      },
+      {
+        label: "tomorrow" as const,
+        title: t("urgency_tomorrow_title"),
+        description: t("urgency_tomorrow_desc"),
+      },
+    ],
+    [t],
+  );
 
 type BookingService = ServiceDetail & {
   isAvailableNow?: boolean | null;
@@ -260,7 +274,7 @@ type BookingService = ServiceDetail & {
     setBookingLandmark(user?.addressLandmark ?? "");
   }, [user?.addressLandmark]);
 
-  const providerName = service?.provider?.name ?? "Provider";
+  const providerName = service?.provider?.name ?? t("provider_label");
   const providerFullAddress = useMemo(() => {
     return [
       service?.provider?.addressStreet,
@@ -344,35 +358,48 @@ type BookingService = ServiceDetail & {
 
     const urgencyLabel =
       selectedUrgency === "now"
-        ? "Come Now (Emergency)"
+        ? t("urgency_now_whatsapp")
         : selectedUrgency === "today"
-          ? "Today (Anytime)"
+          ? t("urgency_today_whatsapp")
           : selectedUrgency === "tomorrow"
-            ? "Tomorrow (Anytime)"
+            ? t("urgency_tomorrow_whatsapp")
             : null;
 
     const parts = [
-      `Booking request: ${service.name}`,
-      urgencyLabel ? `When: ${urgencyLabel}` : null,
-      `Preferred day: ${formatBase(selectedDate, "PPP")}`,
-      `Service location: ${serviceLocation === "customer" ? "My location" : "Provider location"}`,
+      t("whatsapp_booking_request").replace("{service}", service.name),
+      urgencyLabel
+        ? t("whatsapp_when_label").replace("{when}", urgencyLabel)
+        : null,
+      t("whatsapp_preferred_day").replace(
+        "{date}",
+        formatBase(selectedDate, "PPP"),
+      ),
+      t("whatsapp_service_location").replace(
+        "{location}",
+        serviceLocation === "customer"
+          ? t("whatsapp_location_customer")
+          : t("whatsapp_location_provider"),
+      ),
       serviceLocation === "customer" && bookingLandmark.trim()
-        ? `Landmark: ${bookingLandmark.trim()}`
+        ? t("whatsapp_landmark").replace("{landmark}", bookingLandmark.trim())
         : null,
       serviceLocation === "customer" && customerMapsUrl
-        ? `My location: ${customerMapsUrl}`
+        ? t("whatsapp_customer_location").replace("{url}", customerMapsUrl)
         : null,
       serviceLocation === "provider" && providerFullAddress
-        ? `Provider address: ${providerFullAddress}`
+        ? t("whatsapp_provider_address").replace(
+            "{address}",
+            providerFullAddress,
+          )
         : null,
       serviceLocation === "provider"
         ? providerMapsUrl
-          ? `Provider location: ${providerMapsUrl}`
+          ? t("whatsapp_provider_location").replace("{url}", providerMapsUrl)
           : providerMapsHref
-            ? `Provider location: ${providerMapsHref}`
+            ? t("whatsapp_provider_location").replace("{url}", providerMapsHref)
             : null
         : null,
-      "Please confirm arrival time on WhatsApp.",
+      t("whatsapp_confirm_arrival"),
     ].filter(Boolean);
 
     return buildWhatsAppShareHref(service.provider?.phone, parts.join("\n"));
@@ -386,6 +413,7 @@ type BookingService = ServiceDetail & {
     providerMapsUrl,
     service,
     serviceLocation,
+    t,
   ]);
 
   // Remove getNoSlotsReason function as logic is moved to JSX
@@ -407,7 +435,7 @@ type BookingService = ServiceDetail & {
       const res = await apiRequest("POST", "/api/bookings", data);
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || "Booking failed");
+        throw new Error(error.message || t("booking_failed_title"));
       }
       return res.json();
     },
@@ -418,9 +446,9 @@ type BookingService = ServiceDetail & {
       const bookingId = (data as any)?.booking?.id;
       setLastBookingId(typeof bookingId === "number" ? bookingId : null);
       toast({
-        title: "Booking Request Sent",
+        title: t("booking_request_sent_title"),
         description:
-          data.message || "Your booking request has been sent to the provider.",
+          data.message || t("booking_request_sent_description"),
       });
       setDialogStep("sent");
     },
@@ -428,15 +456,15 @@ type BookingService = ServiceDetail & {
       const verificationError = getVerificationError(error);
       if (verificationError) {
         toast({
-          title: "Verification required",
+          title: t("verification_required_title"),
           description: verificationError.message,
           variant: "destructive",
           action: (
             <ToastAction
-              altText="Go to profile"
+              altText={t("go_to_profile")}
               onClick={() => navigate("/customer/profile")}
             >
-              Go to profile
+              {t("go_to_profile")}
             </ToastAction>
           ),
         });
@@ -446,7 +474,7 @@ type BookingService = ServiceDetail & {
 
       const parsed = parseApiError(error);
       toast({
-        title: "Booking Failed",
+        title: t("booking_failed_title"),
         description: parsed.message,
         variant: "destructive",
       });
@@ -458,14 +486,14 @@ type BookingService = ServiceDetail & {
   const saveLandmarkMutation = useMutation({
     mutationFn: async (landmark: string | null) => {
       if (!user?.id) {
-        throw new Error("User not loaded");
+        throw new Error(t("user_not_loaded"));
       }
       const res = await apiRequest("PATCH", `/api/users/${user.id}`, {
         addressLandmark: landmark,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message || "Failed to save landmark");
+        throw new Error(body?.message || t("save_landmark_failed_description"));
       }
       return res.json();
     },
@@ -474,7 +502,7 @@ type BookingService = ServiceDetail & {
     },
     onError: (error: Error) => {
       toast({
-        title: "Unable to save landmark",
+        title: t("save_landmark_failed_title"),
         description: error.message,
         variant: "destructive",
       });
@@ -486,20 +514,20 @@ type BookingService = ServiceDetail & {
       const res = await apiRequest("POST", "/api/profile/location", coords);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message || "Failed to save location");
+        throw new Error(body?.message || t("save_location_failed_description"));
       }
       return (await res.json()) as LocationUpdateResponse;
     },
     onSuccess: ({ user: updatedUser, message }) => {
       queryClient.setQueryData(["/api/user"], updatedUser);
       toast({
-        title: "Location saved",
-        description: message || "Current location saved to your profile.",
+        title: t("location_saved_title"),
+        description: message || t("location_saved_description"),
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Unable to save location",
+        title: t("save_location_failed_title"),
         description: error.message,
         variant: "destructive",
       });
@@ -511,39 +539,39 @@ type BookingService = ServiceDetail & {
   const handleBookingRequest = () => {
     if (!selectedUrgency) {
       toast({
-        title: "Select when you need the service",
+        title: t("select_urgency_error"),
         variant: "destructive",
       });
       return;
     }
     if (serviceLocation === "customer" && !bookingLandmark.trim()) {
       toast({
-        title: "Landmark required",
-        description: "Please type a landmark so the provider can find you.",
+        title: t("landmark_required_title"),
+        description: t("landmark_required_description"),
         variant: "destructive",
       });
       return;
     }
     if (!providerOnline) {
       toast({
-        title: "Provider is offline",
-        description: "Please try again when the provider is available.",
+        title: t("provider_offline_title"),
+        description: t("provider_offline_description"),
         variant: "destructive",
       });
       return;
     }
     if (dailyLimitReached) {
       toast({
-        title: "Fully booked",
-        description: "The provider has reached the daily booking limit.",
+        title: t("provider_fully_booked_title"),
+        description: t("provider_fully_booked_description"),
         variant: "destructive",
       });
       return;
     }
     if (!resolvedSlotLabel || !resolvedSlotStart) {
       toast({
-        title: "No availability",
-        description: "Please try a different day or provider.",
+        title: t("no_availability_title"),
+        description: t("no_availability_description"),
         variant: "destructive",
       });
       return;
@@ -562,9 +590,8 @@ type BookingService = ServiceDetail & {
       const hasLandmark = trimmedLandmark.length > 0;
       if (!hasLandmark) {
         toast({
-          title: "Landmark required",
-          description:
-            "Please type a landmark so the provider can find you.",
+          title: t("landmark_required_title"),
+          description: t("landmark_required_description"),
           variant: "destructive",
         });
         return;
@@ -580,11 +607,11 @@ type BookingService = ServiceDetail & {
         );
       } catch (error) {
         toast({
-          title: "Unable to save landmark",
+          title: t("save_landmark_failed_title"),
           description:
             error instanceof Error
               ? error.message
-              : "Please try again to save your landmark.",
+              : t("save_landmark_failed_description"),
           variant: "destructive",
         });
         return;
@@ -603,8 +630,8 @@ type BookingService = ServiceDetail & {
   const handleUseDeviceLocation = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       toast({
-        title: "Geolocation unavailable",
-        description: "Your browser does not support the Geolocation API.",
+        title: t("geolocation_unavailable_title"),
+        description: t("geolocation_unavailable_description"),
         variant: "destructive",
       });
       return;
@@ -619,8 +646,8 @@ type BookingService = ServiceDetail & {
           setLastGpsAccuracyMeters(accuracyMeters);
           if (accuracyMeters > GPS_WEAK_ACCURACY_METERS) {
             toast({
-              title: "GPS is weak",
-              description: "GPS is weak. Please type a landmark.",
+              title: t("gps_weak_title"),
+              description: t("gps_weak_description"),
               variant: "destructive",
             });
           }
@@ -635,7 +662,7 @@ type BookingService = ServiceDetail & {
       (error) => {
         setIsCapturingDeviceLocation(false);
         toast({
-          title: "Unable to fetch location",
+          title: t("location_fetch_failed_title"),
           description: error.message,
           variant: "destructive",
         });
@@ -669,12 +696,16 @@ type BookingService = ServiceDetail & {
       <DashboardLayout>
         <div className="p-6 text-center">
           <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
-          <h2 className="mt-4 text-xl font-semibold">Service Not Found</h2>
+          <h2 className="mt-4 text-xl font-semibold">
+            {t("service_not_found")}
+          </h2>
           <p className="mt-2 text-muted-foreground">
-            The requested service could not be found.
+            {t("service_not_found_description")}
           </p>
           <Button asChild className="mt-4">
-            <Link href="/customer/browse-services">Browse Other Services</Link>
+            <Link href="/customer/browse-services">
+              {t("browse_services")}
+            </Link>
           </Button>
         </div>
       </DashboardLayout>
@@ -689,14 +720,14 @@ type BookingService = ServiceDetail & {
         transition={{ duration: 0.5 }}
         className="p-4 md:p-6 space-y-6"
       >
-        <Card>
+        <Card className="border-0 bg-gradient-to-br from-sky-50 via-white to-amber-50 shadow-sm">
           <CardHeader>
             <CardTitle className="text-2xl font-bold">{service.name}</CardTitle>
             <div className="flex items-center text-sm text-muted-foreground">
               <Star className="h-4 w-4 mr-1 fill-yellow-400 text-yellow-500" />
               <span>
                 {averageRating.toFixed(1)} ({service.reviews?.length || 0}{" "}
-                reviews)
+                {t("reviews_label")})
               </span>
             </div>
           </CardHeader>
@@ -704,17 +735,28 @@ type BookingService = ServiceDetail & {
             <p className="text-muted-foreground">{service.description}</p>
             <div className="flex items-center text-sm">
               <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
-              <span>Duration: {service.duration} minutes</span>
+              <span>
+                {t("service_duration_label").replace(
+                  "{minutes}",
+                  String(service.duration),
+                )}
+              </span>
             </div>
             <div className="flex items-start text-sm">
               <MapPin className="h-4 w-4 mr-2 mt-0.5 text-muted-foreground" />
-              <span>Location: {providerFullAddress || "Not specified"}</span>
+              <span>
+                {t("location_label")}{" "}
+                {providerFullAddress || t("location_not_specified")}
+              </span>
             </div>
             <div className="text-lg font-semibold">
-              Estimated Price: ₹{service.price}
+              {t("estimated_price_label").replace(
+                "{price}",
+                `₹${service.price}`,
+              )}
             </div>
             <div>
-              <h3 className="font-medium mb-2">Service Provider</h3>
+              <h3 className="font-medium mb-2">{t("service_provider")}</h3>
               <div className="flex items-center space-x-3">
                 {/* Add provider avatar/icon if available */}
                 <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-lg font-semibold">
@@ -729,22 +771,26 @@ type BookingService = ServiceDetail & {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            {/* Removed grid layout from CardContent to prevent heading wrapping */}
-            <CardTitle>Request a Visit</CardTitle>
+        <Card className="border-0 bg-white/80 shadow-sm">
+          <CardHeader className="space-y-1">
+            <CardTitle>{t("request_visit_title")}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t("request_visit_subtitle")}
+            </p>
           </CardHeader>
-          {/* Reverted CardContent and added Grid for layout */}
           <CardContent className="grid md:grid-cols-2 gap-6">
-            {/* Timing Section (Left Column) */}
-            <div>
-              <h3 className="font-medium mb-2">When do you need help?</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Rural timings are flexible—your provider will coordinate the
-                exact arrival time after you request.
+            <div className="space-y-4 rounded-2xl border bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">
+                  1
+                </span>
+                <h3 className="font-semibold">{t("step_pick_time")}</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t("rural_timing_note")}
               </p>
               <div className="grid gap-3">
-                {URGENCY_OPTIONS.map((option) => {
+                {urgencyOptions.map((option) => {
                   const isSelected = selectedUrgency === option.label;
                   const Icon =
                     option.label === "now"
@@ -791,67 +837,81 @@ type BookingService = ServiceDetail & {
                 })}
               </div>
               {bookingsLoading ? (
-                <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Checking availability…
+                  {t("checking_availability")}
                 </div>
               ) : null}
               {!providerOnline ? (
-                <p className="text-sm text-red-600 mt-3">
-                  This provider is offline right now.
+                <p className="text-sm text-red-600">
+                  {t("provider_offline_inline")}
                 </p>
               ) : dailyLimitReached ? (
-                <p className="text-sm text-muted-foreground mt-3">
-                  Daily booking limit reached for{" "}
-                  {formatBase(selectedDate, "PPP")}.
+                <p className="text-sm text-muted-foreground">
+                  {t("daily_limit_reached").replace(
+                    "{date}",
+                    formatBase(selectedDate, "PPP"),
+                  )}
                 </p>
               ) : selectedUrgency && !resolvedSlotLabel ? (
-                <p className="text-sm text-muted-foreground mt-3">
-                  No availability for {formatBase(selectedDate, "PPP")}.
+                <p className="text-sm text-muted-foreground">
+                  {t("no_availability_for_date").replace(
+                    "{date}",
+                    formatBase(selectedDate, "PPP"),
+                  )}
                 </p>
               ) : null}
               {!providerOnline && service.availabilityNote ? (
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="text-xs text-muted-foreground">
                   {service.availabilityNote}
                 </p>
               ) : null}
             </div>
-            {/* Location and Button Section (Right Column) */}
-            <div className="space-y-4">
-              {" "}
-              {/* Use space-y for vertical spacing within the right column */}
+
+            <div className="space-y-4 rounded-2xl border bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+                  2
+                </span>
+                <h3 className="font-semibold">{t("step_pick_location")}</h3>
+              </div>
               <div>
-            <h3 className="font-medium mb-2">Service Location</h3>
-            <RadioGroup
-              value={serviceLocation}
-              onValueChange={(value) =>
-                setServiceLocation(value as "customer" | "provider")
-              }
+                <h3 className="font-medium mb-2">
+                  {t("service_location_title")}
+                </h3>
+                <RadioGroup
+                  value={serviceLocation}
+                  onValueChange={(value) =>
+                    setServiceLocation(value as "customer" | "provider")
+                  }
                   className="flex space-x-4"
                 >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="provider" id="provider_location" />
                     <Label htmlFor="provider_location">
-                      Provider's Location
+                      {t("service_location_provider")}
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="customer" id="my_location" />
-                    <Label htmlFor="my_location">My Location</Label>
+                    <Label htmlFor="my_location">
+                      {t("service_location_customer")}
+                    </Label>
                   </div>
                 </RadioGroup>
-                {/* Display provider address when provider location is selected */}
                 {serviceLocation === "provider" && (
                   <div className="mt-2 space-y-1">
                     <p className="text-sm text-muted-foreground">
-                      Service will be at:{" "}
-                      {providerFullAddress || "Provider address not specified"}
+                      {t("service_at_provider_address").replace(
+                        "{address}",
+                        providerFullAddress || t("location_not_specified"),
+                      )}
                     </p>
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <MapLink
                         latitude={service.provider?.latitude}
                         longitude={service.provider?.longitude}
-                        label="View on Google Maps"
+                        label={t("view_on_map")}
                       />
                       {!providerHasCoords && providerMapsHref ? (
                         <a
@@ -860,7 +920,7 @@ type BookingService = ServiceDetail & {
                           rel="noopener noreferrer"
                           className="text-sm font-medium text-blue-600 hover:underline"
                         >
-                          View on Google Maps
+                          {t("view_on_map")}
                         </a>
                       ) : null}
                     </div>
@@ -869,8 +929,7 @@ type BookingService = ServiceDetail & {
                 {serviceLocation === "customer" && (
                   <div className="mt-3 space-y-3 rounded-md border bg-muted/20 p-4">
                     <p className="text-sm text-muted-foreground">
-                      Rural addresses can be tricky—your landmark is the most
-                      important detail for the provider to find you.
+                      {t("rural_landmark_note")}
                     </p>
                     {lastGpsAccuracyMeters !== null &&
                     lastGpsAccuracyMeters > GPS_WEAK_ACCURACY_METERS ? (
@@ -878,9 +937,12 @@ type BookingService = ServiceDetail & {
                         <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                         <div>
                           <p className="font-semibold">
-                            GPS is weak (±{Math.round(lastGpsAccuracyMeters)}m).
+                            {t("gps_weak_inline").replace(
+                              "{meters}",
+                              String(Math.round(lastGpsAccuracyMeters)),
+                            )}
                           </p>
-                          <p>GPS is weak. Please type a landmark.</p>
+                          <p>{t("gps_weak_description")}</p>
                         </div>
                       </div>
                     ) : null}
@@ -889,23 +951,23 @@ type BookingService = ServiceDetail & {
                         htmlFor="booking_landmark"
                         className="text-base font-semibold"
                       >
-                        Landmark <span className="text-red-600">*</span>
+                        {t("landmark_label")}{" "}
+                        <span className="text-red-600">*</span>
                       </Label>
                       <Input
                         id="booking_landmark"
                         value={bookingLandmark}
                         onChange={(e) => setBookingLandmark(e.target.value)}
-                        placeholder='Example: "Near the big temple, behind the ration shop"'
+                        placeholder={t("landmark_placeholder")}
                         required={serviceLocation === "customer"}
                         className="h-12 text-base"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Use something locals recognize (temple, school, ration
-                        shop, main bus stop).
+                        {t("landmark_helper")}
                       </p>
                       {serviceLocation === "customer" && !bookingLandmark.trim() ? (
                         <p className="text-xs font-medium text-red-700">
-                          Landmark is required.
+                          {t("landmark_required_inline")}
                         </p>
                       ) : null}
                     </div>
@@ -914,65 +976,79 @@ type BookingService = ServiceDetail & {
                       size="lg"
                       variant="secondary"
                       onClick={handleUseDeviceLocation}
-                      disabled={isCapturingDeviceLocation || saveLocationMutation.isPending}
-                      className="w-full h-14 text-base"
+                      disabled={
+                        isCapturingDeviceLocation ||
+                        saveLocationMutation.isPending
+                      }
+                      className="w-full h-12 text-base"
                     >
                       {isCapturingDeviceLocation || saveLocationMutation.isPending ? (
                         <Loader2 className="h-5 w-5 animate-spin" />
                       ) : (
                         <Navigation className="h-5 w-5" />
                       )}
-                      Use My Current Location
+                      {t("use_my_location")}
                     </Button>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>Saved GPS:</span>
-                      <MapLink latitude={user?.latitude} longitude={user?.longitude} />
+                      <span>{t("saved_gps_label")}</span>
+                      <MapLink
+                        latitude={user?.latitude}
+                        longitude={user?.longitude}
+                      />
                       {!user?.latitude || !user?.longitude ? (
-                        <span>(not saved yet)</span>
+                        <span>{t("gps_not_saved")}</span>
                       ) : null}
                     </div>
                   </div>
                 )}
-                {/* Remove the input field for provider address */}
-                {/* 
-                 {serviceLocation === 'provider' && (
-                   <div className="mt-4 space-y-2">
-                     <Label htmlFor="provider_address">Provider Address</Label>
-                     <Input 
-                       id="provider_address"
-                       placeholder="Enter provider's full address"
-                       value={providerAddress} 
-                       onChange={(e) => setProviderAddress(e.target.value)} 
-                       required={serviceLocation === 'provider'}
-                     />
-                   </div>
-                 )}
-                 */}
               </div>
-          {/* Button remains within the right column */}
-          <Button
-            onClick={handleBookingRequest}
-            className="w-full mt-4" /* Reverted margin */
-            disabled={
-              !selectedUrgency ||
-              !providerOnline ||
-              bookingsLoading ||
-              dailyLimitReached ||
-              !resolvedSlotLabel ||
-              (serviceLocation === "customer" && !bookingLandmark.trim()) ||
-              createBookingMutation.isPending
-            }
-          >
-            {createBookingMutation.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : null}
-            Request Booking
+
+              <div className="rounded-xl border bg-muted/30 p-3 text-sm space-y-2">
+                <p className="font-semibold">{t("booking_summary_title")}</p>
+                <div className="flex justify-between">
+                  <span>{t("summary_when")}</span>
+                  <span>
+                    {selectedUrgency === "now"
+                      ? t("urgency_now_summary")
+                      : selectedUrgency === "today"
+                        ? t("urgency_today_summary")
+                        : selectedUrgency === "tomorrow"
+                          ? t("urgency_tomorrow_summary")
+                          : t("summary_not_selected")}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>{t("summary_where")}</span>
+                  <span>
+                    {serviceLocation === "customer"
+                      ? t("service_location_customer")
+                      : t("service_location_provider")}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>{t("summary_price")}</span>
+                  <span>₹{service.price}</span>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleBookingRequest}
+                className="w-full h-12"
+                disabled={
+                  !selectedUrgency ||
+                  !providerOnline ||
+                  bookingsLoading ||
+                  dailyLimitReached ||
+                  !resolvedSlotLabel ||
+                  (serviceLocation === "customer" && !bookingLandmark.trim()) ||
+                  createBookingMutation.isPending
+                }
+              >
+                {createBookingMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                {t("request_booking")}
               </Button>
-              {/* {service.bookingRequiresProviderApproval && (
-                <p className="text-xs text-center text-muted-foreground mt-2">
-                  Booking requires provider approval.
-                </p>
-              )} */}
             </div>
           </CardContent>
         </Card>
@@ -991,20 +1067,25 @@ type BookingService = ServiceDetail & {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {dialogStep === "sent" ? "Booking Requested" : "Confirm Booking"}
+                {dialogStep === "sent"
+                  ? t("booking_requested_title")
+                  : t("confirm_booking_title")}
               </DialogTitle>
             </DialogHeader>
             {dialogStep === "sent" ? (
               <div className="space-y-4">
                 {lastBookingId ? (
                   <p className="text-sm text-muted-foreground">
-                    Booking #{lastBookingId}
+                    {t("booking_number_label").replace(
+                      "{id}",
+                      String(lastBookingId),
+                    )}
                   </p>
                 ) : null}
                 <p className="text-sm text-muted-foreground">
                   {serviceLocation === "customer"
-                    ? "Next step: send your GPS location + landmark on WhatsApp so the provider can find you quickly."
-                    : "Next step: message the provider on WhatsApp to coordinate the visit."}
+                    ? t("next_step_send_location")
+                    : t("next_step_message_provider")}
                 </p>
                 <Button
                   type="button"
@@ -1018,8 +1099,14 @@ type BookingService = ServiceDetail & {
                 >
                   <MessageCircle className="h-5 w-5" />
                   {serviceLocation === "customer"
-                    ? `Send Location to ${providerName} on WhatsApp`
-                    : `Message ${providerName} on WhatsApp`}
+                    ? t("send_location_to_provider").replace(
+                        "{name}",
+                        providerName,
+                      )
+                    : t("message_provider_on_whatsapp").replace(
+                        "{name}",
+                        providerName,
+                      )}
                 </Button>
                 <Button
                   type="button"
@@ -1027,43 +1114,47 @@ type BookingService = ServiceDetail & {
                   className="w-full"
                   onClick={() => setDialogOpen(false)}
                 >
-                  Done
+                  {t("done")}
                 </Button>
               </div>
             ) : (
               <>
                 <div className="space-y-2">
                   <p>
-                    <strong>Service:</strong> {service.name}
+                    <strong>{t("service_label")}:</strong> {service.name}
                   </p>
                   <p>
-                    <strong>When:</strong>{" "}
+                    <strong>{t("when_label")}:</strong>{" "}
                     {selectedUrgency === "now"
-                      ? "Come Now (Emergency)"
+                      ? t("urgency_now_summary")
                       : selectedUrgency === "today"
-                        ? "Today (Anytime)"
+                        ? t("urgency_today_summary")
                         : selectedUrgency === "tomorrow"
-                          ? "Tomorrow (Anytime)"
-                          : "N/A"}
+                          ? t("urgency_tomorrow_summary")
+                          : t("not_available")}
                   </p>
                   <p>
-                    <strong>Preferred day:</strong>{" "}
+                    <strong>{t("preferred_day_label")}:</strong>{" "}
                     {formatBase(selectedDate, "PPP")}
                   </p>
                   <p>
-                    <strong>Location:</strong>{" "}
+                    <strong>{t("location_label")}:</strong>{" "}
                     {serviceLocation === "provider"
-                      ? `Provider's Location (${providerFullAddress || "Not specified"})`
-                      : "Your Location"}
+                      ? t("summary_location_provider").replace(
+                          "{address}",
+                          providerFullAddress || t("location_not_specified"),
+                        )
+                      : t("summary_location_customer")}
                   </p>
                   {serviceLocation === "customer" && bookingLandmark.trim() ? (
                     <p>
-                      <strong>Landmark:</strong> {bookingLandmark.trim()}
+                      <strong>{t("landmark_label")}:</strong>{" "}
+                      {bookingLandmark.trim()}
                     </p>
                   ) : null}
                   {serviceLocation === "customer" ? (
                     <div className="flex flex-wrap items-center gap-2">
-                      <strong>Map:</strong>
+                      <strong>{t("map_label")}:</strong>
                       <MapLink
                         latitude={user?.latitude}
                         longitude={user?.longitude}
@@ -1072,17 +1163,16 @@ type BookingService = ServiceDetail & {
                   ) : null}
                   <div className="rounded-md border bg-muted/10 p-4 space-y-2">
                     <div className="flex justify-between">
-                      <span>Estimated price:</span>
+                      <span>{t("estimated_price_label_inline")}</span>
                       <span>₹{service?.price}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Final labour and material cost is confirmed in person by
-                      the provider.
+                      {t("final_price_note")}
                     </p>
                     {featureFlags.platformFeesEnabled &&
                     featureFlags.platformFeeBreakdownEnabled ? (
                       <div className="flex justify-between text-muted-foreground">
-                        <span>Platform Fee:</span>
+                        <span>{t("platform_fee_label")}</span>
                         <span>₹{platformFee.toFixed(2)}</span>
                       </div>
                     ) : null}
@@ -1090,7 +1180,7 @@ type BookingService = ServiceDetail & {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                    Cancel
+                    {t("cancel")}
                   </Button>
                   <Button
                     onClick={confirmBooking}
@@ -1102,7 +1192,7 @@ type BookingService = ServiceDetail & {
                     {createBookingMutation.isPending ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : null}
-                    Confirm & Request
+                    {t("confirm_and_request")}
                   </Button>
                 </DialogFooter>
               </>
@@ -1113,7 +1203,7 @@ type BookingService = ServiceDetail & {
         {/* Customer Reviews Section */}
         <Card>
           <CardHeader>
-            <CardTitle>Customer Reviews</CardTitle>
+            <CardTitle>{t("customer_reviews_title")}</CardTitle>
           </CardHeader>
           <CardContent>
             {service.reviews && service.reviews.length > 0 ? (
@@ -1138,14 +1228,22 @@ type BookingService = ServiceDetail & {
                       {review.createdAt
                         ? format(new Date(review.createdAt), "PP")
                         : ""}{" "}
-                      - By {review.customerId ? `Customer #${review.customerId}` : "Customer"}
+                      -{" "}
+                      {review.customerId
+                        ? t("review_by_customer_id").replace(
+                            "{id}",
+                            String(review.customerId),
+                          )
+                        : t("review_by_customer")}
                     </p>
                     <p className="text-sm">{review.review}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No reviews yet.</p>
+              <p className="text-sm text-muted-foreground">
+                {t("no_reviews_yet")}
+              </p>
             )}
           </CardContent>
         </Card>

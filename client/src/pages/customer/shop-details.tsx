@@ -29,18 +29,7 @@ import { useState } from "react";
 import { useParams, Link } from "wouter";
 import Meta from "@/components/meta";
 import type { PublicShop } from "@/types/public-shop";
-// Helper function to format address
-const formatAddress = (user: PublicShop | undefined): string => {
-  if (!user) return "Location not specified";
-  const parts = [
-    user.addressStreet,
-    user.addressCity,
-    user.addressState,
-    user.addressPostalCode,
-    user.addressCountry,
-  ].filter(Boolean); // Filter out null/undefined/empty strings
-  return parts.length > 0 ? parts.join(", ") : "Location not specified";
-};
+import { useLanguage } from "@/contexts/language-context";
 
 const container = {
   hidden: { opacity: 0 },
@@ -89,8 +78,21 @@ export default function ShopDetails() {
   const { id } = useParams<{ id: string }>();
   console.log("ShopDetails component - Shop ID from params:", id);
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+  const formatAddress = (user?: PublicShop): string => {
+    if (!user) return t("location_not_specified");
+    const parts = [
+      user.addressStreet,
+      user.addressCity,
+      user.addressState,
+      user.addressPostalCode,
+      user.addressCountry,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(", ") : t("location_not_specified");
+  };
 
   const {
     data: shop,
@@ -193,21 +195,21 @@ export default function ShopDetails() {
     },
     onSuccess: (_data, product) => {
       toast({
-        title: "Added to cart",
-        description: `${product.name} has been added to your cart.`,
+        title: t("added_to_cart_title"),
+        description: t("added_to_cart_item").replace("{product}", product.name),
       });
     },
     onError: (error: Error, _product, context) => {
       if (context?.previousCart) {
         queryClient.setQueryData(["/api/cart"], context.previousCart);
       }
-      let description = error.message || "Failed to add product to cart";
+      let description = error.message || t("add_to_cart_failed_description");
       if (error.message.includes("Cannot add items from different shops")) {
         description =
-          "You can only add items from one shop at a time. Please clear your cart or checkout first.";
+          t("cart_single_shop_limit");
       }
       toast({
-        title: "Error Adding to Cart",
+        title: t("add_to_cart_failed_title"),
         description: description,
         variant: "destructive",
       });
@@ -250,8 +252,8 @@ export default function ShopDetails() {
     },
     onSuccess: (_data, product) => {
       toast({
-        title: "Added to wishlist",
-        description: `${product.name} has been added to your wishlist.`,
+        title: t("added_to_wishlist_title"),
+        description: t("added_to_wishlist_item").replace("{product}", product.name),
       });
     },
     onError: (error: Error, _product, context) => {
@@ -262,8 +264,8 @@ export default function ShopDetails() {
         );
       }
       toast({
-        title: "Error",
-        description: error.message || "Failed to add product to wishlist",
+        title: t("wishlist_add_failed_title"),
+        description: error.message || t("wishlist_add_failed_description"),
         variant: "destructive",
       });
     },
@@ -345,9 +347,9 @@ export default function ShopDetails() {
       <DashboardLayout>
         <Meta title="Shop Not Found" />
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
-          <h2 className="text-2xl font-bold mb-4">Shop not found</h2>
+          <h2 className="text-2xl font-bold mb-4">{t("shop_not_found")}</h2>
           <Link href="/customer/browse-shops">
-            <Button>Back to Shops</Button>
+            <Button>{t("back_to_shops")}</Button>
           </Link>
         </div>
       </DashboardLayout>
@@ -376,20 +378,24 @@ export default function ShopDetails() {
         <Link href="/customer/browse-shops">
           <Button variant="ghost" className="mb-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Shops
+            {t("back_to_shops")}
           </Button>
         </Link>
 
         {/* Shop Header */}
-        <Card className="mb-8">
+        <Card className="mb-8 border-0 bg-gradient-to-br from-emerald-50 via-white to-slate-50 shadow-sm">
           <CardContent className="p-6">
                 <div className="flex flex-col md:flex-row gap-6 items-start">
-                  <div className="h-24 w-24 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <div className="h-24 w-24 rounded-2xl bg-primary/10 flex items-center justify-center overflow-hidden">
                     {shop.profilePicture ? (
                       <img
                         src={shop.profilePicture}
-                        alt={shop.shopProfile?.shopName || shop.name || "Shop"}
-                        className="h-full w-full rounded-lg object-cover"
+                        alt={
+                          shop.shopProfile?.shopName ||
+                          shop.name ||
+                          t("shop_alt_fallback")
+                        }
+                        className="h-full w-full object-cover"
                       />
                 ) : (
                   <Store className="h-12 w-12 text-primary" />
@@ -410,12 +416,17 @@ export default function ShopDetails() {
                   />
                 </div>
                 <p className="mt-4">
-                  {shop.shopProfile?.description ?? "No description available"}
+                  {shop.shopProfile?.description ?? t("shop_description_fallback")}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Link href={`/customer/shops/${shop.id}/quick-order`}>
-                    <Button>Quick Order</Button>
+                    <Button size="lg">{t("quick_order")}</Button>
                   </Link>
+                  {shop.phone ? (
+                    <Button asChild size="lg" variant="outline">
+                      <a href={`tel:${shop.phone}`}>{t("call_shop")}</a>
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -425,12 +436,15 @@ export default function ShopDetails() {
         {/* Products Section */}
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <h2 className="text-xl font-semibold">Products</h2>
-            <div className="flex gap-4 w-full md:w-auto">
+            <h2 className="text-xl font-semibold">{t("products")}</h2>
+          </div>
+
+          <Card className="border-0 bg-gradient-to-br from-slate-50 via-white to-emerald-50 shadow-sm">
+            <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
               <div className="relative flex-1 md:w-80">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder="Search products..."
+                  placeholder={t("browse_products_search_placeholder")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -440,11 +454,11 @@ export default function ShopDetails() {
                 value={selectedCategory}
                 onValueChange={(value) => setSelectedCategory(value)}
               >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Category" />
+                <SelectTrigger className="w-full md:w-44">
+                  <SelectValue placeholder={t("product_category")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="all">{t("all_categories")}</SelectItem>
                   {productFilterConfig.categories.map((category) => (
                     <SelectItem key={category.value} value={category.value}>
                       {category.label}
@@ -452,13 +466,13 @@ export default function ShopDetails() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
           {!filteredProducts?.length ? (
             <Card>
               <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">No products found</p>
+                <p className="text-muted-foreground">{t("products_empty")}</p>
               </CardContent>
             </Card>
           ) : (
@@ -470,12 +484,17 @@ export default function ShopDetails() {
                 const stockCount = Number(product.stock ?? 0);
                 const outOfStock = stockCount <= 0 && !openOrderAllowed;
                 return (
-                  <motion.div key={product.id} variants={item}>
+                  <motion.div
+                    key={product.id}
+                    variants={item}
+                    whileHover={{ y: -4 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  >
                     <Link
                       href={`/customer/shops/${product.shopId}/products/${product.id}`}
                       className="block h-full"
                     >
-                      <Card className="h-full flex flex-col cursor-pointer hover:shadow-lg transition-shadow duration-200">
+                      <Card className="h-full flex flex-col cursor-pointer overflow-hidden rounded-2xl border bg-white/80 shadow-sm transition-shadow duration-200 hover:shadow-lg">
                         <div className="aspect-square relative overflow-hidden">
                           <img
                             src={
@@ -501,45 +520,57 @@ export default function ShopDetails() {
                         <CardContent className="flex-1 p-4">
                           <h3 className="font-semibold truncate">{product.name}</h3>
                           <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                            {product.description ?? "No description"}
+                            {product.description ?? t("product_description_fallback")}
                           </p>
                           <div className="flex items-center justify-between">
-                            <p className="font-semibold">₹{product.price}</p>
-                            <div className="flex gap-2">
-                              <Button
-                                size="icon"
-                                variant="outline"
-                                onClick={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  addToWishlistMutation.mutate(product);
-                                }}
-                                disabled={addToWishlistMutation.isPending}
-                              >
-                                <Heart className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                onClick={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  addToCartMutation.mutate(product);
-                                }}
-                                disabled={
-                                  !product.isAvailable ||
-                                  outOfStock ||
-                                  addToCartMutation.isPending
-                                }
-                              >
-                                <ShoppingCart className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            <p className="text-lg font-semibold">₹{product.price}</p>
                           </div>
-                          {stockCount <= 0 && openOrderAllowed && (
-                            <p className="text-xs text-amber-700 mt-1">
-                              Available on request. The shop will confirm availability.
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                addToWishlistMutation.mutate(product);
+                              }}
+                              disabled={addToWishlistMutation.isPending}
+                            >
+                              <Heart className="h-4 w-4 mr-1" />
+                              {t("save_item")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                addToCartMutation.mutate(product);
+                              }}
+                              disabled={
+                                !product.isAvailable ||
+                                outOfStock ||
+                                addToCartMutation.isPending
+                              }
+                            >
+                              <ShoppingCart className="h-4 w-4 mr-1" />
+                              {t("add_to_cart_button")}
+                            </Button>
+                          </div>
+                          {!product.isAvailable ? (
+                            <p className="text-xs text-rose-600 mt-2">
+                              {t("product_unavailable")}
                             </p>
-                          )}
+                          ) : null}
+                          {outOfStock ? (
+                            <p className="text-xs text-rose-600 mt-2">
+                              {t("product_out_of_stock")}
+                            </p>
+                          ) : null}
+                          {stockCount <= 0 && openOrderAllowed ? (
+                            <p className="text-xs text-amber-700 mt-1">
+                              {t("product_available_on_request")}
+                            </p>
+                          ) : null}
                         </CardContent>
                       </Card>
                     </Link>

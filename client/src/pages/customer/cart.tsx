@@ -349,8 +349,8 @@ export default function Cart() {
         }
       }
       toast({
-        title: "Order placed",
-        description: "Your order has been created.",
+        title: "Order sent to shop",
+        description: "The shop will confirm the final bill amount soon.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
       setIsCheckingOut(false);

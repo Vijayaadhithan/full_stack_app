@@ -682,8 +682,18 @@ export default function ShopOrders() {
 
     return (
       <div className="space-y-4">
-        {orders.map((order) => (
-          <Card key={order.id}>
+        {orders.map((order) => {
+          const canQuoteOrder = ["pending", "awaiting_customer_agreement"].includes(
+            order.status,
+          );
+          const quoteDefault =
+            order.orderType === "product_order"
+              ? String(order.total ?? "")
+              : "";
+          const quoteValue = textOrderQuoteTotals[order.id] ?? quoteDefault;
+
+          return (
+            <Card key={order.id}>
             <CardContent className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
@@ -778,8 +788,8 @@ export default function ShopOrders() {
                   )}
                 </div>
 
-                {order.orderType === "text_order" ? (
-                  <div className="space-y-3">
+                <div className="space-y-3">
+                  {order.orderType === "text_order" ? (
                     <div>
                       <h4 className="font-medium mb-2">Quick Order (Text)</h4>
                       <div className="rounded-md border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
@@ -788,18 +798,41 @@ export default function ShopOrders() {
                           : "No items provided."}
                       </div>
                     </div>
-                    {(user?.role === "shop" || can("orders:update")) && (
+                  ) : (
+                    <div>
+                      <h4 className="font-medium mb-2">{t("order_items")}</h4>
+                      <div className="space-y-2">
+                        {order.items?.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex justify-between items-center"
+                          >
+                            <div>
+                              <p className="font-medium">{item.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {item.quantity} × ₹{item.price}
+                              </p>
+                            </div>
+                            <p className="font-semibold">₹{item.total}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(user?.role === "shop" || can("orders:update")) &&
+                    canQuoteOrder && (
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                         <div className="flex-1 space-y-1">
                           <Label htmlFor={`quote-total-${order.id}`}>
-                            Bill price (₹)
+                            Final bill (₹)
                           </Label>
                           <Input
                             id={`quote-total-${order.id}`}
                             type="number"
                             inputMode="decimal"
-                            placeholder="Enter total amount"
-                            value={textOrderQuoteTotals[order.id] ?? ""}
+                            placeholder="Enter final amount"
+                            value={quoteValue}
                             onChange={(e) =>
                               setTextOrderQuoteTotals((prev) => ({
                                 ...prev,
@@ -811,7 +844,7 @@ export default function ShopOrders() {
                         </div>
                         <Button
                           onClick={() => {
-                            const raw = (textOrderQuoteTotals[order.id] ?? "").trim();
+                            const raw = String(quoteValue ?? "").trim();
                             if (!raw) return;
                             quoteTextOrderMutation.mutate({
                               orderId: order.id,
@@ -820,44 +853,35 @@ export default function ShopOrders() {
                           }}
                           disabled={
                             quoteTextOrderMutation.isPending ||
-                            !(textOrderQuoteTotals[order.id] ?? "").trim()
+                            !String(quoteValue ?? "").trim()
                           }
                         >
                           {quoteTextOrderMutation.isPending && (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           )}
-                          Set bill
+                          {order.status === "awaiting_customer_agreement"
+                            ? "Update bill"
+                            : "Send bill"}
                         </Button>
                       </div>
                     )}
+
+                  {order.status === "awaiting_customer_agreement" ? (
                     <p className="text-xs text-muted-foreground">
-                      After setting the bill, the customer will choose Cash/UPI/Pay Later. Confirm payment when settled, then update order status.
+                      Waiting for the customer to agree to the final bill.
                     </p>
-                  </div>
-                ) : (
-                  <div>
-                    <h4 className="font-medium mb-2">{t("order_items")}</h4>
-                    <div className="space-y-2">
-                      {order.items?.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex justify-between items-center"
-                        >
-                          <div>
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {item.quantity} × ₹{item.price}
-                            </p>
-                          </div>
-                          <p className="font-semibold">₹{item.total}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  ) : null}
+                  {canQuoteOrder ? (
+                    <p className="text-xs text-muted-foreground">
+                      After sending the final bill, the customer will tap Agree
+                      before choosing a payment method.
+                    </p>
+                  ) : null}
+                </div>
 
                 {order.paymentMethod === "pay_later" &&
-                  order.paymentStatus === "pending" && (
+                  order.paymentStatus === "pending" &&
+                  order.status === "confirmed" && (
                     <div className="p-4 rounded-md bg-blue-50 border text-sm space-y-2">
                       <p className="font-medium text-blue-900">
                         Pay Later (Khata) pending approval
@@ -882,7 +906,8 @@ export default function ShopOrders() {
 
                 {(order.paymentStatus === "verifying" ||
                   (order.paymentMethod === "cash" &&
-                    order.paymentStatus === "pending")) && (
+                    order.paymentStatus === "pending")) &&
+                  order.status === "confirmed" && (
                   <div className="p-4 rounded-md bg-yellow-100 border text-sm space-y-2">
                     {order.paymentMethod === "upi" && (
                       <p className="font-medium">
@@ -1031,8 +1056,9 @@ export default function ShopOrders() {
                 </div>
               </div>
             </CardContent>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
     );
   };
@@ -1048,6 +1074,10 @@ export default function ShopOrders() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("all_orders")}</SelectItem>
+                <SelectItem value="pending">{t("pending")}</SelectItem>
+                <SelectItem value="awaiting_customer_agreement">
+                  {t("awaiting_customer_agreement")}
+                </SelectItem>
                 <SelectItem value="confirmed">{t("confirmed")}</SelectItem>
                 <SelectItem value="packed">{t("packed")}</SelectItem>
                 <SelectItem value="dispatched">{t("dispatched")}</SelectItem>

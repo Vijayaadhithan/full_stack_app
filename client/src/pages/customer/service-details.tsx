@@ -12,13 +12,15 @@ import { Button } from "@/components/ui/button";
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Loader2, MapPin, Star, Clock } from "lucide-react";
+import { Loader2, MapPin, Star, Clock, Sparkles } from "lucide-react";
 import Meta from "@/components/meta";
 import { ServiceDetail } from "@shared/api-contract";
 import { apiClient } from "@/lib/apiClient";
+import { useLanguage } from "@/contexts/language-context";
 
 export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
+  const { t } = useLanguage();
   console.log("Service ID from params:", id);
 
   const {
@@ -66,17 +68,20 @@ export default function ServiceDetails() {
       <DashboardLayout>
         <Meta title="Service Not Found" />
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
-          <h2 className="text-2xl font-bold mb-4">Service not found</h2>
+          <h2 className="text-2xl font-bold mb-4">
+            {t("service_not_found")}
+          </h2>
           <Link href="/customer/browse-services">
-            <Button>Back to Services</Button>
+            <Button>{t("back_to_services")}</Button>
           </Link>
         </div>
       </DashboardLayout>
     );
   }
 
-  const providerName = service.provider?.name ?? "Provider";
+  const providerName = service.provider?.name ?? t("provider_label");
   const providerInitial = providerName.charAt(0).toUpperCase();
+  const serviceImage = service.images?.[0] ?? null;
   const providerAddress = [
     service.provider?.addressStreet,
     service.provider?.addressCity,
@@ -106,67 +111,99 @@ export default function ServiceDetails() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="max-w-4xl mx-auto space-y-6 p-6"
+        className="max-w-5xl mx-auto space-y-6 p-6"
       >
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>{service.name}</CardTitle>
-              <Link href={`/customer/book-service/${id}`}>
-                <Button>Book Now</Button>
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Provider Info */}
-            <div className="bg-muted/50 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">Service Provider</h3>
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-                  {service.provider?.profilePicture ? (
-                    <img
-                      src={service.provider.profilePicture}
-                      alt={providerName}
-                      className="h-full w-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-2xl">
-                      {providerInitial}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <p className="font-medium">{providerName}</p>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
-                    <span>
-                      {service.rating?.toFixed(1) || "N/A"} (
-                      {service.reviews?.length || 0} reviews)
-                    </span>
+        <Card className="overflow-hidden border-0 bg-gradient-to-br from-sky-50 via-white to-emerald-50 shadow-sm">
+          <CardContent className="p-0">
+            <div className="grid gap-6 p-6 md:grid-cols-[220px_1fr]">
+              <div className="h-40 w-full overflow-hidden rounded-2xl bg-muted/60">
+                {serviceImage ? (
+                  <img
+                    src={serviceImage}
+                    alt={service.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-slate-500">
+                    <Sparkles className="h-8 w-8" />
                   </div>
+                )}
+              </div>
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t("service_category")}: {service.category}
+                </div>
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-bold">{service.name}</h1>
+                  <p className="text-sm text-muted-foreground">
+                    {service.description}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 shadow-sm">
+                    <Clock className="h-4 w-4" />
+                    {t("service_duration_label").replace(
+                      "{minutes}",
+                      String(service.duration),
+                    )}
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 shadow-sm">
+                    <MapPin className="h-4 w-4" />
+                    {providerAddress || t("location_not_specified")}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-xl font-semibold">
+                    {t("starting_price_label").replace(
+                      "{price}",
+                      `₹${service.price}`,
+                    )}
+                  </p>
+                  <Link href={`/customer/book-service/${id}`}>
+                    <Button size="lg">{t("book_now")}</Button>
+                  </Link>
+                  <Link href="/customer/browse-services">
+                    <Button variant="outline" size="lg">
+                      {t("back_to_services")}
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            {/* Service Details */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  <span>Duration: {service.duration} minutes</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
+        <Card className="border-0 bg-white/80 shadow-sm">
+          <CardHeader>
+            <CardTitle>{t("service_provider")}</CardTitle>
+            <CardDescription>{t("provider_support_line")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                {service.provider?.profilePicture ? (
+                  <img
+                    src={service.provider.profilePicture}
+                    alt={providerName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="text-lg font-semibold">{providerInitial}</span>
+                )}
+              </div>
+              <div>
+                <p className="font-medium">{providerName}</p>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
                   <span>
-                    Location:{" "}
-                    {providerAddress || "Not specified"}
+                    {service.rating?.toFixed(1) || t("not_available")} •{" "}
+                    {service.reviews?.length || 0} {t("reviews_label")}
                   </span>
                 </div>
               </div>
-              <div>
-                <p className="text-muted-foreground">{service.description}</p>
-                <p className="mt-2 font-semibold">₹{service.price}</p>
-              </div>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {t("provider_location_hint")}
             </div>
           </CardContent>
         </Card>
@@ -174,20 +211,20 @@ export default function ServiceDetails() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Star className="h-5 w-5 fill-yellow-500 text-yellow-500" />
-              Ratings & Reviews
+              {t("ratings_reviews")}
             </CardTitle>
             <CardDescription>
               {service.rating && service.reviews?.length
-                ? `${service.rating.toFixed(1)} out of 5 • ${service.reviews.length} review${
-                    service.reviews.length !== 1 ? "s" : ""
-                  }`
-                : "No reviews yet"}
+                ? t("ratings_summary")
+                    .replace("{rating}", service.rating.toFixed(1))
+                    .replace("{count}", String(service.reviews.length))
+                : t("no_reviews_yet")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!service.reviews?.length ? (
               <p className="text-sm text-muted-foreground">
-                Customers haven’t reviewed this service yet.
+                {t("no_reviews_message")}
               </p>
             ) : (
               service.reviews.map((review) => (
@@ -220,7 +257,7 @@ export default function ServiceDetails() {
                     </p>
                   ) : (
                     <p className="text-sm text-muted-foreground italic">
-                      No written feedback provided.
+                      {t("no_written_feedback")}
                     </p>
                   )}
                 </div>

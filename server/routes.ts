@@ -215,6 +215,7 @@ function buildPublicShopResponse(shop: User) {
   return {
     id: shop.id,
     name: shop.name,
+    phone: shop.phone ?? null,
     shopProfile: shop.shopProfile ?? null,
     profilePicture: shop.profilePicture ?? null,
     shopBannerImageUrl: shop.shopBannerImageUrl ?? null,
@@ -842,6 +843,7 @@ type ActiveOrderBoard = Record<ActiveOrderBoardLane, ActiveOrderBoardItem[]>;
 
 const ACTIVE_ORDER_STATUSES: Order["status"][] = [
   "pending",
+  "awaiting_customer_agreement",
   "confirmed",
   "processing",
   "packed",
@@ -852,7 +854,12 @@ const ACTIVE_ORDER_STATUSES: Order["status"][] = [
 function getBoardLaneForStatus(
   status: Order["status"],
 ): ActiveOrderBoardLane | null {
-  if (status === "pending" || status === "confirmed") return "new";
+  if (
+    status === "pending" ||
+    status === "awaiting_customer_agreement" ||
+    status === "confirmed"
+  )
+    return "new";
   if (status === "processing" || status === "packed") return "packing";
   if (status === "dispatched" || status === "shipped") return "ready";
   return null;
@@ -1165,6 +1172,7 @@ const orderStatusUpdateSchema = z
   .object({
     status: z.enum([
       "pending",
+      "awaiting_customer_agreement",
       "cancelled",
       "confirmed",
       "processing",
@@ -5891,6 +5899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const allowedOrderStatus: Order["status"][] = [
           "pending",
+          "awaiting_customer_agreement",
           "cancelled",
           "confirmed",
           "processing",
@@ -6349,6 +6358,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const allowedOrderStatus: Order["status"][] = [
           "pending",
+          "awaiting_customer_agreement",
           "cancelled",
           "confirmed",
           "processing",
@@ -6568,6 +6578,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (order.customerId !== req.user!.id) {
           return res.status(403).json({ message: "Not authorized" });
         }
+        const requiresCustomerAgreement =
+          order.status === "awaiting_customer_agreement" ||
+          (order.status === "pending" && order.orderType === "text_order");
+        if (requiresCustomerAgreement) {
+          return res.status(400).json({
+            message: "Please agree to the final bill before paying.",
+          });
+        }
         const updated = await storage.updateOrder(orderId, {
           paymentStatus: "verifying",
           paymentReference,
@@ -6617,11 +6635,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (order.shopId !== shopContextId) {
           return res.status(403).json({ message: "Not authorized" });
         }
-        let updated = order;
-        if (order.status === "pending") {
-          updated = await storage.updateOrderStatus(orderId, "confirmed");
+        const requiresCustomerAgreement =
+          order.status === "awaiting_customer_agreement" ||
+          (order.status === "pending" && order.orderType === "text_order");
+        if (requiresCustomerAgreement) {
+          return res.status(400).json({
+            message: "Order must be confirmed by the customer first.",
+          });
         }
-        updated = await storage.updateOrder(orderId, {
+        const updated = await storage.updateOrder(orderId, {
           paymentStatus: "verifying",
         });
         if (order.customerId) {
@@ -6678,10 +6700,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (order.shopId !== shopContextId) {
           return res.status(403).json({ message: "Not authorized" });
         }
-        if (order.orderType !== "text_order") {
-          return res
-            .status(400)
-            .json({ message: "Order is not a quick/text order" });
+        if (!["pending", "awaiting_customer_agreement"].includes(order.status)) {
+          return res.status(400).json({
+            message: "Final bill can only be set before the customer agrees.",
+          });
         }
 
         const numericTotal =
@@ -6707,27 +6729,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
           notes: nextNotes || null,
         });
 
-        if (order.status === "pending") {
-          updated = await storage.updateOrderStatus(orderId, "confirmed");
+        if (order.status !== "awaiting_customer_agreement") {
+          updated = await storage.updateOrderStatus(
+            orderId,
+            "awaiting_customer_agreement",
+          );
         }
 
         if (order.customerId) {
           await storage.createNotification({
             userId: order.customerId,
             type: "order",
-            title: "Quick Order priced",
-            message: `Order #${orderId} has been priced at ₹${totalString}. Open the order to choose a payment method and pay.`,
+            title: "Final bill ready",
+            message: `Order #${orderId} final bill is ₹${totalString}. Please agree to continue.`,
           });
         }
 
         res.json(updated);
       } catch (error) {
-        logger.error("Error quoting text order:", error);
+        logger.error("Error setting final order total:", error);
         res.status(500).json({
           message:
             error instanceof Error
               ? error.message
-              : "Failed to quote text order",
+              : "Failed to set final bill amount",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/api/orders/:id/agree-final-bill",
+    requireAuth,
+    requireRole(["customer"]),
+    async (req, res) => {
+      const orderId = getValidatedParam(req, "id");
+      try {
+        const order = await storage.getOrder(orderId);
+        if (!order) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+        if (order.customerId !== req.user!.id) {
+          return res.status(403).json({ message: "Not authorized" });
+        }
+        if (order.status !== "awaiting_customer_agreement") {
+          return res.status(400).json({
+            message: "Order is not awaiting customer agreement.",
+          });
+        }
+        const numericTotal = Number(order.total);
+        if (!Number.isFinite(numericTotal) || numericTotal <= 0) {
+          return res.status(400).json({ message: "Final bill is not ready yet." });
+        }
+
+        const updated = await storage.updateOrderStatus(orderId, "confirmed");
+        if (order.shopId) {
+          await storage.createNotification({
+            userId: order.shopId,
+            type: "order",
+            title: "Customer agreed to final bill",
+            message: `Customer agreed to the final bill for Order #${orderId}.`,
+          });
+        }
+        return res.json(updated);
+      } catch (error) {
+        logger.error("Error confirming final bill:", error);
+        return res.status(500).json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to confirm final bill",
         });
       }
     },
@@ -6768,9 +6839,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: "Payment method cannot be updated after payment has started.",
           });
         }
-        if (!["pending", "confirmed"].includes(order.status)) {
+        if (order.status !== "confirmed") {
           return res.status(400).json({
-            message: "Payment method cannot be updated once the order is processing.",
+            message: "Please agree to the final bill before choosing a payment method.",
           });
         }
         if (order.shopId == null) {
@@ -6864,6 +6935,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         if (order.shopId !== shopContextId)
           return res.status(403).json({ message: "Not authorized" });
+        const requiresCustomerAgreement =
+          order.status === "awaiting_customer_agreement" ||
+          (order.status === "pending" && order.orderType === "text_order");
+        if (requiresCustomerAgreement) {
+          return res.status(400).json({
+            message: "Order must be confirmed by the customer first.",
+          });
+        }
         const isPayLater = order.paymentMethod === "pay_later";
         const canMarkPaid =
           (order.paymentMethod === "upi" && order.paymentStatus === "verifying") ||
@@ -6877,9 +6956,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .status(400)
             .json({ message: "Order is not awaiting verification" });
         }
+        const nextStatus = order.status === "pending" ? "confirmed" : order.status;
         const updated = await storage.updateOrder(orderId, {
           paymentStatus: "paid",
-          status: "confirmed",
+          status: nextStatus,
         });
         if (order.customerId) {
           await storage.createNotification({
@@ -7119,6 +7199,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         if (order.shopId !== shopContextId) {
           return res.status(403).json({ message: "Not authorized" });
+        }
+        if (
+          ["pending", "awaiting_customer_agreement"].includes(order.status) &&
+          status !== "cancelled"
+        ) {
+          return res.status(400).json({
+            message: "Wait for customer agreement before updating the order status.",
+          });
         }
 
         const updated = await storage.updateOrderStatus(

@@ -528,6 +528,7 @@ export const orders = pgTable(
     status: text("status")
       .$type<
         | "pending"
+        | "awaiting_customer_agreement"
         | "cancelled"
         | "confirmed"
         | "processing"

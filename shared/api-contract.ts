@@ -126,6 +126,7 @@ export const productDetailSchema = z.object({
 
 const orderStatusSchema = z.enum([
   "pending",
+  "awaiting_customer_agreement",
   "cancelled",
   "confirmed",
   "processing",

@@ -13,10 +13,11 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/contexts/language-context";
 
 type NavItem = {
   href: string;
-  labelTa: string;
+  labelKey: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   isActive?: (location: string) => boolean;
 };
@@ -29,6 +30,7 @@ function defaultIsActive(location: string, href: string) {
 
 export function BottomNav() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [location] = useLocation();
 
   if (!user?.role) return null;
@@ -38,35 +40,36 @@ export function BottomNav() {
   const items: NavItem[] = (() => {
     if (role === "customer") {
       return [
-        { href: "/customer", labelTa: "முகப்பு", icon: Home },
-        { href: "/customer/browse-shops", labelTa: "கடைகள்", icon: Store },
-        { href: "/customer/orders", labelTa: "ஆர்டர்கள்", icon: Receipt },
-        { href: "/customer/cart", labelTa: "கூடை", icon: ShoppingCart },
-        { href: "/customer/profile", labelTa: "சுயவிவரம்", icon: User },
+        { href: "/customer", labelKey: "nav_home", icon: Home },
+        { href: "/customer/browse-shops", labelKey: "nav_shops", icon: Store },
+        { href: "/customer/browse-products", labelKey: "nav_products", icon: Boxes },
+        { href: "/customer/orders", labelKey: "nav_orders", icon: Receipt },
+        { href: "/customer/cart", labelKey: "nav_cart", icon: ShoppingCart },
+        { href: "/customer/profile", labelKey: "nav_profile", icon: User },
       ];
     }
 
     if (role === "provider") {
       return [
-        { href: "/provider", labelTa: "முகப்பு", icon: Home },
-        { href: "/provider/services", labelTa: "சேவைகள்", icon: Boxes },
-        { href: "/provider/bookings", labelTa: "முன்பதிவு", icon: CalendarCheck },
-        { href: "/provider/reviews", labelTa: "மதிப்பீடுகள்", icon: Star },
-        { href: "/provider/profile", labelTa: "சுயவிவரம்", icon: User },
+        { href: "/provider", labelKey: "nav_home", icon: Home },
+        { href: "/provider/services", labelKey: "nav_services", icon: Boxes },
+        { href: "/provider/bookings", labelKey: "nav_bookings", icon: CalendarCheck },
+        { href: "/provider/reviews", labelKey: "nav_reviews", icon: Star },
+        { href: "/provider/profile", labelKey: "nav_profile", icon: User },
       ];
     }
 
     if (role === "shop") {
       return [
-        { href: "/shop", labelTa: "முகப்பு", icon: Home },
-        { href: "/shop/orders", labelTa: "ஆர்டர்கள்", icon: Receipt },
-        { href: "/shop/products", labelTa: "பொருட்கள்", icon: Boxes },
-        { href: "/shop/inventory", labelTa: "கையிருப்பு", icon: ShoppingCart },
-        { href: "/shop/profile", labelTa: "அமைப்புகள்", icon: User },
+        { href: "/shop", labelKey: "nav_home", icon: Home },
+        { href: "/shop/orders", labelKey: "nav_orders", icon: Receipt },
+        { href: "/shop/products", labelKey: "nav_products", icon: Boxes },
+        { href: "/shop/inventory", labelKey: "nav_inventory", icon: ShoppingCart },
+        { href: "/shop/profile", labelKey: "nav_settings", icon: User },
       ];
     }
 
-    return [{ href: `/${role}`, labelTa: "முகப்பு", icon: Home }];
+    return [{ href: `/${role}`, labelKey: "nav_home", icon: Home }];
   })();
 
   return (
@@ -77,7 +80,18 @@ export function BottomNav() {
       )}
       aria-label="Bottom navigation"
     >
-      <div className="mx-auto grid max-w-xl grid-cols-5 gap-1 px-2 py-2">
+      <div
+        className={cn(
+          "mx-auto grid max-w-xl gap-1 px-2 py-2",
+          items.length === 6
+            ? "grid-cols-6"
+            : items.length === 4
+              ? "grid-cols-4"
+              : items.length === 1
+                ? "grid-cols-1"
+                : "grid-cols-5",
+        )}
+      >
         {items.map((item) => {
           const Icon = item.icon;
           const active = (item.isActive ?? ((loc) => defaultIsActive(loc, item.href)))(
@@ -95,7 +109,7 @@ export function BottomNav() {
                 aria-current={active ? "page" : undefined}
               >
                 <Icon className="h-5 w-5" />
-                <span className="leading-none">{item.labelTa}</span>
+                <span className="leading-none">{t(item.labelKey)}</span>
               </a>
             </Link>
           );
@@ -104,4 +118,3 @@ export function BottomNav() {
     </nav>
   );
 }
-

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Form } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
@@ -15,11 +16,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2,
-  CreditCard,
   Phone,
   Mail,
   MapPin,
-  Upload,
   Trash2,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -41,12 +40,7 @@ const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   phone: z.string().min(10, "Invalid phone number"),
   email: z.string().email("Invalid email"),
-  addressStreet: z.string().optional(),
   addressLandmark: z.string().optional(),
-  addressCity: z.string().optional(),
-  addressState: z.string().optional(),
-  addressPostalCode: z.string().optional(),
-  addressCountry: z.string().optional(),
 });
 
 export default function CustomerProfile() {
@@ -62,12 +56,7 @@ export default function CustomerProfile() {
       name: user?.name || "",
       phone: user?.phone || "",
       email: user?.email || "",
-      addressStreet: user?.addressStreet || "",
       addressLandmark: user?.addressLandmark || "",
-      addressCity: user?.addressCity || "",
-      addressState: user?.addressState || "",
-      addressPostalCode: user?.addressPostalCode || "",
-      addressCountry: user?.addressCountry || "",
     },
   });
 
@@ -229,39 +218,22 @@ export default function CustomerProfile() {
                       </Label>
                       <Input {...form.register("email")} type="email" />
                     </div>
-                    <div className="space-y-2">
-                      <div className="space-y-2 md:col-span-2">
-                        <Label htmlFor="addressStreet">
-                          <span className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4" />
-                            Street Address
-                          </span>
-                        </Label>
-                        <Input {...form.register("addressStreet")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="addressLandmark">Landmark</Label>
-                        <Input
-                          {...form.register("addressLandmark")}
-                          placeholder='Example: "Opposite the temple"'
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="addressCity">City</Label>
-                        <Input {...form.register("addressCity")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="addressState">State</Label>
-                        <Input {...form.register("addressState")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="addressPostalCode">Postal Code</Label>
-                        <Input {...form.register("addressPostalCode")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="addressCountry">Country</Label>
-                        <Input {...form.register("addressCountry")} />
-                      </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="addressLandmark">
+                        <span className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4" />
+                          Landmark / House Color
+                        </span>
+                      </Label>
+                      <Textarea
+                        {...form.register("addressLandmark")}
+                        placeholder='Example: "Opposite Government School, Blue House."'
+                        className="min-h-[120px] text-base"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Use a nearby landmark locals recognize (school, temple,
+                        ration shop, main bus stop).
+                      </p>
                     </div>
                   </div>
                   <Button
@@ -282,8 +254,8 @@ export default function CustomerProfile() {
 
           <ProfileLocationSection
             user={user}
-            title="My Saved Location"
-            description="Use the map or your device GPS to remember where you usually shop from."
+            title="GPS Pin"
+            description="Drop a pin with your phone GPS so shops can find you faster."
             className="md:col-span-2"
           />
 

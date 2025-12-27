@@ -54,6 +54,7 @@ const MemoryStore = createMemoryStore(session);
 
 export type OrderStatus =
   | "pending"
+  | "awaiting_customer_agreement"
   | "cancelled"
   | "confirmed"
   | "processing"
