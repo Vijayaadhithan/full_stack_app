@@ -149,7 +149,7 @@ describe("auth setup integration", () => {
       password: hashed,
       role: "customer",
       name: "Login User",
-      phone: "",
+      phone: "9000000015",
       email: "login@example.com",
     }));
     mock.method(storage, "getUserByEmail", async () => undefined);

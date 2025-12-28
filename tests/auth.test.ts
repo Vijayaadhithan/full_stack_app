@@ -23,7 +23,7 @@ await memStorage.createUser({
   password: hashed,
   role: "customer",
   name: "Test User",
-  phone: "",
+  phone: "9000000001",
   email: "test@example.com",
 });
 

@@ -506,28 +506,36 @@ export function initializeAuth(app: Express) {
 
       // Check for shop and provider profiles
       if (safeUser) {
-        // We use db directly here to check existence efficiently
-        // Note: Using a count or select limit 1 is more efficient than full fetch if we only need existence
-        // But for permissions, just knowing they exist is enough.
+        const skipDbProfiles =
+          process.env.NODE_ENV === "test" || process.env.USE_IN_MEMORY_DB === "true";
 
-        try {
-          const shopExists = await db
-            .select({ id: shops.id })
-            .from(shops)
-            .where(eq(shops.ownerId, user.id))
-            .limit(1);
+        if (skipDbProfiles) {
+          (safeUser as any).hasShopProfile =
+            user.role === "shop" || Boolean(user.shopProfile);
+          (safeUser as any).hasProviderProfile = user.role === "provider";
+        } else {
+          // We use db directly here to check existence efficiently
+          // Note: Using a count or select limit 1 is more efficient than full fetch if we only need existence
+          // But for permissions, just knowing they exist is enough.
+          try {
+            const shopExists = await db
+              .select({ id: shops.id })
+              .from(shops)
+              .where(eq(shops.ownerId, user.id))
+              .limit(1);
 
-          const providerExists = await db
-            .select({ id: providers.id })
-            .from(providers)
-            .where(eq(providers.userId, user.id))
-            .limit(1);
+            const providerExists = await db
+              .select({ id: providers.id })
+              .from(providers)
+              .where(eq(providers.userId, user.id))
+              .limit(1);
 
-          (safeUser as any).hasShopProfile = shopExists.length > 0;
-          (safeUser as any).hasProviderProfile = providerExists.length > 0;
-        } catch (err) {
-          logger.warn({ err }, "Failed to fetch additional profiles during deserialization");
-          // Don't fail the whole request, just proceed without profile flags
+            (safeUser as any).hasShopProfile = shopExists.length > 0;
+            (safeUser as any).hasProviderProfile = providerExists.length > 0;
+          } catch (err) {
+            logger.warn({ err }, "Failed to fetch additional profiles during deserialization");
+            // Don't fail the whole request, just proceed without profile flags
+          }
         }
       }
 

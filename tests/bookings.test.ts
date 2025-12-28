@@ -23,7 +23,7 @@ const customer = await memStorage.createUser({
   password: customerPassword,
   role: "customer",
   name: "Cust",
-  phone: "",
+  phone: "9000000002",
   email: "vijaythriller11@gmail.com",
 });
 await memStorage.updateUser(customer.id, {
@@ -35,7 +35,7 @@ const provider = await memStorage.createUser({
   password: "",
   role: "provider",
   name: "Prov",
-  phone: "",
+  phone: "9000000003",
   email: "vjaadhi2799@gmail.com",
 });
 await memStorage.updateUser(provider.id, {
@@ -46,7 +46,7 @@ const unverifiedCustomer = await memStorage.createUser({
   password: customerPassword,
   role: "customer",
   name: "Cust Unverified",
-  phone: "",
+  phone: "9000000004",
   email: "unverified_customer@example.com",
 });
 const service = await memStorage.createService({

@@ -24,7 +24,7 @@ const verifiedProvider = await memStorage.createUser({
   password: hashedPassword,
   role: "provider",
   name: "Verified Provider",
-  phone: "",
+  phone: "9000000011",
   email: "verified_provider@example.com",
 });
 await memStorage.updateUser(verifiedProvider.id, {
@@ -36,7 +36,7 @@ const unverifiedProvider = await memStorage.createUser({
   password: hashedPassword,
   role: "provider",
   name: "Unverified Provider",
-  phone: "",
+  phone: "9000000012",
   email: "unverified_provider@example.com",
 });
 
@@ -45,7 +45,7 @@ const verifiedShop = await memStorage.createUser({
   password: hashedPassword,
   role: "shop",
   name: "Verified Shop",
-  phone: "",
+  phone: "9000000013",
   email: "verified_shop@example.com",
 });
 await memStorage.updateUser(verifiedShop.id, {
@@ -57,7 +57,7 @@ const unverifiedShop = await memStorage.createUser({
   password: hashedPassword,
   role: "shop",
   name: "Unverified Shop",
-  phone: "",
+  phone: "9000000014",
   email: "unverified_shop@example.com",
 });
 
@@ -147,4 +147,3 @@ describe("Profile verification guard rails", () => {
     assert.equal(res.body.shopId, verifiedShop.id);
   });
 });
-
