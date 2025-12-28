@@ -128,13 +128,13 @@ export default function ShopDetails() {
     isError: isProductsError,
     error: productsError,
   } = useQuery<ShopProductListResponse, Error>({
-    queryKey: ["/api/products", id],
+    queryKey: ["/api/products", shop?.id],
     queryFn: async () => {
-      if (!id) {
+      if (!shop?.id) {
         throw new Error("Missing shop id");
       }
       const params = new URLSearchParams({
-        shopId: id,
+        shopId: String(shop.id), // Use shop.id (owner's user ID) for product lookup
         pageSize: "100",
       });
       const res = await apiRequest(
@@ -148,7 +148,7 @@ export default function ShopDetails() {
       console.log("Successfully fetched shop products:", data);
       return data;
     },
-    enabled: !!id,
+    enabled: !!shop?.id, // Only fetch when shop data is available
   });
 
   if (isProductsError) {
@@ -183,10 +183,10 @@ export default function ShopDetails() {
       const optimisticCart = previousCart
         ? existingItem
           ? previousCart.map((item) =>
-              item.product.id === product.id
-                ? { ...item, quantity: item.quantity + 1 }
-                : item,
-            )
+            item.product.id === product.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item,
+          )
           : [...previousCart, { product, quantity: 1 }]
         : [{ product, quantity: 1 }];
 
@@ -385,18 +385,18 @@ export default function ShopDetails() {
         {/* Shop Header */}
         <Card className="mb-8 border-0 bg-gradient-to-br from-emerald-50 via-white to-slate-50 shadow-sm">
           <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row gap-6 items-start">
-                  <div className="h-24 w-24 rounded-2xl bg-primary/10 flex items-center justify-center overflow-hidden">
-                    {shop.profilePicture ? (
-                      <img
-                        src={shop.profilePicture}
-                        alt={
-                          shop.shopProfile?.shopName ||
-                          shop.name ||
-                          t("shop_alt_fallback")
-                        }
-                        className="h-full w-full object-cover"
-                      />
+            <div className="flex flex-col md:flex-row gap-6 items-start">
+              <div className="h-24 w-24 rounded-2xl bg-primary/10 flex items-center justify-center overflow-hidden">
+                {shop.profilePicture ? (
+                  <img
+                    src={shop.profilePicture}
+                    alt={
+                      shop.shopProfile?.shopName ||
+                      shop.name ||
+                      t("shop_alt_fallback")
+                    }
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <Store className="h-12 w-12 text-primary" />
                 )}
@@ -511,7 +511,7 @@ export default function ShopDetails() {
                                   ((parseFloat(product.mrp) -
                                     parseFloat(product.price)) /
                                     parseFloat(product.mrp)) *
-                                    100,
+                                  100,
                                 )}
                                 % OFF
                               </div>

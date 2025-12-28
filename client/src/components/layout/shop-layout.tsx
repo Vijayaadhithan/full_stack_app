@@ -27,6 +27,9 @@ import { NotificationsCenter } from "@/components/notifications-center";
 import { LanguageSelector } from "@/components/language-selector";
 import { useAuth } from "@/hooks/use-auth";
 import { useLanguage } from "@/contexts/language-context";
+import { ProfileSwitcher } from "@/components/ProfileSwitcher";
+import { isShopUser, isWorkerUser } from "@/lib/role-access";
+import { useShopContext } from "@/hooks/use-shop-context";
 
 type NavConfig = {
   labelKey: string;
@@ -84,20 +87,24 @@ const NAV_ITEMS: NavConfig[] = [
 export function ShopLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, logoutMutation } = useAuth();
+  const { shopName } = useShopContext();
   const { t } = useLanguage();
   const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
+  const isShopOwner = isShopUser(user);
+  const isWorker = isWorkerUser(user);
+  const displayShopName = shopName || t("my_shop");
 
   const navigation = React.useMemo(() => {
     return NAV_ITEMS.filter((item) => {
-      if (item.shopOnly && user?.role !== "shop") {
+      if (item.shopOnly && !isShopOwner) {
         return false;
       }
-      if (item.hideForWorker && user?.role === "worker") {
+      if (item.hideForWorker && isWorker) {
         return false;
       }
       return true;
     });
-  }, [user?.role]);
+  }, [isShopOwner, isWorker]);
 
   const handleLogout = React.useCallback(() => {
     logoutMutation.mutate();
@@ -128,7 +135,7 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:fixed md:inset-y-0 md:left-0 md:flex md:w-64 md:flex-col md:border-r md:bg-card">
         <div className="border-b p-6">
           <h2 className="text-lg font-semibold">
-            {user?.shopProfile?.shopName || t("my_shop")}
+            {displayShopName}
           </h2>
           {user?.name && (
             <p className="mt-1 text-sm text-muted-foreground">{user.name}</p>
@@ -158,7 +165,7 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
                   <SheetContent side="left" className="flex flex-col p-0">
                     <SheetHeader className="px-4 py-4 text-left">
                       <SheetTitle className="text-base font-semibold">
-                        {user?.shopProfile?.shopName || t("my_shop")}
+                        {displayShopName}
                       </SheetTitle>
                       {user?.name && (
                         <p className="text-sm text-muted-foreground truncate">
@@ -170,6 +177,9 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
                     <ScrollArea className="flex-1">
                       <div className="space-y-1 px-2 py-4">
                         {renderNavItems(() => setIsMobileNavOpen(false))}
+                      </div>
+                      <div className="px-2 py-2">
+                        <ProfileSwitcher />
                       </div>
                     </ScrollArea>
                     <Separator />
@@ -191,10 +201,13 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
                 </Sheet>
               )}
               <span className="text-base font-semibold leading-none">
-                {user?.shopProfile?.shopName || t("my_shop")}
+                {displayShopName}
               </span>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
+              <div className="hidden sm:block">
+                <ProfileSwitcher />
+              </div>
               <LanguageSelector />
               <NotificationsCenter />
               <div className="hidden items-center gap-2 truncate sm:flex">

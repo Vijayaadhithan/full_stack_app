@@ -65,9 +65,11 @@ import {
   PaymentMethodType,
   PaymentMethodSchema,
   ShopProfile,
+  Shop,
   shopWorkers,
   TimeSlotLabel,
   timeSlotLabelSchema,
+  shops,
 } from "@shared/schema";
 import { featureFlags, platformFees } from "@shared/config";
 import { eq, and, sql, inArray } from "drizzle-orm";
@@ -110,6 +112,10 @@ import {
   notifyNotificationChange,
   registerRealtimeClient,
 } from "./realtime";
+import {
+  hasRoleAccess,
+  isProviderUser,
+} from "./security/roleAccess";
 import { createCsrfProtection } from "./security/csrfProtection";
 import { formatValidationError } from "./utils/zod";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
@@ -137,6 +143,7 @@ const locationUpdateSchema = z
   .object({
     latitude: z.coerce.number().min(-90).max(90),
     longitude: z.coerce.number().min(-180).max(180),
+    context: z.string().optional(),
   })
   .strict();
 
@@ -210,10 +217,12 @@ type RequestWithAuth = Request & {
   session?: (Request["session"] & { adminId?: string | null }) | null;
 };
 
-function buildPublicShopResponse(shop: User) {
+function buildPublicShopResponse(shop: User & { ownerId?: number; shopTableId?: number }) {
   const modes = resolveShopModes(shop.shopProfile);
   return {
-    id: shop.id,
+    id: shop.id, // This is the user ID (owner), used for product lookups
+    ownerId: shop.ownerId ?? shop.id, // Explicit owner ID for clarity
+    shopTableId: shop.shopTableId, // The shops table row ID (if available)
     name: shop.name,
     phone: shop.phone ?? null,
     shopProfile: shop.shopProfile ?? null,
@@ -236,6 +245,65 @@ function buildPublicShopResponse(shop: User) {
     openOrderMode: modes.openOrderMode,
     allowPayLater: modes.allowPayLater,
   };
+}
+
+function buildShopProfileFromRecord(shop: Shop): ShopProfile {
+  return {
+    shopName: shop.shopName,
+    description: shop.description ?? "",
+    businessType: shop.businessType ?? "",
+    gstin: shop.gstin ?? null,
+    shopAddressStreet: shop.shopAddressStreet ?? undefined,
+    shopAddressArea: shop.shopAddressArea ?? undefined,
+    shopAddressCity: shop.shopAddressCity ?? undefined,
+    shopAddressState: shop.shopAddressState ?? undefined,
+    shopAddressPincode: shop.shopAddressPincode ?? undefined,
+    shopLocationLat: shop.shopLocationLat ? Number(shop.shopLocationLat) : undefined,
+    shopLocationLng: shop.shopLocationLng ? Number(shop.shopLocationLng) : undefined,
+    workingHours: shop.workingHours ?? { from: "09:00", to: "18:00", days: [] },
+    shippingPolicy: shop.shippingPolicy ?? undefined,
+    returnPolicy: shop.returnPolicy ?? undefined,
+    catalogModeEnabled: shop.catalogModeEnabled ?? false,
+    openOrderMode: shop.openOrderMode ?? false,
+    allowPayLater: shop.allowPayLater ?? false,
+    payLaterWhitelist: shop.payLaterWhitelist ?? [],
+  };
+}
+
+function hydrateShopOwner(owner: User, shop: Shop) {
+  return {
+    ...owner,
+    role: "shop" as const,
+    ownerId: shop.ownerId,
+    shopTableId: shop.id,
+    shopProfile: buildShopProfileFromRecord(shop),
+    latitude: shop.shopLocationLat ?? owner.latitude,
+    longitude: shop.shopLocationLng ?? owner.longitude,
+    addressStreet: shop.shopAddressStreet ?? owner.addressStreet,
+    addressCity: shop.shopAddressCity ?? owner.addressCity,
+    addressState: shop.shopAddressState ?? owner.addressState,
+    addressPostalCode: shop.shopAddressPincode ?? owner.addressPostalCode,
+  };
+}
+
+async function fetchShopOwnerWithProfile(
+  ownerId: number,
+  ownerOverride?: User | null,
+): Promise<(User & { ownerId?: number; shopTableId?: number }) | null> {
+  const owner = ownerOverride ?? (await storage.getUser(ownerId));
+  if (!owner) return null;
+  const records = await db
+    .select()
+    .from(shops)
+    .where(eq(shops.ownerId, ownerId))
+    .limit(1);
+  const shop = records[0];
+  if (shop) {
+    return hydrateShopOwner(owner, shop);
+  }
+
+  if (owner.shopProfile) return owner;
+  return null;
 }
 
 declare global {
@@ -1368,10 +1436,10 @@ function requireAuth(req: any, res: any, next: any) {
 
 function requireRole(roles: string[]) {
   return (req: any, res: any, next: any) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!hasRoleAccess(req.user, roles)) {
       return res.status(403).send("Forbidden");
     }
-    next();
+    return next();
   };
 }
 
@@ -1660,7 +1728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const magicLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/magic-login?token=${rawToken}`;
         const emailContent = getMagicLinkEmailContent(
-          user.name || user.username,
+          user.name || user.username || "User",
           magicLink,
         );
 
@@ -1793,7 +1861,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const resetLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${rawToken}`;
         const emailContent = getPasswordResetEmailContent(
-          user.name || user.username,
+          user.name || user.username || "User",
           resetLink,
         );
 
@@ -2176,7 +2244,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Scenario 1: Customer reschedules
       if (
         bookingDate &&
-        currentUser.role === "customer" &&
         booking.customerId === currentUser.id
       ) {
         logger.info(
@@ -2212,7 +2279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Scenario 2: Provider reschedules
       else if (
         bookingDate &&
-        currentUser.role === "provider" &&
+        isProviderUser(currentUser) &&
         service.providerId === currentUser.id
       ) {
         logger.info(
@@ -2251,7 +2318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Scenario 3: Provider accepts/rejects a booking (including a customer's reschedule request)
       else if (
         status &&
-        currentUser.role === "provider" &&
+        isProviderUser(currentUser) &&
         service.providerId === currentUser.id
       ) {
         logger.info(
@@ -2309,7 +2376,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Scenario 3: Customer cancels (can be expanded)
       else if (
         status === "cancelled" &&
-        currentUser.role === "customer" &&
         booking.customerId === currentUser.id
       ) {
         logger.info(
@@ -2455,10 +2521,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(
     "/api/bookings/provider/history",
     requireAuth,
+    requireRole(["provider"]),
     async (req, res) => {
-      if (req.user!.role !== "provider") {
-        return res.status(403).send("Only providers can view booking history");
-      }
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
       try {
@@ -2615,21 +2679,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json(formatValidationError(parsed.error));
     }
 
-    const userId = Number(req.user?.id);
-    if (!Number.isFinite(userId)) {
-      return res.status(400).json({ message: "Invalid user identifier" });
-    }
-
-    const normalizedLatitude = normalizeCoordinate(parsed.data.latitude);
-    const normalizedLongitude = normalizeCoordinate(parsed.data.longitude);
-    if (normalizedLatitude === null || normalizedLongitude === null) {
-      return res.status(400).json({ message: "Invalid coordinates" });
-    }
-
     try {
+      const { latitude, longitude, context } = req.body;
+      logger.info({ body: req.body }, "Location Update Request Body");
+      logger.info({ latitude, longitude, context, lat: Number(latitude), lng: Number(longitude) }, "Parsed values");
+
+      const lat = Number(latitude);
+      const lng = Number(longitude);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        const msg = `Invalid coordinates. Received: lat=${latitude}, lng=${longitude}, typeLat=${typeof latitude}, typeLng=${typeof longitude}`;
+        logger.warn(msg);
+        return res.status(400).json({
+          message: msg,
+          debug: { body: req.body }
+        });
+      }
+
+      const userId = req.user!.id;
+
+      if (context === "shop" && (req.user?.role === "shop" || req.user?.hasShopProfile)) {
+        // Update Shop Location
+        await db
+          .update(shops)
+          .set({
+            shopLocationLat: String(lat),
+            shopLocationLng: String(lng),
+            updatedAt: new Date()
+          })
+          .where(eq(shops.ownerId, userId));
+
+        // Invalidate shop cache if needed
+        await invalidateCache(`shop_detail_${userId}`);
+
+        // Return user as is, or fetch updated shop to return?
+        // Frontend expects { user } response to update cache, but we just updated shop.
+        // We can return the user object as is since user's personal location didn't change.
+        return res.json({ message: "Shop location updated", user: req.user });
+      }
+
+      // Default: Update User Personal Location
+      // We use the raw values as they are checked for number/finite above
       const updatedUser = await storage.updateUser(userId, {
-        latitude: normalizedLatitude,
-        longitude: normalizedLongitude,
+        latitude: String(lat),
+        longitude: String(lng),
       });
       const safeUser = sanitizeUser(updatedUser);
       if (!safeUser) {
@@ -2637,8 +2730,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (req.user) {
-        req.user.latitude = normalizedLatitude as any;
-        req.user.longitude = normalizedLongitude as any;
+        req.user.latitude = String(lat) as any;
+        req.user.longitude = String(lng) as any;
       }
 
       res.json({
@@ -2663,33 +2756,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     const { lat, lng, radius } = parsed.data;
+    const currentUserId = req.user?.id as number | undefined;
 
+    // Query shops table with haversine distance calculation
+    // Use COALESCE to fall back to user coordinates if shop coordinates are not set
     const distanceExpr = sql`
       6371 * 2 * asin(
         sqrt(
-          power(sin((radians(${users.latitude}) - radians(${lat})) / 2), 2) +
-          cos(radians(${lat})) * cos(radians(${users.latitude})) *
-          power(sin((radians(${users.longitude}) - radians(${lng})) / 2), 2)
+          power(sin((radians(CAST(COALESCE(${shops.shopLocationLat}, ${users.latitude}) AS numeric)) - radians(${lat})) / 2), 2) +
+          cos(radians(${lat})) * cos(radians(CAST(COALESCE(${shops.shopLocationLat}, ${users.latitude}) AS numeric))) *
+          power(sin((radians(CAST(COALESCE(${shops.shopLocationLng}, ${users.longitude}) AS numeric)) - radians(${lng})) / 2), 2)
         )
       )
     `;
 
-    const result = await db
+    // Query shops table joined with users
+    const shopRecords = await db
       .select()
-      .from(users)
+      .from(shops)
+      .leftJoin(users, eq(shops.ownerId, users.id))
       .where(
         and(
-          inArray(users.role, NEARBY_USER_ROLES),
-          sql`${users.latitude} IS NOT NULL`,
-          sql`${users.longitude} IS NOT NULL`,
+          // At least one set of coordinates must be available (shop or user)
+          sql`(${shops.shopLocationLat} IS NOT NULL OR ${users.latitude} IS NOT NULL)`,
+          sql`(${shops.shopLocationLng} IS NOT NULL OR ${users.longitude} IS NOT NULL)`,
           sql`${distanceExpr} <= ${radius}`,
+          // Exclude own shop if user is logged in
+          currentUserId !== undefined
+            ? sql`${shops.ownerId} != ${currentUserId}`
+            : sql`TRUE`
         ),
       )
       .orderBy(distanceExpr)
       .limit(NEARBY_SEARCH_LIMIT);
 
-    res.json(sanitizeUserList(result));
+    // Transform to PublicShop format for frontend compatibility
+    const publicShops = shopRecords
+      .filter(record => record.users !== null)
+      .map(record => {
+        const shop = record.shops;
+        const owner = record.users!;
+        // Build a User-like object similar to getShops()
+        return buildPublicShopResponse({
+          ...owner,
+          role: "shop" as const,
+          shopProfile: {
+            shopName: shop.shopName,
+            description: shop.description || "",
+            businessType: shop.businessType || "",
+            gstin: shop.gstin,
+            workingHours: shop.workingHours || { from: "09:00", to: "18:00", days: [] },
+            shippingPolicy: shop.shippingPolicy || undefined,
+            returnPolicy: shop.returnPolicy || undefined,
+            catalogModeEnabled: shop.catalogModeEnabled ?? false,
+            openOrderMode: shop.openOrderMode ?? false,
+            allowPayLater: shop.allowPayLater ?? false,
+            payLaterWhitelist: shop.payLaterWhitelist || [],
+          },
+          latitude: shop.shopLocationLat || owner.latitude,
+          longitude: shop.shopLocationLng || owner.longitude,
+          addressStreet: shop.shopAddressStreet || owner.addressStreet,
+          addressCity: shop.shopAddressCity || owner.addressCity,
+          addressState: shop.shopAddressState || owner.addressState,
+          addressPostalCode: shop.shopAddressPincode || owner.addressPostalCode,
+        });
+      });
+
+    res.json(publicShops);
   });
+
 
   const profileUpdateSchema = insertUserSchema.partial().extend({
     upiId: z
@@ -2715,11 +2850,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json(formatValidationError(result.error));
       }
 
-      // Allow both providers and shops to update UPI fields
-      if (!["provider", "shop"].includes(req.user!.role)) {
-        delete (result.data as any).upiId;
-        delete (result.data as any).upiQrCodeUrl;
-      }
+      // All users can update UPI fields now (for receiving payments)
+      // Previously only allowed for provider/shop roles
 
       // Sanitize paymentMethods using shared schema
       let updateData: Partial<User> = { ...result.data } as Partial<User>;
@@ -2740,6 +2872,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       const updatedUser = await storage.updateUser(userId, updateData);
+
+      if (req.user?.role === "shop" || req.user?.hasShopProfile) {
+        const shopProfileUpdate = updateData.shopProfile as ShopProfile | undefined;
+        const shopUpdate: Partial<typeof shops.$inferInsert> = {};
+
+        if (shopProfileUpdate) {
+          if (shopProfileUpdate.shopName !== undefined) {
+            shopUpdate.shopName = shopProfileUpdate.shopName;
+          }
+          if (shopProfileUpdate.description !== undefined) {
+            shopUpdate.description = shopProfileUpdate.description;
+          }
+          if (shopProfileUpdate.businessType !== undefined) {
+            shopUpdate.businessType = shopProfileUpdate.businessType;
+          }
+          if (shopProfileUpdate.gstin !== undefined) {
+            shopUpdate.gstin = shopProfileUpdate.gstin;
+          }
+          if (shopProfileUpdate.workingHours !== undefined) {
+            shopUpdate.workingHours = shopProfileUpdate.workingHours;
+          }
+          if (shopProfileUpdate.shippingPolicy !== undefined) {
+            shopUpdate.shippingPolicy = shopProfileUpdate.shippingPolicy;
+          }
+          if (shopProfileUpdate.returnPolicy !== undefined) {
+            shopUpdate.returnPolicy = shopProfileUpdate.returnPolicy;
+          }
+          if (shopProfileUpdate.catalogModeEnabled !== undefined) {
+            shopUpdate.catalogModeEnabled = shopProfileUpdate.catalogModeEnabled;
+          }
+          if (shopProfileUpdate.openOrderMode !== undefined) {
+            shopUpdate.openOrderMode = shopProfileUpdate.openOrderMode;
+          }
+          if (shopProfileUpdate.allowPayLater !== undefined) {
+            shopUpdate.allowPayLater = shopProfileUpdate.allowPayLater;
+          }
+          if (shopProfileUpdate.payLaterWhitelist !== undefined) {
+            shopUpdate.payLaterWhitelist = shopProfileUpdate.payLaterWhitelist;
+          }
+          if (shopProfileUpdate.shopAddressStreet !== undefined) {
+            shopUpdate.shopAddressStreet = shopProfileUpdate.shopAddressStreet;
+          }
+          if (shopProfileUpdate.shopAddressArea !== undefined) {
+            shopUpdate.shopAddressArea = shopProfileUpdate.shopAddressArea;
+          }
+          if (shopProfileUpdate.shopAddressCity !== undefined) {
+            shopUpdate.shopAddressCity = shopProfileUpdate.shopAddressCity;
+          }
+          if (shopProfileUpdate.shopAddressState !== undefined) {
+            shopUpdate.shopAddressState = shopProfileUpdate.shopAddressState;
+          }
+          if (shopProfileUpdate.shopAddressPincode !== undefined) {
+            shopUpdate.shopAddressPincode = shopProfileUpdate.shopAddressPincode;
+          }
+          if (shopProfileUpdate.shopLocationLat !== undefined) {
+            shopUpdate.shopLocationLat = String(shopProfileUpdate.shopLocationLat);
+          }
+          if (shopProfileUpdate.shopLocationLng !== undefined) {
+            shopUpdate.shopLocationLng = String(shopProfileUpdate.shopLocationLng);
+          }
+        }
+
+        if (updateData.addressStreet !== undefined) {
+          shopUpdate.shopAddressStreet = updateData.addressStreet ?? null;
+        }
+        if (updateData.addressCity !== undefined) {
+          shopUpdate.shopAddressCity = updateData.addressCity ?? null;
+        }
+        if (updateData.addressState !== undefined) {
+          shopUpdate.shopAddressState = updateData.addressState ?? null;
+        }
+        if (updateData.addressPostalCode !== undefined) {
+          shopUpdate.shopAddressPincode = updateData.addressPostalCode ?? null;
+        }
+
+        if (Object.keys(shopUpdate).length > 0) {
+          await db
+            .update(shops)
+            .set({ ...shopUpdate, updatedAt: new Date() })
+            .where(eq(shops.ownerId, userId));
+        }
+      }
+
       const safeUser = sanitizeUser(updatedUser);
 
       if (!safeUser) {
@@ -2749,7 +2964,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (req.user) Object.assign(req.user, safeUser);
-      if (req.user?.role === "shop") {
+      if (req.user?.role === "shop" || req.user?.hasShopProfile) {
         await invalidateCache(`shop_detail_${userId}`);
       }
       res.json(safeUser);
@@ -2761,6 +2976,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message:
             error instanceof Error ? error.message : "Failed to update user",
         });
+    }
+  });
+
+  // Get current shop for the logged-in user
+  app.get("/api/shops/current", requireAuth, async (req, res) => {
+    try {
+      const shop = await db.query.shops.findFirst({
+        where: eq(shops.ownerId, req.user!.id),
+      });
+
+      if (!shop) {
+        return res.status(404).json({ message: "Shop not found" });
+      }
+
+      res.json(shop);
+    } catch (error) {
+      logger.error("Error fetching current shop:", error);
+      res.status(500).json({ message: "Failed to fetch shop" });
     }
   });
 
@@ -2776,12 +3009,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         Object.entries(parsedQuery.data).filter(([, value]) => value !== undefined),
       );
 
-      const shops = await storage.getShops(filters);
+      // Exclude own shop if user is logged in
+      const currentUserId = (req.user?.id as number) || undefined;
+      const queryFilters = {
+        ...filters,
+        excludeOwnerId: currentUserId,
+      };
+
+      logger.info({ currentUserId, queryFilters }, "[/api/shops] Fetching shops with filters");
+      const shops = await storage.getShops(queryFilters);
+      logger.info({ shopCount: shops.length, shopRoles: shops.map(s => ({ id: s.id, role: s.role })) }, "[/api/shops] Shops returned from storage");
 
       const publicShops = shops
         .filter((shop): shop is User => Boolean(shop && shop.role === "shop"))
         .map((shop) => buildPublicShopResponse(shop as User));
 
+      logger.info({ filteredCount: publicShops.length }, "[/api/shops] Shops after role filter");
       res.json(publicShops);
     } catch (error) {
       logger.error("Error fetching shops:", error);
@@ -2790,6 +3033,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .json({
           message:
             error instanceof Error ? error.message : "Failed to fetch shops",
+        });
+    }
+  });
+
+
+  // Shop dashboard stats - MUST be defined before /api/shops/:id to avoid route conflict
+  app.get(
+    "/api/shops/dashboard-stats",
+    requireAuth,
+    requireShopOrWorkerContext(),
+    async (req, res) => {
+      try {
+        const shopContextId = req.shopContextId;
+        if (typeof shopContextId !== "number") {
+          return res.status(403).json({ message: "Unable to resolve shop context" });
+        }
+        const stats = await storage.getShopDashboardStats(shopContextId);
+        res.json(stats);
+      } catch (error) {
+        logger.error("Error fetching shop dashboard stats:", error);
+        res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch dashboard stats",
+          });
+      }
+    },
+  );
+
+  // Get shop by ID (fetches from shops table, not users)
+  app.get("/api/shops/:id", async (req, res) => {
+    try {
+      const shopId = getValidatedParam(req, "id");
+
+      // Prefer owner ID lookup, fall back to shop table ID
+      const byOwnerId = await db
+        .select()
+        .from(shops)
+        .leftJoin(users, eq(shops.ownerId, users.id))
+        .where(eq(shops.ownerId, shopId))
+        .limit(1);
+      const byShopId =
+        byOwnerId[0] ??
+        (await db
+          .select()
+          .from(shops)
+          .leftJoin(users, eq(shops.ownerId, users.id))
+          .where(eq(shops.id, shopId))
+          .limit(1))[0];
+
+      if (!byShopId) {
+        return res.status(404).json({ message: "Shop not found" });
+      }
+
+      const shop = byShopId.shops;
+      const owner = byShopId.users;
+
+      if (!owner) {
+        return res.status(404).json({ message: "Shop owner not found" });
+      }
+
+      const publicShop = buildPublicShopResponse(
+        hydrateShopOwner(owner, shop),
+      );
+
+      res.json(publicShop);
+    } catch (error) {
+      logger.error("Error fetching shop by ID:", error);
+      res
+        .status(500)
+        .json({
+          message:
+            error instanceof Error ? error.message : "Failed to fetch shop",
         });
     }
   });
@@ -2808,17 +3127,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Failed to fetch user" });
       }
 
-      if (
-        user.role === "shop" &&
-        req.user?.role === "customer"
-      ) {
+      const shopOwner = await fetchShopOwnerWithProfile(user.id, user);
+      if (shopOwner && req.user) {
         const requesterId =
           typeof req.user.id === "number"
             ? req.user.id
             : Number.parseInt(String(req.user.id), 10);
         if (Number.isFinite(requesterId)) {
           const eligibility = await evaluatePayLaterEligibility(
-            user,
+            shopOwner,
             requesterId,
           );
           (safeUser as Record<string, unknown>).payLaterEligibilityForCustomer =
@@ -2852,7 +3169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const requestWithAuth = req as RequestWithAuth;
-        if (requestWithAuth.user?.role === "shop") {
+        if (requestWithAuth.user?.role === "shop" || requestWithAuth.user?.hasShopProfile) {
           if (
             !ensureProfileVerified(
               requestWithAuth,
@@ -2928,7 +3245,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const requestWithAuth = req as RequestWithAuth;
-        if (requestWithAuth.user?.role === "shop") {
+        if (requestWithAuth.user?.role === "shop" || requestWithAuth.user?.hasShopProfile) {
           if (
             !ensureProfileVerified(
               requestWithAuth,
@@ -3383,6 +3700,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filters.lat = lat;
         filters.lng = lng;
         filters.radiusKm = radius ?? DEFAULT_NEARBY_RADIUS_KM;
+      }
+
+      // Exclude own services if user is logged in
+      const currentUserId = (req.user?.id as number) || undefined;
+      if (currentUserId) {
+        filters.excludeProviderId = currentUserId;
       }
 
       const services = await storage.getServices(filters);
@@ -5824,10 +6147,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     ? "Open order: shop owner will confirm availability."
                     : null,
                   isPayLater
-                    ? `Pay later requested by ${
-                      payLaterEligibility?.isWhitelisted
-                        ? "whitelisted customer"
-                        : "known customer"
+                    ? `Pay later requested by ${payLaterEligibility?.isWhitelisted
+                      ? "whitelisted customer"
+                      : "known customer"
                     }. Pending approval.`
                     : null,
                 ]
@@ -5896,8 +6218,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const customer = req.user!;
         const { shopId, orderText, deliveryMethod } = parsed.data;
 
-        const shop = await storage.getUser(shopId);
-        if (!shop || shop.role !== "shop") {
+        const shop = await fetchShopOwnerWithProfile(shopId);
+        if (!shop) {
           return res.status(404).json({ message: "Shop not found" });
         }
 
@@ -6025,32 +6347,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.get(
-    "/api/shops/dashboard-stats",
-    requireAuth,
-    requireShopOrWorkerContext(),
-    async (req, res) => {
-      try {
-        const shopContextId = req.shopContextId;
-        if (typeof shopContextId !== "number") {
-          return res.status(403).json({ message: "Unable to resolve shop context" });
-        }
-        const stats = await storage.getShopDashboardStats(shopContextId);
-        res.json(stats);
-      } catch (error) {
-        logger.error("Error fetching shop dashboard stats:", error);
-        res
-          .status(500)
-          .json({
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to fetch dashboard stats",
-          });
-      }
-    },
-  );
-
   const payLaterWhitelistSchema = z
     .object({
       customerId: z.number().int().positive().optional(),
@@ -6084,9 +6380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       whitelistIds,
     );
     const customerMap = new Map(
-      customers
-        .filter((customer) => customer.role === "customer")
-        .map((customer) => [customer.id, customer]),
+      customers.map((customer) => [customer.id, customer]),
     );
 
     return whitelistIds
@@ -6169,7 +6463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customer = await storage.getUserByPhone(parsed.data.phone);
         }
 
-        if (!customer || customer.role !== "customer") {
+        if (!customer) {
           return res
             .status(404)
             .json({ message: "Customer not found for Pay Later whitelist" });
@@ -6931,8 +7225,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const paymentMethod = parsedBody.data.paymentMethod;
 
-        const shop = await storage.getUser(order.shopId);
-        if (!shop || shop.role !== "shop") {
+        const shop = await fetchShopOwnerWithProfile(order.shopId);
+        if (!shop) {
           return res.status(404).json({ message: "Shop not found" });
         }
 
@@ -7182,13 +7476,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.user) {
         return res.status(401).json({ message: "Not authorized" });
       }
-      if (req.user?.role === "customer") {
-        const orderId = getValidatedParam(req, "id");
-        try {
-          const order = await storage.getOrder(orderId);
-          if (!order) return res.status(404).json({ message: "Order not found" });
-          if (order.customerId !== req.user.id)
-            return res.status(403).json({ message: "Not authorized" });
+      const orderId = getValidatedParam(req, "id");
+      try {
+        const order = await storage.getOrder(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        if (order.customerId === req.user.id) {
           const timeline = await storage.getOrderTimeline(orderId);
           return res.json(
             orderTimelineEntrySchema
@@ -7204,17 +7496,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 })),
               ),
           );
-        } catch (error) {
-          logger.error("Error fetching customer order timeline:", error);
-          return res
-            .status(500)
-            .json({
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to fetch order timeline",
-            });
         }
+      } catch (error) {
+        logger.error("Error fetching customer order timeline:", error);
+        return res
+          .status(500)
+          .json({
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch order timeline",
+          });
       }
       next();
     },
@@ -7563,22 +7855,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { items, hasMore } = await storage.getProducts(filters);
-      const list = items.map((product) => ({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        mrp: product.mrp,
-        category: product.category,
-        images: product.images ?? [],
-        shopId: product.shopId,
-        isAvailable: product.isAvailable ?? true,
-        stock: product.stock,
-        catalogModeEnabled: Boolean(product.catalogModeEnabled),
-        openOrderMode: Boolean(
-          product.openOrderMode ?? product.catalogModeEnabled,
-        ),
-        allowPayLater: Boolean(product.allowPayLater),
-      }));
+
+      // Get current user's shop ID to exclude their own products
+      let userShopId: number | null = null;
+      const currentUserId = req.user?.id as number | undefined;
+      if (currentUserId) {
+        const userShop = await storage.getShopByOwnerId(currentUserId);
+        if (userShop) {
+          userShopId = currentUserId; // products.shopId references users.id (the owner)
+        }
+      }
+
+      const list = items
+        // Filter out products from user's own shop
+        .filter(product => userShopId === null || product.shopId !== userShopId)
+        .map((product) => ({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          mrp: product.mrp,
+          category: product.category,
+          images: product.images ?? [],
+          shopId: product.shopId,
+          isAvailable: product.isAvailable ?? true,
+          stock: product.stock,
+          catalogModeEnabled: Boolean(product.catalogModeEnabled),
+          openOrderMode: Boolean(
+            product.openOrderMode ?? product.catalogModeEnabled,
+          ),
+          allowPayLater: Boolean(product.allowPayLater),
+        }));
 
       res.json({
         page: normalizedPage,
@@ -7631,7 +7937,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           createdAt:
             product.createdAt instanceof Date
               ? product.createdAt.toISOString()
-            : product.createdAt ?? null,
+              : product.createdAt ?? null,
           updatedAt:
             product.updatedAt instanceof Date
               ? product.updatedAt.toISOString()
@@ -7666,9 +7972,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (cached) {
         return res.json(cached);
       }
-      const shop = await storage.getUser(shopId);
-
-      if (!shop || shop.role !== "shop") {
+      const shop = await fetchShopOwnerWithProfile(shopId);
+      if (!shop) {
         return res.status(404).json({ message: "Shop not found" });
       }
       const payload = buildPublicShopResponse(shop);

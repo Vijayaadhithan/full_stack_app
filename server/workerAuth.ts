@@ -32,8 +32,8 @@ export function requireShopOrWorkerPermission(
       return res.status(403).json({ message: "Account suspended" });
     }
 
-    // Shop owners always allowed
-    if (req.user?.role === "shop") {
+    // Shop owners or users with shop profile always allowed
+    if (req.user?.role === "shop" || req.user?.hasShopProfile) {
       const shopId = coerceNumericId(req.user.id);
       if (!shopId) {
         return res.status(403).json({ message: "Unable to resolve shop context" });
@@ -81,7 +81,7 @@ export async function resolveShopContextId(
   req: RequestWithContext,
 ): Promise<number | null> {
   if (!req.user) return null;
-  if (req.user.role === "shop") {
+  if (req.user.role === "shop" || req.user.hasShopProfile) {
     return coerceNumericId(req.user.id);
   }
   if (req.user.role === "worker") {

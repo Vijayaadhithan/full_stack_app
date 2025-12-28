@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useLanguage } from "@/contexts/language-context";
+import { useAppMode } from "@/contexts/UserContext";
 
 type NavItem = {
   href: string;
@@ -30,15 +31,14 @@ function defaultIsActive(location: string, href: string) {
 
 export function BottomNav() {
   const { user } = useAuth();
+  const { appMode } = useAppMode();
   const { t } = useLanguage();
   const [location] = useLocation();
 
-  if (!user?.role) return null;
-
-  const role = user.role === "worker" ? "shop" : user.role;
+  if (!user) return null;
 
   const items: NavItem[] = (() => {
-    if (role === "customer") {
+    if (appMode === "CUSTOMER") {
       return [
         { href: "/customer", labelKey: "nav_home", icon: Home },
         { href: "/customer/browse-shops", labelKey: "nav_shops", icon: Store },
@@ -49,7 +49,7 @@ export function BottomNav() {
       ];
     }
 
-    if (role === "provider") {
+    if (appMode === "PROVIDER") {
       return [
         { href: "/provider", labelKey: "nav_home", icon: Home },
         { href: "/provider/services", labelKey: "nav_services", icon: Boxes },
@@ -59,7 +59,7 @@ export function BottomNav() {
       ];
     }
 
-    if (role === "shop") {
+    if (appMode === "SHOP") {
       return [
         { href: "/shop", labelKey: "nav_home", icon: Home },
         { href: "/shop/orders", labelKey: "nav_orders", icon: Receipt },
@@ -69,7 +69,7 @@ export function BottomNav() {
       ];
     }
 
-    return [{ href: `/${role}`, labelKey: "nav_home", icon: Home }];
+    return [{ href: "/", labelKey: "nav_home", icon: Home }];
   })();
 
   return (

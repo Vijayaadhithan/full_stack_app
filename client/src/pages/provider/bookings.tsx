@@ -1,4 +1,5 @@
 import React from 'react';
+import { PageHeader } from "@/components/common/page-header";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import MapLink from "@/components/location/MapLink";
 import {
@@ -412,8 +413,8 @@ export default function ProviderBookings() {
         // For reschedule, ensure we have a date
         ...(status === "rescheduled" &&
           !data.rescheduleDate && {
-            rescheduleDate: new Date().toISOString(),
-          }),
+          rescheduleDate: new Date().toISOString(),
+        }),
         // For rejection, ensure we have a reason
         ...(status === "rejected" && {
           rejectionReason: data.comments,
@@ -439,22 +440,19 @@ export default function ProviderBookings() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">
-              {t("provider_bookings_title")}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {t("provider_bookings_subtitle")}
-            </p>
-          </div>
+        <PageHeader
+          title={t("provider_bookings_title")}
+          subtitle={t("provider_bookings_subtitle")}
+          showBackButton={true}
+          backDestination="/provider"
+        >
           <Badge variant="secondary" className="w-fit">
             {t("bookings_showing_count").replace(
               "{count}",
               String(filteredCount),
             )}
           </Badge>
-        </div>
+        </PageHeader>
 
         <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
           <aside className="space-y-4">
@@ -500,11 +498,10 @@ export default function ProviderBookings() {
                         >
                           <span>{option.label}</span>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-xs ${
-                              isActive
+                            className={`rounded-full px-2 py-0.5 text-xs ${isActive
                                 ? "bg-white/20 text-white"
                                 : "bg-muted text-muted-foreground"
-                            }`}
+                              }`}
                           >
                             {count}
                           </span>
@@ -579,8 +576,7 @@ export default function ProviderBookings() {
                               </h3>
                               <Badge
                                 variant="outline"
-                                className={`text-xs font-bold uppercase tracking-wide ${
-                                  booking.status === "pending"
+                                className={`text-xs font-bold uppercase tracking-wide ${booking.status === "pending"
                                     ? "animate-pulse border-yellow-500 bg-yellow-300 text-black"
                                     : booking.status === "accepted"
                                       ? "border-green-700 bg-green-600 text-white"
@@ -589,14 +585,14 @@ export default function ProviderBookings() {
                                         : booking.status === "rescheduled"
                                           ? "border-amber-700 bg-amber-500 text-white"
                                           : booking.status ===
-                                              "awaiting_payment"
+                                            "awaiting_payment"
                                             ? "border-yellow-400 bg-yellow-200 text-black"
                                             : booking.status === "en_route"
                                               ? "border-blue-700 bg-blue-600 text-white"
                                               : booking.status === "completed"
                                                 ? "border-slate-700 bg-slate-700 text-white"
                                                 : "border-gray-300 bg-gray-100 text-gray-900"
-                                }`}
+                                  }`}
                               >
                                 {t(booking.status)}
                               </Badge>
@@ -706,329 +702,329 @@ export default function ProviderBookings() {
                               )}
                           </div>
 
-                      {(booking.status === "pending" ||
-                        booking.status ===
-                          "rescheduled_pending_provider_approval") && (
-                        <div className="flex gap-2">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className="text-green-600"
-                                onClick={() => {
-                                  setActionType("accept");
-                                  setSelectedBooking(booking);
-                                }}
-                              >
-                                <Check className="h-4 w-4 mr-2" />
-                                {t("accept")}
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>{t("accept_booking")}</DialogTitle>
-                              </DialogHeader>
-                              <Form {...form}>
-                                <form
-                                  onSubmit={form.handleSubmit(handleAction)}
-                                  className="space-y-4"
-                                >
-                                  <FormField
-                                    control={form.control}
-                                    name="comments"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>
-                                          {t("additional_instructions")}
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Textarea
-                                            {...field}
-                                            placeholder={t(
-                                              "add_any_instructions_for_the_customer",
-                                            )}
-                                          />
-                                        </FormControl>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <Button type="submit" className="w-full">
-                                    {t("accept_booking")}
-                                  </Button>
-                                </form>
-                              </Form>
-                            </DialogContent>
-                          </Dialog>
+                          {(booking.status === "pending" ||
+                            booking.status ===
+                            "rescheduled_pending_provider_approval") && (
+                              <div className="flex gap-2">
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      className="text-green-600"
+                                      onClick={() => {
+                                        setActionType("accept");
+                                        setSelectedBooking(booking);
+                                      }}
+                                    >
+                                      <Check className="h-4 w-4 mr-2" />
+                                      {t("accept")}
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>{t("accept_booking")}</DialogTitle>
+                                    </DialogHeader>
+                                    <Form {...form}>
+                                      <form
+                                        onSubmit={form.handleSubmit(handleAction)}
+                                        className="space-y-4"
+                                      >
+                                        <FormField
+                                          control={form.control}
+                                          name="comments"
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>
+                                                {t("additional_instructions")}
+                                              </FormLabel>
+                                              <FormControl>
+                                                <Textarea
+                                                  {...field}
+                                                  placeholder={t(
+                                                    "add_any_instructions_for_the_customer",
+                                                  )}
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <Button type="submit" className="w-full">
+                                          {t("accept_booking")}
+                                        </Button>
+                                      </form>
+                                    </Form>
+                                  </DialogContent>
+                                </Dialog>
 
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className="text-red-600"
-                                onClick={() => {
-                                  setActionType("reject");
-                                  setSelectedBooking(booking);
-                                }}
-                              >
-                                <X className="h-4 w-4 mr-2" />
-                                {t("reject")}
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>{t("reject_booking")}</DialogTitle>
-                              </DialogHeader>
-                              <Form {...form}>
-                                <form
-                                  onSubmit={form.handleSubmit(handleAction)}
-                                  className="space-y-4"
-                                >
-                                  <FormField
-                                    control={form.control}
-                                    name="comments"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>
-                                          {t("reason_for_rejection")}
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Textarea
-                                            {...field}
-                                            placeholder={t(
-                                              "please_provide_a_reason_for_rejecting_this_booking",
-                                            )}
-                                          />
-                                        </FormControl>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <Button
-                                    type="submit"
-                                    variant="destructive"
-                                    className="w-full"
-                                  >
-                                    {t("reject_booking")}
-                                  </Button>
-                                </form>
-                              </Form>
-                            </DialogContent>
-                          </Dialog>
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      className="text-red-600"
+                                      onClick={() => {
+                                        setActionType("reject");
+                                        setSelectedBooking(booking);
+                                      }}
+                                    >
+                                      <X className="h-4 w-4 mr-2" />
+                                      {t("reject")}
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>{t("reject_booking")}</DialogTitle>
+                                    </DialogHeader>
+                                    <Form {...form}>
+                                      <form
+                                        onSubmit={form.handleSubmit(handleAction)}
+                                        className="space-y-4"
+                                      >
+                                        <FormField
+                                          control={form.control}
+                                          name="comments"
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>
+                                                {t("reason_for_rejection")}
+                                              </FormLabel>
+                                              <FormControl>
+                                                <Textarea
+                                                  {...field}
+                                                  placeholder={t(
+                                                    "please_provide_a_reason_for_rejecting_this_booking",
+                                                  )}
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <Button
+                                          type="submit"
+                                          variant="destructive"
+                                          className="w-full"
+                                        >
+                                          {t("reject_booking")}
+                                        </Button>
+                                      </form>
+                                    </Form>
+                                  </DialogContent>
+                                </Dialog>
 
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  setActionType("reschedule");
-                                  setSelectedBooking(booking);
-                                }}
-                              >
-                                <Calendar className="h-4 w-4 mr-2" />
-                                {t("reschedule")}
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>
-                                  {t("reschedule_booking")}
-                                </DialogTitle>
-                              </DialogHeader>
-                              <Form {...form}>
-                                <form
-                                  onSubmit={form.handleSubmit(handleAction)}
-                                  className="space-y-4"
-                                >
-                                  <FormField
-                                    control={form.control}
-                                    name="rescheduleDate"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>
-                                          {t("new_date_and_time")}
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            type="datetime-local"
-                                            {...field}
-                                          />
-                                        </FormControl>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <FormField
-                                    control={form.control}
-                                    name="comments"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>
-                                          {t("reason_for_rescheduling")}
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Textarea
-                                            {...field}
-                                            placeholder={t(
-                                              "please_provide_a_reason_for_rescheduling",
-                                            )}
-                                          />
-                                        </FormControl>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <Button type="submit" className="w-full">
-                                    {t("confirm_reschedule")}
-                                  </Button>
-                                </form>
-                              </Form>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-                      )}
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => {
+                                        setActionType("reschedule");
+                                        setSelectedBooking(booking);
+                                      }}
+                                    >
+                                      <Calendar className="h-4 w-4 mr-2" />
+                                      {t("reschedule")}
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>
+                                        {t("reschedule_booking")}
+                                      </DialogTitle>
+                                    </DialogHeader>
+                                    <Form {...form}>
+                                      <form
+                                        onSubmit={form.handleSubmit(handleAction)}
+                                        className="space-y-4"
+                                      >
+                                        <FormField
+                                          control={form.control}
+                                          name="rescheduleDate"
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>
+                                                {t("new_date_and_time")}
+                                              </FormLabel>
+                                              <FormControl>
+                                                <Input
+                                                  type="datetime-local"
+                                                  {...field}
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <FormField
+                                          control={form.control}
+                                          name="comments"
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>
+                                                {t("reason_for_rescheduling")}
+                                              </FormLabel>
+                                              <FormControl>
+                                                <Textarea
+                                                  {...field}
+                                                  placeholder={t(
+                                                    "please_provide_a_reason_for_rescheduling",
+                                                  )}
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <Button type="submit" className="w-full">
+                                          {t("confirm_reschedule")}
+                                        </Button>
+                                      </form>
+                                    </Form>
+                                  </DialogContent>
+                                </Dialog>
+                              </div>
+                            )}
 
-                    {(booking.status === "accepted" ||
-                      booking.status === "rescheduled" ||
-                      booking.status === "rescheduled_by_provider") && (
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          className="text-blue-600"
-                          onClick={() => startJobMutation.mutate(booking.id)}
-                          disabled={startJobMutation.isPending}
-                        >
-                          {startJobMutation.isPending && (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          {(booking.status === "accepted" ||
+                            booking.status === "rescheduled" ||
+                            booking.status === "rescheduled_by_provider") && (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  className="text-blue-600"
+                                  onClick={() => startJobMutation.mutate(booking.id)}
+                                  disabled={startJobMutation.isPending}
+                                >
+                                  {startJobMutation.isPending && (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  )}
+                                  <Navigation className="h-4 w-4 mr-2" />
+                                  {t("start_job")}
+                                </Button>
+                              </div>
+                            )}
+
+                          {booking.status === "en_route" && (
+                            <div className="flex items-center gap-2 text-blue-700">
+                              <Navigation className="h-4 w-4" />
+                              <span>{t("on_the_way_to_customer")}</span>
+                            </div>
                           )}
-                          <Navigation className="h-4 w-4 mr-2" />
-                          {t("start_job")}
-                        </Button>
-                      </div>
-                    )}
 
-                    {booking.status === "en_route" && (
-                      <div className="flex items-center gap-2 text-blue-700">
-                        <Navigation className="h-4 w-4" />
-                        <span>{t("on_the_way_to_customer")}</span>
-                      </div>
-                    )}
-
-                    {(booking.status === "accepted" ||
-                      booking.status === "en_route") && (
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="text-green-600"
-                            onClick={() => {
-                              setActionType("complete");
-                              setSelectedBooking(booking);
-                            }}
-                          >
-                            <Check className="h-4 w-4 mr-2" />
-                            {t("complete_service")}
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>{t("complete_service")}</DialogTitle>
-                          </DialogHeader>
-                          <Form {...form}>
-                            <form
-                              onSubmit={form.handleSubmit(handleAction)}
-                              className="space-y-4"
-                            >
-                              <FormField
-                                control={form.control}
-                                name="comments"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t("service_notes")}</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        {...field}
-                                        placeholder={t(
-                                          "add_any_notes_about_the_completed_service",
+                          {(booking.status === "accepted" ||
+                            booking.status === "en_route") && (
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    className="text-green-600"
+                                    onClick={() => {
+                                      setActionType("complete");
+                                      setSelectedBooking(booking);
+                                    }}
+                                  >
+                                    <Check className="h-4 w-4 mr-2" />
+                                    {t("complete_service")}
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>{t("complete_service")}</DialogTitle>
+                                  </DialogHeader>
+                                  <Form {...form}>
+                                    <form
+                                      onSubmit={form.handleSubmit(handleAction)}
+                                      className="space-y-4"
+                                    >
+                                      <FormField
+                                        control={form.control}
+                                        name="comments"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>{t("service_notes")}</FormLabel>
+                                            <FormControl>
+                                              <Textarea
+                                                {...field}
+                                                placeholder={t(
+                                                  "add_any_notes_about_the_completed_service",
+                                                )}
+                                              />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
                                         )}
                                       />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <Button type="submit" className="w-full">
-                                {t("mark_as_complete")}
-                              </Button>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    )}
-                    {booking.status === "awaiting_payment" && (
-                      <div className="space-x-2">
-                        <p className="text-sm">
-                          {t("reference_label")}: {booking.paymentReference}
-                        </p>
-                        <Button
-                          variant="outline"
-                          className="text-blue-600"
-                          onClick={() =>
-                            confirmPaymentMutation.mutate(booking.id)
-                          }
-                        >
-                          {confirmPaymentMutation.isPending && (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          )}
-                          {t("confirm_payment_complete")}
-                        </Button>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="destructive"
-                              onClick={() => setSelectedBooking(booking)}
-                            >
-                              {t("report_issue")}
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>{t("report_issue")}</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4 pt-4">
-                              <Textarea
-                                value={disputeReason}
-                                onChange={(e) =>
-                                  setDisputeReason(e.target.value)
-                                }
-                                placeholder={t("issue_placeholder")}
-                              />
+                                      <Button type="submit" className="w-full">
+                                        {t("mark_as_complete")}
+                                      </Button>
+                                    </form>
+                                  </Form>
+                                </DialogContent>
+                              </Dialog>
+                            )}
+                          {booking.status === "awaiting_payment" && (
+                            <div className="space-x-2">
+                              <p className="text-sm">
+                                {t("reference_label")}: {booking.paymentReference}
+                              </p>
                               <Button
+                                variant="outline"
+                                className="text-blue-600"
                                 onClick={() =>
-                                  disputeMutation.mutate({
-                                    bookingId: booking.id,
-                                    reason: disputeReason,
-                                  })
+                                  confirmPaymentMutation.mutate(booking.id)
                                 }
-                                className="w-full"
                               >
-                                {disputeMutation.isPending && (
+                                {confirmPaymentMutation.isPending && (
                                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                                 )}
-                                {t("submit")}
+                                {t("confirm_payment_complete")}
                               </Button>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={() => setSelectedBooking(booking)}
+                                  >
+                                    {t("report_issue")}
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>{t("report_issue")}</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4 pt-4">
+                                    <Textarea
+                                      value={disputeReason}
+                                      onChange={(e) =>
+                                        setDisputeReason(e.target.value)
+                                      }
+                                      placeholder={t("issue_placeholder")}
+                                    />
+                                    <Button
+                                      onClick={() =>
+                                        disputeMutation.mutate({
+                                          bookingId: booking.id,
+                                          reason: disputeReason,
+                                        })
+                                      }
+                                      className="w-full"
+                                    >
+                                      {disputeMutation.isPending && (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      )}
+                                      {t("submit")}
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
                             </div>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-              );
-            })}
-          </div>
-        )}
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>

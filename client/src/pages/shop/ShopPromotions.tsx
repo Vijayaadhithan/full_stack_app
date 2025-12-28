@@ -49,6 +49,7 @@ import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { useMemo, useState } from "react";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
+import { isShopUser } from "@/lib/role-access";
 
 // Define the Promotion type based on the server schema
 type Promotion = {
@@ -92,8 +93,11 @@ type PromotionFormData = z.infer<typeof promotionFormSchema>;
 export default function ShopPromotions() {
   const { user } = useAuth();
   const { has: can, isWorker, shopId: workerShopId } = useWorkerPermissions();
-  const canManage = (user?.role === 'shop') || can('promotions:manage');
-  const listShopId = user?.role === 'shop' ? user?.id : (isWorker ? workerShopId : undefined);
+  // Allow shop role, users with shopProfile, or workers with promotions:manage permission
+  const isShopOwner = isShopUser(user);
+  const canManage = isShopOwner || can('promotions:manage');
+  // For shop owners, their user ID is also their shop context ID
+  const listShopId = isShopOwner ? user?.id : (isWorker ? workerShopId : undefined);
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(
@@ -309,134 +313,52 @@ export default function ShopPromotions() {
           <h1 className="text-2xl font-bold">Promotions & Discounts</h1>
 
           {/* Dialog trigger button */}
-          {(user?.role === 'shop' || can('promotions:manage')) && (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button
-                type="button"
-                className="w-full sm:w-auto"
-                onClick={() => {
-                  setEditingPromotion(null);
-                  form.reset({
-                    name: "",
-                    description: "",
-                    type: "percentage",
-                    value: 0,
-                    code: "",
-                    usageLimit: 0,
-                    isActive: true,
-                    shopId: user?.id ?? 0,
-                    expiryDays: 0,
-                  });
-                  setDialogOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Create Promotion
-              </Button>
-            </DialogTrigger>
-
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingPromotion ? "Edit Promotion" : "Create Promotion"}
-                </DialogTitle>
-              </DialogHeader>
-
-              {/* Promotion form */}
-              <Form {...form}>
-                <form
-                  onSubmit={form.handleSubmit(onSubmit)}
-                  className="space-y-4"
+          {(isShopOwner || can('promotions:manage')) && (
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  onClick={() => {
+                    setEditingPromotion(null);
+                    form.reset({
+                      name: "",
+                      description: "",
+                      type: "percentage",
+                      value: 0,
+                      code: "",
+                      usageLimit: 0,
+                      isActive: true,
+                      shopId: user?.id ?? 0,
+                      expiryDays: 0,
+                    });
+                    setDialogOpen(true);
+                  }}
                 >
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Promotion Name</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Promotion
+                </Button>
+              </DialogTrigger>
 
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingPromotion ? "Edit Promotion" : "Create Promotion"}
+                  </DialogTitle>
+                </DialogHeader>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {/* Discount type */}
+                {/* Promotion form */}
+                <Form {...form}>
+                  <form
+                    onSubmit={form.handleSubmit(onSubmit)}
+                    className="space-y-4"
+                  >
                     <FormField
                       control={form.control}
-                      name="type"
+                      name="name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Discount Type</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            value={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="percentage">
-                                Percentage
-                              </SelectItem>
-                              <SelectItem value="fixed_amount">
-                                Fixed Amount
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* Discount value */}
-                    <FormField
-                      control={form.control}
-                      name="value"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Discount Value</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="any"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {/* Promotion code */}
-                    <FormField
-                      control={form.control}
-                      name="code"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Promotion Code</FormLabel>
+                          <FormLabel>Promotion Name</FormLabel>
                           <FormControl>
                             <Input {...field} />
                           </FormControl>
@@ -445,81 +367,163 @@ export default function ShopPromotions() {
                       )}
                     />
 
-                    {/* Usage limit */}
                     <FormField
                       control={form.control}
-                      name="usageLimit"
+                      name="description"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Usage Limit</FormLabel>
+                          <FormLabel>Description</FormLabel>
                           <FormControl>
-                            <Input type="number" min="0" {...field} />
+                            <Textarea {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                  </div>
 
-                  {/* Expiry days */}
-                  <FormField
-                    control={form.control}
-                    name="expiryDays"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Expiry Days</FormLabel>
-                        <FormControl>
-                          <Input type="number" min="0" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          0 means "no expiry." Otherwise, the promotion will
-                          expire after that many days from creation.
-                        </p>
-                      </FormItem>
-                    )}
-                  />
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {/* Discount type */}
+                      <FormField
+                        control={form.control}
+                        name="type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Discount Type</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select type" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="percentage">
+                                  Percentage
+                                </SelectItem>
+                                <SelectItem value="fixed_amount">
+                                  Fixed Amount
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                  {/* Active switch */}
-                  <FormField
-                    control={form.control}
-                    name="isActive"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                          <FormLabel>Active</FormLabel>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
+                      {/* Discount value */}
+                      <FormField
+                        control={form.control}
+                        name="value"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Discount Value</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="any"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                  <div className="flex justify-end">
-                    <Button
-                      type="submit"
-                      disabled={
-                        createPromotionMutation.isPending ||
-                        updatePromotionMutation.isPending
-                      }
-                    >
-                      {(createPromotionMutation.isPending ||
-                        updatePromotionMutation.isPending) && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {/* Promotion code */}
+                      <FormField
+                        control={form.control}
+                        name="code"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Promotion Code</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Usage limit */}
+                      <FormField
+                        control={form.control}
+                        name="usageLimit"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Usage Limit</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {/* Expiry days */}
+                    <FormField
+                      control={form.control}
+                      name="expiryDays"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Expiry Days</FormLabel>
+                          <FormControl>
+                            <Input type="number" min="0" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            0 means "no expiry." Otherwise, the promotion will
+                            expire after that many days from creation.
+                          </p>
+                        </FormItem>
                       )}
-                      {editingPromotion
-                        ? "Update Promotion"
-                        : "Create Promotion"}
-                    </Button>
-                  </div>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+                    />
+
+                    {/* Active switch */}
+                    <FormField
+                      control={form.control}
+                      name="isActive"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                          <div className="space-y-0.5">
+                            <FormLabel>Active</FormLabel>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="flex justify-end">
+                      <Button
+                        type="submit"
+                        disabled={
+                          createPromotionMutation.isPending ||
+                          updatePromotionMutation.isPending
+                        }
+                      >
+                        {(createPromotionMutation.isPending ||
+                          updatePromotionMutation.isPending) && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                        {editingPromotion
+                          ? "Update Promotion"
+                          : "Create Promotion"}
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
           )}
         </div>
 
@@ -547,82 +551,82 @@ export default function ShopPromotions() {
                       </p>
                     </div>
                     <div className="flex items-center space-x-1">
-                      {(user?.role === 'shop' || can('promotions:manage')) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingPromotion(promotion);
-                          resetFormWithPromotion(promotion);
-                          setDialogOpen(true);
-                        }}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
+                      {(isShopOwner || can('promotions:manage')) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setEditingPromotion(promotion);
+                            resetFormWithPromotion(promotion);
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
                       )}
-                      {(user?.role === 'shop' || can('promotions:manage')) && (
-                      <AlertDialog
-                        open={
-                          deleteConfirmationOpen &&
-                          promotionToDelete?.id === promotion.id
-                        }
-                        onOpenChange={(open) => {
-                          if (!open) {
-                            setDeleteConfirmationOpen(false);
-                            setPromotionToDelete(null);
+                      {(isShopOwner || can('promotions:manage')) && (
+                        <AlertDialog
+                          open={
+                            deleteConfirmationOpen &&
+                            promotionToDelete?.id === promotion.id
                           }
-                        }}
-                      >
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => {
-                              setPromotionToDelete(promotion);
-                              setDeleteConfirmationOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This action cannot be undone. This will
-                              permanently delete the promotion "
-                              {promotionToDelete?.name}".
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel
+                          onOpenChange={(open) => {
+                            if (!open) {
+                              setDeleteConfirmationOpen(false);
+                              setPromotionToDelete(null);
+                            }
+                          }}
+                        >
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
                               onClick={() => {
-                                setDeleteConfirmationOpen(false);
-                                setPromotionToDelete(null);
+                                setPromotionToDelete(promotion);
+                                setDeleteConfirmationOpen(true);
                               }}
                             >
-                              Cancel
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              onClick={() => {
-                                if (promotionToDelete) {
-                                  deletePromotionMutation.mutate(
-                                    promotionToDelete.id,
-                                  );
-                                }
-                              }}
-                              disabled={deletePromotionMutation.isPending}
-                            >
-                              {deletePromotionMutation.isPending && (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              )}
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will
+                                permanently delete the promotion "
+                                {promotionToDelete?.name}".
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel
+                                onClick={() => {
+                                  setDeleteConfirmationOpen(false);
+                                  setPromotionToDelete(null);
+                                }}
+                              >
+                                Cancel
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                onClick={() => {
+                                  if (promotionToDelete) {
+                                    deletePromotionMutation.mutate(
+                                      promotionToDelete.id,
+                                    );
+                                  }
+                                }}
+                                disabled={deletePromotionMutation.isPending}
+                              >
+                                {deletePromotionMutation.isPending && (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                )}
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       )}
                     </div>
                   </div>
@@ -658,17 +662,17 @@ export default function ShopPromotions() {
                     <div className="space-y-0.5">
                       <span className="text-sm font-medium">Status</span>
                     </div>
-                    {(user?.role === 'shop' || can('promotions:manage')) ? (
-                    <Switch
-                      checked={promotion.isActive}
-                      onCheckedChange={(checked) =>
-                        updateStatusMutation.mutate({
-                          id: promotion.id,
-                          isActive: checked,
-                        })
-                      }
-                      disabled={updateStatusMutation.isPending}
-                    />
+                    {(isShopOwner || can('promotions:manage')) ? (
+                      <Switch
+                        checked={promotion.isActive}
+                        onCheckedChange={(checked) =>
+                          updateStatusMutation.mutate({
+                            id: promotion.id,
+                            isActive: checked,
+                          })
+                        }
+                        disabled={updateStatusMutation.isPending}
+                      />
                     ) : (
                       <div className="text-sm text-muted-foreground">No permission</div>
                     )}

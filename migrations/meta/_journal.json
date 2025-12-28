@@ -64,6 +64,20 @@
       "when": 1766062555979,
       "tag": "0008_breezy_bushwacker",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1766898970546,
+      "tag": "0009_lazy_namorita",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1766911703973,
+      "tag": "0010_soft_nekra",
+      "breakpoints": true
     }
   ]
 }

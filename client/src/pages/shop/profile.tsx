@@ -16,10 +16,11 @@ import { Button } from "@/components/ui/button";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/hooks/use-auth";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Edit, Save, Trash2 } from "lucide-react";
+import type { Shop } from "@shared/schema";
 import { z } from "zod";
 import {
   Select,
@@ -30,7 +31,7 @@ import {
 } from "@/components/ui/select";
 // import { TimePicker } from "@/components/ui/time-picker"; // Removed unused import
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -96,85 +97,73 @@ export default function ShopProfile() {
     null,
   );
 
-  const form = useForm<ShopProfileFormData>({
-    resolver: zodResolver(shopProfileSchema),
-    defaultValues: {
-      name: user?.name || "",
-      shopName: user?.shopProfile?.shopName || "",
-      description: user?.shopProfile?.description || "",
-      businessType: user?.shopProfile?.businessType || "",
-      gstin: user?.shopProfile?.gstin || "",
-      phone: user?.phone || "",
-      email: user?.email || "",
-      upiId: user?.upiId || "",
-      upiQrCodeUrl: user?.upiQrCodeUrl || "",
-      pickupAvailable: user?.pickupAvailable ?? true,
-      deliveryAvailable: user?.deliveryAvailable ?? false,
-      returnsEnabled: user?.returnsEnabled ?? true,
-      catalogModeEnabled: user?.shopProfile?.catalogModeEnabled ?? false,
-      openOrderMode:
-        user?.shopProfile?.openOrderMode ??
-        user?.shopProfile?.catalogModeEnabled ??
-        false,
-      allowPayLater: user?.shopProfile?.allowPayLater ?? false,
-      payLaterWhitelist: user?.shopProfile?.payLaterWhitelist ?? [],
-      workingHours: user?.shopProfile?.workingHours || {
+  // Fetch current shop data to get real location coordinates and profile details
+  const { data: currentShop } = useQuery<Shop | null>({
+    queryKey: ["/api/shops/current"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/shops/current");
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
+  const getFormDefaults = useCallback((shop?: Shop | null): ShopProfileFormData => ({
+    name: user?.name || "",
+    shopName: shop?.shopName ?? user?.shopProfile?.shopName ?? "",
+    description: shop?.description ?? user?.shopProfile?.description ?? "",
+    businessType: shop?.businessType ?? user?.shopProfile?.businessType ?? "",
+    gstin: shop?.gstin ?? user?.shopProfile?.gstin ?? "",
+    phone: user?.phone || "",
+    email: user?.email || "",
+    upiId: user?.upiId || "",
+    upiQrCodeUrl: user?.upiQrCodeUrl || "",
+    pickupAvailable: user?.pickupAvailable ?? true,
+    deliveryAvailable: user?.deliveryAvailable ?? false,
+    returnsEnabled: user?.returnsEnabled ?? true,
+    catalogModeEnabled:
+      shop?.catalogModeEnabled ??
+      user?.shopProfile?.catalogModeEnabled ??
+      false,
+    openOrderMode:
+      shop?.openOrderMode ??
+      user?.shopProfile?.openOrderMode ??
+      user?.shopProfile?.catalogModeEnabled ??
+      false,
+    allowPayLater:
+      shop?.allowPayLater ?? user?.shopProfile?.allowPayLater ?? false,
+    payLaterWhitelist:
+      shop?.payLaterWhitelist ?? user?.shopProfile?.payLaterWhitelist ?? [],
+    workingHours:
+      shop?.workingHours ??
+      user?.shopProfile?.workingHours ?? {
         from: "09:00",
         to: "18:00",
         days: [],
       },
-      shippingPolicy: user?.shopProfile?.shippingPolicy || "",
-      returnPolicy: user?.shopProfile?.returnPolicy || "",
-      addressStreet: user?.addressStreet || "",
-      addressCity: user?.addressCity || "",
-      addressState: user?.addressState || "",
-      addressPostalCode: user?.addressPostalCode || "",
-      addressCountry: user?.addressCountry || "",
-    },
+    shippingPolicy:
+      shop?.shippingPolicy ?? user?.shopProfile?.shippingPolicy ?? "",
+    returnPolicy: shop?.returnPolicy ?? user?.shopProfile?.returnPolicy ?? "",
+    addressStreet: shop?.shopAddressStreet ?? user?.addressStreet ?? "",
+    addressCity: shop?.shopAddressCity ?? user?.addressCity ?? "",
+    addressState: shop?.shopAddressState ?? user?.addressState ?? "",
+    addressPostalCode:
+      shop?.shopAddressPincode ?? user?.addressPostalCode ?? "",
+    addressCountry: user?.addressCountry ?? "",
+  }), [user]);
+
+  const form = useForm<ShopProfileFormData>({
+    resolver: zodResolver(shopProfileSchema),
+    defaultValues: getFormDefaults(currentShop),
   });
 
   // Update form and profile data when user data changes
   useEffect(() => {
-    if (user?.shopProfile) {
-      const shopData = {
-        name: user.name || "",
-        shopName: user.shopProfile.shopName || "",
-        description: user.shopProfile.description || "",
-        businessType: user.shopProfile.businessType || "",
-        gstin: user.shopProfile.gstin || "",
-        phone: user.phone || "",
-        email: user.email || "",
-        upiId: user.upiId || "",
-        upiQrCodeUrl: user.upiQrCodeUrl || "",
-        pickupAvailable: user.pickupAvailable ?? true,
-        deliveryAvailable: user.deliveryAvailable ?? false,
-        returnsEnabled: user.returnsEnabled ?? true,
-        catalogModeEnabled: user.shopProfile.catalogModeEnabled ?? false,
-        openOrderMode:
-          user.shopProfile.openOrderMode ??
-          user.shopProfile.catalogModeEnabled ??
-          false,
-        allowPayLater: user.shopProfile.allowPayLater ?? false,
-        payLaterWhitelist: user.shopProfile.payLaterWhitelist ?? [],
-        workingHours: user.shopProfile.workingHours || {
-          from: "09:00",
-          to: "18:00",
-          days: [],
-        },
-        shippingPolicy: user.shopProfile.shippingPolicy || "",
-        returnPolicy: user.shopProfile.returnPolicy || "",
-        addressStreet: user.addressStreet || "",
-        addressCity: user.addressCity || "",
-        addressState: user.addressState || "",
-        addressPostalCode: user.addressPostalCode || "",
-        addressCountry: user.addressCountry || "",
-        //pickupAvailable: user.pickupAvailable ?? true,
-        //deliveryAvailable: user.deliveryAvailable ?? false,
-      };
-      form.reset(shopData);
-      setProfileData(shopData);
-    }
-  }, [user, form]);
+    if (!user) return;
+    const shopData = getFormDefaults(currentShop);
+    form.reset(shopData);
+    setProfileData(shopData);
+  }, [currentShop, form, getFormDefaults, user]);
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: ShopProfileFormData) => {
@@ -231,6 +220,8 @@ export default function ShopProfile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shops/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/profiles"] });
       setProfileData(form.getValues());
       setEditMode(false);
       toast({
@@ -320,7 +311,7 @@ export default function ShopProfile() {
                   >
                     {user.verificationStatus
                       ? user.verificationStatus.charAt(0).toUpperCase() +
-                        user.verificationStatus.slice(1)
+                      user.verificationStatus.slice(1)
                       : "Not Available"}
                   </p>
                 </div>
@@ -347,6 +338,14 @@ export default function ShopProfile() {
 
         <ProfileLocationSection
           user={user}
+          initialCoordinates={
+            currentShop?.shopLocationLat && currentShop?.shopLocationLng
+              ? {
+                latitude: Number(currentShop.shopLocationLat),
+                longitude: Number(currentShop.shopLocationLng),
+              }
+              : null
+          }
           title="Store Location"
           description="Drag the pin to your storefront or service area so that nearby customers can find you."
         />

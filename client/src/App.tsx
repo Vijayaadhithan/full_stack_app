@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AdminProvider } from "@/hooks/use-admin";
 import { LanguageProvider } from "@/contexts/language-context";
+import { UserProvider } from "@/contexts/UserContext";
 import { ProtectedRoute } from "./lib/protected-route";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import {
@@ -75,8 +76,9 @@ const ResetPasswordPage = lazy(() => import("@/pages/reset-password-page")); // 
 const VerifyEmailPage = lazy(() => import("@/pages/verify-email-page"));
 
 function ClientPerformanceMetricsTracker() {
-  const { user } = useAuth();
-  useClientPerformanceMetrics(user?.role);
+  const { user, isFetching } = useAuth();
+  // Only track metrics when user is authenticated and auth is done loading
+  useClientPerformanceMetrics(isFetching ? null : user?.role);
   return null;
 }
 
@@ -223,24 +225,26 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
         <AuthProvider>
-          <ClientPerformanceMetricsTracker />
-          <RealtimeBridge />
-          <PermissionRequester />
-          <AdminProvider>
-            <ErrorBoundary>
-              {/* Use the existing Router function component here */}
-              <Suspense
-                fallback={
-                  <div className="flex min-h-screen items-center justify-center">
-                    Loading...
-                  </div>
-                }
-              >
-                <Router />
-              </Suspense>
-            </ErrorBoundary>
-            <Toaster />
-          </AdminProvider>
+          <UserProvider>
+            <ClientPerformanceMetricsTracker />
+            <RealtimeBridge />
+            <PermissionRequester />
+            <AdminProvider>
+              <ErrorBoundary>
+                {/* Use the existing Router function component here */}
+                <Suspense
+                  fallback={
+                    <div className="flex min-h-screen items-center justify-center">
+                      Loading...
+                    </div>
+                  }
+                >
+                  <Router />
+                </Suspense>
+              </ErrorBoundary>
+              <Toaster />
+            </AdminProvider>
+          </UserProvider>
         </AuthProvider>
       </LanguageProvider>
     </QueryClientProvider>

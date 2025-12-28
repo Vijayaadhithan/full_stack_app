@@ -24,7 +24,9 @@ const tsvector = customType<{ data: string }>({
   },
 });
 
+// UserRole is now optional - users can have multiple profiles via shops/providers tables
 export type UserRole = "customer" | "provider" | "shop" | "admin" | "worker";
+export type AppMode = "CUSTOMER" | "SHOP" | "PROVIDER";
 export const PaymentMethodType = z.enum(["upi", "cash", "pay_later"]);
 export type PaymentMethodType = z.infer<typeof PaymentMethodType>;
 
@@ -57,6 +59,13 @@ export type ShopProfile = {
   description: string;
   businessType: string;
   gstin?: string | null;
+  shopAddressStreet?: string;
+  shopAddressArea?: string;
+  shopAddressCity?: string;
+  shopAddressState?: string;
+  shopAddressPincode?: string;
+  shopLocationLat?: number;
+  shopLocationLng?: number;
   workingHours: {
     from: string;
     to: string;
@@ -176,12 +185,18 @@ export const users = pgTable(
   "users",
   {
     id: serial("id").primaryKey(),
-    username: text("username").notNull().unique(),
-    password: text("password").notNull(),
-    role: text("role").$type<UserRole>().notNull(),
+    // Auth fields - username/password optional for OTP-only users
+    username: text("username").unique(), // Now optional
+    password: text("password"), // Now optional for OTP-based auth
+    pin: text("pin"), // Hashed 4-digit PIN for rural-first auth
+    // Role is optional - multi-profile via shops/providers tables
+    role: text("role").$type<UserRole>().default("customer"),
+    // Core identity
     name: text("name").notNull(),
-    phone: text("phone").notNull(),
-    email: text("email").notNull(),
+    phone: text("phone").unique().notNull(), // Now UNIQUE - primary identifier
+    email: text("email"), // Now optional
+    isPhoneVerified: boolean("is_phone_verified").default(false), // OTP verification status
+    // Address fields
     addressStreet: text("address_street"),
     addressLandmark: text("address_landmark"),
     addressCity: text("address_city"),
@@ -190,39 +205,39 @@ export const users = pgTable(
     addressCountry: text("address_country"),
     latitude: decimal("latitude", { precision: 10, scale: 7 }),
     longitude: decimal("longitude", { precision: 10, scale: 7 }),
-    language: text("language").default("en"),
+    language: text("language").default("ta"), // Default to Tamil for rural TN
     profilePicture: text("profile_picture"),
     paymentMethods: jsonb("payment_methods").$type<PaymentMethod[]>(),
-    shopProfile: jsonb("shop_profile").$type<ShopProfile>(),
-    googleId: text("google_id").unique(), // Added for Google OAuth
-    emailVerified: boolean("email_verified").default(false), // Added for Google OAuth
+    shopProfile: jsonb("shop_profile").$type<ShopProfile>(), // Legacy - kept for migration
+    googleId: text("google_id").unique(),
+    emailVerified: boolean("email_verified").default(false),
     isSuspended: boolean("is_suspended").default(false),
-    // Provider profile fields
+    // Provider profile fields (legacy - moving to providers table)
     bio: text("bio"),
     qualifications: text("qualifications"),
     experience: text("experience"),
     workingHours: text("working_hours"),
     languages: text("languages"),
-    // Enhanced profile fields for providers and shops
+    // Enhanced profile fields
     verificationStatus: text("verification_status")
       .$type<"unverified" | "pending" | "verified">()
       .default("unverified"),
-    verificationDocuments: jsonb("verification_documents").$type<string[]>(), // Array of document URLs or identifiers
-    profileCompleteness: integer("profile_completeness").default(0), // Percentage
-    specializations: text("specializations").array(), // For providers
-    certifications: text("certifications").array(), // For providers
-    shopBannerImageUrl: text("shop_banner_image_url"), // For shops
-    shopLogoImageUrl: text("shop_logo_image_url"), // For shops
+    verificationDocuments: jsonb("verification_documents").$type<string[]>(),
+    profileCompleteness: integer("profile_completeness").default(0),
+    specializations: text("specializations").array(),
+    certifications: text("certifications").array(),
+    shopBannerImageUrl: text("shop_banner_image_url"),
+    shopLogoImageUrl: text("shop_logo_image_url"),
     yearsInBusiness: integer("years_in_business"),
-    socialMediaLinks: jsonb("social_media_links").$type<Record<string, string>>(), // e.g., { facebook: "url", instagram: "url" }
+    socialMediaLinks: jsonb("social_media_links").$type<Record<string, string>>(),
     upiId: text("upi_id"),
     upiQrCodeUrl: text("upi_qr_code_url"),
-    //rating: decimal("rating", { precision: 2, scale: 1 }),
     deliveryAvailable: boolean("delivery_available").default(false),
     pickupAvailable: boolean("pickup_available").default(true),
     returnsEnabled: boolean("returns_enabled").default(true),
     averageRating: decimal("average_rating").default("0"),
     totalReviews: integer("total_reviews").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
   },
   (table) => ({
     usersRoleIdx: index("users_role_idx").on(table.role),
@@ -230,6 +245,80 @@ export const users = pgTable(
     usersPhoneIdx: index("users_phone_idx").on(table.phone),
   }),
 );
+
+// Shop profile table - separate from users for multi-profile support
+export const shops = pgTable(
+  "shops",
+  {
+    id: serial("id").primaryKey(),
+    ownerId: integer("owner_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull()
+      .unique(), // One shop per user
+    shopName: text("shop_name").notNull(),
+    description: text("description"),
+    businessType: text("business_type"),
+    gstin: text("gstin"),
+    isOpen: boolean("is_open").default(true),
+    catalogModeEnabled: boolean("catalog_mode_enabled").default(false),
+    openOrderMode: boolean("open_order_mode").default(false),
+    allowPayLater: boolean("allow_pay_later").default(false),
+    payLaterWhitelist: jsonb("pay_later_whitelist").$type<number[]>(),
+    workingHours: jsonb("working_hours").$type<{
+      from: string;
+      to: string;
+      days: string[];
+    }>(),
+    shippingPolicy: text("shipping_policy"),
+    returnPolicy: text("return_policy"),
+    bannerImageUrl: text("banner_image_url"),
+    logoImageUrl: text("logo_image_url"),
+    shopAddressStreet: text("shop_address_street"),
+    shopAddressArea: text("shop_address_area"),
+    shopAddressCity: text("shop_address_city"),
+    shopAddressState: text("shop_address_state"),
+    shopAddressPincode: text("shop_address_pincode"),
+    shopLocationLat: decimal("shop_location_lat", { precision: 10, scale: 7 }),
+    shopLocationLng: decimal("shop_location_lng", { precision: 10, scale: 7 }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    shopsOwnerIdx: index("shops_owner_id_idx").on(table.ownerId),
+  }),
+);
+
+export type Shop = typeof shops.$inferSelect;
+export type InsertShop = typeof shops.$inferInsert;
+
+// Provider profile table - separate from users for multi-profile support
+export const providers = pgTable(
+  "providers",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull()
+      .unique(), // One provider profile per user
+    skills: text("skills").array(),
+    bio: text("bio"),
+    experience: text("experience"),
+    qualifications: text("qualifications"),
+    isOnDuty: boolean("is_on_duty").default(false),
+    languages: text("languages").array(),
+    specializations: text("specializations").array(),
+    certifications: text("certifications").array(),
+    workingHours: jsonb("working_hours").$type<WorkingHours>(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    providersUserIdx: index("providers_user_id_idx").on(table.userId),
+  }),
+);
+
+export type Provider = typeof providers.$inferSelect;
+export type InsertProvider = typeof providers.$inferInsert;
 
 // Link table for shop workers and their responsibilities
 export const shopWorkers = pgTable(
@@ -727,24 +816,70 @@ export const shopProfileSchema = z.object({
 // Schema for customer profile updates (excluding sensitive/role-specific fields)
 export const customerProfileSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  phone: z.string().min(1, "Phone number is required"),
-  email: z.string().email("Invalid email address"),
+  phone: z.string().min(10, "Phone number must be 10 digits").max(10, "Phone number must be 10 digits"),
+  email: z.string().email("Invalid email address").optional().nullable(), // Now optional
   addressStreet: z.string().optional().nullable(),
   addressLandmark: z.string().optional().nullable(),
   addressCity: z.string().optional().nullable(),
   addressState: z.string().optional().nullable(),
   addressPostalCode: z.string().optional().nullable(),
   addressCountry: z.string().optional().nullable(),
-  language: z.string().optional().default("en"),
+  language: z.string().optional().default("ta"),
   profilePicture: z.string().optional().nullable(),
 });
+
+// Rural-First Auth Schemas
+export const phoneSchema = z
+  .string()
+  .regex(/^\d{10}$/, "Phone number must be exactly 10 digits");
+
+export const pinSchema = z
+  .string()
+  .regex(/^\d{4}$/, "PIN must be exactly 4 digits");
+
+// Schema for rural registration (phone + PIN based)
+export const ruralRegisterSchema = z.object({
+  phone: phoneSchema,
+  name: z.string().min(1, "Name is required").max(100, "Name too long"),
+  pin: pinSchema,
+  initialRole: z.enum(["customer", "shop", "provider"]).optional().default("customer"),
+  language: z.string().optional().default("ta"),
+});
+
+export type RuralRegisterData = z.infer<typeof ruralRegisterSchema>;
+
+// Schema for PIN login
+export const pinLoginSchema = z.object({
+  phone: phoneSchema,
+  pin: pinSchema,
+});
+
+export type PinLoginData = z.infer<typeof pinLoginSchema>;
+
+// Schema for check user request
+export const checkUserSchema = z.object({
+  phone: phoneSchema,
+});
+
+export type CheckUserData = z.infer<typeof checkUserSchema>;
+
+// Schema for PIN reset
+export const resetPinSchema = z.object({
+  phone: phoneSchema,
+  newPin: pinSchema,
+});
+
+export type ResetPinData = z.infer<typeof resetPinSchema>;
 
 export const insertUserSchema = createInsertSchema(users, {
   shopProfile: shopProfileSchema.optional().nullable(),
   emailVerified: z.boolean().optional().default(false),
-  role: z.enum(["customer", "provider", "shop", "admin", "worker"]),
-  username: z.string().optional(),
-  password: z.string().optional(),
+  isPhoneVerified: z.boolean().optional().default(false),
+  role: z.enum(["customer", "provider", "shop", "admin", "worker"]).optional(),
+  username: z.string().optional().nullable(),
+  password: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable(),
+  pin: z.string().optional().nullable(),
 }).extend({
   paymentMethods: PaymentMethodSchema.array().optional(),
   averageRating: z.string().optional().default("0"),
@@ -755,7 +890,7 @@ export const insertCustomerSchema = insertUserSchema
   .pick({
     username: true,
     password: true,
-    role: true, // Default to 'customer' or ensure it's set
+    role: true,
     name: true,
     phone: true,
     email: true,
@@ -766,11 +901,17 @@ export const insertCustomerSchema = insertUserSchema
     addressCountry: true,
     language: true,
     profilePicture: true,
-    emailVerified: true, // Can be part of initial creation
+    emailVerified: true,
+    isPhoneVerified: true,
+    pin: true,
   })
   .extend({
-    role: z.literal("customer"), // Ensure role is customer for this schema
+    role: z.literal("customer").optional(),
   });
+
+// Insert schemas for new profile tables
+export const insertShopSchema = createInsertSchema(shops);
+export const insertProviderSchema = createInsertSchema(providers);
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;

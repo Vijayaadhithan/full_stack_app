@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocation } from "wouter";
-import { Loader2 } from "lucide-react";
+import { Loader2, Phone, Mail, ArrowLeft } from "lucide-react";
 
 import LogoMark from "@/components/branding/logo-mark";
 import { useAuth } from "@/hooks/use-auth";
@@ -24,6 +24,7 @@ import { translations, type AuthTranslations, type SupportedLanguage } from "./a
 
 const RegisterFlow = lazy(() => import("./auth/RegisterFlow"));
 const ForgotPassword = lazy(() => import("./auth/ForgotPassword"));
+const RuralAuthFlow = lazy(() => import("./auth/RuralAuthFlow"));
 
 const loginSchema = z.object({
   identifier: z.string().min(1, "Required"),
@@ -33,6 +34,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 type AuthTab = "login" | "register";
+type AuthMode = "rural" | "legacy";
 
 function isValidEmail(value: string) {
   return /.+@.+\..+/.test(value.trim());
@@ -46,8 +48,9 @@ export default function AuthPage() {
     isFetching: authIsFetching,
   } = useAuth();
   const [, setLocation] = useLocation();
-  const [language, setLanguage] = useState<SupportedLanguage>("en");
+  const [language, setLanguage] = useState<SupportedLanguage>("en"); // Default to English
   const [activeTab, setActiveTab] = useState<AuthTab>("login");
+  const [authMode, setAuthMode] = useState<AuthMode>("rural"); // Default to rural flow
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [magicLinkMessage, setMagicLinkMessage] = useState<string | null>(null);
   const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
@@ -66,7 +69,7 @@ export default function AuthPage() {
       !loginMutation.isPending &&
       !registerMutation.isPending
     ) {
-      const targetPath = user.role === "worker" ? "/shop" : `/${user.role}`;
+      const targetPath = user.role === "worker" ? "/shop" : `/${user.role || "customer"}`;
       setLocation(targetPath);
     }
   }, [
@@ -119,7 +122,7 @@ export default function AuthPage() {
       <Suspense
         fallback={
           <div className="flex min-h-screen items-center justify-center">
-            Loading...
+            <Loader2 className="h-8 w-8 animate-spin" />
           </div>
         }
       >
@@ -134,11 +137,47 @@ export default function AuthPage() {
     );
   }
 
+  // Rural-first authentication flow (default)
+  if (authMode === "rural") {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-orange-50 to-white">
+            <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+          </div>
+        }
+      >
+        <div className="relative">
+          <RuralAuthFlow />
+          {/* Switch to legacy login */}
+          <div className="fixed bottom-4 left-0 right-0 flex justify-center">
+            <Button
+              variant="ghost"
+              onClick={() => setAuthMode("legacy")}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              <Mail className="w-4 h-4 mr-2" />
+              Email/Username Login
+            </Button>
+          </div>
+        </div>
+      </Suspense>
+    );
+  }
+
+  // Legacy authentication flow (email/username + password)
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-3xl">
         <CardHeader className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+            <Button
+              variant="ghost"
+              onClick={() => setAuthMode("rural")}
+              className="p-2"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
             <Select
               value={language}
               onValueChange={(val) => setLanguage(val as SupportedLanguage)}
@@ -247,6 +286,16 @@ export default function AuthPage() {
                   onClick={() => (window.location.href = `${API_BASE_URL}/auth/google`)}
                 >
                   {t.continueWithGoogle}
+                </Button>
+                {/* Mobile login option */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setAuthMode("rural")}
+                >
+                  <Phone className="w-4 h-4 mr-2" />
+                  Login with Phone + PIN
                 </Button>
               </form>
             </TabsContent>

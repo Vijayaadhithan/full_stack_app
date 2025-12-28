@@ -11,6 +11,7 @@ import { LocationPicker, Coordinates } from "./location-picker";
 import { cn } from "@/lib/utils";
 import MapLink from "@/components/location/MapLink";
 import { useLanguage } from "@/contexts/language-context";
+import { useAppMode } from "@/contexts/UserContext";
 
 type ProfileLocationSectionProps = {
   user: Pick<User, "latitude" | "longitude" | "role"> | null;
@@ -51,7 +52,8 @@ export function ProfileLocationSection({
   title,
   description,
   className,
-}: ProfileLocationSectionProps) {
+  initialCoordinates,
+}: ProfileLocationSectionProps & { initialCoordinates?: Coordinates | null }) {
   const { t } = useLanguage();
   const resolvedTitle =
     title ??
@@ -62,13 +64,16 @@ export function ProfileLocationSection({
     description ?? t("profile_location_description");
   const userLatitude = user?.latitude;
   const userLongitude = user?.longitude;
+
   const initialLocation = useMemo(
-    () => toCoordinates(userLatitude, userLongitude),
-    [userLatitude, userLongitude],
+    () => initialCoordinates || toCoordinates(userLatitude, userLongitude),
+    [userLatitude, userLongitude, initialCoordinates],
   );
+
   const [location, setLocation] = useState<Coordinates | null>(initialLocation);
   const [isCapturingDeviceLocation, setIsCapturingDeviceLocation] = useState(false);
   const { toast } = useToast();
+  const { appMode } = useAppMode();
 
   useEffect(() => {
     setLocation(initialLocation);
@@ -76,7 +81,10 @@ export function ProfileLocationSection({
 
   const mutation = useMutation({
     mutationFn: async (coords: Coordinates) => {
-      const res = await apiRequest("POST", "/api/profile/location", coords);
+      const res = await apiRequest("POST", "/api/profile/location", {
+        ...coords,
+        context: appMode === "SHOP" ? "shop" : "user"
+      });
       return (await res.json()) as { message?: string; user: User };
     },
     onSuccess: ({ user: updatedUser, message }) => {

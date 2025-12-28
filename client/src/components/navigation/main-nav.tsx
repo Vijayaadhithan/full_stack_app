@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
+import { useAppMode } from "@/contexts/UserContext";
 import {
   Home,
   LogOut,
@@ -8,6 +9,9 @@ import {
   ShoppingCart,
   Heart,
   Star,
+  Boxes,
+  Receipt,
+  CalendarCheck,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +25,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
 import { NotificationsCenter } from "@/components/notifications-center";
+import { ProfileSwitcher } from "@/components/ProfileSwitcher";
 
 interface MainNavProps {
   rightSlot?: React.ReactNode;
@@ -34,45 +39,44 @@ type NavItem = {
 
 export function MainNav({ rightSlot }: MainNavProps) {
   const { user, logoutMutation } = useAuth();
+  const { appMode } = useAppMode();
   const [location] = useLocation();
   const isAuthenticated = Boolean(user);
 
   const navItems = React.useMemo<NavItem[]>(() => {
-    if (!user?.role) {
-      return [];
+    if (!user) return [];
+
+    if (appMode === "CUSTOMER") {
+      return [
+        { label: "Dashboard", href: "/customer", icon: Home },
+        { label: "Cart", href: "/customer/cart", icon: ShoppingCart },
+        { label: "Wishlist", href: "/customer/wishlist", icon: Heart },
+        { label: "My Reviews", href: "/customer/my-reviews", icon: Star },
+        { label: "Profile", href: "/customer/profile", icon: User },
+      ];
     }
 
-    const targetRole = user.role === "worker" ? "shop" : user.role;
-    const items: NavItem[] = [
-      {
-        label: "Dashboard",
-        href: `/${targetRole}`,
-        icon: Home,
-      },
-    ];
-
-    if (user.role === "customer") {
-      items.push(
-        {
-          label: "Cart",
-          href: "/customer/cart",
-          icon: ShoppingCart,
-        },
-        {
-          label: "Wishlist",
-          href: "/customer/wishlist",
-          icon: Heart,
-        },
-        {
-          label: "My Reviews",
-          href: "/customer/my-reviews",
-          icon: Star,
-        },
-      );
+    if (appMode === "SHOP") {
+      return [
+        { label: "Dashboard", href: "/shop", icon: Home },
+        { label: "Orders", href: "/shop/orders", icon: Receipt },
+        { label: "Products", href: "/shop/products", icon: Boxes },
+        { label: "Profile", href: "/shop/profile", icon: User },
+      ];
     }
 
-    return items;
-  }, [user?.role]);
+    if (appMode === "PROVIDER") {
+      return [
+        { label: "Dashboard", href: "/provider", icon: Home },
+        { label: "Services", href: "/provider/services", icon: Boxes },
+        { label: "Bookings", href: "/provider/bookings", icon: CalendarCheck },
+        { label: "Reviews", href: "/provider/reviews", icon: Star },
+        { label: "Profile", href: "/provider/profile", icon: User },
+      ];
+    }
+
+    return [{ label: "Dashboard", href: "/", icon: Home }];
+  }, [user, appMode]);
 
   const handleLogout = React.useCallback(() => {
     logoutMutation.mutate();
@@ -132,6 +136,11 @@ export function MainNav({ rightSlot }: MainNavProps) {
                     {rightSlot}
                   </div>
                 )}
+                {isAuthenticated && (
+                  <div className="py-2">
+                    <ProfileSwitcher />
+                  </div>
+                )}
                 {isAuthenticated ? (
                   <Button
                     variant="outline"
@@ -183,6 +192,10 @@ export function MainNav({ rightSlot }: MainNavProps) {
           {rightSlot && <div className="hidden md:flex">{rightSlot}</div>}
           {isAuthenticated ? (
             <>
+              {/* Mode Switcher for all authenticated users */}
+              <div className="hidden sm:block">
+                <ProfileSwitcher />
+              </div>
               <NotificationsCenter />
               <div className="hidden items-center gap-2 truncate sm:flex">
                 <User className="h-5 w-5" />

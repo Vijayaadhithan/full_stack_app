@@ -170,7 +170,9 @@ export interface IStorage {
   getShops(filters?: {
     locationCity?: string;
     locationState?: string;
+    excludeOwnerId?: number;
   }): Promise<User[]>;
+  getShopByOwnerId(ownerId: number): Promise<{ id: number; ownerId: number } | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User>; // Updated to accept all partial User fields
 
@@ -908,27 +910,39 @@ export class MemStorage implements IStorage {
     return shops;
   }
 
+  async getShopByOwnerId(ownerId: number): Promise<{ id: number; ownerId: number } | undefined> {
+    // In MemStorage, shops are stored as users with role "shop"
+    // Return a simple object matching the interface
+    const shopUser = Array.from(this.users.values()).find(
+      (u) => u.role === "shop" && u.id === ownerId
+    );
+    if (shopUser) {
+      return { id: shopUser.id, ownerId: shopUser.id };
+    }
+    return undefined;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
-    const normalizedUsername = normalizeUsername(insertUser.username);
-    const normalizedEmail = normalizeEmail(insertUser.email);
+    // Username and email are now optional for rural-first auth
+    const normalizedUsername = insertUser.username ? normalizeUsername(insertUser.username) : null;
+    const normalizedEmail = insertUser.email ? normalizeEmail(insertUser.email) : null;
     const normalizedPhone = normalizePhone(insertUser.phone);
 
-    if (!normalizedUsername) {
-      throw new Error("Invalid username");
-    }
-    if (!normalizedEmail) {
-      throw new Error("Invalid email");
+    if (!normalizedPhone) {
+      throw new Error("Invalid phone number");
     }
 
     const id = this.currentId++;
     const user: User = {
       id,
       username: normalizedUsername,
-      password: insertUser.password!,
-      role: insertUser.role as UserRole,
+      password: insertUser.password ?? null,
+      pin: insertUser.pin ?? null,
+      role: (insertUser.role as UserRole) ?? "customer",
       name: insertUser.name,
-      phone: normalizedPhone ?? "",
+      phone: normalizedPhone,
       email: normalizedEmail,
+      isPhoneVerified: insertUser.isPhoneVerified ?? false,
       addressStreet:
         insertUser.addressStreet === undefined
           ? null
@@ -951,7 +965,7 @@ export class MemStorage implements IStorage {
           : insertUser.addressCountry,
       latitude: normalizeCoordinate(insertUser.latitude),
       longitude: normalizeCoordinate(insertUser.longitude),
-      language: insertUser.language === undefined ? null : insertUser.language,
+      language: insertUser.language === undefined ? "ta" : insertUser.language,
       profilePicture:
         insertUser.profilePicture === undefined
           ? null
@@ -977,7 +991,7 @@ export class MemStorage implements IStorage {
         insertUser.languages === undefined ? null : insertUser.languages,
       googleId: null,
       emailVerified:
-        insertUser.emailVerified === undefined ? null : insertUser.emailVerified,
+        insertUser.emailVerified === undefined ? false : insertUser.emailVerified,
       verificationStatus: null,
       verificationDocuments: null,
       profileCompleteness: null,
@@ -990,13 +1004,14 @@ export class MemStorage implements IStorage {
       upiId: null,
       upiQrCodeUrl: null,
       averageRating:
-        insertUser.averageRating === undefined ? null : insertUser.averageRating,
+        insertUser.averageRating === undefined ? "0" : insertUser.averageRating,
       totalReviews:
-        insertUser.totalReviews === undefined ? null : insertUser.totalReviews,
+        insertUser.totalReviews === undefined ? 0 : insertUser.totalReviews,
       deliveryAvailable: null,
       returnsEnabled: true,
       pickupAvailable: null,
       isSuspended: false,
+      createdAt: new Date(),
     };
     this.users.set(id, user);
     return user;
@@ -2382,7 +2397,7 @@ export class MemStorage implements IStorage {
 
     // Apply role-based filtering if role is provided
     if (role) {
-      if (role === "shop_owner") {
+      if (role === "shop_owner" || role === "shop" || role === "worker") {
         // Shop owners should not see service notifications
         userNotifications = userNotifications.filter(
           (n) => n.type !== "service",
@@ -2901,7 +2916,8 @@ export class MemStorage implements IStorage {
       profilePicture: null,
       paymentMethods: undefined,
       emailVerified: false,
-      averageRating: "",
+      isPhoneVerified: true,
+      averageRating: "0",
       totalReviews: 0,
     });
 
@@ -2987,7 +3003,8 @@ export class MemStorage implements IStorage {
       profilePicture: null,
       paymentMethods: undefined,
       emailVerified: false,
-      averageRating: "",
+      isPhoneVerified: true,
+      averageRating: "0",
       totalReviews: 0,
     });
 

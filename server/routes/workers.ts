@@ -11,6 +11,7 @@ import {
   WorkerResponsibilityZ,
   type WorkerResponsibility,
 } from "@shared/schema";
+import { hasRoleAccess } from "../security/roleAccess";
 import {
   normalizeEmail,
   normalizePhone,
@@ -30,10 +31,10 @@ function requireAuth(req: any, res: any, next: any) {
 
 function requireRole(roles: string[]) {
   return (req: any, res: any, next: any) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!hasRoleAccess(req.user, roles)) {
       return res.status(403).send("Forbidden");
     }
-    next();
+    return next();
   };
 }
 

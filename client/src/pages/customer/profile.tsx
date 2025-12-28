@@ -39,8 +39,14 @@ import { ProfileLocationSection } from "@/components/location/profile-location-s
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   phone: z.string().min(10, "Invalid phone number"),
-  email: z.string().email("Invalid email"),
+  email: z.string().email("Invalid email").optional().or(z.literal("")),
+  upiId: z.string().optional(),
   addressLandmark: z.string().optional(),
+  addressStreet: z.string().optional(),
+  addressCity: z.string().optional(),
+  addressState: z.string().optional(),
+  addressPostalCode: z.string().optional(),
+  addressCountry: z.string().optional(),
 });
 
 export default function CustomerProfile() {
@@ -56,7 +62,13 @@ export default function CustomerProfile() {
       name: user?.name || "",
       phone: user?.phone || "",
       email: user?.email || "",
+      upiId: user?.upiId || "",
       addressLandmark: user?.addressLandmark || "",
+      addressStreet: user?.addressStreet || "",
+      addressCity: user?.addressCity || "",
+      addressState: user?.addressState || "",
+      addressPostalCode: user?.addressPostalCode || "",
+      addressCountry: user?.addressCountry || "India",
     },
   });
 
@@ -171,7 +183,7 @@ export default function CustomerProfile() {
                         >
                           {user.verificationStatus
                             ? user.verificationStatus.charAt(0).toUpperCase() +
-                              user.verificationStatus.slice(1)
+                            user.verificationStatus.slice(1)
                             : "Not Available"}
                         </p>
                       </div>
@@ -213,22 +225,60 @@ export default function CustomerProfile() {
                       <Label htmlFor="email">
                         <span className="flex items-center gap-2">
                           <Mail className="h-4 w-4" />
-                          Email Address
+                          Email Address (Optional)
                         </span>
                       </Label>
-                      <Input {...form.register("email")} type="email" />
+                      <Input {...form.register("email")} type="email" placeholder="yourname@example.com" />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="upiId">
+                        <span className="flex items-center gap-2">
+                          💳 UPI ID (for payments)
+                        </span>
+                      </Label>
+                      <Input {...form.register("upiId")} placeholder="yourname@upi" />
+                    </div>
+
+                    {/* Address Section */}
+                    <div className="md:col-span-2 space-y-4 pt-4 border-t">
+                      <h3 className="font-semibold flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        Address Details
+                      </h3>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="addressStreet">Street Address</Label>
+                          <Input {...form.register("addressStreet")} placeholder="Door No, Street Name" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="addressCity">City/Village</Label>
+                          <Input {...form.register("addressCity")} placeholder="City or Village name" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="addressState">State</Label>
+                          <Input {...form.register("addressState")} placeholder="Tamil Nadu" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="addressPostalCode">Postal Code</Label>
+                          <Input {...form.register("addressPostalCode")} placeholder="600001" inputMode="numeric" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="addressCountry">Country</Label>
+                          <Input {...form.register("addressCountry")} placeholder="India" />
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="addressLandmark">
                         <span className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4" />
-                          Landmark / House Color
+                          📍 Landmark / House Description
                         </span>
                       </Label>
                       <Textarea
                         {...form.register("addressLandmark")}
                         placeholder='Example: "Opposite Government School, Blue House."'
-                        className="min-h-[120px] text-base"
+                        className="min-h-[80px] text-base"
                       />
                       <p className="text-xs text-muted-foreground">
                         Use a nearby landmark locals recognize (school, temple,

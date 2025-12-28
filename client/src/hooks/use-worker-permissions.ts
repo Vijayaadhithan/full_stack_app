@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { isShopUser } from "@/lib/role-access";
 
 export function useWorkerPermissions() {
   const { user } = useAuth();
@@ -17,7 +18,7 @@ export function useWorkerPermissions() {
   });
 
   const has = (perm: string) => {
-    if (user?.role === "shop") return true;
+    if (isShopUser(user)) return true;
     if (!isWorker) return false;
     return !!data?.responsibilities?.includes(perm);
   };

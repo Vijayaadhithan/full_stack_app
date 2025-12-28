@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Booking, Notification } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
+import { isProviderUser, isShopUser, isWorkerUser } from "@/lib/role-access";
 
 type NotificationContextType = {
   notifications: Notification[];
@@ -20,6 +21,21 @@ const NotificationContext = createContext<NotificationContextType | undefined>(
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const effectiveRole = React.useMemo(() => {
+    if (!user) return null;
+    if (isWorkerUser(user)) return "worker";
+    if (user.role === "shop") return "shop";
+    if (user.role === "provider") return "provider";
+    if (user.role === "customer") {
+      if (isShopUser(user)) return "shop";
+      if (isProviderUser(user)) return "provider";
+      return "customer";
+    }
+    return "customer";
+  }, [user]);
+  const isShopOwner = effectiveRole === "shop" || effectiveRole === "worker";
+  const isProvider = effectiveRole === "provider";
+  const isCustomer = !isShopOwner && !isProvider;
 
   // Fetch all notifications
   const { data: notificationsData, refetch: refreshNotifications } =
@@ -35,18 +51,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const { data: pendingBookings = [] } = useQuery<Booking[]>({
     queryKey: ["/api/bookings/provider/pending"],
-    enabled: user?.role === "provider",
+    enabled: isProvider,
   });
 
-  const pendingBookingsCount =
-    user?.role === "provider" ? pendingBookings.length : 0;
+  const pendingBookingsCount = isProvider ? pendingBookings.length : 0;
 
   // Filter notifications based on user role
   const notifications = React.useMemo(() => {
     if (!user) return [];
 
     // For customer, only show relevant notifications
-    if (user.role === "customer") {
+    if (isCustomer) {
       return allNotifications.filter((notification) => {
         // For service type notifications, only show accepted, rejected, or rescheduled
         if (notification.type === "service") {
@@ -62,7 +77,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
 
     // For service providers, only show service-related notifications
-    if (user.role === "provider") {
+    if (isProvider) {
       return allNotifications.filter((notification) => {
         // For completed services, don't show notifications to avoid button issues
         if (notification.title.includes("Service Completed")) {
@@ -83,7 +98,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
 
     // For shop owners, only show shop-related notifications
-    if (user.role === "shop") {
+    if (isShopOwner) {
       return allNotifications.filter((notification) => {
         // Don't show service provider notifications to shop owners
         if (notification.type === "service") {
@@ -96,7 +111,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
 
     return allNotifications;
-  }, [allNotifications, user]);
+  }, [allNotifications, isCustomer, isProvider, isShopOwner, user]);
 
   // Mark notification as read
   const markAsReadMutation = useMutation({
@@ -142,7 +157,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         "PATCH",
         "/api/notifications/mark-all-read",
         {
-          role: user?.role,
+          role: effectiveRole ?? user?.role,
         },
       );
       if (!res.ok) {

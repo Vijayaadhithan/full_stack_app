@@ -14,6 +14,12 @@ import {
   type InsertUser,
   shopProfileSchema,
   emailVerificationTokens as emailVerificationTokensTable,
+  checkUserSchema,
+  ruralRegisterSchema,
+  pinLoginSchema,
+  resetPinSchema,
+  shops,
+  providers,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -82,43 +88,43 @@ type PublicRegistrationRole = (typeof PUBLIC_REGISTRATION_ROLES)[number];
 const usernameRegex = /^[a-z0-9._-]+$/i;
 
 const registrationSchemaBase = z.object({
-    username: z
-      .string()
-      .trim()
-      .min(3, "Username must be at least 3 characters")
-      .max(32, "Username must be at most 32 characters")
-      .regex(
-        usernameRegex,
-        "Username can only contain letters, numbers, dots, underscores, and hyphens",
-      ),
-    password: z
-      .string()
-      .min(8, "Password must be at least 8 characters long")
-      .max(64, "Password must be at most 64 characters long"),
-    role: z
-      .enum(PUBLIC_REGISTRATION_ROLES)
-      .default("customer"),
-    name: z
-      .string()
-      .trim()
-      .min(1, "Name is required")
-      .max(100, "Name must be at most 100 characters"),
-    phone: z
-      .string()
-      .trim()
-      .min(8, "Phone number must be at least 8 digits")
-      .max(20, "Phone number must be at most 20 digits")
-      .regex(/^\d+$/, "Phone number must contain digits only"),
-    email: z
-      .string()
-      .trim()
-      .email("Invalid email address"),
-    language: z.string().trim().max(10).optional(),
-    bio: z.string().trim().max(1000).optional(),
-    experience: z.string().trim().max(200).optional(),
-    languages: z.string().trim().max(200).optional(),
-    shopProfile: shopProfileSchema.optional(),
-  });
+  username: z
+    .string()
+    .trim()
+    .min(3, "Username must be at least 3 characters")
+    .max(32, "Username must be at most 32 characters")
+    .regex(
+      usernameRegex,
+      "Username can only contain letters, numbers, dots, underscores, and hyphens",
+    ),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters long")
+    .max(64, "Password must be at most 64 characters long"),
+  role: z
+    .enum(PUBLIC_REGISTRATION_ROLES)
+    .default("customer"),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(100, "Name must be at most 100 characters"),
+  phone: z
+    .string()
+    .trim()
+    .min(8, "Phone number must be at least 8 digits")
+    .max(20, "Phone number must be at most 20 digits")
+    .regex(/^\d+$/, "Phone number must contain digits only"),
+  email: z
+    .string()
+    .trim()
+    .email("Invalid email address"),
+  language: z.string().trim().max(10).optional(),
+  bio: z.string().trim().max(1000).optional(),
+  experience: z.string().trim().max(200).optional(),
+  languages: z.string().trim().max(200).optional(),
+  shopProfile: shopProfileSchema.optional(),
+});
 
 const registrationSchema = registrationSchemaBase
   .extend({
@@ -130,7 +136,10 @@ const registrationSchema = registrationSchemaBase
 
 declare global {
   namespace Express {
-    interface User extends Omit<SelectUser, "password"> {}
+    interface User extends Omit<SelectUser, "password"> {
+      hasShopProfile?: boolean;
+      hasProviderProfile?: boolean;
+    }
   }
 }
 
@@ -215,7 +224,7 @@ export function initializeAuth(app: Express) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for rural users
     },
   };
 
@@ -445,6 +454,7 @@ export function initializeAuth(app: Express) {
               phone: "", // Ensure phone is provided or handled if it's a required field with no default
               averageRating: "0",
               totalReviews: 0,
+              isPhoneVerified: false,
             };
             logger.info("[Google OAuth] Creating user");
             const createdUser = await storage.createUser(userToCreate);
@@ -455,7 +465,7 @@ export function initializeAuth(app: Express) {
 
             // Send welcome email (no verification link needed as Google verifies email)
             const emailContent = getWelcomeEmailContent(
-              createdUser.name || createdUser.username,
+              createdUser.name || createdUser.username || "User",
               FRONTEND_URL,
             );
             if (createdUser.email) {
@@ -493,6 +503,34 @@ export function initializeAuth(app: Express) {
         return done(null, false);
       }
       const safeUser = sanitizeUser(user);
+
+      // Check for shop and provider profiles
+      if (safeUser) {
+        // We use db directly here to check existence efficiently
+        // Note: Using a count or select limit 1 is more efficient than full fetch if we only need existence
+        // But for permissions, just knowing they exist is enough.
+
+        try {
+          const shopExists = await db
+            .select({ id: shops.id })
+            .from(shops)
+            .where(eq(shops.ownerId, user.id))
+            .limit(1);
+
+          const providerExists = await db
+            .select({ id: providers.id })
+            .from(providers)
+            .where(eq(providers.userId, user.id))
+            .limit(1);
+
+          (safeUser as any).hasShopProfile = shopExists.length > 0;
+          (safeUser as any).hasProviderProfile = providerExists.length > 0;
+        } catch (err) {
+          logger.warn({ err }, "Failed to fetch additional profiles during deserialization");
+          // Don't fail the whole request, just proceed without profile flags
+        }
+      }
+
       return done(null, safeUser ?? false);
     } catch (error) {
       return done(error as Error);
@@ -550,7 +588,7 @@ export function registerAuthRoutes(app: Express) {
         name: validatedData.name.trim(),
         phone: normalizedPhone,
         email: normalizedEmail,
-        language: validatedData.language ?? "en",
+        language: validatedData.language ?? "ta",
         bio:
           validatedData.role === "provider"
             ? validatedData.bio?.trim() ?? null
@@ -568,6 +606,7 @@ export function registerAuthRoutes(app: Express) {
             ? validatedData.shopProfile ?? null
             : null,
         emailVerified: false,
+        isPhoneVerified: false,
         averageRating: "0",
         totalReviews: 0,
       };
@@ -578,7 +617,7 @@ export function registerAuthRoutes(app: Express) {
       const verificationLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify-email?token=${verificationToken}&userId=${user.id}`;
 
       const welcomeContent = getWelcomeEmailContent(
-        user.name || user.username,
+        user.name || user.username || "User",
         verificationLink,
       );
       if (user.email) {
@@ -728,6 +767,327 @@ export function registerAuthRoutes(app: Express) {
     } catch (error) {
       logger.error({ err: error }, "Error deleting user account");
       res.status(500).json({ message: "Failed to delete account." });
+    }
+  });
+
+  // =====================================================
+  // RURAL-FIRST AUTH ROUTES (Mobile + OTP + PIN)
+  // These routes minimize SMS costs by using PIN for returning users
+  // =====================================================
+
+  // Check if a phone number exists in the system
+  app.post("/api/auth/check-user", loginLimiter, async (req, res) => {
+    const parsed = checkUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid phone number",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const { phone } = parsed.data;
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone format" });
+    }
+
+    try {
+      const user = await storage.getUserByPhone(normalizedPhone);
+      if (user) {
+        return res.json({
+          exists: true,
+          name: user.name,
+          isPhoneVerified: user.isPhoneVerified,
+        });
+      }
+      return res.json({ exists: false });
+    } catch (error) {
+      logger.error({ err: error }, "Error checking user");
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Rural Registration: Phone + Name + PIN (after OTP verification on client)
+  app.post("/api/auth/rural-register", registerLimiter, async (req, res, next) => {
+    const parsed = ruralRegisterSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid input",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const { phone, name, pin, initialRole, language } = parsed.data;
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone format" });
+    }
+
+    try {
+      // Check if phone already exists
+      const existingUser = await storage.getUserByPhone(normalizedPhone);
+      if (existingUser) {
+        return res.status(400).json({ message: "Phone number already registered" });
+      }
+
+      // Hash the PIN using the same scrypt method as passwords
+      const hashedPin = await hashPasswordInternal(pin);
+
+      // Generate username from phone number for rural users
+      const generatedUsername = `user_${normalizedPhone.replace(/\D/g, "").slice(-10)}`;
+
+      const userToCreate: InsertUser = {
+        username: generatedUsername,
+        phone: normalizedPhone,
+        name: name.trim(),
+        pin: hashedPin,
+        role: initialRole ?? "customer",
+        language: language ?? "ta",
+        isPhoneVerified: true, // Verified via OTP on client
+        emailVerified: false,
+        averageRating: "0",
+        totalReviews: 0,
+      };
+
+      const user = await storage.createUser(userToCreate);
+
+      // If they chose shop or provider, create the profile entry
+      if (initialRole === "shop") {
+        await db.insert(shops).values({
+          ownerId: user.id,
+          shopName: `${name}'s Shop`,
+        });
+      } else if (initialRole === "provider") {
+        await db.insert(providers).values({
+          userId: user.id,
+        });
+      }
+
+      const safeUser = sanitizeUser(user);
+      if (!safeUser) {
+        return res.status(500).json({ message: "Failed to create user" });
+      }
+
+      req.login(safeUser as Express.User, (err) => {
+        if (err) return next(err);
+        return res.status(201).json(safeUser);
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Rural registration failed");
+      return res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
+  // PIN Login: Phone + PIN (no SMS cost!)
+  app.post("/api/auth/login-pin", loginLimiter, async (req, res, next) => {
+    const parsed = pinLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid input",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const { phone, pin } = parsed.data;
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone format" });
+    }
+
+    try {
+      const user = await storage.getUserByPhone(normalizedPhone);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      if (user.isSuspended) {
+        return res.status(403).json({ message: "Account suspended" });
+      }
+
+      if (!user.pin) {
+        return res.status(400).json({
+          message: "PIN not set. Please reset your PIN.",
+          needsPinReset: true,
+        });
+      }
+
+      // Compare PIN using timing-safe comparison
+      const isPinValid = await comparePasswords(pin, user.pin);
+      if (!isPinValid) {
+        return res.status(401).json({ message: "Invalid PIN" });
+      }
+
+      const safeUser = sanitizeUser(user);
+      if (!safeUser) {
+        return res.status(500).json({ message: "Login failed" });
+      }
+
+      req.login(safeUser as Express.User, (err) => {
+        if (err) return next(err);
+        return res.status(200).json(safeUser);
+      });
+    } catch (error) {
+      logger.error({ err: error }, "PIN login failed");
+      return res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Reset PIN (after OTP verification on client)
+  app.post("/api/auth/reset-pin", loginLimiter, async (req, res) => {
+    const parsed = resetPinSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid input",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const { phone, newPin } = parsed.data;
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone format" });
+    }
+
+    try {
+      const user = await storage.getUserByPhone(normalizedPhone);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Hash the new PIN
+      const hashedPin = await hashPasswordInternal(newPin);
+
+      await storage.updateUser(user.id, {
+        pin: hashedPin,
+        isPhoneVerified: true,
+      });
+
+      return res.json({ success: true, message: "PIN reset successfully" });
+    } catch (error) {
+      logger.error({ err: error }, "PIN reset failed");
+      return res.status(500).json({ message: "Failed to reset PIN" });
+    }
+  });
+
+  // Get user profiles (shop and provider status)
+  app.get("/api/auth/profiles", async (req, res) => {
+    if (!req.isAuthenticated?.() || !req.user) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    try {
+      const userId = req.user.id;
+
+      // Check if user has a shop profile
+      const shopResult = await db
+        .select()
+        .from(shops)
+        .where(eq(shops.ownerId, userId))
+        .limit(1);
+
+      // Check if user has a provider profile
+      const providerResult = await db
+        .select()
+        .from(providers)
+        .where(eq(providers.userId, userId))
+        .limit(1);
+
+      return res.json({
+        hasShop: shopResult.length > 0,
+        shop: shopResult[0] ?? null,
+        hasProvider: providerResult.length > 0,
+        provider: providerResult[0] ?? null,
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Failed to fetch profiles");
+      return res.status(500).json({ message: "Failed to fetch profiles" });
+    }
+  });
+
+  // Create shop profile
+  app.post("/api/auth/create-shop", async (req, res) => {
+    if (!req.isAuthenticated?.() || !req.user) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { shopName, description, businessType } = req.body;
+
+    if (!shopName || typeof shopName !== "string" || shopName.trim().length === 0) {
+      return res.status(400).json({ message: "Shop name is required" });
+    }
+
+    try {
+      const userId = req.user.id;
+
+      // Check if shop already exists
+      const existing = await db
+        .select()
+        .from(shops)
+        .where(eq(shops.ownerId, userId))
+        .limit(1);
+
+      if (existing.length > 0) {
+        return res.status(400).json({ message: "You already have a shop" });
+      }
+
+      const [shop] = await db.insert(shops).values({
+        ownerId: userId,
+        shopName: shopName.trim(),
+        description: description?.trim(),
+        businessType: businessType?.trim(),
+        shopAddressStreet: req.body.shopAddressStreet?.trim() || null,
+        shopAddressArea: req.body.shopAddressArea?.trim() || null,
+        shopAddressCity: req.body.shopAddressCity?.trim() || null,
+        shopAddressState: req.body.shopAddressState?.trim() || null,
+        shopAddressPincode: req.body.shopAddressPincode?.trim() || null,
+        shopLocationLat: req.body.shopLocationLat,
+        shopLocationLng: req.body.shopLocationLng
+      }).returning();
+
+      return res.status(201).json(shop);
+    } catch (error) {
+      logger.error({ err: error }, "Failed to create shop");
+      return res.status(500).json({ message: "Failed to create shop" });
+    }
+  });
+
+  // Create provider profile
+  app.post("/api/auth/create-provider", async (req, res) => {
+    if (!req.isAuthenticated?.() || !req.user) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { bio, skills, experience } = req.body;
+
+    try {
+      const userId = req.user.id;
+
+      // Check if provider already exists
+      const existing = await db
+        .select()
+        .from(providers)
+        .where(eq(providers.userId, userId))
+        .limit(1);
+
+      if (existing.length > 0) {
+        return res.status(400).json({ message: "You already have a provider profile" });
+      }
+
+      const [provider] = await db.insert(providers).values({
+        userId,
+        bio: bio?.trim(),
+        skills: skills ?? [],
+        experience: experience?.trim(),
+      }).returning();
+
+      return res.status(201).json(provider);
+    } catch (error) {
+      logger.error({ err: error }, "Failed to create provider profile");
+      return res.status(500).json({ message: "Failed to create provider profile" });
     }
   });
 }

@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
+import { isProviderUser, isShopUser, isWorkerUser } from "@/lib/role-access";
 
 export function NotificationsCenter() {
   const [open, setOpen] = useState(false);
@@ -26,6 +27,20 @@ export function NotificationsCenter() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const lastSeenNotificationIdRef = useRef<number | null>(null);
+  const effectiveRole = useMemo(() => {
+    if (!user) return null;
+    if (isWorkerUser(user)) return "worker";
+    if (user.role === "shop") return "shop";
+    if (user.role === "provider") return "provider";
+    if (user.role === "customer") {
+      if (isShopUser(user)) return "shop";
+      if (isProviderUser(user)) return "provider";
+      return "customer";
+    }
+    return "customer";
+  }, [user]);
+  const isShopOwner = effectiveRole === "shop" || effectiveRole === "worker";
+  const isProvider = effectiveRole === "provider";
 
   const { data: notificationsData, isFetched } = useQuery<{
     data: Notification[];
@@ -79,10 +94,11 @@ export function NotificationsCenter() {
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
       // Include user role in the request to mark only relevant notifications
+      const role = effectiveRole ?? user?.role;
       const res = await apiRequest(
         "PATCH",
         "/api/notifications/mark-all-read",
-        { role: user?.role },
+        { role },
       );
       if (!res.ok) {
         const error = await res.json();
@@ -110,21 +126,21 @@ export function NotificationsCenter() {
               let isRelevantToUser = false;
 
               // Shop owners should only mark shop/order/return notifications as read
-              if (user?.role === "shop") {
+              if (isShopOwner) {
                 isRelevantToUser = ["order", "shop", "return"].includes(
                   notification.type,
                 );
               }
 
               // Service providers should only mark service/booking notifications as read
-              else if (user?.role === "provider") {
+              else if (isProvider) {
                 isRelevantToUser = ["service", "booking"].includes(
                   notification.type,
                 );
               }
 
               // Customers should mark all their notifications as read
-              else if (user?.role === "customer") {
+              else {
                 isRelevantToUser = true;
               }
 
@@ -155,13 +171,13 @@ export function NotificationsCenter() {
 
     return notifications.filter((notification) => {
       // Shop owners should only see shop/order/return notifications
-      if (user.role === "shop") {
+      if (isShopOwner) {
         return ["order", "shop", "return"].includes(notification.type);
       }
 
       // Service providers should see service/booking notifications
       // and specifically service request notifications
-      if (user.role === "provider") {
+      if (isProvider) {
         // Include notifications about new service requests
         if (
           notification.type === "service_request" &&
@@ -179,7 +195,7 @@ export function NotificationsCenter() {
       // Customers should see all relevant notifications
       return true;
     });
-  }, [notifications, user]);
+  }, [isProvider, isShopOwner, notifications, user]);
 
   // Sort notifications with unread first, then by date
   const sortedNotifications = useMemo(() => {
@@ -234,7 +250,7 @@ export function NotificationsCenter() {
   };
 
   useEffect(() => {
-    if (!user || user.role !== "shop") return;
+    if (!user || !isShopOwner) return;
     if (!isFetched) return;
     if (open) return;
 
@@ -286,7 +302,7 @@ export function NotificationsCenter() {
         description: highlight.message || "A new order needs your attention.",
       });
     }
-  }, [filteredNotifications, isFetched, open, toast, user]);
+  }, [filteredNotifications, isFetched, isShopOwner, open, toast, user]);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -329,43 +345,45 @@ export function NotificationsCenter() {
     const id = extractEntityId(notification);
 
     // Navigate based on notification type and user role
+    const baseRole =
+      effectiveRole === "worker" ? "shop" : effectiveRole || "customer";
     switch (notification.type) {
       case "booking":
-        if (user?.role === "customer") {
+        if (baseRole === "customer") {
           navigate(`/customer/bookings/${id || ""}`);
-        } else if (user?.role === "provider") {
+        } else if (baseRole === "provider") {
           navigate(`/provider/bookings${id ? `/${id}` : "?status=pending"}`);
         }
         break;
       case "order":
-        if (user?.role === "customer") {
+        if (baseRole === "customer") {
           navigate(`/customer/order/${id || ""}`);
-        } else if (user?.role === "shop") {
+        } else if (baseRole === "shop") {
           navigate(`/shop/orders${id ? `/${id}` : ""}`);
         }
         break;
       case "return":
-        if (user?.role === "customer") {
+        if (baseRole === "customer") {
           navigate(`/customer/returns/${id || ""}`);
-        } else if (user?.role === "shop") {
+        } else if (baseRole === "shop") {
           navigate(`/shop/returns${id ? `/${id}` : ""}`);
         }
         break;
       case "shop":
-        if (user?.role === "shop") {
+        if (baseRole === "shop") {
           navigate("/shop/inventory");
         } else {
-          navigate(`/${user?.role || ""}`);
+          navigate(`/${baseRole}`);
         }
         break;
       case "service_request":
-        if (user?.role === "provider") {
+        if (baseRole === "provider") {
           navigate(`/provider/services${id ? `/${id}` : ""}`);
         }
         break;
       default:
         // For general notifications, navigate to the dashboard
-        navigate(`/${user?.role || ""}`);
+        navigate(`/${baseRole}`);
     }
   };
 

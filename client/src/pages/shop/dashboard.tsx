@@ -48,6 +48,7 @@ export default function ShopDashboard() {
     user,
     shopId: shopContextId,
     isWorker,
+    shopName,
     permissionsLoading,
     hasPermission,
     workerResponsibilities,
@@ -133,7 +134,7 @@ export default function ShopDashboard() {
             <h1 className="text-2xl font-bold">
               {t("shop_dashboard_welcome").replace(
                 "{name}",
-                user?.shopProfile?.shopName || user?.name || t("not_available"),
+                shopName || user?.name || t("not_available"),
               )}
             </h1>
             <p className="text-muted-foreground">

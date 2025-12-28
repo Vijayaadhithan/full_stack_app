@@ -246,6 +246,7 @@ export default function RegisterFlow({
       email: data.email.toLowerCase().trim(),
       language,
       emailVerified: false,
+      isPhoneVerified: false,
       averageRating: "0",
       totalReviews: 0,
     };

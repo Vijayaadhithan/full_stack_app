@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useWorkerPermissions } from "@/hooks/use-worker-permissions";
+import { isShopUser } from "@/lib/role-access";
 import { useLanguage } from "@/contexts/language-context";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -148,7 +149,8 @@ const boardColumns: Record<
 export default function ShopOrders() {
   const { user } = useAuth();
   const { has: can } = useWorkerPermissions();
-  const canManagePayLater = user?.role === "shop" || can("orders:update");
+  const isShopOwner = isShopUser(user);
+  const canManagePayLater = isShopOwner || can("orders:update");
   const { t } = useLanguage();
   const { toast } = useToast();
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
@@ -841,7 +843,7 @@ export default function ShopOrders() {
                     </div>
                   )}
 
-                  {(user?.role === "shop" || can("orders:update")) &&
+                  {(isShopOwner || can("orders:update")) &&
                     canQuoteOrder && (
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                         <div className="flex-1 space-y-1">
@@ -910,7 +912,7 @@ export default function ShopOrders() {
                       <p className="text-blue-900/80">
                         Approve credit to confirm availability and move the order forward.
                       </p>
-                      {(user?.role === "shop" || can("orders:update")) && (
+                      {(isShopOwner || can("orders:update")) && (
                         <Button
                           size="sm"
                           onClick={() => approvePayLaterMutation.mutate(order.id)}
@@ -940,7 +942,7 @@ export default function ShopOrders() {
                         Mark as paid once the customer settles the balance.
                       </p>
                     )}
-                    {(user?.role === "shop" || can("orders:update")) && (
+                    {(isShopOwner || can("orders:update")) && (
                       <Button
                         size="sm"
                         onClick={() => confirmPaymentMutation.mutate(order.id)}
@@ -963,7 +965,7 @@ export default function ShopOrders() {
                       }
                     }}
                   >
-                    {(user?.role === "shop" || can("orders:update")) && (
+                    {(isShopOwner || can("orders:update")) && (
                       <DialogTrigger asChild>
                         <Button
                           variant="outline"
@@ -1314,7 +1316,7 @@ export default function ShopOrders() {
                               </p>
                             </div>
                             <div className="flex gap-2">
-                              {(user?.role === 'shop' || can('returns:manage')) && (
+                              {(isShopOwner || can('returns:manage')) && (
                               <Button
                                 variant="outline"
                                 onClick={() =>
@@ -1328,7 +1330,7 @@ export default function ShopOrders() {
                                 {t("approve_return")}
                               </Button>
                               )}
-                              {(user?.role === 'shop' || can('returns:manage')) && (
+                              {(isShopOwner || can('returns:manage')) && (
                               <Button
                                 variant="outline"
                                 className="text-red-600"

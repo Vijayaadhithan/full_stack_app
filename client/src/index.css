@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+Thambi+2:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,6 +11,8 @@
 
   :root {
     font-size: clamp(14px, 0.4vw + 14px, 18px);
+    /* Default mode primary color */
+    --mode-primary: hsl(25, 95%, 53%);
   }
 
   @media (min-width: 1600px) {
@@ -24,12 +28,83 @@
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply antialiased bg-background text-foreground;
+    font-family: 'Baloo Thambi 2', sans-serif;
     position: relative;
     min-height: 100dvh;
     min-width: 320px;
     overflow-x: hidden;
   }
+}
+
+/* ==========================================
+   MODE-BASED THEMES (Rural-First Architecture)
+   Customer = Orange/Saffron
+   Shop = Green
+   Provider = Blue
+   ========================================== */
+
+/* Customer Theme (Orange/Saffron) - Default */
+.mode-customer {
+  --primary: 25 95% 53%;
+  --primary-foreground: 60 9.1% 97.8%;
+  --accent: 25 80% 95%;
+}
+
+.mode-customer .primary-gradient {
+  background: linear-gradient(135deg, hsl(25, 95%, 53%) 0%, hsl(35, 95%, 55%) 100%);
+}
+
+/* Shop Theme (Green) */
+.mode-shop {
+  --primary: 142 71% 45%;
+  --primary-foreground: 60 9.1% 97.8%;
+  --accent: 142 60% 95%;
+}
+
+.mode-shop .primary-gradient {
+  background: linear-gradient(135deg, hsl(142, 71%, 45%) 0%, hsl(152, 71%, 50%) 100%);
+}
+
+/* Provider Theme (Blue) */
+.mode-provider {
+  --primary: 217 91% 60%;
+  --primary-foreground: 60 9.1% 97.8%;
+  --accent: 217 80% 95%;
+}
+
+.mode-provider .primary-gradient {
+  background: linear-gradient(135deg, hsl(217, 91%, 60%) 0%, hsl(227, 91%, 65%) 100%);
+}
+
+/* Mode indicator pill styles */
+.mode-pill-customer {
+  @apply bg-orange-500 text-white;
+}
+.mode-pill-shop {
+  @apply bg-green-500 text-white;
+}
+.mode-pill-provider {
+  @apply bg-blue-500 text-white;
+}
+
+/* Large touch-friendly inputs for rural users */
+.rural-input {
+  @apply h-16 text-2xl tracking-wider text-center rounded-xl border-2;
+  font-family: 'Baloo Thambi 2', sans-serif;
+}
+
+.rural-input:focus {
+  @apply ring-4 ring-primary/20 border-primary;
+}
+
+/* PIN input dots */
+.pin-dot {
+  @apply w-4 h-4 rounded-full bg-gray-300 transition-all;
+}
+
+.pin-dot-filled {
+  @apply bg-primary scale-110;
 }
 
 /* Global watermark: single, centered mark (very light) */
@@ -44,3 +119,4 @@ body::before {
   background-position: center;
   background-size: 60vmin;
 }
+

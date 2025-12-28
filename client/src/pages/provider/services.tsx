@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { PageHeader } from "@/components/common/page-header";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
   Card,
@@ -254,8 +255,8 @@ export default function ProviderServices() {
     const total = services?.length ?? 0;
     const online = services
       ? services.filter(
-          (service) => service.isAvailable && service.isAvailableNow !== false,
-        ).length
+        (service) => service.isAvailable && service.isAvailableNow !== false,
+      ).length
       : 0;
     const paused = total - online;
     const categories = new Set(
@@ -296,8 +297,8 @@ export default function ProviderServices() {
       const matchesSearch = !trimmed
         ? true
         : [service.name, service.description, service.category]
-            .filter((value): value is string => Boolean(value))
-            .some((value) => value.toLowerCase().includes(trimmed));
+          .filter((value): value is string => Boolean(value))
+          .some((value) => value.toLowerCase().includes(trimmed));
       const matchesCategory =
         categoryFilter === "all" || service.category === categoryFilter;
       return matchesSearch && matchesCategory;
@@ -307,17 +308,16 @@ export default function ProviderServices() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">{t("provider_services_title")}</h1>
-            <p className="text-sm text-muted-foreground">
-              {t("provider_services_subtitle")}
-            </p>
-          </div>
+        <PageHeader
+          title={t("provider_services_title")}
+          subtitle={t("provider_services_subtitle")}
+          showBackButton={true}
+          backDestination="/provider"
+        >
           <Button onClick={openCreateDialog}>
             <Plus className="mr-2 h-4 w-4" /> {t("add_service")}
           </Button>
-        </div>
+        </PageHeader>
 
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
@@ -696,8 +696,8 @@ export default function ProviderServices() {
                   >
                     {(createServiceMutation.isPending ||
                       updateServiceMutation.isPending) && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
                     {editingService ? t("update_service") : t("create_service")}
                   </Button>
                 </div>

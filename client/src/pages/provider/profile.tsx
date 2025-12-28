@@ -1,4 +1,5 @@
 import React from "react";
+import { PageHeader } from "@/components/common/page-header";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
   Card,
@@ -233,13 +234,12 @@ export default function ProviderProfile() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">{t("provider_profile_title")}</h1>
-            <p className="text-sm text-muted-foreground">
-              {t("provider_profile_subtitle")}
-            </p>
-          </div>
+        <PageHeader
+          title={t("provider_profile_title")}
+          subtitle={t("provider_profile_subtitle")}
+          showBackButton={true}
+          backDestination="/provider"
+        >
           {!editMode ? (
             <Button type="button" onClick={toggleEditMode}>
               <Edit className="mr-2 h-4 w-4" />
@@ -268,7 +268,7 @@ export default function ProviderProfile() {
               </Button>
             </div>
           )}
-        </div>
+        </PageHeader>
 
         <Card>
           <CardHeader>

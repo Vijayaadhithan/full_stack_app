@@ -12,6 +12,7 @@ import {
 } from "../workerAuth";
 import { formatValidationError } from "../utils/zod";
 import { broadcastInvalidation } from "../realtime";
+import { hasRoleAccess } from "../security/roleAccess";
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -22,10 +23,10 @@ function requireAuth(req: any, res: any, next: any) {
 
 function requireRole(roles: string[]) {
   return (req: any, res: any, next: any) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!hasRoleAccess(req.user, roles)) {
       return res.status(403).send("Forbidden");
     }
-    next();
+    return next();
   };
 }
 
@@ -341,59 +342,59 @@ export function registerPromotionRoutes(app: Express) {
     },
   );
 
-    /**
-     * @openapi
-     * /api/promotions/{id}:
-     *   patch:
-     *     summary: Update a promotion
-     *     parameters:
-     *       - in: path
-     *         name: id
-     *         required: true
-     *         schema:
-     *           type: integer
-     *     requestBody:
-     *       required: true
-     *       content:
-     *         application/json:
-     *           schema:
-     *             type: object
-     *             properties:
-     *               name:
-     *                 type: string
-     *               description:
-     *                 type: string
-     *               type:
-     *                 type: string
-     *                 enum: [percentage, fixed_amount]
-     *               value:
-     *                 type: number
-     *               code:
-     *                 type: string
-     *               usageLimit:
-     *                 type: integer
-     *               isActive:
-     *                 type: boolean
-     *               expiryDays:
-     *                 type: integer
-     *               applicableProducts:
-     *                 type: array
-     *                 items:
-     *                   type: integer
-     *               excludedProducts:
-     *                 type: array
-     *                 items:
-     *                   type: integer
-     *               minPurchase:
-     *                 type: number
-     *               maxDiscount:
-     *                 type: number
-     *     responses:
-     *       200:
-     *         description: Promotion updated
-     *       400:
-     *         description: Invalid input
-     */
+  /**
+   * @openapi
+   * /api/promotions/{id}:
+   *   patch:
+   *     summary: Update a promotion
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               name:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               type:
+   *                 type: string
+   *                 enum: [percentage, fixed_amount]
+   *               value:
+   *                 type: number
+   *               code:
+   *                 type: string
+   *               usageLimit:
+   *                 type: integer
+   *               isActive:
+   *                 type: boolean
+   *               expiryDays:
+   *                 type: integer
+   *               applicableProducts:
+   *                 type: array
+   *                 items:
+   *                   type: integer
+   *               excludedProducts:
+   *                 type: array
+   *                 items:
+   *                   type: integer
+   *               minPurchase:
+   *                 type: number
+   *               maxDiscount:
+   *                 type: number
+   *     responses:
+   *       200:
+   *         description: Promotion updated
+   *       400:
+   *         description: Invalid input
+   */
   app.patch(
     "/api/promotions/:id",
     requireAuth,
@@ -704,7 +705,7 @@ export function registerPromotionRoutes(app: Express) {
         }
         const requestedShopId = parsedParams.data.shopId;
         // Role-based access: customers can view any shop; workers can view only their shop; shops can view only their own
-        if (req.user?.role === "shop") {
+        if (req.user?.role === "shop" || req.user?.hasShopProfile) {
           const shopContextId = coerceNumericId(req.user.id);
           if (!shopContextId || requestedShopId !== shopContextId) {
             return res.status(403).json({ message: "Invalid shop context" });
@@ -716,8 +717,6 @@ export function registerPromotionRoutes(app: Express) {
           if (!workerShopId || requestedShopId !== workerShopId) {
             return res.status(403).json({ message: "Invalid shop context" });
           }
-        } else if (req.user?.role !== "customer") {
-          return res.status(403).json({ message: "Forbidden" });
         }
         const shopId = requestedShopId;
         const now = new Date();

@@ -58,6 +58,8 @@ import {
   orderStatusUpdates,
   UserRole,
   TimeSlotLabel,
+  shops,
+  Shop,
 } from "@shared/schema";
 import {
   IStorage,
@@ -839,41 +841,105 @@ export class PostgresStorage implements IStorage {
   async getShops(filters?: {
     locationCity?: string;
     locationState?: string;
+    excludeOwnerId?: number;
   }): Promise<User[]> {
-    const conditions = [eq(users.role, "shop")];
-    if (filters) {
-      if (filters.locationCity) {
-        conditions.push(eq(users.addressCity, filters.locationCity));
-      }
-      if (filters.locationState) {
-        conditions.push(eq(users.addressState, filters.locationState));
-      }
-    }
-    return await db
+    // Query shops table and join with users to get owner info
+    const shopRecords = await db
       .select()
-      .from(users)
-      .where(and(...conditions));
+      .from(shops)
+      .leftJoin(users, eq(shops.ownerId, users.id));
+
+    // Filter and transform to User-like objects for backward compatibility
+    const results: User[] = [];
+
+    for (const record of shopRecords) {
+      const shop = record.shops;
+      const owner = record.users;
+
+      if (!owner) continue;
+
+      // Apply filters
+      if (filters?.excludeOwnerId !== undefined && shop.ownerId === filters.excludeOwnerId) {
+        continue;
+      }
+      if (filters?.locationCity && shop.shopAddressCity?.toLowerCase() !== filters.locationCity.toLowerCase()) {
+        continue;
+      }
+      if (filters?.locationState && shop.shopAddressState?.toLowerCase() !== filters.locationState.toLowerCase()) {
+        continue;
+      }
+
+      // Build a User-like object with shop profile data
+      results.push({
+        ...owner,
+        role: "shop" as const, // Treat as shop role for frontend compatibility
+        shopProfile: {
+          shopName: shop.shopName,
+          description: shop.description || "",
+          businessType: shop.businessType || "",
+          gstin: shop.gstin,
+          shopAddressStreet: shop.shopAddressStreet || undefined,
+          shopAddressArea: shop.shopAddressArea || undefined,
+          shopAddressCity: shop.shopAddressCity || undefined,
+          shopAddressState: shop.shopAddressState || undefined,
+          shopAddressPincode: shop.shopAddressPincode || undefined,
+          shopLocationLat: shop.shopLocationLat ? Number(shop.shopLocationLat) : undefined,
+          shopLocationLng: shop.shopLocationLng ? Number(shop.shopLocationLng) : undefined,
+          workingHours: shop.workingHours || { from: "09:00", to: "18:00", days: [] },
+          shippingPolicy: shop.shippingPolicy || undefined,
+          returnPolicy: shop.returnPolicy || undefined,
+          catalogModeEnabled: shop.catalogModeEnabled ?? false,
+          openOrderMode: shop.openOrderMode ?? false,
+          allowPayLater: shop.allowPayLater ?? false,
+          payLaterWhitelist: shop.payLaterWhitelist || [],
+        },
+        // Use shop address coordinates if available, else fall back to user
+        latitude: shop.shopLocationLat || owner.latitude,
+        longitude: shop.shopLocationLng || owner.longitude,
+        addressStreet: shop.shopAddressStreet || owner.addressStreet,
+        addressCity: shop.shopAddressCity || owner.addressCity,
+        addressState: shop.shopAddressState || owner.addressState,
+        addressPostalCode: shop.shopAddressPincode || owner.addressPostalCode,
+      });
+    }
+
+    return results;
+  }
+
+  async getShopById(shopId: number): Promise<Shop | undefined> {
+    const result = await db.select().from(shops).where(eq(shops.id, shopId));
+    return result[0];
+  }
+
+  async getShopByOwnerId(ownerId: number): Promise<Shop | undefined> {
+    const result = await db.select().from(shops).where(eq(shops.ownerId, ownerId));
+    return result[0];
   }
 
   async createUser(user: InsertUser): Promise<User> {
     const normalizedUsername = normalizeUsername(user.username);
-    const normalizedEmail = normalizeEmail(user.email);
+    const normalizedEmail = user.email ? normalizeEmail(user.email) : null;
     const normalizedPhone = normalizePhone(user.phone);
 
+    // Username is required
     if (!normalizedUsername) {
       throw new Error("Invalid username");
     }
-    if (!normalizedEmail) {
-      throw new Error("Invalid email");
+    // Email is optional for rural users (phone + PIN only)
+    // Only validate if email is provided
+    if (user.email && !normalizedEmail) {
+      throw new Error("Invalid email format");
     }
 
     const insertData = {
       username: normalizedUsername,
       password: user.password,
+      pin: user.pin, // Add PIN support for rural auth
       role: user.role as UserRole,
       name: user.name,
       phone: normalizedPhone ?? "",
-      email: normalizedEmail,
+      email: normalizedEmail, // Can be null for rural users
+      isPhoneVerified: user.isPhoneVerified ?? false, // Add phone verification status
       addressStreet: user.addressStreet,
       addressLandmark: user.addressLandmark,
       addressCity: user.addressCity,
@@ -959,21 +1025,19 @@ export class PostgresStorage implements IStorage {
         // Diagnostic logging to inspect calculation inputs
         logger.info("[updateUser] Combined data for user", id, combinedData);
         if (existingUser.role === "customer") {
-          totalProfileFields = 4; // For customer: name, phone, email, full address. Profile picture is optional.
+          // For customer: name, phone, and address/landmark
+          // Email is optional for rural-first auth users
+          totalProfileFields = 3;
           if (combinedData.name) completedFields++;
           if (combinedData.phone) completedFields++;
-          if (combinedData.email) completedFields++;
-          if (
-            combinedData.addressStreet &&
+          // Address completeness: either full address fields OR addressLandmark is sufficient
+          const hasFullAddress = combinedData.addressStreet &&
             combinedData.addressCity &&
             combinedData.addressState &&
             combinedData.addressPostalCode &&
-            combinedData.addressCountry
-          )
-            completedFields++;
-          // Profile picture contributes if present, but isn't required for 100% of these base fields.
-          // If profile picture is present, it's a bonus but doesn't change the 100% from core fields.
-          // Let's stick to the 4 core fields for 100% customer completeness.
+            combinedData.addressCountry;
+          const hasLandmark = combinedData.addressLandmark && combinedData.addressLandmark.trim().length > 0;
+          if (hasFullAddress || hasLandmark) completedFields++;
         } else if (existingUser.role === "provider") {
           totalProfileFields = 9; // name, phone, email, full address, bio, qualifications, experience, workingHours, languages
           if (combinedData.name) completedFields++;
@@ -1343,6 +1407,10 @@ export class PostgresStorage implements IStorage {
   async getServices(filters?: any): Promise<Service[]> {
     // Build an array of conditions starting with the non-deleted check
     const conditions = [eq(services.isDeleted, false)];
+
+    if (filters?.excludeProviderId !== undefined) {
+      conditions.push(ne(services.providerId, filters.excludeProviderId));
+    }
     let query: any = db.select().from(services);
     let joinedProviders = false;
     const escapeLikePattern = (value: string) =>
@@ -2682,7 +2750,7 @@ export class PostgresStorage implements IStorage {
     role?: string,
   ): Promise<void> {
     const conditions = [eq(notifications.userId, userId)];
-    if (role === "shop_owner") {
+    if (role === "shop_owner" || role === "shop" || role === "worker") {
       // Shop owners should not see service notifications
       conditions.push(sql`type != 'service'`);
     } else if (role === "provider") {

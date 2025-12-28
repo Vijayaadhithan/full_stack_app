@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { PageHeader } from "@/components/common/page-header";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,8 +22,8 @@ import { IndianRupee, Loader2, Search, Users } from "lucide-react";
 type ProviderBookingService =
   | Service
   | {
-      price?: string | number | null;
-    };
+    price?: string | number | null;
+  };
 
 type ProviderBookingCustomer = Pick<User, "id" | "name" | "phone">;
 
@@ -173,17 +174,16 @@ export default function ProviderEarnings() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">{t("provider_earnings_title")}</h1>
-            <p className="text-sm text-muted-foreground">
-              {t("provider_earnings_subtitle")}
-            </p>
-          </div>
+        <PageHeader
+          title={t("provider_earnings_title")}
+          subtitle={t("provider_earnings_subtitle")}
+          showBackButton={true}
+          backDestination="/provider"
+        >
           <Badge variant="secondary" className="w-fit">
             {showingCountLabel}
           </Badge>
-        </div>
+        </PageHeader>
 
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="border-emerald-200/60">

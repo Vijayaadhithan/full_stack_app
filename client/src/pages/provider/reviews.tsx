@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { PageHeader } from "@/components/common/page-header";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -111,14 +112,13 @@ export default function ProviderReviews() {
         animate="show"
         className="space-y-6 p-6"
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">{t("provider_reviews_title")}</h1>
-            <p className="text-sm text-muted-foreground">
-              {t("provider_reviews_subtitle")}
-            </p>
-          </div>
-        </div>
+
+        <PageHeader
+          title={t("provider_reviews_title")}
+          subtitle={t("provider_reviews_subtitle")}
+          showBackButton={true}
+          backDestination="/provider"
+        />
 
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
