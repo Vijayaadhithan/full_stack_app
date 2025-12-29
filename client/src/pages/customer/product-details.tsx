@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatIndianDisplay } from "@shared/date-utils";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
   Card,
@@ -62,7 +63,7 @@ export default function ProductDetails() {
   const averageRating =
     reviews.length > 0
       ? reviews.reduce((total, review) => total + review.rating, 0) /
-        reviews.length
+      reviews.length
       : null;
   const openOrderAllowed = Boolean(
     product?.openOrderMode || product?.catalogModeEnabled,
@@ -102,10 +103,10 @@ export default function ProductDetails() {
       const optimisticCart = previousCart
         ? existingItem
           ? previousCart.map((item) =>
-              item.product.id === product.id
-                ? { ...item, quantity: item.quantity + 1 }
-                : item,
-            )
+            item.product.id === product.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item,
+          )
           : [...previousCart, { product, quantity: 1 }]
         : [{ product, quantity: 1 }];
 
@@ -391,9 +392,8 @@ export default function ProductDetails() {
             </CardTitle>
             <CardDescription>
               {averageRating !== null
-                ? `${averageRating.toFixed(1)} out of 5 • ${reviews.length} review${
-                    reviews.length !== 1 ? "s" : ""
-                  }`
+                ? `${averageRating.toFixed(1)} out of 5 • ${reviews.length} review${reviews.length !== 1 ? "s" : ""
+                }`
                 : enableReviews
                   ? "No reviews yet"
                   : "Sign in to view customer reviews"}
@@ -434,17 +434,16 @@ export default function ProductDetails() {
                         {Array.from({ length: 5 }).map((_, index) => (
                           <Star
                             key={index}
-                            className={`h-4 w-4 ${
-                              index < review.rating
+                            className={`h-4 w-4 ${index < review.rating
                                 ? "fill-yellow-400 text-yellow-500"
                                 : "text-muted-foreground"
-                            }`}
+                              }`}
                           />
                         ))}
                       </div>
                       {review.createdAt && (
                         <span className="text-xs text-muted-foreground">
-                          {new Date(review.createdAt).toLocaleDateString()}
+                          {formatIndianDisplay(review.createdAt, "date")}
                         </span>
                       )}
                     </div>

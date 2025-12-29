@@ -71,7 +71,7 @@ import {
 import { motion } from "framer-motion";
 import { Booking, Review, Service } from "@shared/schema";
 import { formatIndianDisplay, formatInIndianTime } from "@shared/date-utils";
-import { describeSlotLabel } from "@/lib/time-slots";
+import { formatBookingTimeLabel } from "@/lib/time-slots";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -340,6 +340,16 @@ function PendingBookingRequestsList({
     );
   }
 
+  const actionDateLabel = selectedBooking?.bookingDate
+    ? formatIndianDisplay(selectedBooking.bookingDate, "date")
+    : null;
+  const actionTimeLabel = selectedBooking?.bookingDate
+    ? formatBookingTimeLabel(
+        selectedBooking.bookingDate,
+        selectedBooking.timeSlotLabel,
+      )
+    : null;
+
   return (
     <div className="space-y-4">
       {pendingBookings.map((booking) => {
@@ -361,11 +371,12 @@ function PendingBookingRequestsList({
         );
         const landmark = resolveLandmark(booking.relevantAddress);
         const addressLine = formatAddressLine(booking.relevantAddress);
+        const timeLabel = formatBookingTimeLabel(
+          booking.bookingDate,
+          booking.timeSlotLabel,
+        );
         const whenLabel = booking.bookingDate
-          ? `${formatIndianDisplay(booking.bookingDate, "date")}${booking.timeSlotLabel
-            ? ` • ${describeSlotLabel(booking.timeSlotLabel) ?? ""}`
-            : ""
-          }`
+          ? `${formatIndianDisplay(booking.bookingDate, "date")}${timeLabel ? ` • ${timeLabel}` : ""}`
           : "Date not set";
         const locationTypeLabel =
           booking.serviceLocation === "provider"
@@ -554,8 +565,8 @@ function PendingBookingRequestsList({
             <div className="space-y-2">
               <p className="text-sm font-medium">Date & Time</p>
               <p className="text-sm">
-                {selectedBooking?.bookingDate
-                  ? formatIndianDisplay(selectedBooking.bookingDate, "datetime")
+                {actionDateLabel
+                  ? `${actionDateLabel}${actionTimeLabel ? ` • ${actionTimeLabel}` : ""}`
                   : "Date not set"}
               </p>
             </div>
@@ -639,57 +650,63 @@ function BookingHistoryList({
 
   return (
     <div className="space-y-3">
-      {recentHistory.map((booking) => (
-        <div
-          key={booking.id}
-          className="flex items-center justify-between border rounded-md p-3"
-        >
-          <div>
-            <p className="font-medium">{booking.service?.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {booking.bookingDate
-                ? `${formatIndianDisplay(booking.bookingDate, "date")}${booking.timeSlotLabel
-                  ? ` • ${describeSlotLabel(booking.timeSlotLabel) ?? ""}`
-                  : ""
-                }`
-                : "Date not set"}
-            </p>
-            <div className="flex items-center mt-1">
-              {booking.status === "accepted" && (
-                <>
-                  <CheckCircle className="h-3 w-3 mr-1 text-green-500" />
-                  <span className="text-xs">Accepted</span>
-                </>
-              )}
-              {booking.status === "rejected" && (
-                <>
-                  <XCircle className="h-3 w-3 mr-1 text-red-500" />
-                  <span className="text-xs">Rejected</span>
-                </>
-              )}
-              {booking.status === "expired" && (
-                <>
-                  <AlertCircle className="h-3 w-3 mr-1 text-orange-500" />
-                  <span className="text-xs">Expired</span>
-                </>
-              )}
-            </div>
-          </div>
-          <Badge
-            variant={booking.status === "accepted" ? "default" : "destructive"}
-            className="flex items-center gap-1"
+      {recentHistory.map((booking) => {
+        const timeLabel = formatBookingTimeLabel(
+          booking.bookingDate,
+          booking.timeSlotLabel,
+        );
+
+        return (
+          <div
+            key={booking.id}
+            className="flex items-center justify-between border rounded-md p-3"
           >
-            {booking.status === "accepted" && (
-              <CheckCircle className="h-3 w-3" />
-            )}
-            {booking.status === "rejected" && <XCircle className="h-3 w-3" />}
-            {booking.status === "expired" && (
-              <AlertCircle className="h-3 w-3" />
-            )}
-            {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-          </Badge>
-        </div>
-      ))}
+            <div>
+              <p className="font-medium">{booking.service?.name}</p>
+              <p className="text-sm text-muted-foreground">
+                {booking.bookingDate
+                  ? `${formatIndianDisplay(booking.bookingDate, "date")}${timeLabel ? ` • ${timeLabel}` : ""}`
+                  : "Date not set"}
+              </p>
+              <div className="flex items-center mt-1">
+                {booking.status === "accepted" && (
+                  <>
+                    <CheckCircle className="h-3 w-3 mr-1 text-green-500" />
+                    <span className="text-xs">Accepted</span>
+                  </>
+                )}
+                {booking.status === "rejected" && (
+                  <>
+                    <XCircle className="h-3 w-3 mr-1 text-red-500" />
+                    <span className="text-xs">Rejected</span>
+                  </>
+                )}
+                {booking.status === "expired" && (
+                  <>
+                    <AlertCircle className="h-3 w-3 mr-1 text-orange-500" />
+                    <span className="text-xs">Expired</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <Badge
+              variant={
+                booking.status === "accepted" ? "default" : "destructive"
+              }
+              className="flex items-center gap-1"
+            >
+              {booking.status === "accepted" && (
+                <CheckCircle className="h-3 w-3" />
+              )}
+              {booking.status === "rejected" && <XCircle className="h-3 w-3" />}
+              {booking.status === "expired" && (
+                <AlertCircle className="h-3 w-3" />
+              )}
+              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+            </Badge>
+          </div>
+        );
+      })}
       {showFooterAction ? (
         <Button variant="outline" size="sm" asChild className="w-full">
           <Link href="/provider/bookings">View Full History</Link>
@@ -1360,24 +1377,20 @@ export default function ProviderDashboard() {
                             </p>
                             <p className="text-sm text-muted-foreground">
                               <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
-                              {booking.timeSlotLabel
-                                ? describeSlotLabel(booking.timeSlotLabel)
-                                : formatIndianDisplay(
-                                    booking.bookingDate || "",
-                                    "time",
-                                  )}
+                              {formatBookingTimeLabel(
+                                booking.bookingDate || "",
+                                booking.timeSlotLabel,
+                              )}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">
-                            {booking.timeSlotLabel
-                              ? describeSlotLabel(booking.timeSlotLabel)
-                              : formatIndianDisplay(
-                                  booking.bookingDate || "",
-                                  "time",
-                                )}
+                            {formatBookingTimeLabel(
+                              booking.bookingDate || "",
+                              booking.timeSlotLabel,
+                            )}
                           </span>
                         </div>
                       </div>

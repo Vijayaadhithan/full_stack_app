@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatIndianDisplay } from "@shared/date-utils";
 import { useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -216,8 +217,8 @@ export default function ServiceDetails() {
             <CardDescription>
               {service.rating && service.reviews?.length
                 ? t("ratings_summary")
-                    .replace("{rating}", service.rating.toFixed(1))
-                    .replace("{count}", String(service.reviews.length))
+                  .replace("{rating}", service.rating.toFixed(1))
+                  .replace("{count}", String(service.reviews.length))
                 : t("no_reviews_yet")}
             </CardDescription>
           </CardHeader>
@@ -237,17 +238,16 @@ export default function ServiceDetails() {
                       {Array.from({ length: 5 }).map((_, index) => (
                         <Star
                           key={index}
-                          className={`h-4 w-4 ${
-                            index < review.rating
+                          className={`h-4 w-4 ${index < review.rating
                               ? "fill-yellow-400 text-yellow-500"
                               : "text-muted-foreground"
-                          }`}
+                            }`}
                         />
                       ))}
                     </div>
                     {review.createdAt && (
                       <span className="text-xs text-muted-foreground">
-                        {new Date(review.createdAt).toLocaleDateString()}
+                        {formatIndianDisplay(review.createdAt, "date")}
                       </span>
                     )}
                   </div>

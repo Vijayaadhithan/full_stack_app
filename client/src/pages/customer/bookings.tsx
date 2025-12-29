@@ -28,7 +28,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { formatIndianDisplay, formatInIndianTime } from "@shared/date-utils";
-import { describeSlotLabel } from "@/lib/time-slots";
+import { formatBookingTimeLabel } from "@/lib/time-slots";
 import { DialogTrigger } from "@radix-ui/react-dialog";
 import { Input } from "@/components/ui/input"; // Added Input for datetime-local
 
@@ -760,12 +760,10 @@ export default function Bookings() {
                               </p>
                               <p className="text-sm text-muted-foreground">
                                 <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
-                                {booking.timeSlotLabel
-                                  ? describeSlotLabel(booking.timeSlotLabel)
-                                  : formatIndianDisplay(
-                                      booking.bookingDate,
-                                      "time",
-                                    )}
+                                {formatBookingTimeLabel(
+                                  booking.bookingDate,
+                                  booking.timeSlotLabel,
+                                )}
                               </p>
                               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                                 <LocationIcon className="h-4 w-4" />
@@ -1154,12 +1152,10 @@ export default function Bookings() {
                               </p>
                               <p className="text-sm text-muted-foreground">
                                 <Clock className="inline h-4 w-4 mr-1 align-text-bottom" />
-                                {booking.timeSlotLabel
-                                  ? describeSlotLabel(booking.timeSlotLabel)
-                                  : formatIndianDisplay(
-                                      booking.bookingDate,
-                                      "time",
-                                    )}
+                                {formatBookingTimeLabel(
+                                  booking.bookingDate,
+                                  booking.timeSlotLabel,
+                                )}
                               </p>
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <LocationIcon className="h-4 w-4" />

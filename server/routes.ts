@@ -76,7 +76,7 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { db } from "./db";
 import crypto from "crypto";
 import { performance } from "node:perf_hooks";
-import { formatIndianDisplay, toIndianTime } from "@shared/date-utils"; // Import IST utility
+import { formatIndianDisplay, toIndianTime, fromIndianTime } from "@shared/date-utils"; // Import IST utility
 import {
   normalizeCoordinate,
   DEFAULT_NEARBY_RADIUS_KM,
@@ -1097,11 +1097,16 @@ function buildSlotWindow(date: Date, label?: TimeSlotLabel | null) {
   if (!label || !BROAD_TIME_SLOTS[label]) {
     return null;
   }
-  const start = new Date(toIndianTime(date));
-  start.setHours(BROAD_TIME_SLOTS[label].startHour, 0, 0, 0);
-  const end = new Date(toIndianTime(date));
-  end.setHours(BROAD_TIME_SLOTS[label].endHour, 0, 0, 0);
-  return { start, end };
+  // Convert to IST to set the correct hours for the slot
+  const startZoned = new Date(toIndianTime(date));
+  startZoned.setHours(BROAD_TIME_SLOTS[label].startHour, 0, 0, 0);
+  const endZoned = new Date(toIndianTime(date));
+  endZoned.setHours(BROAD_TIME_SLOTS[label].endHour, 0, 0, 0);
+  // Convert back from IST representation to proper UTC Date
+  return {
+    start: fromIndianTime(startZoned),
+    end: fromIndianTime(endZoned),
+  };
 }
 
 async function fetchServiceBookingSlots(
@@ -3177,13 +3182,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             requesterId,
           );
           (safeUser as Record<string, unknown>).payLaterEligibilityForCustomer =
-            {
-              eligible:
-                eligibility.allowPayLater &&
-                (eligibility.isKnownCustomer || eligibility.isWhitelisted),
-              isKnownCustomer: eligibility.isKnownCustomer,
-              isWhitelisted: eligibility.isWhitelisted,
-            };
+          {
+            eligible:
+              eligibility.allowPayLater &&
+              (eligibility.isKnownCustomer || eligibility.isWhitelisted),
+            isKnownCustomer: eligibility.isKnownCustomer,
+            isWhitelisted: eligibility.isWhitelisted,
+          };
         }
       }
 
@@ -4462,13 +4467,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Invalid time slot selection" });
         }
 
-        const bookingDateTime = slotWindow
-          ? slotWindow.start
-          : new Date(bookingDate);
+        // Use the client-provided booking date directly
+        // The slot window is used only for availability checks, not to override the booking time
+        const bookingDateTime = new Date(bookingDate);
+        const checkDateTime = slotWindow ? slotWindow.start : bookingDateTime;
 
         const existingForDay = await storage.getBookingsByService(
           serviceId,
-          bookingDateTime,
+          checkDateTime,
         );
         const slotKey = normalizedSlotLabel ?? null;
         const customerHasActiveBookingForSlot = existingForDay.some(
@@ -4488,7 +4494,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const isAvailable = await storage.checkAvailability(
           serviceId,
-          bookingDateTime,
+          checkDateTime,
           normalizedSlotLabel,
         );
         if (!isAvailable) {

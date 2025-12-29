@@ -83,9 +83,7 @@ import {
 import {
   toISTForStorage,
   getCurrentISTDate,
-  fromDatabaseToIST,
   getExpirationDate,
-  convertArrayDatesToIST,
 } from "./ist-utils";
 import {
   normalizeEmail,
@@ -3227,14 +3225,14 @@ export class PostgresStorage implements IStorage {
       trackingInfo: trackingInfo || order.trackingInfo,
     };
     if ("updatedAt" in order) {
-      updateData.updatedAt = getCurrentISTDate();
+      updateData.updatedAt = new Date();
     }
     const updated = await this.updateOrder(orderId, updateData);
     await db.insert(orderStatusUpdates).values({
       orderId,
       status,
       trackingInfo: trackingInfo || order.trackingInfo,
-      timestamp: getCurrentISTDate(),
+      timestamp: new Date(),
     });
     return updated;
   }
@@ -3249,7 +3247,7 @@ export class PostgresStorage implements IStorage {
       orderId: u.orderId!,
       status: u.status as OrderStatus,
       trackingInfo: u.trackingInfo ?? undefined,
-      timestamp: fromDatabaseToIST(u.timestamp as Date) as Date,
+      timestamp: u.timestamp as Date,
     }));
   }
 

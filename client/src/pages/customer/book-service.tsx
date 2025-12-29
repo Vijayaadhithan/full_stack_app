@@ -61,28 +61,28 @@ const SLOT_OPTIONS: Array<{
   startHour: number;
   endHour: number;
 }> = [
-  {
-    label: "morning",
-    title: "Morning",
-    window: "9 AM - 12 PM",
-    startHour: 9,
-    endHour: 12,
-  },
-  {
-    label: "afternoon",
-    title: "Afternoon",
-    window: "12 PM - 4 PM",
-    startHour: 12,
-    endHour: 16,
-  },
-  {
-    label: "evening",
-    title: "Evening",
-    window: "4 PM - 8 PM",
-    startHour: 16,
-    endHour: 20,
-  },
-];
+    {
+      label: "morning",
+      title: "Morning",
+      window: "9 AM - 12 PM",
+      startHour: 9,
+      endHour: 12,
+    },
+    {
+      label: "afternoon",
+      title: "Afternoon",
+      window: "12 PM - 4 PM",
+      startHour: 12,
+      endHour: 16,
+    },
+    {
+      label: "evening",
+      title: "Evening",
+      window: "4 PM - 8 PM",
+      startHour: 16,
+      endHour: 20,
+    },
+  ];
 
 const getSlotStartForDate = (
   date: Date,
@@ -161,11 +161,11 @@ export default function BookService() {
     [t],
   );
 
-type BookingService = ServiceDetail & {
-  isAvailableNow?: boolean | null;
-  availabilityNote?: string | null;
-  allowedSlots?: BroadSlotLabel[] | null;
-};
+  type BookingService = ServiceDetail & {
+    isAvailableNow?: boolean | null;
+    availabilityNote?: string | null;
+    allowedSlots?: BroadSlotLabel[] | null;
+  };
   // Fetch service with provider info
   const { data: service, isLoading: serviceLoading } = useQuery<BookingService>({
     queryKey: [`/api/services/${id}`],
@@ -388,9 +388,9 @@ type BookingService = ServiceDetail & {
         : null,
       serviceLocation === "provider" && providerFullAddress
         ? t("whatsapp_provider_address").replace(
-            "{address}",
-            providerFullAddress,
-          )
+          "{address}",
+          providerFullAddress,
+        )
         : null,
       serviceLocation === "provider"
         ? providerMapsUrl
@@ -618,9 +618,17 @@ type BookingService = ServiceDetail & {
       }
     }
 
+    const now = new Date();
+    let bookingDate =
+      selectedUrgency === "now" ? now : resolvedSlotStart;
+    if (selectedUrgency === "today" && bookingDate.getTime() < now.getTime()) {
+      bookingDate = now;
+    }
+
     createBookingMutation.mutate({
       serviceId: service.id,
-      bookingDate: resolvedSlotStart.toISOString(), // Send UTC ISO string
+      // Keep same-day bookings at or after the current time.
+      bookingDate: bookingDate.toISOString(),
       serviceLocation: serviceLocation,
       timeSlotLabel: resolvedSlotLabel,
       // No providerAddress needed here
@@ -678,7 +686,7 @@ type BookingService = ServiceDetail & {
   const averageRating =
     service?.reviews && service.reviews.length > 0
       ? service.reviews.reduce((acc: number, review) => acc + review.rating, 0) /
-        service.reviews.length
+      service.reviews.length
       : 0;
 
   if (serviceLoading) {
@@ -932,7 +940,7 @@ type BookingService = ServiceDetail & {
                       {t("rural_landmark_note")}
                     </p>
                     {lastGpsAccuracyMeters !== null &&
-                    lastGpsAccuracyMeters > GPS_WEAK_ACCURACY_METERS ? (
+                      lastGpsAccuracyMeters > GPS_WEAK_ACCURACY_METERS ? (
                       <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                         <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                         <div>
@@ -1100,13 +1108,13 @@ type BookingService = ServiceDetail & {
                   <MessageCircle className="h-5 w-5" />
                   {serviceLocation === "customer"
                     ? t("send_location_to_provider").replace(
-                        "{name}",
-                        providerName,
-                      )
+                      "{name}",
+                      providerName,
+                    )
                     : t("message_provider_on_whatsapp").replace(
-                        "{name}",
-                        providerName,
-                      )}
+                      "{name}",
+                      providerName,
+                    )}
                 </Button>
                 <Button
                   type="button"
@@ -1141,9 +1149,9 @@ type BookingService = ServiceDetail & {
                     <strong>{t("location_label")}:</strong>{" "}
                     {serviceLocation === "provider"
                       ? t("summary_location_provider").replace(
-                          "{address}",
-                          providerFullAddress || t("location_not_specified"),
-                        )
+                        "{address}",
+                        providerFullAddress || t("location_not_specified"),
+                      )
                       : t("summary_location_customer")}
                   </p>
                   {serviceLocation === "customer" && bookingLandmark.trim() ? (
@@ -1170,7 +1178,7 @@ type BookingService = ServiceDetail & {
                       {t("final_price_note")}
                     </p>
                     {featureFlags.platformFeesEnabled &&
-                    featureFlags.platformFeeBreakdownEnabled ? (
+                      featureFlags.platformFeeBreakdownEnabled ? (
                       <div className="flex justify-between text-muted-foreground">
                         <span>{t("platform_fee_label")}</span>
                         <span>₹{platformFee.toFixed(2)}</span>
@@ -1231,9 +1239,9 @@ type BookingService = ServiceDetail & {
                       -{" "}
                       {review.customerId
                         ? t("review_by_customer_id").replace(
-                            "{id}",
-                            String(review.customerId),
-                          )
+                          "{id}",
+                          String(review.customerId),
+                        )
                         : t("review_by_customer")}
                     </p>
                     <p className="text-sm">{review.review}</p>

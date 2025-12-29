@@ -1,7 +1,7 @@
 /**
  * Utility functions for handling dates with Indian Standard Time (IST)
  */
-import { formatInTimeZone, toZonedTime } from "date-fns-tz";
+import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
 import { parseISO, isValid } from "date-fns";
 const timeZone = "Asia/Kolkata";
 
@@ -15,6 +15,16 @@ const timeZone = "Asia/Kolkata";
 export function toIndianTime(date: Date | string): Date {
   const inputDate = typeof date === "string" ? parseISO(date) : date;
   return toZonedTime(inputDate, timeZone);
+}
+
+/**
+ * Converts a Date object representing IST time back to a proper UTC Date.
+ * Use this after manipulating hours/minutes on an IST-adjusted date (from toIndianTime).
+ * @param zonedDate Date object representing IST time (e.g., result of toIndianTime after setHours)
+ * @returns Date object in UTC that corresponds to the given IST time
+ */
+export function fromIndianTime(zonedDate: Date): Date {
+  return fromZonedTime(zonedDate, timeZone);
 }
 
 /**

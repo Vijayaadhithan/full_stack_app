@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { formatIndianDisplay } from "@shared/date-utils";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -165,10 +166,10 @@ const MyReviews: React.FC = () => {
           prevReviews.map((review) =>
             review.id === editingReview.id
               ? {
-                  ...review,
-                  ...(updatedReview as ReviewWithService),
-                  serviceName: review.serviceName,
-                }
+                ...review,
+                ...(updatedReview as ReviewWithService),
+                serviceName: review.serviceName,
+              }
               : review,
           ),
         );
@@ -241,7 +242,7 @@ const MyReviews: React.FC = () => {
                   <p className="text-xs text-muted-foreground">
                     Reviewed on:{" "}
                     {review.createdAt
-                      ? new Date(review.createdAt).toLocaleDateString()
+                      ? formatIndianDisplay(review.createdAt, "date")
                       : "Date Unavailable"}
                   </p>
                   <Button
@@ -276,7 +277,7 @@ const MyReviews: React.FC = () => {
                   <p className="text-xs text-muted-foreground">
                     Reviewed on:{" "}
                     {review.createdAt
-                      ? new Date(review.createdAt).toLocaleDateString()
+                      ? formatIndianDisplay(review.createdAt, "date")
                       : "Date Unavailable"}
                   </p>
                   <Button
@@ -305,7 +306,7 @@ const MyReviews: React.FC = () => {
               {editingReview
                 ? editingReview.serviceName
                 : editingProductReview?.productName ||
-                  `Product ID: ${editingProductReview?.productId}`}
+                `Product ID: ${editingProductReview?.productId}`}
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">

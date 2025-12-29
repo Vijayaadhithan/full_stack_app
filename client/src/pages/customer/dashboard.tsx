@@ -28,7 +28,7 @@ import { Booking } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
-import { describeSlotLabel } from "@/lib/time-slots";
+import { formatBookingTimeLabel } from "@/lib/time-slots";
 import { useLanguage } from "@/contexts/language-context";
 
 type GlobalSearchResult = {
@@ -128,32 +128,37 @@ function BookingRequestsList() {
         </p>
       ) : (
         <div className="space-y-3">
-          {pendingRequests.map((booking) => (
-            <div
-              key={booking.id}
-              className="flex items-center justify-between border rounded-md p-3"
-            >
-              <div>
-                <p className="font-medium">{booking.service?.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {formatIndianDisplay(booking.bookingDate, "date")}{" "}
-                  {booking.timeSlotLabel
-                    ? `• ${describeSlotLabel(booking.timeSlotLabel)}`
-                    : `• ${formatIndianDisplay(booking.bookingDate, "time")}`}
-                </p>
-                <div className="flex items-center mt-1">
-                  <Clock className="h-3 w-3 mr-1 text-yellow-500" />
-                  <span className="text-xs">
-                    {t("customer_booking_requests_waiting")}
-                  </span>
+          {pendingRequests.map((booking) => {
+            const timeLabel = formatBookingTimeLabel(
+              booking.bookingDate,
+              booking.timeSlotLabel,
+            );
+
+            return (
+              <div
+                key={booking.id}
+                className="flex items-center justify-between border rounded-md p-3"
+              >
+                <div>
+                  <p className="font-medium">{booking.service?.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatIndianDisplay(booking.bookingDate, "date")}{" "}
+                    {timeLabel ? `• ${timeLabel}` : null}
+                  </p>
+                  <div className="flex items-center mt-1">
+                    <Clock className="h-3 w-3 mr-1 text-yellow-500" />
+                    <span className="text-xs">
+                      {t("customer_booking_requests_waiting")}
+                    </span>
+                  </div>
                 </div>
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {t("pending")}
+                </Badge>
               </div>
-              <Badge variant="outline" className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {t("pending")}
-              </Badge>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       <Button variant="outline" size="sm" asChild className="w-full">
@@ -205,6 +210,10 @@ function BookingHistoryList() {
         {recentHistory.map((booking) => {
           const statusLabel =
             historyStatusLabels[booking.status] || booking.status;
+          const timeLabel = formatBookingTimeLabel(
+            booking.bookingDate,
+            booking.timeSlotLabel,
+          );
 
           return (
             <div
@@ -215,9 +224,7 @@ function BookingHistoryList() {
                 <p className="font-medium">{booking.service?.name}</p>
                 <p className="text-sm text-muted-foreground">
                   {formatIndianDisplay(booking.bookingDate, "date")}{" "}
-                  {booking.timeSlotLabel
-                    ? `• ${describeSlotLabel(booking.timeSlotLabel)}`
-                    : `• ${formatIndianDisplay(booking.bookingDate, "time")}`}
+                  {timeLabel ? `• ${timeLabel}` : null}
                 </p>
                 <div className="flex items-center mt-1">
                   {booking.status === "accepted" && (
