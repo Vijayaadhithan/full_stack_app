@@ -7,14 +7,14 @@ import {
     Auth
 } from "firebase/auth";
 
-// Firebase configuration from environment variables (with hardcoded fallback)
+// Firebase configuration from environment variables
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDs4MJm55Aelkvfgh4cC9Yj6KHbyK-yFdY",
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "vaasal-d888a.firebaseapp.com",
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "vaasal-d888a",
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "vaasal-d888a.firebasestorage.app",
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "490481415278",
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:490481415278:web:92e6ac583ad95eb7d3627f"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
 };
 
 // Debug: Log Firebase configuration status
