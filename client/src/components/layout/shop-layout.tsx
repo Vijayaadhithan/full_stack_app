@@ -30,6 +30,7 @@ import { useLanguage } from "@/contexts/language-context";
 import { ProfileSwitcher } from "@/components/ProfileSwitcher";
 import { isShopUser, isWorkerUser } from "@/lib/role-access";
 import { useShopContext } from "@/hooks/use-shop-context";
+import LogoMark from "@/components/branding/logo-mark";
 
 type NavConfig = {
   labelKey: string;
@@ -148,8 +149,9 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex w-full flex-col md:pl-64">
         <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex h-16 items-center justify-between gap-2 px-3 sm:px-4 md:px-6">
-            <div className="flex items-center gap-2">
+          <div className="flex h-16 items-center px-3 sm:px-4 md:px-6">
+            {/* Left: Menu + Shop Name */}
+            <div className="flex items-center gap-2 flex-1">
               {navigation.length > 0 && (
                 <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
                   <SheetTrigger asChild>
@@ -200,11 +202,20 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
                   </SheetContent>
                 </Sheet>
               )}
-              <span className="text-base font-semibold leading-none">
+              <span className="text-base font-semibold leading-none hidden sm:inline">
                 {displayShopName}
               </span>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3">
+
+            {/* Center: Logo */}
+            <div className="flex items-center justify-center">
+              <Link href="/shop">
+                <LogoMark size={40} className="rounded-lg" />
+              </Link>
+            </div>
+
+            {/* Right: Controls */}
+            <div className="flex items-center justify-end gap-2 sm:gap-3 flex-1">
               <div className="hidden sm:block">
                 <ProfileSwitcher />
               </div>

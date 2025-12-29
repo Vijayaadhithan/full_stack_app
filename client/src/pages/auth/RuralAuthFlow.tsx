@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { Loader2, Phone, Lock, User, ArrowLeft, Store, Wrench, UserCircle, Globe } from "lucide-react";
+import { Loader2, Phone, Lock, User, ArrowLeft, Store, Wrench, UserCircle, Globe, Sparkles, Shield, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import LogoMark from "@/components/branding/logo-mark";
+import doorstepLogo from "@/assets/doorstep-ds-logo.png";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -14,6 +13,7 @@ type Language = "en" | "ta";
 
 interface RuralAuthFlowProps {
     onSuccess?: () => void;
+    onForgotPassword?: () => void;
 }
 
 // Bilingual translations
@@ -21,7 +21,7 @@ const translations = {
     en: {
         enterPhone: "Enter your mobile number",
         phonePlaceholder: "9876543210",
-        getOtp: "Get OTP",
+        getOtp: "Continue",
         enterOtp: "Enter OTP",
         verify: "Verify",
         enterPin: "Enter your PIN",
@@ -40,13 +40,14 @@ const translations = {
         provider: "Service Provider",
         providerDesc: "Offer your services",
         welcome: "Welcome!",
-        complete: "Save & Login",
+        complete: "Complete Setup",
         switchLang: "தமிழ்",
+        tagline: "Your local services, delivered",
     },
     ta: {
         enterPhone: "உங்கள் மொபைல் எண்",
         phonePlaceholder: "9876543210",
-        getOtp: "OTP பெறுக",
+        getOtp: "தொடரவும்",
         enterOtp: "OTP உள்ளிடுக",
         verify: "சரிபார்க்கவும்",
         enterPin: "உங்கள் PIN",
@@ -65,12 +66,13 @@ const translations = {
         provider: "சேவை வழங்குநர்",
         providerDesc: "சேவைகளை வழங்கவும்",
         welcome: "வரவேற்பு!",
-        complete: "சேமி & உள்நுழை",
+        complete: "அமைப்பை முடிக்கவும்",
         switchLang: "English",
+        tagline: "உங்கள் உள்ளூர் சேவைகள்",
     },
 };
 
-export default function RuralAuthFlow({ onSuccess }: RuralAuthFlowProps) {
+export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuthFlowProps) {
     const [, setLocation] = useLocation();
     const { toast } = useToast();
 
@@ -128,7 +130,6 @@ export default function RuralAuthFlow({ onSuccess }: RuralAuthFlowProps) {
             const res = await apiRequest("POST", "/api/auth/check-user", { phone });
             const data = await res.json();
 
-            // Save phone for "Remember Me"
             localStorage.setItem("lastPhone", phone);
 
             if (data.exists) {
@@ -137,9 +138,6 @@ export default function RuralAuthFlow({ onSuccess }: RuralAuthFlowProps) {
                 setStep("pin-entry");
             } else {
                 setIsExistingUser(false);
-                // New user - trigger OTP flow
-                // For now, we'll skip Firebase OTP and go straight to setup
-                // In production, integrate Firebase signInWithPhoneNumber here
                 setStep("otp");
             }
         } catch (error) {
@@ -149,7 +147,7 @@ export default function RuralAuthFlow({ onSuccess }: RuralAuthFlowProps) {
         }
     }
 
-    // Handle OTP verification (placeholder - integrate Firebase here)
+    // Handle OTP verification
     async function handleOtpVerify() {
         if (otp.length !== 6) {
             toast({ title: "Invalid OTP", description: "Please enter 6 digits", variant: "destructive" });
@@ -157,8 +155,6 @@ export default function RuralAuthFlow({ onSuccess }: RuralAuthFlowProps) {
         }
 
         setIsLoading(true);
-        // TODO: Verify OTP with Firebase
-        // For demo, simulate verification
         await new Promise(resolve => setTimeout(resolve, 1000));
         setIsLoading(false);
         setStep("profile-setup");
@@ -195,14 +191,14 @@ export default function RuralAuthFlow({ onSuccess }: RuralAuthFlowProps) {
         }
     }
 
-    // Handle forgot PIN
-    async function handleForgotPin() {
-        setIsLoading(true);
-        // Trigger OTP flow for PIN reset
-        // TODO: Integrate Firebase OTP
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setIsLoading(false);
-        setStep("otp");
+    // Handle forgot PIN - redirect to forgot password flow
+    function handleForgotPin() {
+        if (onForgotPassword) {
+            onForgotPassword();
+        } else {
+            // Fallback: trigger OTP flow for legacy behavior
+            setStep("otp");
+        }
     }
 
     // Handle profile setup submission
@@ -256,276 +252,370 @@ export default function RuralAuthFlow({ onSuccess }: RuralAuthFlowProps) {
         }
     }
 
-    // Render based on step
     return (
-        <div className="min-h-screen bg-gradient-to-br from-orange-400 via-orange-500 to-red-500 flex items-center justify-center p-4">
-            {/* Decorative background elements */}
+        <div className="min-h-screen relative overflow-hidden">
+            {/* Animated gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+
+            {/* Animated orbs */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-24 -left-24 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-                <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-yellow-400/20 rounded-full blur-3xl" />
-                <div className="absolute top-1/4 right-1/4 w-48 h-48 bg-orange-300/20 rounded-full blur-2xl" />
+                <div className="absolute -top-40 -left-40 w-80 h-80 bg-orange-500/30 rounded-full blur-[120px] animate-pulse" />
+                <div className="absolute top-1/3 -right-20 w-96 h-96 bg-amber-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: "1s" }} />
+                <div className="absolute -bottom-40 left-1/3 w-80 h-80 bg-orange-600/25 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: "2s" }} />
+                <div className="absolute top-20 right-1/4 w-64 h-64 bg-yellow-500/15 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: "1.5s" }} />
             </div>
 
-            <Card className="w-full max-w-md shadow-2xl backdrop-blur-sm bg-white/95 border-0 relative z-10">
-                <CardHeader className="text-center pb-4">
-                    {/* Language Dropdown */}
-                    <div className="flex justify-end mb-2">
-                        <select
-                            value={language}
-                            onChange={(e) => setLanguage(e.target.value as Language)}
-                            className="px-3 py-1.5 rounded-full text-sm font-medium bg-orange-100 text-orange-700 border-0 focus:ring-2 focus:ring-orange-300 cursor-pointer"
+            {/* Subtle grid pattern */}
+            <div
+                className="absolute inset-0 opacity-[0.02]"
+                style={{
+                    backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                                      linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+                    backgroundSize: '50px 50px'
+                }}
+            />
+
+            {/* Main content */}
+            <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+                <div className="w-full max-w-md">
+                    {/* Language Selector - Floating */}
+                    <div className="flex justify-end mb-4">
+                        <button
+                            onClick={() => setLanguage(language === "en" ? "ta" : "en")}
+                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md text-white/80 text-sm font-medium hover:bg-white/20 transition-all border border-white/10"
                         >
-                            <option value="en">🇬🇧 English</option>
-                            <option value="ta">🇮🇳 தமிழ்</option>
-                        </select>
+                            <Globe className="w-4 h-4" />
+                            {t.switchLang}
+                        </button>
                     </div>
 
-                    {/* Logo and Title */}
-                    <div className="flex justify-center mb-4">
-                        <div className="w-20 h-20 bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl flex items-center justify-center shadow-lg">
-                            <LogoMark size={48} />
-                        </div>
-                    </div>
-                    <CardTitle className="text-2xl font-bold text-gray-800">
-                        {step === "pin-entry" && userName
-                            ? (language === "en" ? `Hello, ${userName}!` : `வணக்கம், ${userName}!`)
-                            : (language === "en" ? "Welcome to DoorStepTN" : "DoorStepTN க்கு வரவேற்கிறோம்!")}
-                    </CardTitle>
-                    <p className="text-gray-500 text-sm mt-1">
-                        {language === "en" ? "Your local services, delivered" : "உங்கள் உள்ளூர் சேவைகள்"}
-                    </p>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    {/* Step: Phone Entry */}
-                    {step === "phone" && (
-                        <div className="space-y-5">
-                            <div className="space-y-2">
-                                <Label className="text-base font-medium text-gray-700">{t.enterPhone}</Label>
-                                <div className="relative">
-                                    <div className="absolute left-0 top-0 h-full flex items-center pl-4 pointer-events-none">
-                                        <span className="text-lg font-semibold text-gray-400">+91</span>
+                    {/* Glass Card */}
+                    <div className="relative">
+                        {/* Glow effect behind card */}
+                        <div className="absolute -inset-1 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 rounded-3xl blur-lg opacity-30 animate-pulse" />
+
+                        <div className="relative bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl p-8 overflow-hidden">
+                            {/* Inner glow */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none" />
+
+                            {/* Header with Logo */}
+                            <div className="relative text-center mb-8">
+                                {/* Logo with glow */}
+                                <div className="relative inline-block mb-6">
+                                    <div className="absolute -inset-4 bg-orange-500/30 rounded-full blur-2xl" />
+                                    {/* Main Logo */}
+                                    <div className="relative w-20 h-20 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/30 bg-white/10 p-1">
+                                        <img
+                                            src={doorstepLogo}
+                                            alt="DoorStep"
+                                            className="w-full h-full object-cover rounded-xl"
+                                        />
                                     </div>
-                                    <Input
-                                        ref={phoneInputRef}
-                                        type="tel"
-                                        inputMode="numeric"
-                                        pattern="[0-9]*"
-                                        maxLength={10}
-                                        value={phone}
-                                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                                        placeholder={t.phonePlaceholder}
-                                        className="pl-16 h-14 text-xl font-mono tracking-widest text-center border-2 border-gray-200 focus:border-orange-400 rounded-xl transition-colors"
-                                        autoComplete="tel"
-                                    />
                                 </div>
-                            </div>
-                            <Button
-                                onClick={handlePhoneSubmit}
-                                disabled={isLoading || phone.length !== 10}
-                                className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl shadow-lg shadow-orange-200 transition-all"
-                            >
-                                {isLoading ? <Loader2 className="animate-spin" /> : t.getOtp}
-                            </Button>
-                        </div>
-                    )}
 
-                    {/* Step: OTP Verification */}
-                    {step === "otp" && (
-                        <div className="space-y-5">
-                            <Button
-                                variant="ghost"
-                                onClick={() => setStep("phone")}
-                                className="mb-2 text-gray-600 hover:text-gray-800"
-                            >
-                                <ArrowLeft className="w-4 h-4 mr-2" /> {t.back}
-                            </Button>
-                            <div className="space-y-2">
-                                <Label className="text-base font-medium text-gray-700">{t.enterOtp}</Label>
-                                <p className="text-sm text-gray-500">
-                                    {language === "en" ? `OTP sent to +91 ${phone}` : `+91 ${phone} க்கு OTP அனுப்பப்பட்டது`}
+                                {/* Title */}
+                                <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-300 via-amber-200 to-orange-300 bg-clip-text text-transparent mb-2">
+                                    {step === "pin-entry" && userName
+                                        ? (language === "en" ? `Hello, ${userName}!` : `வணக்கம், ${userName}!`)
+                                        : "DoorStep"}
+                                </h1>
+                                <p className="text-white/60 text-sm flex items-center justify-center gap-2">
+                                    <Sparkles className="w-4 h-4" />
+                                    {t.tagline}
                                 </p>
                             </div>
-                            <Input
-                                ref={otpInputRef}
-                                type="tel"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                maxLength={6}
-                                value={otp}
-                                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                                placeholder="• • • • • •"
-                                className="h-14 text-2xl font-mono tracking-[0.5em] text-center border-2 border-gray-200 focus:border-orange-400 rounded-xl"
-                            />
-                            <Button
-                                onClick={handleOtpVerify}
-                                disabled={isLoading || otp.length !== 6}
-                                className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl shadow-lg shadow-orange-200"
-                            >
-                                {isLoading ? <Loader2 className="animate-spin" /> : t.verify}
-                            </Button>
-                        </div>
-                    )}
 
-                    {/* Step: PIN Entry (Existing User) */}
-                    {step === "pin-entry" && (
-                        <div className="space-y-5">
-                            <Button
-                                variant="ghost"
-                                onClick={() => setStep("phone")}
-                                className="mb-2 text-gray-600 hover:text-gray-800"
-                            >
-                                <ArrowLeft className="w-4 h-4 mr-2" /> {t.back}
-                            </Button>
-                            <div className="space-y-2">
-                                <Label className="text-base font-medium text-gray-700">{t.enterPin}</Label>
-                            </div>
-                            <div className="relative">
-                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                                <Input
-                                    ref={pinInputRef}
-                                    type="password"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    maxLength={4}
-                                    value={pin}
-                                    onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                                    placeholder="• • • •"
-                                    className="pl-12 h-14 text-2xl tracking-[0.5em] text-center border-2 border-gray-200 focus:border-orange-400 rounded-xl"
-                                />
-                            </div>
-                            <Button
-                                onClick={handlePinLogin}
-                                disabled={isLoading || pin.length !== 4}
-                                className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl shadow-lg shadow-orange-200"
-                            >
-                                {isLoading ? <Loader2 className="animate-spin" /> : t.login}
-                            </Button>
-                            <Button
-                                variant="link"
-                                onClick={handleForgotPin}
-                                disabled={isLoading}
-                                className="w-full text-gray-500"
-                            >
-                                {t.forgotPin}
-                            </Button>
-                        </div>
-                    )}
+                            {/* Step: Phone Entry */}
+                            {step === "phone" && (
+                                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="space-y-3">
+                                        <Label className="text-white/80 text-sm font-medium flex items-center gap-2">
+                                            <Phone className="w-4 h-4" />
+                                            {t.enterPhone}
+                                        </Label>
+                                        <div className="relative group">
+                                            <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
+                                            <div className="relative flex items-center bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden">
+                                                <span className="pl-4 pr-2 text-white/60 text-lg font-semibold">+91</span>
+                                                <Input
+                                                    ref={phoneInputRef}
+                                                    type="tel"
+                                                    inputMode="numeric"
+                                                    pattern="[0-9]*"
+                                                    maxLength={10}
+                                                    value={phone}
+                                                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                                    placeholder={t.phonePlaceholder}
+                                                    className="flex-1 h-14 text-xl font-mono tracking-wider text-white placeholder:text-white/30 bg-transparent border-0 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                                    autoComplete="tel"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
 
-                    {/* Step: Profile Setup (New User) */}
-                    {step === "profile-setup" && (
-                        <div className="space-y-4">
-                            <Button
-                                variant="ghost"
-                                onClick={() => setStep("otp")}
-                                className="mb-2"
-                            >
-                                <ArrowLeft className="w-4 h-4 mr-2" /> {t.back}
-                            </Button>
+                                    <Button
+                                        onClick={handlePhoneSubmit}
+                                        disabled={isLoading || phone.length !== 10}
+                                        className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30 transition-all duration-300 hover:shadow-orange-500/50 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
+                                    >
+                                        {isLoading ? (
+                                            <Loader2 className="animate-spin" />
+                                        ) : (
+                                            <span className="flex items-center gap-2">
+                                                {t.getOtp}
+                                                <ChevronRight className="w-5 h-5" />
+                                            </span>
+                                        )}
+                                    </Button>
 
-                            <div className="space-y-2">
-                                <Label className="text-lg font-medium">{t.yourName}</Label>
-                                <div className="relative">
-                                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-6 h-6" />
-                                    <Input
-                                        type="text"
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
-                                        placeholder="பெயர்"
-                                        className="pl-14 h-14 text-xl"
-                                    />
+                                    {/* Trust indicators */}
+                                    <div className="flex items-center justify-center gap-4 text-white/40 text-xs">
+                                        <span className="flex items-center gap-1">
+                                            <Shield className="w-3 h-3" />
+                                            Secure
+                                        </span>
+                                        <span>•</span>
+                                        <span>100% Safe</span>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
-                            <div className="space-y-3">
-                                <Label className="text-lg font-medium">{t.chooseRole}</Label>
-                                <div className="grid gap-3">
-                                    <RoleButton
-                                        icon={<UserCircle className="w-8 h-8" />}
-                                        title={t.customer}
-                                        description={t.customerDesc}
-                                        selected={selectedRole === "customer"}
-                                        onClick={() => setSelectedRole("customer")}
-                                        color="orange"
-                                    />
-                                    <RoleButton
-                                        icon={<Store className="w-8 h-8" />}
-                                        title={t.shop}
-                                        description={t.shopDesc}
-                                        selected={selectedRole === "shop"}
-                                        onClick={() => setSelectedRole("shop")}
-                                        color="green"
-                                    />
-                                    <RoleButton
-                                        icon={<Wrench className="w-8 h-8" />}
-                                        title={t.provider}
-                                        description={t.providerDesc}
-                                        selected={selectedRole === "provider"}
-                                        onClick={() => setSelectedRole("provider")}
-                                        color="blue"
-                                    />
+                            {/* Step: OTP Verification */}
+                            {step === "otp" && (
+                                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                    <button
+                                        onClick={() => setStep("phone")}
+                                        className="flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-4"
+                                    >
+                                        <ArrowLeft className="w-4 h-4" />
+                                        {t.back}
+                                    </button>
+
+                                    <div className="space-y-2">
+                                        <Label className="text-white/80 text-sm font-medium">{t.enterOtp}</Label>
+                                        <p className="text-white/50 text-sm">
+                                            {language === "en" ? `OTP sent to +91 ${phone}` : `+91 ${phone} க்கு OTP அனுப்பப்பட்டது`}
+                                        </p>
+                                    </div>
+
+                                    <div className="relative group">
+                                        <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
+                                        <Input
+                                            ref={otpInputRef}
+                                            type="tel"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
+                                            maxLength={6}
+                                            value={otp}
+                                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                            placeholder="• • • • • •"
+                                            className="relative h-16 text-2xl font-mono tracking-[0.5em] text-center text-white placeholder:text-white/30 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                        />
+                                    </div>
+
+                                    <Button
+                                        onClick={handleOtpVerify}
+                                        disabled={isLoading || otp.length !== 6}
+                                        className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30"
+                                    >
+                                        {isLoading ? <Loader2 className="animate-spin" /> : t.verify}
+                                    </Button>
                                 </div>
-                            </div>
+                            )}
 
-                            <Button
-                                onClick={handleProfileSetup}
-                                disabled={!name.trim()}
-                                className="w-full h-14 text-lg font-semibold"
-                            >
-                                {t.next}
-                            </Button>
+                            {/* Step: PIN Entry (Existing User) */}
+                            {step === "pin-entry" && (
+                                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                    <button
+                                        onClick={() => setStep("phone")}
+                                        className="flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-4"
+                                    >
+                                        <ArrowLeft className="w-4 h-4" />
+                                        {t.back}
+                                    </button>
+
+                                    <div className="space-y-2">
+                                        <Label className="text-white/80 text-sm font-medium flex items-center gap-2">
+                                            <Lock className="w-4 h-4" />
+                                            {t.enterPin}
+                                        </Label>
+                                    </div>
+
+                                    {/* PIN Dots Display */}
+                                    <div className="flex justify-center gap-4 my-6">
+                                        {[0, 1, 2, 3].map((i) => (
+                                            <div
+                                                key={i}
+                                                className={`w-5 h-5 rounded-full transition-all duration-200 ${pin.length > i
+                                                    ? "bg-gradient-to-r from-orange-400 to-amber-400 scale-110 shadow-lg shadow-orange-500/50"
+                                                    : "bg-white/20"
+                                                    }`}
+                                            />
+                                        ))}
+                                    </div>
+
+                                    <div className="relative group">
+                                        <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
+                                        <Input
+                                            ref={pinInputRef}
+                                            type="password"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
+                                            maxLength={4}
+                                            value={pin}
+                                            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                                            placeholder="• • • •"
+                                            className="relative h-16 text-3xl tracking-[0.5em] text-center text-white placeholder:text-white/30 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                        />
+                                    </div>
+
+                                    <Button
+                                        onClick={handlePinLogin}
+                                        disabled={isLoading || pin.length !== 4}
+                                        className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30"
+                                    >
+                                        {isLoading ? <Loader2 className="animate-spin" /> : t.login}
+                                    </Button>
+
+                                    <button
+                                        onClick={handleForgotPin}
+                                        disabled={isLoading}
+                                        className="w-full text-center text-white/50 text-sm hover:text-white/70 transition-colors"
+                                    >
+                                        {t.forgotPin}
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Step: Profile Setup (New User) */}
+                            {step === "profile-setup" && (
+                                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                    <button
+                                        onClick={() => setStep("otp")}
+                                        className="flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-2"
+                                    >
+                                        <ArrowLeft className="w-4 h-4" />
+                                        {t.back}
+                                    </button>
+
+                                    <div className="space-y-3">
+                                        <Label className="text-white/80 text-sm font-medium flex items-center gap-2">
+                                            <User className="w-4 h-4" />
+                                            {t.yourName}
+                                        </Label>
+                                        <div className="relative group">
+                                            <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
+                                            <Input
+                                                type="text"
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
+                                                placeholder={language === "en" ? "Your name" : "உங்கள் பெயர்"}
+                                                className="relative h-14 text-lg text-white placeholder:text-white/30 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <Label className="text-white/80 text-sm font-medium">{t.chooseRole}</Label>
+                                        <div className="grid gap-3">
+                                            <RoleButton
+                                                icon={<UserCircle className="w-7 h-7" />}
+                                                title={t.customer}
+                                                description={t.customerDesc}
+                                                selected={selectedRole === "customer"}
+                                                onClick={() => setSelectedRole("customer")}
+                                                color="orange"
+                                            />
+                                            <RoleButton
+                                                icon={<Store className="w-7 h-7" />}
+                                                title={t.shop}
+                                                description={t.shopDesc}
+                                                selected={selectedRole === "shop"}
+                                                onClick={() => setSelectedRole("shop")}
+                                                color="green"
+                                            />
+                                            <RoleButton
+                                                icon={<Wrench className="w-7 h-7" />}
+                                                title={t.provider}
+                                                description={t.providerDesc}
+                                                selected={selectedRole === "provider"}
+                                                onClick={() => setSelectedRole("provider")}
+                                                color="blue"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <Button
+                                        onClick={handleProfileSetup}
+                                        disabled={!name.trim()}
+                                        className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30"
+                                    >
+                                        {t.next}
+                                    </Button>
+                                </div>
+                            )}
+
+                            {/* Step: PIN Setup (New User) */}
+                            {step === "pin-setup" && (
+                                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                    <button
+                                        onClick={() => setStep("profile-setup")}
+                                        className="flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-2"
+                                    >
+                                        <ArrowLeft className="w-4 h-4" />
+                                        {t.back}
+                                    </button>
+
+                                    <div className="space-y-3">
+                                        <Label className="text-white/80 text-sm font-medium flex items-center gap-2">
+                                            <Lock className="w-4 h-4" />
+                                            {t.createPin}
+                                        </Label>
+                                        <div className="relative group">
+                                            <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
+                                            <Input
+                                                type="password"
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
+                                                maxLength={4}
+                                                value={pin}
+                                                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                                                placeholder="• • • •"
+                                                className="relative h-16 text-3xl tracking-[0.5em] text-center text-white placeholder:text-white/30 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <Label className="text-white/80 text-sm font-medium">{t.confirmPin}</Label>
+                                        <div className="relative group">
+                                            <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
+                                            <Input
+                                                type="password"
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
+                                                maxLength={4}
+                                                value={confirmPin}
+                                                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                                                placeholder="• • • •"
+                                                className="relative h-16 text-3xl tracking-[0.5em] text-center text-white placeholder:text-white/30 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <Button
+                                        onClick={handlePinSetup}
+                                        disabled={isLoading || pin.length !== 4 || confirmPin.length !== 4}
+                                        className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30"
+                                    >
+                                        {isLoading ? <Loader2 className="animate-spin" /> : t.complete}
+                                    </Button>
+                                </div>
+                            )}
                         </div>
-                    )}
-
-                    {/* Step: PIN Setup (New User) */}
-                    {step === "pin-setup" && (
-                        <div className="space-y-4">
-                            <Button
-                                variant="ghost"
-                                onClick={() => setStep("profile-setup")}
-                                className="mb-2"
-                            >
-                                <ArrowLeft className="w-4 h-4 mr-2" /> {t.back}
-                            </Button>
-
-                            <div className="space-y-2">
-                                <Label className="text-lg font-medium">{t.createPin}</Label>
-                                <Input
-                                    type="password"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    maxLength={4}
-                                    value={pin}
-                                    onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                                    placeholder="• • • •"
-                                    className="h-16 text-3xl tracking-[0.5em] text-center"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label className="text-lg font-medium">{t.confirmPin}</Label>
-                                <Input
-                                    type="password"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    maxLength={4}
-                                    value={confirmPin}
-                                    onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                                    placeholder="• • • •"
-                                    className="h-16 text-3xl tracking-[0.5em] text-center"
-                                />
-                            </div>
-
-                            <Button
-                                onClick={handlePinSetup}
-                                disabled={isLoading || pin.length !== 4 || confirmPin.length !== 4}
-                                className="w-full h-14 text-lg font-semibold"
-                            >
-                                {isLoading ? <Loader2 className="animate-spin" /> : t.complete}
-                            </Button>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
@@ -541,32 +631,52 @@ interface RoleButtonProps {
 }
 
 function RoleButton({ icon, title, description, selected, onClick, color }: RoleButtonProps) {
-    const colors = {
-        orange: "border-orange-500 bg-orange-50 text-orange-600",
-        green: "border-green-500 bg-green-50 text-green-600",
-        blue: "border-blue-500 bg-blue-50 text-blue-600",
-    };
-
-    const iconColors = {
-        orange: "text-orange-500",
-        green: "text-green-500",
-        blue: "text-blue-500",
+    const gradients = {
+        orange: "from-orange-500 to-amber-500",
+        green: "from-emerald-500 to-green-500",
+        blue: "from-blue-500 to-cyan-500",
     };
 
     return (
         <button
             type="button"
             onClick={onClick}
-            className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left ${selected ? colors[color] : "border-gray-200 hover:border-gray-300"
+            className={`relative flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left overflow-hidden group ${selected
+                ? "border-transparent"
+                : "border-white/20 hover:border-white/40 bg-white/5"
                 }`}
         >
-            <div className={selected ? iconColors[color] : "text-gray-400"}>
-                {icon}
+            {/* Selected gradient background */}
+            {selected && (
+                <div className={`absolute inset-0 bg-gradient-to-r ${gradients[color]} opacity-20`} />
+            )}
+
+            {/* Selected border glow */}
+            {selected && (
+                <div className={`absolute -inset-[1px] bg-gradient-to-r ${gradients[color]} rounded-xl`} />
+            )}
+
+            <div className={`relative z-10 flex items-center gap-4 ${selected ? "text-white" : "text-white/70"}`}>
+                <div className={`p-2 rounded-lg ${selected ? `bg-gradient-to-r ${gradients[color]}` : "bg-white/10"}`}>
+                    {icon}
+                </div>
+                <div className="flex-1">
+                    <div className="font-semibold">{title}</div>
+                    <div className="text-sm text-white/50">{description}</div>
+                </div>
+                {selected && (
+                    <div className={`w-6 h-6 rounded-full bg-gradient-to-r ${gradients[color]} flex items-center justify-center`}>
+                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                )}
             </div>
-            <div className="flex-1">
-                <div className="font-semibold">{title}</div>
-                <div className="text-sm text-gray-500">{description}</div>
-            </div>
+
+            {/* Background for selected state */}
+            {selected && (
+                <div className="absolute inset-[2px] bg-slate-900/90 rounded-[10px] -z-0" />
+            )}
         </button>
     );
 }

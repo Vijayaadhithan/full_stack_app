@@ -492,6 +492,17 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   expiresAt: timestamp("expires_at").notNull(),
 });
 
+// Phone OTP tokens for forgot password and phone verification
+export const phoneOtpTokens = pgTable("phone_otp_tokens", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull(),
+  otpHash: text("otp_hash").notNull(), // Hashed OTP for security
+  purpose: text("purpose").$type<"forgot_password" | "phone_verification">().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  isUsed: boolean("is_used").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const emailNotificationPreferenceOverrides = pgTable(
   "email_notification_preferences",
   {
@@ -1076,6 +1087,28 @@ export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect
 export type InsertEmailVerificationToken = z.infer<
   typeof insertEmailVerificationTokenSchema
 >;
+
+// Phone OTP token types
+export const insertPhoneOtpTokenSchema =
+  createInsertSchema(phoneOtpTokens).strict();
+export type PhoneOtpToken = typeof phoneOtpTokens.$inferSelect;
+export type InsertPhoneOtpToken = z.infer<typeof insertPhoneOtpTokenSchema>;
+
+// Forgot password OTP flow schemas
+export const forgotPasswordOtpSchema = z.object({
+  phone: z.string().trim().min(10, "Phone number must be at least 10 digits").max(15),
+});
+
+export const verifyResetOtpSchema = z.object({
+  phone: z.string().trim().min(10).max(15),
+  otp: z.string().trim().length(6, "OTP must be exactly 6 digits"),
+});
+
+export const resetPasswordSchema = z.object({
+  phone: z.string().trim().min(10).max(15),
+  otp: z.string().trim().length(6, "OTP must be exactly 6 digits"),
+  newPin: z.string().trim().length(4, "PIN must be exactly 4 digits"),
+});
 
 export const Booking = z.object({
   id: z.number(),

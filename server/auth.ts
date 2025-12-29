@@ -14,15 +14,19 @@ import {
   type InsertUser,
   shopProfileSchema,
   emailVerificationTokens as emailVerificationTokensTable,
+  phoneOtpTokens,
   checkUserSchema,
   ruralRegisterSchema,
   pinLoginSchema,
   resetPinSchema,
+  forgotPasswordOtpSchema,
+  verifyResetOtpSchema,
+  resetPasswordSchema,
   shops,
   providers,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, lt } from "drizzle-orm";
 import dotenv from "dotenv";
 import {
   loginLimiter,
@@ -977,6 +981,198 @@ export function registerAuthRoutes(app: Express) {
       return res.json({ success: true, message: "PIN reset successfully" });
     } catch (error) {
       logger.error({ err: error }, "PIN reset failed");
+      return res.status(500).json({ message: "Failed to reset PIN" });
+    }
+  });
+
+  // =====================================================
+  // FORGOT PASSWORD OTP ENDPOINTS
+  // =====================================================
+
+  // Generate 6-digit OTP
+  function generateOtp(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  // Send OTP for forgot password
+  app.post("/api/auth/forgot-password-otp", loginLimiter, async (req, res) => {
+    const parsed = forgotPasswordOtpSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid phone number",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const { phone } = parsed.data;
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone format" });
+    }
+
+    try {
+      // Check if user exists
+      const user = await storage.getUserByPhone(normalizedPhone);
+      if (!user) {
+        // Don't reveal if user exists or not for security
+        return res.json({ success: true, message: "If this phone number is registered, you will receive an OTP" });
+      }
+
+      // Delete any existing unused OTPs for this phone
+      await db.delete(phoneOtpTokens)
+        .where(and(
+          eq(phoneOtpTokens.phone, normalizedPhone),
+          eq(phoneOtpTokens.purpose, "forgot_password"),
+          eq(phoneOtpTokens.isUsed, false)
+        ));
+
+      // Generate OTP
+      const otp = generateOtp();
+      const otpHash = createHash("sha256").update(otp).digest("hex");
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      // Store OTP
+      await db.insert(phoneOtpTokens).values({
+        phone: normalizedPhone,
+        otpHash,
+        purpose: "forgot_password",
+        expiresAt,
+      });
+
+      // In development, log OTP to console
+      // In production, integrate with SMS provider (Twilio, MSG91, etc.)
+      logger.info(`[FORGOT PASSWORD OTP] Phone: ${normalizedPhone}, OTP: ${otp}`);
+      console.log(`\n🔐 FORGOT PASSWORD OTP for ${normalizedPhone}: ${otp}\n`);
+
+      return res.json({ success: true, message: "OTP sent successfully" });
+    } catch (error) {
+      logger.error({ err: error }, "Failed to send forgot password OTP");
+      return res.status(500).json({ message: "Failed to send OTP" });
+    }
+  });
+
+  // Verify OTP for password reset
+  app.post("/api/auth/verify-reset-otp", loginLimiter, async (req, res) => {
+    const parsed = verifyResetOtpSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid input",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const { phone, otp } = parsed.data;
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone format" });
+    }
+
+    try {
+      const otpHash = createHash("sha256").update(otp).digest("hex");
+
+      // Find valid OTP
+      const otpRecords = await db
+        .select()
+        .from(phoneOtpTokens)
+        .where(and(
+          eq(phoneOtpTokens.phone, normalizedPhone),
+          eq(phoneOtpTokens.otpHash, otpHash),
+          eq(phoneOtpTokens.purpose, "forgot_password"),
+          eq(phoneOtpTokens.isUsed, false)
+        ))
+        .limit(1);
+
+      const otpRecord = otpRecords[0];
+
+      if (!otpRecord) {
+        return res.status(400).json({ message: "Invalid OTP" });
+      }
+
+      if (otpRecord.expiresAt < new Date()) {
+        return res.status(400).json({ message: "OTP expired. Please request a new one." });
+      }
+
+      // OTP is valid - don't mark as used yet, that happens on password reset
+      return res.json({ success: true, message: "OTP verified" });
+    } catch (error) {
+      logger.error({ err: error }, "Failed to verify reset OTP");
+      return res.status(500).json({ message: "Verification failed" });
+    }
+  });
+
+  // Reset password/PIN after OTP verification
+  app.post("/api/auth/reset-password", loginLimiter, async (req, res) => {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid input",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const { phone, otp, newPin } = parsed.data;
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone format" });
+    }
+
+    try {
+      const otpHash = createHash("sha256").update(otp).digest("hex");
+
+      // Verify OTP is still valid
+      const otpRecords = await db
+        .select()
+        .from(phoneOtpTokens)
+        .where(and(
+          eq(phoneOtpTokens.phone, normalizedPhone),
+          eq(phoneOtpTokens.otpHash, otpHash),
+          eq(phoneOtpTokens.purpose, "forgot_password"),
+          eq(phoneOtpTokens.isUsed, false)
+        ))
+        .limit(1);
+
+      const otpRecord = otpRecords[0];
+
+      if (!otpRecord) {
+        return res.status(400).json({ message: "Invalid or expired OTP" });
+      }
+
+      if (otpRecord.expiresAt < new Date()) {
+        return res.status(400).json({ message: "OTP expired. Please request a new one." });
+      }
+
+      // Find user
+      const user = await storage.getUserByPhone(normalizedPhone);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Hash the new PIN
+      const hashedPin = await hashPasswordInternal(newPin);
+
+      // Update user's PIN
+      await storage.updateUser(user.id, {
+        pin: hashedPin,
+        isPhoneVerified: true,
+      });
+
+      // Mark OTP as used
+      await db.update(phoneOtpTokens)
+        .set({ isUsed: true })
+        .where(eq(phoneOtpTokens.id, otpRecord.id));
+
+      // Cleanup expired OTPs (async, don't wait)
+      db.delete(phoneOtpTokens)
+        .where(lt(phoneOtpTokens.expiresAt, new Date()))
+        .catch(err => logger.warn({ err }, "Failed to cleanup expired OTPs"));
+
+      logger.info(`[FORGOT PASSWORD] PIN reset successful for ${normalizedPhone}`);
+      return res.json({ success: true, message: "PIN reset successfully" });
+    } catch (error) {
+      logger.error({ err: error }, "Failed to reset password");
       return res.status(500).json({ message: "Failed to reset PIN" });
     }
   });

@@ -7,15 +7,25 @@ import {
     Auth
 } from "firebase/auth";
 
-// Firebase configuration from environment variables
+// Firebase configuration from environment variables (with hardcoded fallback)
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDs4MJm55Aelkvfgh4cC9Yj6KHbyK-yFdY",
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "vaasal-d888a.firebaseapp.com",
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "vaasal-d888a",
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "vaasal-d888a.firebasestorage.app",
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "490481415278",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:490481415278:web:92e6ac583ad95eb7d3627f"
 };
+
+// Debug: Log Firebase configuration status
+console.log("Firebase Config Check:", {
+    hasApiKey: !!firebaseConfig.apiKey,
+    hasAuthDomain: !!firebaseConfig.authDomain,
+    hasProjectId: !!firebaseConfig.projectId,
+    apiKeyPreview: firebaseConfig.apiKey ? firebaseConfig.apiKey.substring(0, 10) + "..." : "MISSING",
+    authDomain: firebaseConfig.authDomain || "MISSING",
+    projectId: firebaseConfig.projectId || "MISSING"
+});
 
 // Check if Firebase is configured
 export const isFirebaseConfigured = Boolean(
@@ -23,6 +33,8 @@ export const isFirebaseConfigured = Boolean(
     firebaseConfig.authDomain &&
     firebaseConfig.projectId
 );
+
+console.log("isFirebaseConfigured:", isFirebaseConfigured);
 
 // Initialize Firebase only if configured
 let app: ReturnType<typeof initializeApp> | null = null;
@@ -32,10 +44,12 @@ if (isFirebaseConfigured) {
     try {
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
-        console.log("Firebase initialized successfully");
+        console.log("Firebase initialized successfully, auth:", !!auth);
     } catch (error) {
         console.error("Firebase initialization error:", error);
     }
+} else {
+    console.warn("Firebase NOT configured - missing environment variables. Expected VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID in .env");
 }
 
 export { auth };
@@ -47,10 +61,16 @@ let recaptchaVerifierInstance: RecaptchaVerifier | null = null;
 /**
  * Initialize reCAPTCHA verifier (invisible)
  * Call this once when the OTP button is mounted
+ * Returns a promise that resolves to the verifier once rendered
  */
-export function initRecaptcha(buttonId: string): RecaptchaVerifier | null {
-    if (typeof window === "undefined" || !auth) {
-        console.warn("Firebase Auth not available");
+export async function initRecaptcha(buttonId: string): Promise<RecaptchaVerifier | null> {
+    if (typeof window === "undefined") {
+        console.warn("Window not available");
+        return null;
+    }
+
+    if (!auth) {
+        console.warn("Firebase Auth not available - check Firebase configuration");
         return null;
     }
 
@@ -61,6 +81,14 @@ export function initRecaptcha(buttonId: string): RecaptchaVerifier | null {
         } catch (e) {
             // Ignore cleanup errors
         }
+        recaptchaVerifierInstance = null;
+    }
+
+    // Wait for button to be in DOM
+    const button = document.getElementById(buttonId);
+    if (!button) {
+        console.warn(`Button with id "${buttonId}" not found in DOM`);
+        return null;
     }
 
     try {
@@ -73,6 +101,10 @@ export function initRecaptcha(buttonId: string): RecaptchaVerifier | null {
                 console.log("reCAPTCHA expired - user needs to re-verify");
             }
         });
+
+        // Render the reCAPTCHA widget - this is important!
+        await recaptchaVerifierInstance.render();
+        console.log("reCAPTCHA initialized successfully");
 
         return recaptchaVerifierInstance;
     } catch (error) {

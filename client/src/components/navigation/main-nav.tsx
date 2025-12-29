@@ -26,6 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
 import { NotificationsCenter } from "@/components/notifications-center";
 import { ProfileSwitcher } from "@/components/ProfileSwitcher";
+import LogoMark from "@/components/branding/logo-mark";
 
 interface MainNavProps {
   rightSlot?: React.ReactNode;
@@ -163,9 +164,9 @@ export function MainNav({ rightSlot }: MainNavProps) {
 
         <Link
           href={navItems[0]?.href ?? "/"}
-          className="text-base sm:text-lg font-semibold leading-none tracking-tight whitespace-nowrap flex-shrink-0"
+          className="flex items-center gap-2 flex-shrink-0"
         >
-          DoorStepTN
+          <LogoMark size={36} className="rounded-lg" />
         </Link>
 
         {navItems.length > 0 && (
