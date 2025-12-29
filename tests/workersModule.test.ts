@@ -155,9 +155,9 @@ describe("worker routes", () => {
     const handler = findRoute(routes, "post", "/api/shops/workers");
     const req = {
       body: {
-        workerId: "DuplicateUser",
+        workerNumber: "1234567890",
         name: "John Worker",
-        password: "secretpw",
+        pin: "1234",
       },
       user: { id: 50, role: "shop" },
       isAuthenticated: () => true,
@@ -194,14 +194,14 @@ describe("worker routes", () => {
         return {
           returning: async () => (insertCalls.length === 1
             ? [
-                {
-                  id: 77,
-                  username: values.username,
-                  name: values.name,
-                  email: values.email,
-                  phone: values.phone,
-                },
-              ]
+              {
+                id: 77,
+                workerNumber: values.workerNumber,
+                name: values.name,
+                email: values.email,
+                phone: values.phone,
+              },
+            ]
             : []),
         };
       },
@@ -216,11 +216,11 @@ describe("worker routes", () => {
     const handler = findRoute(routes, "post", "/api/shops/workers");
     const req = {
       body: {
-        workerId: "CashierOne",
+        workerNumber: "9876543210",
         name: "Cashier",
         email: "CASHIER@example.com",
         phone: "+1 (555) 123-4567",
-        password: "supersecret",
+        pin: "1234",
         responsibilities: ["orders:read", "customers:message"],
       },
       user: { id: 9, role: "shop" },
@@ -232,7 +232,7 @@ describe("worker routes", () => {
 
     assert.equal(res.statusCode, 201);
     assert.equal(res.body.id, 77);
-    assert.equal(res.body.workerId, "cashierone");
+    assert.equal(res.body.workerNumber, "9876543210");
     assert.equal(res.body.email, "cashier@example.com");
     assert.equal(res.body.phone, "15551234567");
     assert.deepEqual(res.body.responsibilities, [
@@ -241,8 +241,8 @@ describe("worker routes", () => {
     ]);
 
     const [userValues, linkValues] = insertCalls;
-    assert.equal(userValues.username, "cashierone");
-    assert.equal(typeof userValues.password, "string");
+    assert.equal(userValues.workerNumber, "9876543210");
+    assert.equal(typeof userValues.pin, "string");
     assert.equal(linkValues.shopId, 9);
     assert.equal(linkValues.workerUserId, 77);
   });
@@ -334,7 +334,7 @@ describe("worker routes", () => {
           where: async () => [
             {
               id: 77,
-              workerId: "worker77",
+              workerNumber: "1234567890",
               name: "Worker",
               responsibilities: ["orders:read"],
               active: true,
@@ -365,7 +365,7 @@ describe("worker routes", () => {
     await handler(req, res);
 
     assert.equal(res.statusCode, 200);
-    assert.equal(res.body.workerId, "worker77");
+    assert.equal(res.body.workerNumber, "1234567890");
   });
 
   it("lists workers for the authenticated shop", async () => {
@@ -384,7 +384,7 @@ describe("worker routes", () => {
     const listedWorkers = [
       {
         id: 1,
-        workerId: "cashier-one",
+        workerNumber: "1234567890",
         name: "Cashier One",
         email: "cashier@example.com",
         phone: "123",
@@ -421,7 +421,7 @@ describe("worker routes", () => {
     assert.equal(executeCalls.length, 1);
   });
 
-  it("checks workerId availability with normalization", async () => {
+  it("checks workerNumber availability", async () => {
     const [{ db }, loggerModule] = await Promise.all([
       import("../server/db"),
       import("../server/logger"),
@@ -442,9 +442,9 @@ describe("worker routes", () => {
     const { app, routes } = createMockApp();
     registerWorkerRoutes(app as any);
 
-    const handler = findRoute(routes, "get", "/api/shops/workers/check-id");
+    const handler = findRoute(routes, "get", "/api/shops/workers/check-number");
     const req = {
-      query: { workerId: "  Cashier.One  " },
+      query: { workerNumber: "1234567890" },
       user: { id: 3, role: "shop" },
       isAuthenticated: () => true,
     };
@@ -453,11 +453,11 @@ describe("worker routes", () => {
     await handler(req, res);
 
     assert.equal(res.statusCode, 200);
-    assert.equal(res.body.workerId, "cashier.one");
+    assert.equal(res.body.workerNumber, "1234567890");
     assert.equal(res.body.available, true);
   });
 
-  it("updates worker details, responsibilities, and credentials", async () => {
+  it("updates worker details, responsibilities, and pin", async () => {
     const [{ db }, loggerModule] = await Promise.all([
       import("../server/db"),
       import("../server/logger"),
@@ -498,7 +498,7 @@ describe("worker routes", () => {
         email: "updated@example.com",
         phone: "999",
         responsibilities: ["orders:update"],
-        password: "fresh-password",
+        pin: "5678",
         active: false,
       },
       user: { id: 9, role: "shop" },
@@ -518,8 +518,8 @@ describe("worker routes", () => {
     assert.equal(userUpdate?.payload.name, "Updated Worker");
     assert.equal(userUpdate?.payload.email, "updated@example.com");
     assert.equal(userUpdate?.payload.phone, "999");
-    assert.equal(typeof userUpdate?.payload.password, "string");
-    assert.notEqual(userUpdate?.payload.password, "fresh-password");
+    assert.equal(typeof userUpdate?.payload.pin, "string");
+    assert.notEqual(userUpdate?.payload.pin, "5678");
   });
 
   it("deletes worker accounts when removing links", async () => {

@@ -938,6 +938,7 @@ export class MemStorage implements IStorage {
       username: normalizedUsername,
       password: insertUser.password ?? null,
       pin: insertUser.pin ?? null,
+      workerNumber: (insertUser as any).workerNumber ?? null,
       role: (insertUser.role as UserRole) ?? "customer",
       name: insertUser.name,
       phone: normalizedPhone,
