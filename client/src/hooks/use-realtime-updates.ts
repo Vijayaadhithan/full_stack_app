@@ -48,7 +48,19 @@ export function useRealtimeUpdates(enabled: boolean) {
         const keys = Array.isArray(payload.keys) ? payload.keys : [];
         for (const key of keys) {
           if (typeof key === "string" && key.length > 0) {
-            queryClient.invalidateQueries({ queryKey: [key] });
+            // Use predicate to match queries where the first element starts with the key
+            // This allows server to send "orders" and match ["orders", "shop", "status"]
+            // Also matches exact keys like "/api/notifications"
+            queryClient.invalidateQueries({
+              predicate: (query) => {
+                const queryKey = query.queryKey;
+                if (!Array.isArray(queryKey) || queryKey.length === 0) return false;
+                const firstElement = queryKey[0];
+                if (typeof firstElement !== "string") return false;
+                // Match if: exact match OR first element equals key OR first element starts with key
+                return firstElement === key || firstElement.startsWith(key);
+              },
+            });
           }
         }
       } catch (error) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import { formatIndianDisplay } from "@shared/date-utils";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,8 +16,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Star, AlertCircle } from "lucide-react"; // Import icons
 import { Review, ProductReview } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 // Use the updated Review type from the backend modification
 interface ReviewWithService extends Review {
@@ -61,12 +62,6 @@ const StarRating = ({
 };
 
 const MyReviews: React.FC = () => {
-  const [reviews, setReviews] = useState<ReviewWithService[]>([]);
-  const [productReviews, setProductReviews] = useState<
-    ProductReviewWithProduct[]
-  >([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   const [editingReview, setEditingReview] = useState<ReviewWithService | null>(
     null,
   );
@@ -74,45 +69,59 @@ const MyReviews: React.FC = () => {
     useState<ProductReviewWithProduct | null>(null);
   const [editRating, setEditRating] = useState<number | null>(null);
   const [editComment, setEditComment] = useState<string>("");
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const { user } = useAuth();
 
-  const fetchReviews = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [serviceRes, productRes] = await Promise.all([
-        apiRequest("GET", "/api/reviews/customer"),
-        apiRequest("GET", "/api/product-reviews/customer"),
-      ]);
+  // Use React Query for service reviews
+  const { data: reviews = [], isLoading: reviewsLoading, error: reviewsError } = useQuery<ReviewWithService[]>({
+    queryKey: ["/api/reviews/customer"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/reviews/customer");
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return res.json();
+    },
+    enabled: !!user,
+  });
 
-      if (!serviceRes.ok)
-        throw new Error(`HTTP error! status: ${serviceRes.status}`);
-      if (!productRes.ok)
-        throw new Error(`HTTP error! status: ${productRes.status}`);
+  // Use React Query for product reviews
+  const { data: productReviews = [], isLoading: productReviewsLoading, error: productReviewsError } = useQuery<ProductReviewWithProduct[]>({
+    queryKey: ["/api/product-reviews/customer"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/product-reviews/customer");
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return res.json();
+    },
+    enabled: !!user,
+  });
 
-      const serviceData = (await serviceRes.json()) as ReviewWithService[];
-      const productData =
-        (await productRes.json()) as ProductReviewWithProduct[];
+  const loading = reviewsLoading || productReviewsLoading;
+  const error = reviewsError || productReviewsError;
 
-      setReviews(serviceData);
-      setProductReviews(productData);
-    } catch (err: any) {
-      console.error("Failed to fetch reviews:", err);
-      setError(
-        `Failed to load your reviews: ${err.message || "Please try again later."}`,
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    fetchReviews();
-  }, [fetchReviews]);
+  // Mutation for updating reviews
+  const updateReviewMutation = useMutation({
+    mutationFn: async ({ id, rating, review, isProduct }: { id: number; rating: number; review: string; isProduct: boolean }) => {
+      const url = isProduct ? `/api/product-reviews/${id}` : `/api/reviews/${id}`;
+      const response = await apiRequest("PATCH", url, { rating, review });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Failed to save changes." }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate the appropriate query to refresh data
+      if (variables.isProduct) {
+        queryClient.invalidateQueries({ queryKey: ["/api/product-reviews/customer"] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/reviews/customer"] });
+      }
+      handleCloseDialog();
+    },
+    onError: (err: Error) => {
+      setSubmitError(`Failed to save changes: ${err.message || "Please try again."}`);
+    },
+  });
 
   const handleEditClick = (review: ReviewWithService) => {
     setEditingReview(review);
@@ -137,62 +146,17 @@ const MyReviews: React.FC = () => {
     setEditComment("");
   };
 
-  const handleSaveChanges = async () => {
+  const handleSaveChanges = () => {
     const currentReview = editingReview || editingProductReview;
     if (!currentReview || editRating === null) return;
-    setIsSubmitting(true);
     setSubmitError(null);
 
-    try {
-      const url = editingReview
-        ? `/api/reviews/${editingReview.id}`
-        : `/api/product-reviews/${editingProductReview!.id}`;
-      const response = await apiRequest("PATCH", url, {
-        rating: editRating,
-        review: editComment,
-      });
-      if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ message: "Failed to save changes." }));
-        throw new Error(
-          errorData.message || `HTTP error! status: ${response.status}`,
-        );
-      }
-      // Update local state immediately
-      const updatedReview = await response.json();
-      if (editingReview) {
-        setReviews((prevReviews) =>
-          prevReviews.map((review) =>
-            review.id === editingReview.id
-              ? {
-                ...review,
-                ...(updatedReview as ReviewWithService),
-                serviceName: review.serviceName,
-              }
-              : review,
-          ),
-        );
-      } else if (editingProductReview) {
-        setProductReviews((prevReviews) =>
-          prevReviews.map((review) =>
-            review.id === editingProductReview.id
-              ? { ...review, ...(updatedReview as ProductReviewWithProduct) }
-              : review,
-          ),
-        );
-      }
-      // No need to fetch all reviews again
-      // await fetchReviews();
-      handleCloseDialog();
-    } catch (err: any) {
-      console.error("Failed to update review:", err);
-      setSubmitError(
-        `Failed to save changes: ${err.message || "Please try again."}`,
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+    updateReviewMutation.mutate({
+      id: currentReview.id,
+      rating: editRating,
+      review: editComment,
+      isProduct: !!editingProductReview,
+    });
   };
 
   if (loading) {
@@ -206,13 +170,14 @@ const MyReviews: React.FC = () => {
   }
 
   if (error) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to load reviews.";
     return (
       <DashboardLayout>
         <div className="p-6">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         </div>
       </DashboardLayout>
@@ -334,18 +299,18 @@ const MyReviews: React.FC = () => {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={isSubmitting}>
+              <Button variant="outline" disabled={updateReviewMutation.isPending}>
                 Cancel
               </Button>
             </DialogClose>
             <Button
               onClick={handleSaveChanges}
-              disabled={isSubmitting || editRating === null}
+              disabled={updateReviewMutation.isPending || editRating === null}
             >
-              {isSubmitting ? (
+              {updateReviewMutation.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              {isSubmitting ? "Saving..." : "Save Changes"}
+              {updateReviewMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -298,7 +298,7 @@ export interface IStorage {
     options?: { page: number; limit: number },
   ): Promise<{ data: Notification[]; total: number; totalPages: number }>;
   markNotificationAsRead(id: number): Promise<void>;
-  markAllNotificationsAsRead(userId: number, role: UserRole): Promise<void>;
+  markAllNotificationsAsRead(userId: number): Promise<void>;
   deleteNotification(id: number): Promise<void>;
 
   // Promotion operations
@@ -2384,32 +2384,11 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async markAllNotificationsAsRead(
-    userId: number,
-    role?: string,
-  ): Promise<void> {
-    // Get all notifications for this user
-    // We pass a large limit to get all notifications for marking as read, or we could iterate if needed.
-    // For MemStorage, we can just access the map directly or use the method with a large limit.
-    // However, getNotificationsByUser now returns { data, total, totalPages }.
+  async markAllNotificationsAsRead(userId: number): Promise<void> {
+    // Mark ALL notifications for this user as read (no role filtering)
     const result = await this.getNotificationsByUser(userId, { page: 1, limit: 1000 });
-    let userNotifications = result.data;
+    const userNotifications = result.data;
 
-    // Apply role-based filtering if role is provided
-    if (role) {
-      if (role === "shop_owner" || role === "shop" || role === "worker") {
-        // Shop owners should not see service notifications
-        userNotifications = userNotifications.filter(
-          (n) => n.type !== "service",
-        );
-      } else if (role === "provider") {
-        // Service providers should not see order notifications
-        userNotifications = userNotifications.filter((n) => n.type !== "order");
-      }
-      // For customers, we don't need additional filtering
-    }
-
-    // Mark filtered notifications as read
     for (const notification of userNotifications) {
       notification.isRead = true;
       this.notifications.set(notification.id, notification);

@@ -200,9 +200,12 @@ const WISHLIST_KEYS = ["/api/wishlist"];
 const CUSTOMER_ORDER_KEYS = ["/api/orders", "/api/orders/customer"];
 const SHOP_ORDER_KEYS = [
   "orders",
+  "/api/orders",
   "/api/orders/shop",
   "/api/orders/shop/recent",
+  "/api/shops/orders/active",
   "/api/returns/shop",
+  "/api/shops/dashboard-stats",
   "shopDashboardStats",
 ];
 

@@ -1232,7 +1232,7 @@ const reviewReplySchema = z
 
 const notificationsMarkAllSchema = z
   .object({
-    role: z.enum(["customer", "provider", "shop", "worker", "admin"]).optional(),
+    role: z.enum(["customer", "provider", "shop", "worker", "admin"]).optional().nullable(),
   })
   .strict();
 
@@ -5852,14 +5852,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!parsedBody.success) {
         return res.status(400).json(formatValidationError(parsedBody.error));
       }
-      const { role } = parsedBody.data;
       try {
-        const effectiveRole = role ?? req.user?.role;
-        if (!effectiveRole) {
-          return res.status(400).json({ message: "User role is required" });
-        }
-        // Pass both user ID and role to properly filter notifications
-        await storage.markAllNotificationsAsRead(req.user!.id, effectiveRole);
+        // Mark ALL notifications for the user (no role filtering)
+        await storage.markAllNotificationsAsRead(req.user!.id);
         res.status(200).json({ success: true });
       } catch (error) {
         logger.error("Error marking notifications as read:", error);
@@ -6205,13 +6200,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         logger.info(`Created order ${newOrder.id}`);
 
-        if (isPayLater && shopId) {
-          await storage.createNotification({
-            userId: shopId,
-            type: "order",
-            title: "Pay Later approval needed",
-            message: `Order #${newOrder.id} is waiting for credit approval.`,
-          });
+        // Notify shop about new order
+        if (shopId) {
+          if (isPayLater) {
+            // Pay-later orders get specific notification about credit approval
+            await storage.createNotification({
+              userId: shopId,
+              type: "order",
+              title: "Pay Later approval needed",
+              message: `Order #${newOrder.id} (₹${totalAsString}) is waiting for credit approval.`,
+            });
+          } else {
+            // Regular orders
+            await storage.createNotification({
+              userId: shopId,
+              type: "order",
+              title: "New Order Received",
+              message: `Order #${newOrder.id} has been placed (₹${totalAsString}).`,
+            });
+          }
         }
 
         // Clear cart after order creation
@@ -7723,7 +7730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             customerId: req.user!.id,
           });
 
-          // Create notification for return request
+          // Create notification for customer
           await storage.createNotification({
             userId: order.customerId,
             type: "return",
@@ -7731,6 +7738,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message:
               "Your return request has been received and is being processed.",
           });
+
+          // Notify shop about return request
+          if (order.shopId) {
+            await storage.createNotification({
+              userId: order.shopId,
+              type: "return",
+              title: "New Return Request",
+              message: `Customer requested return for Order #${order.id}.`,
+            });
+          }
 
           res.status(201).json(returnRequest);
         } else {

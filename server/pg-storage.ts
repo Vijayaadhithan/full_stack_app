@@ -2743,24 +2743,12 @@ export class PostgresStorage implements IStorage {
     }
   }
 
-  async markAllNotificationsAsRead(
-    userId: number,
-    role?: string,
-  ): Promise<void> {
-    const conditions = [eq(notifications.userId, userId)];
-    if (role === "shop_owner" || role === "shop" || role === "worker") {
-      // Shop owners should not see service notifications
-      conditions.push(sql`type != 'service'`);
-    } else if (role === "provider") {
-      // Service providers should not see order notifications
-      conditions.push(sql`type != 'order'`);
-    }
-    const query = db
+  async markAllNotificationsAsRead(userId: number): Promise<void> {
+    // Mark ALL notifications for this user as read (no role filtering)
+    await db
       .update(notifications)
       .set({ isRead: true })
-      .where(and(...conditions));
-
-    await query;
+      .where(eq(notifications.userId, userId));
 
     notifyNotificationChange(userId);
   }

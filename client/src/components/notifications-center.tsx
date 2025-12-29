@@ -27,9 +27,10 @@ export function NotificationsCenter() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const lastSeenNotificationIdRef = useRef<number | null>(null);
-  const effectiveRole = useMemo(() => {
-    if (!user) return null;
-    if (isWorkerUser(user)) return "worker";
+  // Determine the base role for navigation purposes (not for filtering)
+  const baseRole = useMemo(() => {
+    if (!user) return "customer";
+    if (isWorkerUser(user)) return "shop";
     if (user.role === "shop") return "shop";
     if (user.role === "provider") return "provider";
     if (user.role === "customer") {
@@ -39,8 +40,7 @@ export function NotificationsCenter() {
     }
     return "customer";
   }, [user]);
-  const isShopOwner = effectiveRole === "shop" || effectiveRole === "worker";
-  const isProvider = effectiveRole === "provider";
+  const isShopOwner = baseRole === "shop";
 
   const { data: notificationsData, isFetched } = useQuery<{
     data: Notification[];
@@ -93,12 +93,11 @@ export function NotificationsCenter() {
 
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
-      // Include user role in the request to mark only relevant notifications
-      const role = effectiveRole ?? user?.role;
+      // Mark ALL notifications as read (no role filtering)
       const res = await apiRequest(
         "PATCH",
         "/api/notifications/mark-all-read",
-        { role },
+        {},
       );
       if (!res.ok) {
         const error = await res.json();
@@ -109,7 +108,7 @@ export function NotificationsCenter() {
       return res.json();
     },
     onSuccess: () => {
-      // Optimistically update the local cache to show zero unread count
+      // Optimistically update the local cache to mark all notifications as read
       queryClient.setQueryData(
         ["/api/notifications"],
         (
@@ -118,38 +117,13 @@ export function NotificationsCenter() {
             | undefined,
         ) => {
           if (!oldData) return undefined;
-          // Only mark notifications relevant to the user's role as read
+          // Mark ALL notifications as read
           return {
             ...oldData,
-            data: oldData.data.map((notification) => {
-              // Check if this notification is relevant to the user's role
-              let isRelevantToUser = false;
-
-              // Shop owners should only mark shop/order/return notifications as read
-              if (isShopOwner) {
-                isRelevantToUser = ["order", "shop", "return"].includes(
-                  notification.type,
-                );
-              }
-
-              // Service providers should only mark service/booking notifications as read
-              else if (isProvider) {
-                isRelevantToUser = ["service", "booking"].includes(
-                  notification.type,
-                );
-              }
-
-              // Customers should mark all their notifications as read
-              else {
-                isRelevantToUser = true;
-              }
-
-              // Only mark as read if it's relevant to the user
-              return {
-                ...notification,
-                isRead: isRelevantToUser ? true : notification.isRead,
-              };
-            }),
+            data: oldData.data.map((notification) => ({
+              ...notification,
+              isRead: true,
+            })),
           };
         },
       );
@@ -161,41 +135,15 @@ export function NotificationsCenter() {
         title: t("notifications_cleared"),
         description: t("all_notifications_marked_as_read"),
       });
-      // REMOVED: refetch(); // The optimistic update and invalidation should be sufficient.
     },
   });
 
-  // Filter notifications based on user role
+  // Show ALL notifications to the user regardless of role
+  // This provides a unified notification experience across all profiles
   const filteredNotifications = useMemo(() => {
     if (!user) return [];
-
-    return notifications.filter((notification) => {
-      // Shop owners should only see shop/order/return notifications
-      if (isShopOwner) {
-        return ["order", "shop", "return"].includes(notification.type);
-      }
-
-      // Service providers should see service/booking notifications
-      // and specifically service request notifications
-      if (isProvider) {
-        // Include notifications about new service requests
-        if (
-          notification.type === "service_request" &&
-          (notification.title.includes("New Service Request") ||
-            notification.title.includes("Service Request") ||
-            notification.message.includes("new service request"))
-        ) {
-          return true;
-        }
-        return ["service", "booking", "booking_request"].includes(
-          notification.type,
-        );
-      }
-
-      // Customers should see all relevant notifications
-      return true;
-    });
-  }, [isProvider, isShopOwner, notifications, user]);
+    return notifications;
+  }, [notifications, user]);
 
   // Sort notifications with unread first, then by date
   const sortedNotifications = useMemo(() => {
@@ -345,8 +293,7 @@ export function NotificationsCenter() {
     const id = extractEntityId(notification);
 
     // Navigate based on notification type and user role
-    const baseRole =
-      effectiveRole === "worker" ? "shop" : effectiveRole || "customer";
+    // baseRole is already computed: shop, provider, or customer
     switch (notification.type) {
       case "booking":
         if (baseRole === "customer") {
