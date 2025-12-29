@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type Worker = {
   id: number;
-  workerId: string;
+  workerNumber: string;
   name: string;
   email: string;
   phone: string;
@@ -57,11 +57,11 @@ export default function ShopWorkers() {
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
-    workerId: "",
+    workerNumber: "",
     name: "",
     email: "",
     phone: "",
-    password: "",
+    pin: "",
     responsibilities: [] as string[],
     preset: "",
   });
@@ -71,20 +71,20 @@ export default function ShopWorkers() {
     queryFn: () => apiRequest("GET", "/api/shops/workers/responsibilities").then(r => r.json()),
   });
 
-  // Inline availability check for Worker ID
-  const workerIdTrimmed = createForm.workerId.trim();
-  const { data: workerIdCheck, isFetching: checkingWorkerId } = useQuery<{ workerId: string; available: boolean } | null>({
-    queryKey: ["/api/shops/workers/check-id", workerIdTrimmed],
-    enabled: workerIdTrimmed.length >= 3,
+  // Inline availability check for Worker Number (10 digits)
+  const workerNumberInput = createForm.workerNumber.replace(/\D/g, "");
+  const { data: workerNumberCheck, isFetching: checkingWorkerNumber } = useQuery<{ workerNumber: string; available: boolean } | null>({
+    queryKey: ["/api/shops/workers/check-number", workerNumberInput],
+    enabled: workerNumberInput.length === 10,
     staleTime: 5000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/shops/workers/check-id?workerId=${encodeURIComponent(workerIdTrimmed)}`);
+      const res = await apiRequest("GET", `/api/shops/workers/check-number?workerNumber=${encodeURIComponent(workerNumberInput)}`);
       if (!res.ok) return null;
       return res.json();
     },
   });
-  const workerIdAvailable = workerIdTrimmed.length < 3 ? undefined : workerIdCheck?.available;
+  const workerNumberAvailable = workerNumberInput.length !== 10 ? undefined : workerNumberCheck?.available;
 
   const { data: workers, isLoading } = useQuery<Worker[]>({
     queryKey: ["/api/shops/workers"],
@@ -94,22 +94,25 @@ export default function ShopWorkers() {
   const createMutation = useMutation({
     mutationFn: async () => {
       const body = {
-        workerId: createForm.workerId,
+        workerNumber: workerNumberInput,
         name: createForm.name,
         email: createForm.email || undefined,
         phone: createForm.phone || undefined,
-        password: createForm.password,
+        pin: createForm.pin,
         responsibilities: createForm.responsibilities,
       };
       const res = await apiRequest("POST", "/api/shops/workers", body);
-      if (!res.ok) throw new Error("Failed to create worker");
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to create worker");
+      }
       return await res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/shops/workers"] });
       setCreating(false);
-      setCreateForm({ workerId: "", name: "", email: "", phone: "", password: "", responsibilities: [], preset: "" });
-      toast({ title: "Worker created", description: "The worker can now log in with the given ID and password." });
+      setCreateForm({ workerNumber: "", name: "", email: "", phone: "", pin: "", responsibilities: [], preset: "" });
+      toast({ title: "Worker created", description: "The worker can now log in with their 10-digit number and 4-digit PIN." });
     },
     onError: async (err: any) => {
       toast({ title: "Failed to create worker", description: err?.message || "Please check inputs and try again.", variant: "destructive" });
@@ -143,13 +146,13 @@ export default function ShopWorkers() {
     onError: () => toast({ title: "Failed to update worker", variant: "destructive" }),
   });
 
-  const resetPassword = useMutation({
-    mutationFn: async ({ workerUserId, password }: { workerUserId: number; password: string }) => {
-      const res = await apiRequest("PATCH", `/api/shops/workers/${workerUserId}`, { password });
-      if (!res.ok) throw new Error("Failed to set password");
+  const resetPin = useMutation({
+    mutationFn: async ({ workerUserId, pin }: { workerUserId: number; pin: string }) => {
+      const res = await apiRequest("PATCH", `/api/shops/workers/${workerUserId}`, { pin });
+      if (!res.ok) throw new Error("Failed to set PIN");
     },
-    onSuccess: () => toast({ title: "Password reset", description: "The new password is set." }),
-    onError: () => toast({ title: "Failed to reset password", variant: "destructive" })
+    onSuccess: () => toast({ title: "PIN reset", description: "The new PIN is set." }),
+    onError: () => toast({ title: "Failed to reset PIN", variant: "destructive" })
   });
 
   const deleteWorker = useMutation({
@@ -190,15 +193,25 @@ export default function ShopWorkers() {
               </DialogHeader>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
-                  <Label className="text-sm">Worker ID</Label>
-                  <Input value={createForm.workerId} onChange={(e) => setCreateForm({ ...createForm, workerId: e.target.value })} placeholder="e.g., CASHIER-01" />
-                  {workerIdTrimmed.length >= 3 && (
+                  <Label className="text-sm">10-Digit Worker Number</Label>
+                  <Input
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={createForm.workerNumber}
+                    onChange={(e) => setCreateForm({ ...createForm, workerNumber: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                    placeholder="e.g., 9876543210"
+                    maxLength={10}
+                    className="font-mono tracking-wider"
+                  />
+                  <p className="text-xs text-muted-foreground">{workerNumberInput.length}/10 digits</p>
+                  {workerNumberInput.length === 10 && (
                     <div className="flex items-center gap-2 text-xs mt-1 min-h-[1rem]">
-                      {checkingWorkerId ? (
+                      {checkingWorkerNumber ? (
                         <span className="text-muted-foreground flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Checking…</span>
-                      ) : workerIdAvailable === true ? (
+                      ) : workerNumberAvailable === true ? (
                         <span className="text-green-600 flex items-center gap-1"><Check className="h-3 w-3" /> Available</span>
-                      ) : workerIdAvailable === false ? (
+                      ) : workerNumberAvailable === false ? (
                         <span className="text-red-600 flex items-center gap-1"><X className="h-3 w-3" /> Already taken</span>
                       ) : null}
                     </div>
@@ -209,16 +222,26 @@ export default function ShopWorkers() {
                   <Input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm">Email</Label>
+                  <Label className="text-sm">Email (optional)</Label>
                   <Input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm">Phone</Label>
+                  <Label className="text-sm">Phone (optional)</Label>
                   <Input value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })} />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label className="text-sm">Temporary Password</Label>
-                  <Input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} />
+                  <Label className="text-sm">4-Digit PIN</Label>
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={createForm.pin}
+                    onChange={(e) => setCreateForm({ ...createForm, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                    placeholder="••••"
+                    maxLength={4}
+                    className="font-mono tracking-[0.5em] text-center w-32"
+                  />
+                  <p className="text-xs text-muted-foreground">{createForm.pin.length}/4 digits</p>
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label className="text-sm">Preset</Label>
@@ -267,11 +290,10 @@ export default function ShopWorkers() {
                     onClick={() => createMutation.mutate()}
                     disabled={
                       createMutation.isPending ||
-                      !createForm.workerId ||
-                      workerIdAvailable === false ||
-                      workerIdTrimmed.length < 3 ||
+                      workerNumberInput.length !== 10 ||
+                      workerNumberAvailable === false ||
                       !createForm.name ||
-                      !createForm.password
+                      createForm.pin.length !== 4
                     }
                   >
                     {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create Worker'}
@@ -298,7 +320,7 @@ export default function ShopWorkers() {
                     onToggleActive={(active) => toggleActive.mutate({ workerUserId: w.id, active })}
                     onSaveResponsibilities={(list) => updateResponsibilities.mutate({ workerUserId: w.id, responsibilities: list })}
                     onSaveProfile={(profile) => updateProfile.mutate({ workerUserId: w.id, ...profile })}
-                    onResetPassword={(password) => resetPassword.mutate({ workerUserId: w.id, password })}
+                    onResetPin={(pin) => resetPin.mutate({ workerUserId: w.id, pin })}
                     onDelete={() => deleteWorker.mutate(w.id)}
                     all={respData?.all || []}
                   />
@@ -313,13 +335,13 @@ export default function ShopWorkers() {
   );
 }
 
-function WorkerRow({ worker, all, onToggleActive, onSaveResponsibilities, onSaveProfile, onResetPassword, onDelete }: {
+function WorkerRow({ worker, all, onToggleActive, onSaveResponsibilities, onSaveProfile, onResetPin, onDelete }: {
   worker: Worker;
   all: string[];
   onToggleActive: (active: boolean) => void;
   onSaveResponsibilities: (list: string[]) => void;
   onSaveProfile: (profile: { name?: string; email?: string; phone?: string }) => void;
-  onResetPassword: (password: string) => void;
+  onResetPin: (pin: string) => void;
   onDelete: () => void;
 }) {
   const [editOpen, setEditOpen] = useState(false);
@@ -327,14 +349,14 @@ function WorkerRow({ worker, all, onToggleActive, onSaveResponsibilities, onSave
   const [name, setName] = useState(worker.name);
   const [email, setEmail] = useState(worker.email);
   const [phone, setPhone] = useState(worker.phone);
-  const [newPass, setNewPass] = useState("");
+  const [newPin, setNewPin] = useState("");
 
   return (
     <div className="border rounded p-4">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-1">
-          <div className="text-sm text-muted-foreground">Worker ID</div>
-          <div className="font-mono">{worker.workerId}</div>
+          <div className="text-sm text-muted-foreground">Worker Number</div>
+          <div className="font-mono text-lg tracking-wider">{worker.workerNumber || '-'}</div>
         </div>
         <div className="space-y-1">
           <div className="text-sm text-muted-foreground">Name</div>
@@ -407,10 +429,19 @@ function WorkerRow({ worker, all, onToggleActive, onSaveResponsibilities, onSave
               </div>
 
               <div className="space-y-2 md:col-span-2">
-                <Label>Reset Password</Label>
+                <Label>Reset PIN</Label>
                 <div className="flex gap-2">
-                  <Input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="New password" />
-                  <Button variant="secondary" onClick={() => { if (newPass) onResetPassword(newPass); setNewPass(""); }}>Set</Button>
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    placeholder="New 4-digit PIN"
+                    maxLength={4}
+                    className="font-mono tracking-[0.5em] text-center w-32"
+                  />
+                  <Button variant="secondary" disabled={newPin.length !== 4} onClick={() => { if (newPin.length === 4) onResetPin(newPin); setNewPin(""); }}>Set PIN</Button>
                 </div>
               </div>
 

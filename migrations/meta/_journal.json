@@ -85,6 +85,13 @@
       "when": 1766980801822,
       "tag": "0011_many_venus",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1767002674336,
+      "tag": "0012_cool_zodiak",
+      "breakpoints": true
     }
   ]
 }

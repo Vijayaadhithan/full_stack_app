@@ -189,6 +189,7 @@ export const users = pgTable(
     username: text("username").unique(), // Now optional
     password: text("password"), // Now optional for OTP-based auth
     pin: text("pin"), // Hashed 4-digit PIN for rural-first auth
+    workerNumber: text("worker_number").unique(), // 10-digit worker ID for shop workers
     // Role is optional - multi-profile via shops/providers tables
     role: text("role").$type<UserRole>().default("customer"),
     // Core identity
@@ -243,6 +244,7 @@ export const users = pgTable(
     usersRoleIdx: index("users_role_idx").on(table.role),
     usersEmailIdx: index("users_email_idx").on(table.email),
     usersPhoneIdx: index("users_phone_idx").on(table.phone),
+    usersWorkerNumberIdx: index("users_worker_number_idx").on(table.workerNumber),
   }),
 );
 
@@ -866,6 +868,14 @@ export const pinLoginSchema = z.object({
 });
 
 export type PinLoginData = z.infer<typeof pinLoginSchema>;
+
+// Schema for worker login (10-digit number + 4-digit PIN)
+export const workerLoginSchema = z.object({
+  workerNumber: z.string().regex(/^\d{10}$/, "Worker number must be exactly 10 digits"),
+  pin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits"),
+});
+
+export type WorkerLoginData = z.infer<typeof workerLoginSchema>;
 
 // Schema for check user request
 export const checkUserSchema = z.object({

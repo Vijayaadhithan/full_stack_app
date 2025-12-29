@@ -22,8 +22,11 @@ import {
   forgotPasswordOtpSchema,
   verifyResetOtpSchema,
   resetPasswordSchema,
+  workerLoginSchema,
   shops,
   providers,
+  users,
+  shopWorkers,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, lt } from "drizzle-orm";
@@ -982,6 +985,76 @@ export function registerAuthRoutes(app: Express) {
     } catch (error) {
       logger.error({ err: error }, "PIN reset failed");
       return res.status(500).json({ message: "Failed to reset PIN" });
+    }
+  });
+
+  // =====================================================
+  // WORKER LOGIN (10-digit number + 4-digit PIN)
+  // =====================================================
+  app.post("/api/auth/worker-login", loginLimiter, async (req, res, next) => {
+    const parsed = workerLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid input",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const { workerNumber, pin } = parsed.data;
+
+    try {
+      // Find user by workerNumber
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.workerNumber, workerNumber));
+
+      if (!user) {
+        return res.status(401).json({ message: "Invalid worker number or PIN" });
+      }
+
+      if (user.isSuspended) {
+        return res.status(403).json({ message: "Account suspended" });
+      }
+
+      if (user.role !== "worker") {
+        return res.status(401).json({ message: "Invalid worker number or PIN" });
+      }
+
+      // Check if worker is active in shopWorkers table
+      const [workerLink] = await db
+        .select({ active: shopWorkers.active })
+        .from(shopWorkers)
+        .where(eq(shopWorkers.workerUserId, user.id));
+
+      if (!workerLink || !workerLink.active) {
+        return res.status(403).json({ message: "Worker account is inactive" });
+      }
+
+      if (!user.pin) {
+        return res.status(400).json({
+          message: "PIN not set. Please contact the shop owner.",
+        });
+      }
+
+      // Compare PIN using timing-safe comparison
+      const isPinValid = await comparePasswords(pin, user.pin);
+      if (!isPinValid) {
+        return res.status(401).json({ message: "Invalid worker number or PIN" });
+      }
+
+      const safeUser = sanitizeUser(user);
+      if (!safeUser) {
+        return res.status(500).json({ message: "Login failed" });
+      }
+
+      req.login(safeUser as Express.User, (err) => {
+        if (err) return next(err);
+        return res.status(200).json(safeUser);
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Worker login failed");
+      return res.status(500).json({ message: "Login failed" });
     }
   });
 

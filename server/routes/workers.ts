@@ -109,11 +109,11 @@ export function registerWorkerRoutes(app: Express) {
   // Create a worker under the authenticated shop
   const createWorkerSchema = z
     .object({
-      workerId: z.string().min(3), // The ID given by shop owner; stored as username
+      workerNumber: z.string().regex(/^\d{10}$/, "Worker number must be exactly 10 digits"),
       name: z.string().min(1),
       email: z.string().email().optional().nullable(),
       phone: z.string().optional().nullable(),
-      password: z.string().min(6), // Plain password provided by shop owner
+      pin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits"),
       responsibilities: z
         .array(WorkerResponsibilityZ)
         .default(["orders:read", "products:read"]),
@@ -130,22 +130,18 @@ export function registerWorkerRoutes(app: Express) {
       if (!parsed.success) {
         return res.status(400).json(formatValidationError(parsed.error));
       }
-      const { workerId, name, email, phone, password, responsibilities } = parsed.data;
+      const { workerNumber, name, email, phone, pin, responsibilities } = parsed.data;
       try {
-        const normalizedWorkerId = normalizeUsername(workerId);
-        if (!normalizedWorkerId) {
-          return res.status(400).json({ message: "Invalid worker ID" });
-        }
         const normalizedEmail = normalizeEmail(email);
         const normalizedPhone = normalizePhone(phone);
 
-        // Ensure workerId (username) is unique
+        // Ensure workerNumber (10-digit ID) is unique
         const existing = await db
           .select()
           .from(users)
-          .where(eq(users.username, normalizedWorkerId));
+          .where(eq(users.workerNumber, workerNumber));
         if (existing[0]) {
-          return res.status(400).json({ message: "Worker ID already exists" });
+          return res.status(400).json({ message: "Worker number already exists" });
         }
 
         if (normalizedEmail) {
@@ -168,13 +164,18 @@ export function registerWorkerRoutes(app: Express) {
           }
         }
 
-        const hashedPassword = await hashPasswordInternal(password);
-        const fallbackEmail = normalizedEmail ?? `${normalizedWorkerId}@workers.local`;
+        // Hash the PIN for secure storage
+        const hashedPin = await hashPasswordInternal(pin);
+        // Generate a unique username from workerNumber for backwards compatibility
+        const generatedUsername = `worker_${workerNumber}`;
+        const fallbackEmail = normalizedEmail ?? `worker_${workerNumber}@workers.local`;
+
         const [createdUser] = await db
           .insert(users)
           .values({
-            username: normalizedWorkerId,
-            password: hashedPassword,
+            username: generatedUsername,
+            workerNumber: workerNumber,
+            pin: hashedPin,
             role: "worker",
             name,
             phone: normalizedPhone ?? "",
@@ -191,7 +192,7 @@ export function registerWorkerRoutes(app: Express) {
 
         return res.status(201).json({
           id: createdUser.id,
-          workerId: createdUser.username,
+          workerNumber: createdUser.workerNumber,
           name: createdUser.name,
           email: createdUser.email,
           phone: createdUser.phone,
@@ -215,7 +216,7 @@ export function registerWorkerRoutes(app: Express) {
         const result = await db
           .select({
             id: users.id,
-            workerId: users.username,
+            workerNumber: users.workerNumber,
             name: users.name,
             email: users.email,
             phone: users.phone,
@@ -235,53 +236,49 @@ export function registerWorkerRoutes(app: Express) {
     },
   );
 
-  // Check availability of a worker ID (username) for current shop owner
+  // Check availability of a worker number (10-digit ID) for current shop owner
   app.get(
-    "/api/shops/workers/check-id",
+    "/api/shops/workers/check-number",
     requireAuth,
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
       try {
         await ensureShopWorkersTable();
-        const parsedQuery = workerIdAvailabilitySchema.safeParse(req.query);
+        const parsedQuery = workerNumberAvailabilitySchema.safeParse(req.query);
         if (!parsedQuery.success) {
           return res.status(400).json({
-            message: "Invalid workerId",
+            message: "Invalid worker number",
             errors: parsedQuery.error.flatten(),
           });
         }
-        const { workerId } = parsedQuery.data;
-        const normalizedWorkerId = normalizeUsername(workerId);
-        if (!normalizedWorkerId) {
-          return res.status(400).json({ message: "Invalid workerId" });
-        }
+        const { workerNumber } = parsedQuery.data;
         const existing = await db
           .select()
           .from(users)
-          .where(eq(users.username, normalizedWorkerId));
+          .where(eq(users.workerNumber, workerNumber));
         const available = !existing[0];
-        return res.json({ workerId: normalizedWorkerId, available });
+        return res.json({ workerNumber, available });
       } catch (error) {
-        logger.error("Error checking worker ID availability:", error);
+        logger.error("Error checking worker number availability:", error);
         return res.status(500).json({ message: "Failed to check availability" });
       }
     },
   );
 
-  const workerIdAvailabilitySchema = z
+  const workerNumberAvailabilitySchema = z
     .object({
-      workerId: z.string().trim().min(3, "workerId must be at least 3 characters"),
+      workerNumber: z.string().regex(/^\d{10}$/, "Worker number must be exactly 10 digits"),
     })
     .strict();
 
-  // Update worker details/responsibilities or reset password
+  // Update worker details/responsibilities or reset PIN
   const updateWorkerSchema = z
     .object({
       name: z.string().optional(),
       email: z.string().email().optional(),
       phone: z.string().optional(),
       responsibilities: z.array(WorkerResponsibilityZ).optional(),
-      password: z.string().min(6).optional(),
+      pin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits").optional(),
       active: z.boolean().optional(),
     })
     .strict();
@@ -301,7 +298,7 @@ export function registerWorkerRoutes(app: Express) {
       if (!parsed.success) {
         return res.status(400).json(formatValidationError(parsed.error));
       }
-      const { name, email, phone, responsibilities, password, active } = parsed.data;
+      const { name, email, phone, responsibilities, pin, active } = parsed.data;
 
       try {
         // Ensure the worker belongs to this shop
@@ -327,7 +324,7 @@ export function registerWorkerRoutes(app: Express) {
         if (name) updateUserData.name = name;
         if (email) updateUserData.email = email;
         if (phone) updateUserData.phone = phone;
-        if (password) updateUserData.password = await hashPasswordInternal(password);
+        if (pin) updateUserData.pin = await hashPasswordInternal(pin);
         if (Object.keys(updateUserData).length) {
           await db.update(users).set(updateUserData).where(eq(users.id, workerUserId));
         }
@@ -355,7 +352,7 @@ export function registerWorkerRoutes(app: Express) {
         const result = await db
           .select({
             id: users.id,
-            workerId: users.username,
+            workerNumber: users.workerNumber,
             name: users.name,
             email: users.email,
             phone: users.phone,

@@ -74,6 +74,7 @@ const AdminMonitoring = lazy(() => import("@/pages/admin/AdminMonitoring"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password-page")); // Import the new page
 const VerifyEmailPage = lazy(() => import("@/pages/verify-email-page"));
+const WorkerLoginPage = lazy(() => import("@/pages/auth/WorkerLoginPage"));
 
 function ClientPerformanceMetricsTracker() {
   const { user, isFetching } = useAuth();
@@ -134,6 +135,7 @@ function Router() {
         </AdminLayout>
       </Route>
       <Route path="/auth" component={AuthPage} />
+      <Route path="/worker-login" component={WorkerLoginPage} />
       {/* Customer Routes */}
       <ProtectedRoute
         path="/customer"
