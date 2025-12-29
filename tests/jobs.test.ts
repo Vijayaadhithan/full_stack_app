@@ -79,14 +79,15 @@ describe("paymentReminderJob", () => {
         updatedAt: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
       },
     ]);
-    const getService = mock.fn(async () => ({ providerId: 77 }));
-    const getUser = mock.fn(async () => ({ email: "provider@example.com" }));
+    // Batch methods used by the optimized job
+    const getServicesByIds = mock.fn(async () => [{ id: 50, providerId: 77 }]);
+    const getUsersByIds = mock.fn(async () => [{ id: 77, email: "provider@example.com" }]);
 
     const storage: Partial<IStorage> = {
       getBookingsByStatus,
       updateBooking,
-      getService,
-      getUser,
+      getServicesByIds,
+      getUsersByIds,
     };
 
     startPaymentReminderJob(storage as IStorage);
@@ -101,8 +102,9 @@ describe("paymentReminderJob", () => {
         disputeReason: "Payment confirmation overdue.",
       },
     ]);
-    assert.equal(getService.mock.callCount(), 1);
-    assert.equal(getUser.mock.callCount(), 1);
+    // Verify batch methods were called
+    assert.equal(getServicesByIds.mock.callCount(), 1);
+    assert.equal(getUsersByIds.mock.callCount(), 1);
   });
 
   it("logs when reminder job throws", async () => {

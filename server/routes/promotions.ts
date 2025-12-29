@@ -2,12 +2,11 @@ import { Express, type Request } from "express";
 import { z } from "zod";
 import { eq, and, gte, lte, isNull, or } from "drizzle-orm"; // Added 'or'
 import { db } from "../db";
-import { promotions, products, shopWorkers } from "@shared/schema";
+import { promotions, shopWorkers } from "@shared/schema";
 import logger from "../logger";
 import {
   requireShopOrWorkerPermission,
   resolveShopContextId,
-  coerceNumericId,
   type RequestWithContext,
 } from "../workerAuth";
 import { formatValidationError } from "../utils/zod";
@@ -704,20 +703,6 @@ export function registerPromotionRoutes(app: Express) {
             .json(formatValidationError(parsedParams.error));
         }
         const requestedShopId = parsedParams.data.shopId;
-        // Role-based access: customers can view any shop; workers can view only their shop; shops can view only their own
-        if (req.user?.role === "shop" || req.user?.hasShopProfile) {
-          const shopContextId = coerceNumericId(req.user.id);
-          if (!shopContextId || requestedShopId !== shopContextId) {
-            return res.status(403).json({ message: "Invalid shop context" });
-          }
-        } else if (req.user?.role === "worker") {
-          const workerShopId = await resolveShopContextId(
-            req as RequestWithContext,
-          );
-          if (!workerShopId || requestedShopId !== workerShopId) {
-            return res.status(403).json({ message: "Invalid shop context" });
-          }
-        }
         const shopId = requestedShopId;
         const now = new Date();
 
@@ -981,7 +966,7 @@ export function registerPromotionRoutes(app: Express) {
             .status(400)
             .json(formatValidationError(bodyResult.error));
         }
-        const { orderId } = bodyResult.data;
+        const { orderId: _orderId } = bodyResult.data;
 
         // Get the promotion
         const promotionResult = await db

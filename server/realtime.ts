@@ -16,6 +16,7 @@ type SseConnection = {
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
 const connections = new Map<number, Set<SseConnection>>();
+const connectionToUser = new WeakMap<SseConnection, number>();
 
 function writeEvent(connection: SseConnection, payload: SseEvent) {
   try {
@@ -31,11 +32,16 @@ function cleanupConnection(connection: SseConnection) {
   if (connection.heartbeat) {
     clearInterval(connection.heartbeat);
   }
-  connections.forEach((set, userId) => {
-    if (set.delete(connection) && set.size === 0) {
-      connections.delete(userId);
+  const userId = connectionToUser.get(connection);
+  if (userId !== undefined) {
+    const set = connections.get(userId);
+    if (set) {
+      set.delete(connection);
+      if (set.size === 0) {
+        connections.delete(userId);
+      }
     }
-  });
+  }
 }
 
 function createHeartbeat(connection: SseConnection) {
@@ -60,6 +66,7 @@ export function registerRealtimeClient(res: Response, userId: number) {
     heartbeat: null,
   };
   connection.heartbeat = createHeartbeat(connection);
+  connectionToUser.set(connection, userId);
 
   const existing = connections.get(userId);
   if (existing) {
@@ -149,13 +156,7 @@ function localBroadcastInvalidation(
       .filter((value): value is number => Number.isFinite(value))
     : [Number(recipients)].filter((value) => Number.isFinite(value));
 
-  const uniqueTargets: number[] = [];
-  for (let i = 0; i < targets.length; i += 1) {
-    const target = targets[i];
-    if (!uniqueTargets.includes(target)) {
-      uniqueTargets.push(target);
-    }
-  }
+  const uniqueTargets = Array.from(new Set(targets));
 
   for (let i = 0; i < uniqueTargets.length; i += 1) {
     const target = uniqueTargets[i];

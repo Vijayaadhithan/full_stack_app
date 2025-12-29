@@ -11,8 +11,8 @@ export function startPaymentReminderJob(storage: IStorage) {
   const lockTtlMs =
     Number.parseInt(
       process.env.PAYMENT_REMINDER_LOCK_TTL_MS ||
-        process.env.JOB_LOCK_TTL_MS ||
-        "",
+      process.env.JOB_LOCK_TTL_MS ||
+      "",
       10,
     ) || 10 * 60 * 1000;
 
@@ -32,6 +32,34 @@ export function startPaymentReminderJob(storage: IStorage) {
 
           const awaiting = await storage.getBookingsByStatus("awaiting_payment");
 
+          // Batch fetch all service IDs upfront to avoid N+1 queries
+          const serviceIds = Array.from(
+            new Set(
+              awaiting
+                .map((b) => b.serviceId)
+                .filter((id): id is number => id != null),
+            ),
+          );
+          const services =
+            serviceIds.length > 0
+              ? await storage.getServicesByIds(serviceIds)
+              : [];
+          const serviceMap = new Map(services.map((s) => [s.id, s]));
+
+          // Batch fetch all provider IDs
+          const providerIds = Array.from(
+            new Set(
+              services
+                .map((s) => s.providerId)
+                .filter((id): id is number => id != null),
+            ),
+          );
+          const providers =
+            providerIds.length > 0
+              ? await storage.getUsersByIds(providerIds)
+              : [];
+          const providerMap = new Map(providers.map((p) => [p.id, p]));
+
           for (const b of awaiting) {
             const updatedAt = (b as any).updatedAt
               ? new Date((b as any).updatedAt)
@@ -42,9 +70,10 @@ export function startPaymentReminderJob(storage: IStorage) {
                 disputeReason: "Payment confirmation overdue.",
               });
             } else if (updatedAt < reminderCutoff) {
-              const provider = await storage
-                .getService(b.serviceId!)
-                .then((s) => (s ? storage.getUser(s.providerId!) : null));
+              const service = b.serviceId ? serviceMap.get(b.serviceId) : null;
+              const provider = service?.providerId
+                ? providerMap.get(service.providerId)
+                : null;
               if (provider && provider.email) {
                 logger.info(
                   `[PaymentReminderJob] Skipping email reminder for booking ${b.id}; email notifications disabled.`,

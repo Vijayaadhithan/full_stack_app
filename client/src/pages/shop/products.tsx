@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
@@ -21,7 +19,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+// Textarea import removed - used in lazy loaded component
 import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/contexts/language-context";
 import { useForm } from "react-hook-form";
@@ -77,7 +75,7 @@ type ProductFormData = z.infer<typeof productFormSchema>;
 
 export default function ShopProducts() {
   const {
-    user,
+    user: _user,
     shopId: shopContextId,
     isWorker,
     permissionsLoading: workerPermissionsLoading,
@@ -671,11 +669,10 @@ export default function ShopProducts() {
                     <span>{t("availability")}</span>
                     <div className="flex items-center gap-2">
                       <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                          isAvailable
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${isAvailable
                             ? "bg-emerald-100 text-emerald-700"
                             : "bg-muted text-muted-foreground"
-                        }`}
+                          }`}
                       >
                         {isAvailable
                           ? t("inventory_have_it")
@@ -749,13 +746,13 @@ export default function ShopProducts() {
                   resetForm();
                 }
               }}
-              >
-                <DialogTrigger asChild>
-                  <Button className="w-full sm:w-auto">
-                    <Plus className="h-4 w-4 mr-2" />
-                    {t("add_product")}
-                  </Button>
-                </DialogTrigger>
+            >
+              <DialogTrigger asChild>
+                <Button className="w-full sm:w-auto">
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t("add_product")}
+                </Button>
+              </DialogTrigger>
               <Suspense
                 fallback={
                   <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">

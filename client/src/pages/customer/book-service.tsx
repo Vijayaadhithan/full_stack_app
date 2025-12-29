@@ -23,7 +23,6 @@ import {
   Star,
   AlertCircle,
   Sun,
-  Moon,
   Navigation,
   MessageCircle,
 } from "lucide-react";

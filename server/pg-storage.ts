@@ -3,7 +3,7 @@ import pgSession from "connect-pg-simple";
 import { db } from "./db";
 import type { SQL } from "drizzle-orm";
 import logger from "./logger";
-import { getCache, setCache } from "./services/cache.service";
+import { getCache, setCache, invalidateCache } from "./services/cache.service";
 import { createSessionStore } from "./services/sessionStore.service";
 import { createHash } from "crypto";
 import {
@@ -757,7 +757,7 @@ export class PostgresStorage implements IStorage {
           .filter((id): id is number => typeof id === "number"),
       ),
     );
-    let shopModes = new Map<number, typeof DEFAULT_SHOP_MODES>();
+    const shopModes = new Map<number, typeof DEFAULT_SHOP_MODES>();
     if (shopIds.length) {
       const shops = await db
         .select({
@@ -766,12 +766,12 @@ export class PostgresStorage implements IStorage {
         })
         .from(users)
         .where(inArray(users.id, shopIds));
-      shopModes = new Map(
-        shops.map((shop) => [
+      for (const shop of shops) {
+        shopModes.set(
           shop.id,
           resolveShopModes(shop.profile as ShopProfile | null | undefined),
-        ]),
-      );
+        );
+      }
     }
 
     const items: ProductListItem[] = trimmed.map((product) => {
@@ -841,6 +841,16 @@ export class PostgresStorage implements IStorage {
     locationState?: string;
     excludeOwnerId?: number;
   }): Promise<User[]> {
+    // Build cache key from filters
+    const filterParts: string[] = [];
+    if (filters?.locationCity) filterParts.push(`city:${filters.locationCity.toLowerCase()}`);
+    if (filters?.locationState) filterParts.push(`state:${filters.locationState.toLowerCase()}`);
+    if (filters?.excludeOwnerId) filterParts.push(`excl:${filters.excludeOwnerId}`);
+    const cacheKey = `shops:list:${filterParts.join(':')}`;
+
+    const cached = await getCache<User[]>(cacheKey);
+    if (cached) return cached;
+
     // Query shops table and join with users to get owner info
     const shopRecords = await db
       .select()
@@ -901,6 +911,7 @@ export class PostgresStorage implements IStorage {
       });
     }
 
+    await setCache(cacheKey, results, 120); // 2 minutes cache for shop listings
     return results;
   }
 
@@ -1215,14 +1226,35 @@ export class PostgresStorage implements IStorage {
       }
     }
     const result = await db.insert(reviews).values(review).returning();
+
+    // Invalidate caches
+    if (review.serviceId) {
+      await invalidateCache(`reviews:service:${review.serviceId}`);
+      try {
+        const service = await this.getService(review.serviceId);
+        if (service?.providerId) {
+          await invalidateCache(`reviews:provider:${service.providerId}`);
+        }
+      } catch (err) {
+        logger.warn({ err }, "Failed to invalidate provider review cache");
+      }
+    }
+
     return result[0];
   }
 
   async getReviewsByService(serviceId: number): Promise<Review[]> {
-    return await db
+    const cacheKey = `reviews:service:${serviceId}`;
+    const cached = await getCache<Review[]>(cacheKey);
+    if (cached) return cached;
+
+    const results = await db
       .select()
       .from(reviews)
       .where(eq(reviews.serviceId, serviceId));
+
+    await setCache(cacheKey, results, 300); // 5 minutes cache
+    return results;
   }
 
   async getReviewsByServiceIds(serviceIds: number[]): Promise<Review[]> {
@@ -1237,17 +1269,22 @@ export class PostgresStorage implements IStorage {
   }
 
   async getReviewsByProvider(providerId: number): Promise<Review[]> {
-    // This requires joining reviews with services to get the providerId
-    const providerServices = await db
-      .select({ id: services.id })
-      .from(services)
-      .where(eq(services.providerId, providerId));
-    const serviceIds = providerServices.map((s) => s.id);
-    if (serviceIds.length === 0) return [];
+    // Optimized: Single JOIN query instead of two separate queries
     const rows = await db
-      .select()
+      .select({
+        id: reviews.id,
+        customerId: reviews.customerId,
+        serviceId: reviews.serviceId,
+        bookingId: reviews.bookingId,
+        rating: reviews.rating,
+        review: reviews.review,
+        providerReply: reviews.providerReply,
+        createdAt: reviews.createdAt,
+      })
       .from(reviews)
-      .where(sql`${reviews.serviceId} IN ${serviceIds}`);
+      .innerJoin(services, eq(reviews.serviceId, services.id))
+      .where(eq(services.providerId, providerId));
+
     return rows as Review[];
   }
 
@@ -1596,21 +1633,39 @@ export class PostgresStorage implements IStorage {
       .orderBy(desc(bookings.bookingDate));
   }
 
-  async getBookingsByProvider(providerId: number): Promise<Booking[]> {
+  async getBookingsByProvider(
+    providerId: number,
+    options?: { page: number; limit: number },
+  ): Promise<{ data: Booking[]; total: number; totalPages: number }> {
     // Get all services offered by this provider first
     const providerServices = await this.getServicesByProvider(providerId);
     const serviceIds = providerServices.map((service) => service.id);
-    if (serviceIds.length === 0) return [];
 
-    let allBookings: Booking[] = [];
-    for (const serviceId of serviceIds) {
-      const serviceBookings = await db
-        .select()
-        .from(bookings)
-        .where(eq(bookings.serviceId, serviceId));
-      allBookings = [...allBookings, ...serviceBookings];
+    if (serviceIds.length === 0) {
+      return { data: [], total: 0, totalPages: 0 };
     }
-    return allBookings;
+
+    const { page = 1, limit = 20 } = options ?? {};
+    const offset = (page - 1) * limit;
+
+    // Get total count
+    const totalResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(bookings)
+      .where(inArray(bookings.serviceId, serviceIds));
+    const total = Number(totalResult[0]?.count ?? 0);
+    const totalPages = Math.ceil(total / limit);
+
+    // Get paginated data
+    const data = await db
+      .select()
+      .from(bookings)
+      .where(inArray(bookings.serviceId, serviceIds))
+      .orderBy(desc(bookings.bookingDate))
+      .limit(limit)
+      .offset(offset);
+
+    return { data, total, totalPages };
   }
 
   async getBookingsByStatus(status: string): Promise<Booking[]> {
@@ -2420,10 +2475,15 @@ export class PostgresStorage implements IStorage {
       .orderBy(desc(orders.orderDate));
   }
 
-  async getOrdersByShop(shopId: number, status?: string): Promise<Order[]> {
+  async getOrdersByShop(shopId: number, status?: string | string[]): Promise<Order[]> {
     const conditions = [eq(orders.shopId, shopId)];
     if (status && status !== "all_orders") {
-      conditions.push(eq(orders.status, status as any));
+      if (Array.isArray(status)) {
+        // Safe cast as we expect valid statuses
+        conditions.push(inArray(orders.status, status as any[]));
+      } else {
+        conditions.push(eq(orders.status, status as any));
+      }
     }
 
     return await db
@@ -2852,9 +2912,9 @@ export class PostgresStorage implements IStorage {
   }
 
   async joinWaitlist(
-    customerId: number,
-    serviceId: number,
-    preferredDate: Date,
+    _customerId: number,
+    _serviceId: number,
+    _preferredDate: Date,
   ): Promise<void> {
     // Insert into a waitlist table (implementation required)
   }
@@ -2921,16 +2981,6 @@ export class PostgresStorage implements IStorage {
     if (!booking) throw new Error("Booking not found");
     // Map 'confirmed' to 'accepted' for internal consistency
     const internalStatus = status === "confirmed" ? "accepted" : status;
-    // Ensure that createdAt is always a valid Date object before using new Date()
-    let createdAt: Date;
-    if (booking && booking.createdAt) {
-      createdAt =
-        booking.createdAt instanceof Date
-          ? booking.createdAt
-          : new Date(booking.createdAt as string | number);
-    } else {
-      createdAt = new Date();
-    }
 
     return await this.updateBooking(id, {
       status: internalStatus,
@@ -2963,7 +3013,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getProviderSchedule(
-    providerId: number,
+    _providerId: number,
     date: Date,
   ): Promise<Booking[]> {
     // Convert date to start and end of day in IST
@@ -3081,10 +3131,11 @@ export class PostgresStorage implements IStorage {
   async getProductReviewsByProduct(
     productId: number,
   ): Promise<ProductReview[]> {
-    return await db
+    const result = await db
       .select()
       .from(productReviews)
       .where(eq(productReviews.productId, productId));
+    return result;
   }
 
   async getProductReviewsByShop(shopId: number): Promise<ProductReview[]> {
@@ -3156,7 +3207,7 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
   // Add new methods for blocked time slots
-  async getBlockedTimeSlots(serviceId: number): Promise<BlockedTimeSlot[]> {
+  async getBlockedTimeSlots(_serviceId: number): Promise<BlockedTimeSlot[]> {
     // Query blocked time slots table (implementation required)
     return [];
   }
@@ -3179,15 +3230,15 @@ export class PostgresStorage implements IStorage {
     return blockedSlot as BlockedTimeSlot;
   }
 
-  async deleteBlockedTimeSlot(slotId: number): Promise<void> {
+  async deleteBlockedTimeSlot(_slotId: number): Promise<void> {
     // Delete blocked time slot (implementation required)
   }
 
   async getOverlappingBookings(
-    serviceId: number,
-    date: Date,
-    startTime: string,
-    endTime: string,
+    _serviceId: number,
+    _date: Date,
+    _startTime: string,
+    _endTime: string,
   ): Promise<Booking[]> {
     // Query for overlapping bookings (implementation required)
     return [];
@@ -3271,17 +3322,17 @@ export class PostgresStorage implements IStorage {
   }
 
   async updateProviderAvailability(
-    providerId: number,
-    availability: {
+    _providerId: number,
+    _availability: {
       days: string[];
       hours: { start: string; end: string };
       breaks: { start: string; end: string }[];
     },
   ): Promise<void> {
-    logger.info(`Updated availability for provider ${providerId}`);
+    logger.info(`Updated availability for provider`);
   }
 
-  async getProviderAvailability(providerId: number): Promise<{
+  async getProviderAvailability(_providerId: number): Promise<{
     days: string[];
     hours: { start: string; end: string };
     breaks: { start: string; end: string }[];

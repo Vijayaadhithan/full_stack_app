@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
-import { z } from "zod";
-import { Loader2, ArrowLeft, Phone, Lock, Globe, Sparkles, Eye, EyeOff, CheckCircle } from "lucide-react";
+// z from zod not used directly in this file
+import { Loader2, ArrowLeft, Phone, Lock, Globe, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,8 +82,8 @@ export default function ForgotPassword({
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [_showPassword, _setShowPassword] = useState(false);
+  const [_showConfirmPassword, _setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const otpInputRef = useRef<HTMLInputElement>(null);

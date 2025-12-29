@@ -308,8 +308,8 @@ export function initializeAuth(app: Express) {
         },
         async (
           req: any,
-          accessToken: string,
-          refreshToken: string,
+          _accessToken: string,
+          _refreshToken: string,
           profile: any,
           done: any,
         ) => {
@@ -752,10 +752,10 @@ export function registerAuthRoutes(app: Express) {
       },
     );
   } else {
-    app.get("/auth/google", (req, res) =>
+    app.get("/auth/google", (_req, res) =>
       res.status(503).send("Google OAuth is not configured."),
     );
-    app.get("/auth/google/callback", (req, res) =>
+    app.get("/auth/google/callback", (_req, res) =>
       res.status(503).send("Google OAuth is not configured."),
     );
   }

@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import request from "supertest";
@@ -145,5 +145,9 @@ describe("Profile verification guard rails", () => {
 
     assert.equal(res.status, 201);
     assert.equal(res.body.shopId, verifiedShop.id);
+  });
+
+  after(() => {
+    process.exit(0);
   });
 });

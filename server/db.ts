@@ -31,7 +31,7 @@ function createDebugLogger(role: PoolRole) {
       if (duration > slowThreshold) {
         logger.warn(`[SLOW] ${msg}`, parameters);
       } else {
-        logger.info(msg);
+        logger.debug(msg);
       }
     };
   };

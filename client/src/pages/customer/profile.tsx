@@ -22,7 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState } from "react";
+// useState removed - profile picture upload not currently used
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,9 +52,7 @@ const profileSchema = z.object({
 export default function CustomerProfile() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [imagePreview, setImagePreview] = useState<string | null>(
-    user?.profilePicture || null,
-  );
+  // Profile picture upload functionality removed - not currently used
 
   const form = useForm({
     resolver: zodResolver(profileSchema),
@@ -77,7 +75,7 @@ export default function CustomerProfile() {
       const res = await apiRequest("PATCH", `/api/users/${user?.id}`, data);
       return res.json();
     },
-    onSuccess: (updatedUser: User) => {
+    onSuccess: (_updatedUser: User) => {
       // queryClient.setQueryData(["/api/user"], updatedUser); // Can be kept or removed, invalidateQueries is more robust for ensuring fresh data
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       toast({
@@ -127,27 +125,7 @@ export default function CustomerProfile() {
     deleteAccountMutation.mutate();
   };
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await apiRequest(
-        "POST",
-        `/api/users/${user?.id}/profile-picture`,
-        formData,
-      );
-      const updatedUser = await res.json();
-      queryClient.setQueryData(["/api/user"], updatedUser);
-    }
-  };
+  // handleImageChange function removed - profile picture upload not currently used
 
   return (
     <DashboardLayout>

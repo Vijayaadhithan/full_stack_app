@@ -154,11 +154,15 @@ export default function ProviderBookings() {
   const [disputeReason, setDisputeReason] = useState("");
 
   // Fetch all bookings including accepted ones
-  const { data: bookings, isLoading } = useQuery<BookingWithDetails[]>({
+  const { data: bookingsResponse, isLoading } = useQuery<{
+    data: BookingWithDetails[];
+    meta: { total: number; totalPages: number; page: number; limit: number };
+  }>({
     // Use BookingWithDetails
     queryKey: ["/api/bookings/provider"],
     enabled: !!user?.id,
   });
+  const bookings = bookingsResponse?.data;
 
   // Update the selected status when the URL changes
   useEffect(() => {
@@ -250,7 +254,7 @@ export default function ProviderBookings() {
     },
     onSuccess: async (result) => {
       // result is { responseData: { booking: updatedBookingData, message: string }, inputData: data }
-      const { responseData, inputData } = result;
+      const { responseData, inputData: _inputData } = result;
       const updatedBooking = responseData.booking; // Access the nested booking object
 
       // Existing success logic
@@ -499,8 +503,8 @@ export default function ProviderBookings() {
                           <span>{option.label}</span>
                           <span
                             className={`rounded-full px-2 py-0.5 text-xs ${isActive
-                                ? "bg-white/20 text-white"
-                                : "bg-muted text-muted-foreground"
+                              ? "bg-white/20 text-white"
+                              : "bg-muted text-muted-foreground"
                               }`}
                           >
                             {count}
@@ -577,21 +581,21 @@ export default function ProviderBookings() {
                               <Badge
                                 variant="outline"
                                 className={`text-xs font-bold uppercase tracking-wide ${booking.status === "pending"
-                                    ? "animate-pulse border-yellow-500 bg-yellow-300 text-black"
-                                    : booking.status === "accepted"
-                                      ? "border-green-700 bg-green-600 text-white"
-                                      : booking.status === "rejected"
-                                        ? "border-red-700 bg-red-600 text-white"
-                                        : booking.status === "rescheduled"
-                                          ? "border-amber-700 bg-amber-500 text-white"
-                                          : booking.status ===
-                                            "awaiting_payment"
-                                            ? "border-yellow-400 bg-yellow-200 text-black"
-                                            : booking.status === "en_route"
-                                              ? "border-blue-700 bg-blue-600 text-white"
-                                              : booking.status === "completed"
-                                                ? "border-slate-700 bg-slate-700 text-white"
-                                                : "border-gray-300 bg-gray-100 text-gray-900"
+                                  ? "animate-pulse border-yellow-500 bg-yellow-300 text-black"
+                                  : booking.status === "accepted"
+                                    ? "border-green-700 bg-green-600 text-white"
+                                    : booking.status === "rejected"
+                                      ? "border-red-700 bg-red-600 text-white"
+                                      : booking.status === "rescheduled"
+                                        ? "border-amber-700 bg-amber-500 text-white"
+                                        : booking.status ===
+                                          "awaiting_payment"
+                                          ? "border-yellow-400 bg-yellow-200 text-black"
+                                          : booking.status === "en_route"
+                                            ? "border-blue-700 bg-blue-600 text-white"
+                                            : booking.status === "completed"
+                                              ? "border-slate-700 bg-slate-700 text-white"
+                                              : "border-gray-300 bg-gray-100 text-gray-900"
                                   }`}
                               >
                                 {t(booking.status)}

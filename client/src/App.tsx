@@ -10,9 +10,6 @@ import { ProtectedRoute } from "./lib/protected-route";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import {
   initializePushNotifications,
-  getCurrentPosition,
-  writeFileToStorage,
-  scheduleLocalNotification,
 } from "@/lib/permissions"; // Added imports
 import PermissionRequester from "@/components/PermissionRequester"; // Import the new component
 import React, { useEffect, Suspense, lazy } from "react";

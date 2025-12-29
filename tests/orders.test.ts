@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import request from "supertest";
@@ -100,7 +100,7 @@ describe("Orders API", () => {
     assert.equal(res.status, 403);
     assert.ok(
       typeof res.body.message === "string" &&
-        res.body.message.includes("Profile verification required"),
+      res.body.message.includes("Profile verification required"),
     );
   });
   it("rejects orders when totals do not match the server calculation", async () => {
@@ -126,5 +126,9 @@ describe("Orders API", () => {
       res.body.message,
       "Order total mismatch. Please review your cart and try again.",
     );
+  });
+
+  after(() => {
+    process.exit(0);
   });
 });

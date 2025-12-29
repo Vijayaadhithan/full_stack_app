@@ -287,7 +287,7 @@ function PendingBookingRequestsList({
     },
     onSuccess: async (result) => {
       // 'result' is { responseData: { booking: updatedBookingData, message: string }, inputComments: comments }
-      const { responseData, inputComments } = result;
+      const { responseData, inputComments: _inputComments } = result;
       const updatedBooking = responseData.booking; // Access the nested booking object
 
       // Existing success logic
@@ -345,9 +345,9 @@ function PendingBookingRequestsList({
     : null;
   const actionTimeLabel = selectedBooking?.bookingDate
     ? formatBookingTimeLabel(
-        selectedBooking.bookingDate,
-        selectedBooking.timeSlotLabel,
-      )
+      selectedBooking.bookingDate,
+      selectedBooking.timeSlotLabel,
+    )
     : null;
 
   return (
@@ -385,7 +385,7 @@ function PendingBookingRequestsList({
         const expiresInDays = booking.expiresAt
           ? Math.ceil(
             (new Date(booking.expiresAt).getTime() - Date.now()) /
-              (1000 * 60 * 60 * 24),
+            (1000 * 60 * 60 * 24),
           )
           : null;
 
@@ -783,12 +783,14 @@ export default function ProviderDashboard() {
     queryKey: servicesQueryKey,
     enabled: !!user?.id,
   });
-  const { data: bookings, isLoading: bookingsLoading } = useQuery<
-    ProviderBooking[]
-  >({
+  const { data: bookingsResponse, isLoading: bookingsLoading } = useQuery<{
+    data: ProviderBooking[];
+    meta: { total: number; totalPages: number; page: number; limit: number };
+  }>({
     queryKey: bookingsQueryKey,
     enabled: !!user?.id,
   });
+  const bookings = bookingsResponse?.data;
   const { data: reviews, isLoading: reviewsLoading } = useQuery<Review[]>({
     queryKey: [`/api/reviews/provider/${user?.id}`],
     enabled: !!user?.id,
@@ -1190,66 +1192,66 @@ export default function ProviderDashboard() {
           <div className="grid gap-4 sm:grid-cols-2">
             <motion.div variants={item}>
               <Card className="border-emerald-200/60">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {t("earnings_today")}
-                </CardTitle>
-                <IndianRupee className="h-4 w-4 text-emerald-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatRupees(todayEarnings)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Completed + awaiting payment
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-          <motion.div variants={item}>
-            <Card className="border-sky-200/60">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {t("earnings_month")}
-                </CardTitle>
-                <IndianRupee className="h-4 w-4 text-sky-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatRupees(monthEarnings)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Total completed jobs
-                </p>
-              </CardContent>
-            </Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {t("earnings_today")}
+                  </CardTitle>
+                  <IndianRupee className="h-4 w-4 text-emerald-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {formatRupees(todayEarnings)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Completed + awaiting payment
+                  </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+            <motion.div variants={item}>
+              <Card className="border-sky-200/60">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {t("earnings_month")}
+                  </CardTitle>
+                  <IndianRupee className="h-4 w-4 text-sky-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {formatRupees(monthEarnings)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Total completed jobs
+                  </p>
+                </CardContent>
+              </Card>
             </motion.div>
             <motion.div variants={item}>
               <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {t("pending_requests")}
-                </CardTitle>
-                <Bell className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{pendingBookingsCount}</div>
-              </CardContent>
-            </Card>
-          </motion.div>
-          <motion.div variants={item}>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {t("average_rating")}
-                </CardTitle>
-                <Star className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {averageRating ? averageRating.toFixed(1) : "N/A"}
-                </div>
-              </CardContent>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {t("pending_requests")}
+                  </CardTitle>
+                  <Bell className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{pendingBookingsCount}</div>
+                </CardContent>
+              </Card>
+            </motion.div>
+            <motion.div variants={item}>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {t("average_rating")}
+                  </CardTitle>
+                  <Star className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {averageRating ? averageRating.toFixed(1) : "N/A"}
+                  </div>
+                </CardContent>
               </Card>
             </motion.div>
           </div>
@@ -1273,49 +1275,49 @@ export default function ProviderDashboard() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Earnings by customer */}
-        <motion.div variants={item}>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <IndianRupee className="h-5 w-5 text-emerald-600" />
-                {t("earnings_by_customer")}
-              </CardTitle>
-              <Link href="/provider/earnings">
-                <Button variant="ghost" size="sm">
-                  {t("view_all")}
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              {topCustomers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t("earnings_empty_state")}
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {topCustomers.map((customer, index) => (
-                    <div
-                      key={`${customer.name}-${index}`}
-                      className="flex items-center justify-between border-b border-border/60 pb-3 last:border-b-0 last:pb-0"
-                    >
-                      <div>
-                        <p className="font-medium">{customer.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {customer.count}{" "}
-                          {customer.count === 1
-                            ? t("job_single")
-                            : t("job_plural")}
-                        </p>
+          <motion.div variants={item}>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <IndianRupee className="h-5 w-5 text-emerald-600" />
+                  {t("earnings_by_customer")}
+                </CardTitle>
+                <Link href="/provider/earnings">
+                  <Button variant="ghost" size="sm">
+                    {t("view_all")}
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent>
+                {topCustomers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {t("earnings_empty_state")}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {topCustomers.map((customer, index) => (
+                      <div
+                        key={`${customer.name}-${index}`}
+                        className="flex items-center justify-between border-b border-border/60 pb-3 last:border-b-0 last:pb-0"
+                      >
+                        <div>
+                          <p className="font-medium">{customer.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {customer.count}{" "}
+                            {customer.count === 1
+                              ? t("job_single")
+                              : t("job_plural")}
+                          </p>
+                        </div>
+                        <div className="text-lg font-semibold">
+                          {formatRupees(customer.total)}
+                        </div>
                       </div>
-                      <div className="text-lg font-semibold">
-                        {formatRupees(customer.total)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </motion.div>
           <motion.div variants={item}>
             <Card>

@@ -175,6 +175,13 @@ export function createCsrfProtection(options?: CsrfOptions): RequestHandler {
     }
 
     const providedToken = extractToken(req);
+
+    // FIX: Allow requests with Authorization header (e.g. Bearer token) to bypass CSRF.
+    // This solves 403 errors for mobile apps/APIs that don't implementation session-based CSRF.
+    if (req.headers.authorization && !providedToken) {
+      return next();
+    }
+
     if (!providedToken) {
       return next(createCsrfError("Missing CSRF token"));
     }

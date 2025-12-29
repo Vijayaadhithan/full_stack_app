@@ -37,10 +37,10 @@ interface ProfileSwitcherProps {
     onCreateProvider?: () => void;
 }
 
-export function ProfileSwitcher({ onCreateShop, onCreateProvider }: ProfileSwitcherProps) {
+export function ProfileSwitcher({ onCreateShop: _onCreateShop, onCreateProvider: _onCreateProvider }: ProfileSwitcherProps) {
     const [, setLocation] = useLocation();
     const { appMode, setAppMode, refetchProfiles } = useAppMode();
-    const { profiles, isLoadingProfiles, user } = useUserContext();
+    const { profiles } = useUserContext();
     const { toast } = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [showShopForm, setShowShopForm] = useState(false);

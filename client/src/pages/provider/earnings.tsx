@@ -75,10 +75,14 @@ export default function ProviderEarnings() {
   const { t } = useLanguage();
   const [searchTerm, setSearchTerm] = useState("");
 
-  const { data: bookings, isLoading } = useQuery<ProviderBooking[]>({
+  const { data: bookingsResponse, isLoading } = useQuery<{
+    data: ProviderBooking[];
+    meta: { total: number; totalPages: number; page: number; limit: number };
+  }>({
     queryKey: ["/api/bookings/provider"],
     enabled: !!user?.id,
   });
+  const bookings = bookingsResponse?.data;
 
   const todayKey = getIndianDayKey(new Date());
   const monthKey = getIndianMonthKey(new Date());

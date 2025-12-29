@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from "react";
-import { useLocation, Redirect } from "wouter";
+import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -36,7 +36,7 @@ const resetPasswordSchema = z
 type ResetPasswordData = z.infer<typeof resetPasswordSchema>;
 
 export default function ResetPasswordPage() {
-  const [location, navigate] = useLocation();
+  const [_location, navigate] = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
   const [token, setToken] = useState<string | null>(null);
@@ -88,8 +88,8 @@ export default function ResetPasswordPage() {
         });
         setMessage(
           t("resetPassword.successMessage") +
-            " " +
-            t("resetPassword.redirectingToLogin"),
+          " " +
+          t("resetPassword.redirectingToLogin"),
         );
         setTimeout(() => {
           navigate("/auth");

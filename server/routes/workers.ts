@@ -15,7 +15,6 @@ import { hasRoleAccess } from "../security/roleAccess";
 import {
   normalizeEmail,
   normalizePhone,
-  normalizeUsername,
 } from "../utils/identity";
 import { formatValidationError } from "../utils/zod";
 

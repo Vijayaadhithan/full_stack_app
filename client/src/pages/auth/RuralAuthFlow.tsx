@@ -83,7 +83,7 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
     // Auth state
     const [step, setStep] = useState<AuthStep>("phone");
     const [isLoading, setIsLoading] = useState(false);
-    const [isExistingUser, setIsExistingUser] = useState(false);
+    const [_isExistingUser, setIsExistingUser] = useState(false);
     const [userName, setUserName] = useState("");
 
     // Form data

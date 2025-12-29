@@ -17,23 +17,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/language-context";
-import { Clock, Calendar as CalendarIcon, X } from "lucide-react";
+import { X } from "lucide-react";
 import { z } from "zod";
-import { format, parse, addMinutes } from "date-fns";
+import { format, parse } from "date-fns";
 
 const blockTimeSchema = z.object({
   startTime: z.string(),

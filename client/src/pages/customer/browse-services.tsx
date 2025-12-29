@@ -8,7 +8,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   Loader2,
-  Star,
   Clock,
   Search,
   Filter,

@@ -23,7 +23,7 @@ import {
   getMagicLinkEmailContent,
 } from "./emailService";
 import { storage } from "./storage";
-import { sanitizeUser, sanitizeUserList } from "./security/sanitizeUser";
+import { sanitizeUser } from "./security/sanitizeUser";
 import { z } from "zod";
 import multer, { MulterError } from "multer";
 import path from "path";
@@ -36,27 +36,19 @@ import {
 } from "./services/cache.service";
 import {
   insertServiceSchema,
-  insertBookingSchema,
   insertProductSchema,
-  insertOrderSchema,
-  insertOrderItemSchema,
   insertReviewSchema,
   insertUserSchema,
-  insertNotificationSchema,
   insertReturnRequestSchema,
-  InsertReturnRequest,
-  ReturnRequest,
   insertProductReviewSchema,
-  insertPromotionSchema,
-  insertBlockedTimeSlotSchema, // Added import
-  promotions, // Import promotions table for direct updates
+  insertBlockedTimeSlotSchema,
+  promotions,
   orders,
-  users, // Import the users table schema
+  users,
   reviews,
   passwordResetTokens as passwordResetTokensTable,
   magicLinkTokens as magicLinkTokensTable,
   User,
-  UserRole,
   Booking,
   Order,
   type Service,
@@ -66,7 +58,6 @@ import {
   PaymentMethodSchema,
   ShopProfile,
   Shop,
-  shopWorkers,
   TimeSlotLabel,
   timeSlotLabelSchema,
   shops,
@@ -78,7 +69,6 @@ import crypto from "crypto";
 import { performance } from "node:perf_hooks";
 import { formatIndianDisplay, toIndianTime, fromIndianTime } from "@shared/date-utils"; // Import IST utility
 import {
-  normalizeCoordinate,
   DEFAULT_NEARBY_RADIUS_KM,
   MIN_NEARBY_RADIUS_KM,
   MAX_NEARBY_RADIUS_KM,
@@ -108,8 +98,6 @@ import {
   usernameLookupLimiter,
 } from "./security/rateLimiters";
 import {
-  notifyBookingChange,
-  notifyNotificationChange,
   registerRealtimeClient,
 } from "./realtime";
 import {
@@ -120,7 +108,6 @@ import { createCsrfProtection } from "./security/csrfProtection";
 import { formatValidationError } from "./utils/zod";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 import {
-  appApi,
   serviceDetailSchema,
   productDetailSchema,
   orderDetailSchema,
@@ -136,7 +123,6 @@ const SERVICE_DETAIL_CACHE_TTL_SECONDS = 60;
 const PRODUCT_DETAIL_CACHE_TTL_SECONDS = 60;
 const SHOP_DETAIL_CACHE_TTL_SECONDS = 120;
 const NEARBY_SEARCH_LIMIT = 200;
-const NEARBY_USER_ROLES: UserRole[] = ["shop", "provider"];
 const GLOBAL_SEARCH_RESULT_LIMIT = 25;
 
 const locationUpdateSchema = z
@@ -506,8 +492,10 @@ async function evaluatePayLaterEligibility(
     );
   const isKnownCustomer = Number(priorOrders[0]?.value ?? 0) > 0;
 
+
+
   return {
-    allowPayLater: true,
+    allowPayLater: isWhitelisted || isKnownCustomer,
     isKnownCustomer,
     isWhitelisted,
   };
@@ -1427,44 +1415,6 @@ const globalSearchQuerySchema = z
     },
   );
 
-// Helper function to validate and parse date and time
-function validateAndParseDateTime(
-  dateStr: string,
-  timeStr: string,
-): Date | null {
-  try {
-    // Validate date format (YYYY-MM-DD)
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      logger.error("Invalid date format. Expected YYYY-MM-DD");
-      return null;
-    }
-
-    // Validate time format (HH:MM)
-    if (!/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(timeStr)) {
-      logger.error("Invalid time format. Expected HH:MM");
-      return null;
-    }
-
-    // Create a valid date object
-    const [year, month, day] = dateStr.split("-").map(Number);
-    const [hours, minutes] = timeStr.split(":").map(Number);
-
-    // Month is 0-indexed in JavaScript Date
-    const date = new Date(year, month - 1, day, hours, minutes);
-
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      logger.error("Invalid date/time combination");
-      return null;
-    }
-
-    return date;
-  } catch (error) {
-    logger.error("Error parsing date/time:", error);
-    return null;
-  }
-}
-
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
     return res.status(401).send("Unauthorized");
@@ -1498,8 +1448,6 @@ function ensureProfileVerified(
   }
   return true;
 }
-
-type NearbyRole = (typeof NEARBY_USER_ROLES)[number];
 
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1656,7 +1604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       200:
    *         description: A JSON array of available endpoints
    */
-  app.get("/api", requireAuth, (req, res) => {
+  app.get("/api", requireAuth, (_req, res) => {
     const routes = app._router.stack
       .filter((r: any) => r.route && r.route.path)
       .map((r: any) => ({
@@ -2058,9 +2006,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "awaiting_payment",
           "en_route",
         ]);
-        const scheduledBookings = (
-          await storage.getBookingsByProvider(providerId)
-        ).filter((booking) => scheduledStatuses.has(booking.status));
+        const { data: providerBookings } = await storage.getBookingsByProvider(providerId, { page: 1, limit: 100 });
+        const scheduledBookings = providerBookings.filter((booking) => scheduledStatuses.has(booking.status));
 
         const serviceIds = Array.from(
           new Set(pendingBookings.map((b) => b.serviceId!).filter(Boolean)),
@@ -2258,7 +2205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json(formatValidationError(parsedBody.error));
       }
       // Destructure bookingDate as well, it might be undefined if not a reschedule
-      const { status, comments, bookingDate, changedBy } = parsedBody.data;
+      const { status, comments, bookingDate, changedBy: _changedBy } = parsedBody.data;
       const currentUser = req.user!;
 
       logger.info(`[API] Attempting to update booking ${bookingId}`);
@@ -2290,7 +2237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.info(
           `[API] Customer ${currentUser.id} rescheduling booking ${bookingId} to ${bookingDate}`,
         );
-        const originalBookingDate = booking.bookingDate; // Capture original booking date
+
         updatedBookingData = {
           bookingDate: new Date(bookingDate),
           status: "rescheduled_pending_provider_approval",
@@ -2326,7 +2273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.info(
           `[API] Provider ${currentUser.id} rescheduling booking ${bookingId} to ${bookingDate}`,
         );
-        const originalBookingDate = booking.bookingDate; // Capture original booking date
+
         updatedBookingData = {
           bookingDate: new Date(bookingDate),
           status: "rescheduled_by_provider", // Or a more appropriate status like "accepted" if provider reschedule implies auto-acceptance
@@ -2377,7 +2324,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (customerUser) {
             let notificationTitle = `Booking ${status === "accepted" ? "Accepted" : "Rejected"}`;
             let notificationMessage = `Your booking for '${service.name}' has been ${status}${comments ? `: ${comments}` : "."}`;
-            let emailSubject = `Booking ${status === "accepted" ? "Accepted" : "Rejected"}`;
 
             if (
               booking.status === "rescheduled_pending_provider_approval" &&
@@ -2388,14 +2334,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ? formatIndianDisplay(booking.bookingDate, "datetime")
                 : "N/A";
               notificationMessage = `Your reschedule request for booking #${bookingId} ('${service.name}') has been accepted. New date: ${formattedRescheduledDate}`;
-              emailSubject = "Reschedule Confirmed";
             } else if (
               booking.status === "rescheduled_pending_provider_approval" &&
               status === "rejected"
             ) {
               notificationTitle = "Reschedule Rejected";
               notificationMessage = `Your reschedule request for booking #${bookingId} ('${service.name}') has been rejected. ${comments ? comments : "Please contact the provider or try rescheduling again."}`;
-              emailSubject = "Reschedule Rejected";
             }
 
             notificationPromises.push(
@@ -2591,7 +2535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/bookings/process-expired",
     requireAuth,
     requireRole(["admin"]),
-    async (req, res) => {
+    async (_req, res) => {
       try {
         await storage.processExpiredBookings();
         res.json({ message: "Expired bookings processed successfully" });
@@ -3255,6 +3199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         logger.info("Created product:", product);
+        await invalidateCache(`products:shop:${shopContextId}`);
         res.status(201).json(product);
       } catch (error) {
         logger.error("Error creating product:", error);
@@ -3349,7 +3294,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.get("/api/products/shop/:id", requireAuth, async (req, res) => {
+  app.get("/api/products/shop/:id", async (req, res) => {
     try {
       const products = await storage.getProductsByShop(getValidatedParam(req, "id"));
       logger.info("Shop products:", products);
@@ -3507,7 +3452,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "[API] /api/products/:id PATCH - Updated product:",
           updatedProduct,
         );
-        await invalidateCache(`product_detail_${shopContextId}_${productId}`);
+        await Promise.all([
+          invalidateCache(`product_detail_${shopContextId}_${productId}`),
+          invalidateCache(`products:shop:${shopContextId}`),
+        ]);
         res.json(updatedProduct);
       } catch (error) {
         logger.error("[API] Error in /api/products/:id PATCH:", error);
@@ -3563,6 +3511,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const service = await storage.createService(serviceData);
 
         logger.info("Created service:", service);
+        await invalidateCache(`services:provider:${req.user!.id}`);
         res.status(201).json(service);
       } catch (error) {
         logger.error("Error creating service:", error);
@@ -3578,7 +3527,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.get("/api/services/provider/:id", requireAuth, async (req, res) => {
+  app.get("/api/services/provider/:id", async (req, res) => {
     try {
       const services = await storage.getServicesByProvider(
         getValidatedParam(req, "id"),
@@ -3624,11 +3573,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           services.map((service) => storage.updateService(service.id, updates)),
         );
 
-        await Promise.all(
-          updatedServices.map((service) =>
+        // Invalidate caches for individual services and the provider's service list
+        await Promise.all([
+          ...updatedServices.map((service) =>
             invalidateCache(`service_detail_${service.id}`),
           ),
-        );
+          invalidateCache(`services:provider:${providerId}`),
+        ]);
 
         res.json({ updated: updatedServices.length, services: updatedServices });
       } catch (error) {
@@ -3688,7 +3639,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "[API] /api/services/:id PATCH - Updated service:",
           updatedService,
         );
-        await invalidateCache(`service_detail_${serviceId}`);
+        await Promise.all([
+          invalidateCache(`service_detail_${serviceId}`),
+          invalidateCache(`services:provider:${req.user!.id}`),
+        ]);
         res.json(updatedService);
       } catch (error) {
         logger.error("[API] Error updating service:", error);
@@ -4391,7 +4345,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           logger.info(
             "[API] /api/services/:id DELETE - Service marked as deleted successfully",
           );
-          await invalidateCache(`service_detail_${serviceId}`);
+          await Promise.all([
+            invalidateCache(`service_detail_${serviceId}`),
+            invalidateCache(`services:provider:${req.user!.id}`),
+          ]);
           res.status(200).json({ message: "Service deleted successfully" });
         } catch (error) {
           logger.error("[API] Error deleting service:", error);
@@ -4902,7 +4859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           title: "Payment Submitted",
           message: `Customer submitted payment reference for booking #${bookingId}.`,
         });
-        const service = await storage.getService(booking.serviceId!);
+
 
         res.json({ booking: updatedBooking });
       } catch (error) {
@@ -5110,10 +5067,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const bookings = await storage.getBookingsByProvider(req.user!.id);
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 20;
+
+        const { data: bookings, total, totalPages } = await storage.getBookingsByProvider(req.user!.id, { page, limit });
         const enrichedBookings = await hydrateProviderBookings(bookings);
 
-        res.json(enrichedBookings);
+        res.json({
+          data: enrichedBookings,
+          meta: {
+            total,
+            totalPages,
+            page,
+            limit
+          }
+        });
       } catch (error) {
         logger.error("Error fetching provider bookings:", error);
         res
@@ -5142,9 +5110,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Not authorized" });
       }
       try {
-        const bookings = await storage.getBookingsByProvider(providerId);
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 20;
+
+        const { data: bookings, total, totalPages } = await storage.getBookingsByProvider(providerId, { page, limit });
         const enrichedBookings = await hydrateProviderBookings(bookings);
-        res.json(enrichedBookings);
+        res.json({
+          data: enrichedBookings,
+          meta: {
+            total,
+            totalPages,
+            page,
+            limit
+          }
+        });
       } catch (error) {
         logger.error("Error fetching provider bookings:", error);
         res
@@ -5163,7 +5142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/bookings/:id/payment",
     requireAuth,
     requireRole(["customer"]),
-    async (req, res) => {
+    async (_req, res) => {
       res
         .status(200)
         .json({ message: "Payment functionality has been disabled." });
@@ -5658,6 +5637,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         await storage.updateProviderRating(service.providerId);
+
+        // Invalidate caches
+        await invalidateCache(`reviews:service:${serviceId}`);
+        if (service.providerId) {
+          await invalidateCache(`reviews:provider:${service.providerId}`);
+        }
+
         res.status(201).json(newReview);
       } catch (error) {
         logger.error("Error saving review:", error);
@@ -5706,6 +5692,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Update the review
         const updatedReview = await storage.updateReview(reviewId, updatePayload);
+
+        // Invalidate caches
+        if (existingReview.serviceId) {
+          const service = await storage.getService(existingReview.serviceId);
+          if (service) {
+            await invalidateCache(`reviews:service:${existingReview.serviceId}`);
+            if (service.providerId) {
+              await invalidateCache(`reviews:provider:${service.providerId}`);
+            }
+          }
+        }
+
         res.json(updatedReview);
       } catch (error) {
         logger.error("Error updating review:", error);
@@ -5721,7 +5719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.get("/api/reviews/service/:id", requireAuth, async (req, res) => {
+  app.get("/api/reviews/service/:id", async (req, res) => {
     try {
       const reviews = await storage.getReviewsByService(getValidatedParam(req, "id"));
       res.json(reviews);
@@ -5738,7 +5736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/reviews/provider/:id", requireAuth, async (req, res) => {
+  app.get("/api/reviews/provider/:id", async (req, res) => {
     try {
       const reviews = await storage.getReviewsByProvider(getValidatedParam(req, "id"));
       res.json(reviews);
@@ -5789,6 +5787,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updatedReview = await storage.updateReview(reviewId, {
           providerReply: reply,
         } as any);
+
+        // Invalidate caches
+        if (service) {
+          await invalidateCache(`reviews:service:${service.id}`);
+          if (service.providerId) {
+            await invalidateCache(`reviews:provider:${service.providerId}`);
+          }
+        }
+
         res.json(updatedReview);
       } catch (error) {
         logger.error("Error replying to review:", error);
@@ -6071,7 +6078,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // If a promotion is applied, verify it's valid
-        let promotionCode = null;
         if (promotionId) {
           const promotionResult = await db
             .select()
@@ -6111,8 +6117,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .status(400)
               .json({ message: "This promotion has reached its usage limit" });
           }
-
-          promotionCode = promotion.code || null;
         }
 
         const customer = req.user!;
@@ -6143,9 +6147,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
           payLaterEligibility = eligibility;
           if (!eligibility.allowPayLater) {
-            return res
-              .status(400)
-              .json({ message: "Pay later is not enabled for this shop." });
+            const message = shopModes.allowPayLater
+              ? "You are not eligible for Pay Later at this shop (Requires history or approval)."
+              : "Pay Later is not enabled for this shop.";
+            return res.status(400).json({ message });
           }
           if (!eligibility.isKnownCustomer && !eligibility.isWhitelisted) {
             return res.status(403).json({
@@ -6223,6 +6228,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Clear cart after order creation
         await storage.clearCart(req.user!.id);
+
+        // Invalidate shop product caches to reflect stock changes
+        await invalidateCache(`products:shop:${shopId}`);
+        await Promise.all(
+          items.map((item) =>
+            invalidateCache(`product_detail_${shopId}_${item.productId}`),
+          ),
+        );
 
         res.status(201).json({ order: newOrder });
       } catch (error) {
@@ -6322,7 +6335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/orders/:id/payment",
     requireAuth,
     requireRole(["customer"]),
-    async (req, res) => {
+    async (_req, res) => {
       res
         .status(200)
         .json({ message: "Payment functionality has been disabled." });
@@ -6610,10 +6623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ message: "Unable to resolve shop context" });
         }
 
-        const orders = await storage.getOrdersByShop(shopContextId);
-        const activeOrders = orders.filter((order) =>
-          ACTIVE_ORDER_STATUSES.includes(order.status),
-        );
+        const activeOrders = await storage.getOrdersByShop(shopContextId, ACTIVE_ORDER_STATUSES);
 
         if (activeOrders.length === 0) {
           return res.json({ new: [], packing: [], ready: [] } as ActiveOrderBoard);
@@ -8087,7 +8097,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Then delete the product
           logger.info(`Deleting product with ID: ${productId}`);
           await storage.deleteProduct(productId);
-          await invalidateCache(`product_detail_${product.shopId}_${productId}`);
+          await Promise.all([
+            invalidateCache(`product_detail_${product.shopId}_${productId}`),
+            invalidateCache(`products:shop:${product.shopId}`),
+          ]);
           logger.info(`Product ${productId} deleted successfully`);
           res.status(200).json({ message: "Product deleted successfully" });
         } catch (deleteError) {
@@ -8114,7 +8127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Product Reviews
-  app.get("/api/reviews/product/:id", requireAuth, async (req, res) => {
+  app.get("/api/reviews/product/:id", async (req, res) => {
     try {
       const productId = getValidatedParam(req, "id");
       const reviews = await storage.getProductReviewsByProduct(productId);
@@ -8130,7 +8143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/reviews/shop/:id", requireAuth, async (req, res) => {
+  app.get("/api/reviews/shop/:id", async (req, res) => {
     try {
       const shopId = getValidatedParam(req, "id");
       const reviews = await storage.getProductReviewsByShop(shopId);
@@ -8192,6 +8205,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerId: req.user!.id,
           isVerifiedPurchase: true,
         });
+
+        // Invalidate product and shop review caches
+        if (result.data.productId) {
+          await invalidateCache(`reviews:product:${result.data.productId}`);
+          // Get product to find shop ID for cache invalidation
+          const product = await storage.getProduct(result.data.productId);
+          if (product?.shopId) {
+            await invalidateCache(`reviews:shop:${product.shopId}`);
+          }
+        }
+
         res.status(201).json(review);
       } catch (error) {
         res
@@ -8235,6 +8259,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const updated = await storage.updateProductReview(reviewId, updatePayload);
+
+        // Invalidate product and shop review caches
+        if (existing.productId) {
+          await invalidateCache(`reviews:product:${existing.productId}`);
+          const product = await storage.getProduct(existing.productId);
+          if (product?.shopId) {
+            await invalidateCache(`reviews:shop:${product.shopId}`);
+          }
+        }
+
         res.json(updated);
       } catch (error) {
         logger.error("Error updating product review:", error);

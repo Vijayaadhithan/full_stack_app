@@ -219,12 +219,12 @@ const helmetConfig: HelmetOptions = {
   permittedCrossDomainPolicies: { permittedPolicies: "none" },
   ...(isProduction
     ? {
-        hsts: { maxAge: 60 * 60 * 24 * 365, includeSubDomains: true, preload: true },
-      }
+      hsts: { maxAge: 60 * 60 * 24 * 365, includeSubDomains: true, preload: true },
+    }
     : {
-        contentSecurityPolicy: false,
-        hsts: false,
-      }),
+      contentSecurityPolicy: false,
+      hsts: false,
+    }),
 };
 
 const MASK_PATTERNS = [
@@ -376,16 +376,16 @@ app.use(
     origin: allowAllOrigins
       ? true
       : (origin, callback) => {
-          if (!origin) {
-            return callback(null, true);
-          }
-          const isAllowed = originMatchers.some((matcher) => matcher.test(origin));
-          if (isAllowed) {
-            return callback(null, true);
-          }
-          logger.warn({ origin, allowedOrigins: corsAllowedOrigins }, "Blocked CORS origin");
-          return callback(new Error("Not allowed by CORS"));
-        },
+        if (!origin) {
+          return callback(null, true);
+        }
+        const isAllowed = originMatchers.some((matcher) => matcher.test(origin));
+        if (isAllowed) {
+          return callback(null, true);
+        }
+        logger.warn({ origin, allowedOrigins: corsAllowedOrigins }, "Blocked CORS origin");
+        return callback(new Error("Not allowed by CORS"));
+      },
     credentials: true,
   }),
 );

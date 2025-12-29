@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+// googleapis imported only when needed
 import nodemailer from "nodemailer";
 import { OAuth2Client } from "google-auth-library";
 import logger from "./logger";

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import pino from "pino";
 import type { Logger } from "pino";
-import type { LogCategory, LogContext } from "@shared/logging";
+import type { LogContext } from "@shared/logging";
 import {
   getRequestContextStore,
   runWithRequestContext,

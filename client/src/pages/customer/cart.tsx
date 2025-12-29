@@ -37,10 +37,7 @@ const container = {
   },
 };
 
-const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
-};
+// Framer motion item removed - was unused
 
 type CartItem = {
   product: Product;
@@ -396,372 +393,372 @@ export default function Cart() {
   return (
     <TooltipProvider>
       <DashboardLayout>
-      <motion.div
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="max-w-4xl mx-auto space-y-6"
-      >
-        <h1 className="text-2xl font-bold">Shopping Cart</h1>
+        <motion.div
+          variants={container}
+          initial="hidden"
+          animate="show"
+          className="max-w-4xl mx-auto space-y-6"
+        >
+          <h1 className="text-2xl font-bold">Shopping Cart</h1>
 
-        {isLoading ? (
-          <div className="grid gap-6">
-            <Card>
-              <CardContent className="divide-y">
-                {Array.from({ length: 2 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="py-4 first:pt-6 last:pb-6 flex gap-4"
-                  >
-                    <Skeleton className="w-24 h-24 rounded" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-5 w-56" />
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-10 w-32" />
-                    </div>
-                    <div className="space-y-2 text-right">
-                      <Skeleton className="h-5 w-16 ml-auto" />
-                      <Skeleton className="h-10 w-10 ml-auto rounded-md" />
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-5 w-32" />
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="h-4 w-64" />
-                <Skeleton className="h-4 w-40" />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-5 w-32" />
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-10 w-full" />
-              </CardContent>
-            </Card>
-          </div>
-        ) : !cartItems?.length ? (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">Your cart is empty</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-6">
-            <Card>
-              <CardContent className="divide-y">
-                {cartItems?.map(
-                  (
-                    item: CartItem, // Explicit type
-                  ) => (
-                    <motion.div
-                      key={item.product.id}
-                      className="py-4 first:pt-6 last:pb-6"
+          {isLoading ? (
+            <div className="grid gap-6">
+              <Card>
+                <CardContent className="divide-y">
+                  {Array.from({ length: 2 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="py-4 first:pt-6 last:pb-6 flex gap-4"
                     >
-                      <div className="flex gap-4">
-                        <img
-                          src={
-                            item.product.images?.[0] ||
-                            "https://via.placeholder.com/100"
-                          }
-                          alt={item.product.name}
-                          className="w-24 h-24 object-cover rounded"
-                        />
-                        <div className="flex-1">
-                          <h3 className="font-semibold">{item.product.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            ₹{item.product.price} × {item.quantity}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              onClick={() =>
-                                updateCartMutation.mutate({
-                                  productId: item.product.id,
-                                  quantity: item.quantity - 1,
-                                })
-                              }
-                              disabled={
-                                item.quantity <= 1 ||
-                                updateCartMutation.isPending
-                              }
-                            >
-                              <Minus className="h-4 w-4" />
-                            </Button>
-                            <span className="w-8 text-center">
-                              {item.quantity}
-                            </span>
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              onClick={() =>
-                                updateCartMutation.mutate({
-                                  productId: item.product.id,
-                                  quantity: item.quantity + 1,
-                                })
-                              }
-                              disabled={
-                                updateCartMutation.isPending ||
-                                (!openOrderEnabled &&
-                                  item.quantity >=
-                                    Number(item.product.stock ?? 0))
-                              }
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">
-                            ₹
-                            {(
-                              parseFloat(item.product.price) * item.quantity
-                            ).toFixed(2)}
-                          </p>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() =>
-                              removeFromCartMutation.mutate(item.product.id)
-                            }
-                            disabled={removeFromCartMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                      <Skeleton className="w-24 h-24 rounded" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-5 w-56" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-10 w-32" />
                       </div>
-                    </motion.div>
-                  ),
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Promotions Section */}
-            {shopId && (
+                      <div className="space-y-2 text-right">
+                        <Skeleton className="h-5 w-16 ml-auto" />
+                        <Skeleton className="h-10 w-10 ml-auto rounded-md" />
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center">
-                    <Tag className="h-4 w-4 mr-2" />
-                    Available Promotions
-                  </CardTitle>
+                  <Skeleton className="h-5 w-32" />
                 </CardHeader>
-                <CardContent>
-                  {isLoadingPromotions ? (
-                    <div className="space-y-3">
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                    </div>
-                  ) : !availablePromotions?.length ? (
-                    <p className="text-sm text-muted-foreground">
-                      No promotions available for this shop
-                    </p>
-                  ) : (
-                    <RadioGroup
-                      value={
-                        selectedPromotion ? String(selectedPromotion.id) : ""
-                      }
-                      onValueChange={(value) => {
-                        if (value === "") {
-                          handlePromotionSelect(null);
-                        } else {
-                          const promotion = availablePromotions.find(
-                            (p) => p.id === parseInt(value),
-                          );
-                          if (promotion) handlePromotionSelect(promotion);
-                        }
-                      }}
-                      className="space-y-3"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="" id="no-promotion" />
-                        <Label htmlFor="no-promotion">No promotion</Label>
-                      </div>
-
-                      {availablePromotions.map((promotion) => (
-                        <div
-                          key={promotion.id}
-                          className="flex items-start space-x-2 border rounded-md p-2"
-                        >
-                          <RadioGroupItem
-                            value={String(promotion.id)}
-                            id={`promotion-${promotion.id}`}
-                            className="mt-1"
+                <CardContent className="space-y-3">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-4 w-64" />
+                  <Skeleton className="h-4 w-40" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-5 w-32" />
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-10 w-full" />
+                </CardContent>
+              </Card>
+            </div>
+          ) : !cartItems?.length ? (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <p className="text-muted-foreground">Your cart is empty</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-6">
+              <Card>
+                <CardContent className="divide-y">
+                  {cartItems?.map(
+                    (
+                      item: CartItem, // Explicit type
+                    ) => (
+                      <motion.div
+                        key={item.product.id}
+                        className="py-4 first:pt-6 last:pb-6"
+                      >
+                        <div className="flex gap-4">
+                          <img
+                            src={
+                              item.product.images?.[0] ||
+                              "https://via.placeholder.com/100"
+                            }
+                            alt={item.product.name}
+                            className="w-24 h-24 object-cover rounded"
                           />
                           <div className="flex-1">
-                            <div className="flex justify-between items-start">
-                              <Label
-                                htmlFor={`promotion-${promotion.id}`}
-                                className="font-medium"
+                            <h3 className="font-semibold">{item.product.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              ₹{item.product.price} × {item.quantity}
+                            </p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={() =>
+                                  updateCartMutation.mutate({
+                                    productId: item.product.id,
+                                    quantity: item.quantity - 1,
+                                  })
+                                }
+                                disabled={
+                                  item.quantity <= 1 ||
+                                  updateCartMutation.isPending
+                                }
                               >
-                                {promotion.name}
-                              </Label>
-                              <Badge variant="outline">
-                                {formatPromotionValue(promotion)}
-                              </Badge>
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                              <span className="w-8 text-center">
+                                {item.quantity}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={() =>
+                                  updateCartMutation.mutate({
+                                    productId: item.product.id,
+                                    quantity: item.quantity + 1,
+                                  })
+                                }
+                                disabled={
+                                  updateCartMutation.isPending ||
+                                  (!openOrderEnabled &&
+                                    item.quantity >=
+                                    Number(item.product.stock ?? 0))
+                                }
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
                             </div>
-                            {promotion.description && (
-                              <p className="text-sm text-muted-foreground mt-1">
-                                {promotion.description}
-                              </p>
-                            )}
-                            {promotion.usageLimit && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {promotion.usageLimit -
-                                  (promotion.usedCount || 0)}{" "}
-                                uses remaining
-                              </p>
-                            )}
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">
+                              ₹
+                              {(
+                                parseFloat(item.product.price) * item.quantity
+                              ).toFixed(2)}
+                            </p>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() =>
+                                removeFromCartMutation.mutate(item.product.id)
+                              }
+                              disabled={removeFromCartMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
-                      ))}
-                    </RadioGroup>
+                      </motion.div>
+                    ),
                   )}
                 </CardContent>
               </Card>
-            )}
 
-            {shopInfo && (
+              {/* Promotions Section */}
+              {shopId && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center">
+                      <Tag className="h-4 w-4 mr-2" />
+                      Available Promotions
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingPromotions ? (
+                      <div className="space-y-3">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                      </div>
+                    ) : !availablePromotions?.length ? (
+                      <p className="text-sm text-muted-foreground">
+                        No promotions available for this shop
+                      </p>
+                    ) : (
+                      <RadioGroup
+                        value={
+                          selectedPromotion ? String(selectedPromotion.id) : ""
+                        }
+                        onValueChange={(value) => {
+                          if (value === "") {
+                            handlePromotionSelect(null);
+                          } else {
+                            const promotion = availablePromotions.find(
+                              (p) => p.id === parseInt(value),
+                            );
+                            if (promotion) handlePromotionSelect(promotion);
+                          }
+                        }}
+                        className="space-y-3"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="" id="no-promotion" />
+                          <Label htmlFor="no-promotion">No promotion</Label>
+                        </div>
+
+                        {availablePromotions.map((promotion) => (
+                          <div
+                            key={promotion.id}
+                            className="flex items-start space-x-2 border rounded-md p-2"
+                          >
+                            <RadioGroupItem
+                              value={String(promotion.id)}
+                              id={`promotion-${promotion.id}`}
+                              className="mt-1"
+                            />
+                            <div className="flex-1">
+                              <div className="flex justify-between items-start">
+                                <Label
+                                  htmlFor={`promotion-${promotion.id}`}
+                                  className="font-medium"
+                                >
+                                  {promotion.name}
+                                </Label>
+                                <Badge variant="outline">
+                                  {formatPromotionValue(promotion)}
+                                </Badge>
+                              </div>
+                              {promotion.description && (
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {promotion.description}
+                                </p>
+                              )}
+                              {promotion.usageLimit && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {promotion.usageLimit -
+                                    (promotion.usedCount || 0)}{" "}
+                                  uses remaining
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </RadioGroup>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {shopInfo && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Delivery Method</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <DeliveryMethodSelector
+                      value={deliveryMethod}
+                      onChange={(value) => setDeliveryMethod(value)}
+                      pickupAvailable={shopInfo.pickupAvailable}
+                      deliveryAvailable={shopInfo.deliveryAvailable}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {openOrderWarning && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm flex gap-3">
+                  <Info className="h-4 w-4 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-amber-900">Open order request</p>
+                    <p className="text-amber-800">
+                      Stock counts are not enforced for this shop. The shop owner will confirm availability before processing your order.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Delivery Method</CardTitle>
+                  <CardTitle className="text-lg">Payment Method</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <DeliveryMethodSelector
-                    value={deliveryMethod}
-                    onChange={(value) => setDeliveryMethod(value)}
-                    pickupAvailable={shopInfo.pickupAvailable}
-                    deliveryAvailable={shopInfo.deliveryAvailable}
+                  <PaymentMethodSelector
+                    value={paymentMethod}
+                    onChange={setPaymentMethod}
+                    allowPayLater={payLaterEnabled}
+                    disableCash={deliveryMethod === "delivery"}
+                    payLaterDisabledReason={payLaterDisabledReason}
                   />
+                  {paymentMethod === "pay_later" && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Pay Later orders are placed as pending approval. The shop owner will approve credit before processing.
+                    </p>
+                  )}
+                  {deliveryMethod === "delivery" && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Cash on delivery is disabled. Choose UPI or Pay Later.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
-            )}
 
-            {openOrderWarning && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm flex gap-3">
-                <Info className="h-4 w-4 text-amber-600 mt-0.5" />
-                <div>
-                  <p className="font-medium text-amber-900">Open order request</p>
-                  <p className="text-amber-800">
-                    Stock counts are not enforced for this shop. The shop owner will confirm availability before processing your order.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Payment Method</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <PaymentMethodSelector
-                  value={paymentMethod}
-                  onChange={setPaymentMethod}
-                  allowPayLater={payLaterEnabled}
-                  disableCash={deliveryMethod === "delivery"}
-                  payLaterDisabledReason={payLaterDisabledReason}
-                />
-                {paymentMethod === "pay_later" && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Pay Later orders are placed as pending approval. The shop owner will approve credit before processing.
-                  </p>
-                )}
-                {deliveryMethod === "delivery" && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Cash on delivery is disabled. Choose UPI or Pay Later.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Order Summary */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Order Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>₹{subtotal.toFixed(2)}</span>
-                </div>
-
-                {discountAmount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span className="flex items-center">
-                      <Check className="h-4 w-4 mr-1" />
-                      Discount
-                      {selectedPromotion && (
-                        <span className="text-xs ml-1">
-                          ({selectedPromotion.name})
-                        </span>
-                      )}
-                    </span>
-                    <span>-₹{discountAmount.toFixed(2)}</span>
+              {/* Order Summary */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Order Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>₹{subtotal.toFixed(2)}</span>
                   </div>
-                )}
 
-                {featureFlags.platformFeesEnabled &&
-                featureFlags.platformFeeBreakdownEnabled ? (
-                  <div className="flex justify-between text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      Platform Service Fee
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground focus:outline-none"
-                            aria-label="Learn more about the platform service fee"
-                          >
-                            <Info className="h-4 w-4" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs text-sm">
-                          This small fee helps us operate the platform and provide
-                          you with support.
-                        </TooltipContent>
-                      </Tooltip>
-                    </span>
-                    <span>₹{platformFee.toFixed(2)}</span>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between text-green-600">
+                      <span className="flex items-center">
+                        <Check className="h-4 w-4 mr-1" />
+                        Discount
+                        {selectedPromotion && (
+                          <span className="text-xs ml-1">
+                            ({selectedPromotion.name})
+                          </span>
+                        )}
+                      </span>
+                      <span>-₹{discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {featureFlags.platformFeesEnabled &&
+                    featureFlags.platformFeeBreakdownEnabled ? (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        Platform Service Fee
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground focus:outline-none"
+                              aria-label="Learn more about the platform service fee"
+                            >
+                              <Info className="h-4 w-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs text-sm">
+                            This small fee helps us operate the platform and provide
+                            you with support.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                      <span>₹{platformFee.toFixed(2)}</span>
+                    </div>
+                  ) : null}
+
+                  <Separator />
+
+                  <div className="flex justify-between font-medium">
+                    <span>Total Amount</span>
+                    <span>₹{totalAmount.toFixed(2)}</span>
                   </div>
-                ) : null}
 
-                <Separator />
-
-                <div className="flex justify-between font-medium">
-                  <span>Total Amount</span>
-                  <span>₹{totalAmount.toFixed(2)}</span>
-                </div>
-
-                <Button
-                  className="w-full mt-4"
-                  onClick={() => {
-                    setIsCheckingOut(true);
-                    createOrderMutation.mutate();
-                  }}
-                  disabled={
-                    isCheckingOut ||
-                    createOrderMutation.isPending ||
-                    !cartItems ||
-                    cartItems.length === 0
-                  }
-                >
-                  Place Order
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </motion.div>
+                  <Button
+                    className="w-full mt-4"
+                    onClick={() => {
+                      setIsCheckingOut(true);
+                      createOrderMutation.mutate();
+                    }}
+                    disabled={
+                      isCheckingOut ||
+                      createOrderMutation.isPending ||
+                      !cartItems ||
+                      cartItems.length === 0
+                    }
+                  >
+                    Place Order
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </motion.div>
       </DashboardLayout>
     </TooltipProvider>
   );

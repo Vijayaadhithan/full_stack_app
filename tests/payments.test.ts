@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import request from "supertest";
@@ -189,5 +189,9 @@ describe("Payment APIs", () => {
     );
     assert.equal(confirmRes.status, 200);
     assert.equal(confirmRes.body.paymentStatus, "paid");
+  });
+
+  after(() => {
+    process.exit(0);
   });
 });

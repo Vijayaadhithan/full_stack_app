@@ -44,12 +44,11 @@ import {
   InsertReturnRequest,
   Promotion,
   InsertPromotion,
-  orderStatusUpdates,
   UserRole,
   TimeSlotLabel,
   ShopProfile,
 } from "@shared/schema";
-import { newIndianDate, formatIndianDisplay } from "../shared/date-utils";
+import { newIndianDate } from "../shared/date-utils";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -193,7 +192,10 @@ export interface IStorage {
     customerId: number,
     filters?: { status?: Booking["status"] },
   ): Promise<Booking[]>;
-  getBookingsByProvider(providerId: number): Promise<Booking[]>;
+  getBookingsByProvider(
+    providerId: number,
+    options?: { page: number; limit: number },
+  ): Promise<{ data: Booking[]; total: number; totalPages: number }>;
   getBookingsByStatus(status: string): Promise<Booking[]>;
   updateBooking(id: number, booking: Partial<Booking>): Promise<Booking>;
   getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]>; // Added
@@ -251,7 +253,7 @@ export interface IStorage {
     customerId: number,
     filters?: { status?: Order["status"] },
   ): Promise<Order[]>;
-  getOrdersByShop(shopId: number, status?: string): Promise<Order[]>;
+  getOrdersByShop(shopId: number, status?: string | string[]): Promise<Order[]>;
   getRecentOrdersByShop(shopId: number): Promise<Order[]>;
   getShopDashboardStats(shopId: number): Promise<DashboardStats>;
   getPayLaterOutstandingAmounts(
@@ -691,10 +693,46 @@ export class MemStorage implements IStorage {
     }
     return Promise.resolve();
   }
-  createPromotion(promotion: InsertPromotion): Promise<Promotion> {
+  createPromotion(_promotion: InsertPromotion): Promise<Promotion> {
     throw new Error("Method not implemented.");
   }
-  getPromotionsByShop(shopId: number): Promise<Promotion[]> {
+  getBookingsByProvider(
+    providerId: number,
+    options?: { page: number; limit: number },
+  ): Promise<{ data: Booking[]; total: number; totalPages: number }> {
+    // 1. Filter by provider
+    // In MemStorage, bookings don't have a providerId directly, we must link via service.
+    const services = Array.from(this.services.values()).filter(
+      (s) => s.providerId === providerId,
+    );
+    const serviceIds = new Set(services.map((s) => s.id));
+    const allBookings = Array.from(this.bookings.values()).filter(
+      (b) => b.serviceId && serviceIds.has(b.serviceId),
+    );
+
+    // 2. Sort by date desc (mock behavior)
+    allBookings.sort((a, b) => {
+      const dateA = new Date(a.bookingDate).getTime();
+      const dateB = new Date(b.bookingDate).getTime();
+      return dateB - dateA;
+    });
+
+    const total = allBookings.length;
+    if (!options) {
+      return Promise.resolve({ data: allBookings, total, totalPages: 1 });
+    }
+
+    const { page, limit } = options;
+    const totalPages = Math.ceil(total / limit);
+    const offset = (page - 1) * limit;
+
+    return Promise.resolve({
+      data: allBookings.slice(offset, offset + limit),
+      total,
+      totalPages,
+    });
+  }
+  getPromotionsByShop(_shopId: number): Promise<Promotion[]> {
     throw new Error("Method not implemented.");
   }
 
@@ -1380,13 +1418,7 @@ export class MemStorage implements IStorage {
       );
   }
 
-  async getBookingsByProvider(providerId: number): Promise<Booking[]> {
-    return Array.from(this.bookings.values()).filter((booking) => {
-      if (booking.serviceId === null) return false;
-      const service = this.services.get(booking.serviceId);
-      return service?.providerId === providerId;
-    });
-  }
+
 
   async getBookingsByStatus(status: string): Promise<Booking[]> {
     return Array.from(this.bookings.values()).filter(
@@ -1901,13 +1933,14 @@ export class MemStorage implements IStorage {
       .sort((a, b) => parseDate(b.orderDate) - parseDate(a.orderDate));
   }
 
-  async getOrdersByShop(shopId: number, status?: string): Promise<Order[]> {
+  async getOrdersByShop(shopId: number, status?: string | string[]): Promise<Order[]> {
     return Array.from(this.orders.values())
       .filter((order) => order.shopId === shopId)
-      .filter(
-        (order) =>
-          !status || status === "all_orders" || order.status === status,
-      );
+      .filter((order) => {
+        if (!status || status === "all_orders") return true;
+        if (Array.isArray(status)) return status.includes(order.status);
+        return order.status === status;
+      });
   }
 
   async getRecentOrdersByShop(shopId: number): Promise<Order[]> {

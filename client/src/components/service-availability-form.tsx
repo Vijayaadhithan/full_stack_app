@@ -1,4 +1,4 @@
-import { useState } from "react";
+// useState removed - not currently used
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useLanguage } from "@/contexts/language-context";
-import { Clock, Plus, Trash } from "lucide-react";
+import { Plus, Trash } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
-import type { WorkingHours, BreakTime } from "@shared/schema";
+import type { BreakTime } from "@shared/schema";
 
 interface ServiceAvailabilityFormProps {
   form: UseFormReturn<any>;
@@ -145,7 +145,7 @@ export function ServiceAvailabilityForm({
         <div className="space-y-4">
           {form
             .watch("breakTime")
-            ?.map((breakTime: BreakTime, index: number) => (
+            ?.map((_breakTime: BreakTime, index: number) => (
               <div key={index} className="flex items-end gap-4">
                 <FormField
                   control={form.control}
