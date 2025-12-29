@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Card,
@@ -10,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { MonitoringSnapshot } from "@shared/monitoring";
 import type { LogCategory } from "@shared/logging";
@@ -73,6 +75,25 @@ function formatBytes(value: number | null | undefined) {
   return `${formatter.format(current)} ${units[index]}`;
 }
 
+function toNumber(value: number | string | null | undefined) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatRupees(value: number | string | null | undefined) {
+  const numeric = toNumber(value);
+  return `₹${integerFormatter.format(numeric)}`;
+}
+
+function formatDateTime(value: string | number | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString();
+}
+
 type FrontendMetricName = MonitoringSnapshot["frontend"]["metrics"][number]["name"];
 
 function formatFrontendMetricValue(
@@ -87,6 +108,14 @@ function formatFrontendMetricValue(
 }
 
 type HealthResponse = Record<string, unknown>;
+type AdminHealthStatus = {
+  database: string;
+  api: string;
+  jobs: {
+    bookingExpiration: string | null;
+    paymentReminder: string | null;
+  };
+};
 
 type LogEntry = {
   timestamp: string;
@@ -143,6 +172,7 @@ export default function AdminMonitoring() {
         isFetching={monitoringQuery.isFetching}
         onRefresh={() => monitoringQuery.refetch()}
       />
+      <OperationalAlertsSection snapshot={snapshot} />
       <div className="grid gap-8 xl:grid-cols-2">
         <RequestPerformanceSection
           snapshot={snapshot}
@@ -248,6 +278,226 @@ function MonitoringOverview({ snapshot, isFetching, onRefresh }: SectionProps & 
           </CardContent>
         </Card>
       </div>
+    </section>
+  );
+}
+
+type AlertSeverity = "critical" | "warning" | "info";
+
+type AlertItem = {
+  title: string;
+  description: string;
+  severity: AlertSeverity;
+};
+
+const ALERT_LIMITS = {
+  errorRateWarning: 0.02,
+  errorRateCritical: 0.05,
+  p95LatencyMsWarning: 1500,
+  p95LatencyMsCritical: 2500,
+  cpuWarning: 75,
+  cpuCritical: 90,
+  heapWarning: 80,
+  heapCritical: 90,
+  eventLoopWarning: 200,
+  eventLoopCritical: 400,
+};
+
+function OperationalAlertsSection({ snapshot }: { snapshot: MonitoringSnapshot | undefined }) {
+  const alerts = useMemo<AlertItem[]>(() => {
+    if (!snapshot) return [];
+    const requests = snapshot.requests;
+    const errors = snapshot.errors;
+    const resources = snapshot.resources;
+    const frontend = snapshot.frontend;
+
+    const errorCount = requests.statusBuckets.clientError + requests.statusBuckets.serverError;
+    const errorRate = requests.total ? errorCount / requests.total : 0;
+    const heapPercent = resources.memory.heapTotalBytes
+      ? (resources.memory.heapUsedBytes / resources.memory.heapTotalBytes) * 100
+      : null;
+    const eventLoopP95 = resources.eventLoopDelayMs?.p95 ?? null;
+
+    const items: AlertItem[] = [];
+
+    if (errorRate >= ALERT_LIMITS.errorRateCritical) {
+      items.push({
+        title: "High error rate",
+        description: `Error rate at ${formatPercent(errorRate, { alreadyRatio: true })}. Investigate failing endpoints.`,
+        severity: "critical",
+      });
+    } else if (errorRate >= ALERT_LIMITS.errorRateWarning) {
+      items.push({
+        title: "Elevated error rate",
+        description: `Error rate at ${formatPercent(errorRate, { alreadyRatio: true })}. Watch regression spikes.`,
+        severity: "warning",
+      });
+    }
+
+    if (requests.p95DurationMs && requests.p95DurationMs >= ALERT_LIMITS.p95LatencyMsCritical) {
+      items.push({
+        title: "Latency breach",
+        description: `P95 latency at ${formatDuration(requests.p95DurationMs)}.`,
+        severity: "critical",
+      });
+    } else if (requests.p95DurationMs && requests.p95DurationMs >= ALERT_LIMITS.p95LatencyMsWarning) {
+      items.push({
+        title: "Latency rising",
+        description: `P95 latency at ${formatDuration(requests.p95DurationMs)}.`,
+        severity: "warning",
+      });
+    }
+
+    if (resources.cpu.percent >= ALERT_LIMITS.cpuCritical) {
+      items.push({
+        title: "CPU saturation",
+        description: `CPU at ${formatPercent(resources.cpu.percent)}.`,
+        severity: "critical",
+      });
+    } else if (resources.cpu.percent >= ALERT_LIMITS.cpuWarning) {
+      items.push({
+        title: "CPU elevated",
+        description: `CPU at ${formatPercent(resources.cpu.percent)}.`,
+        severity: "warning",
+      });
+    }
+
+    if (heapPercent !== null && heapPercent >= ALERT_LIMITS.heapCritical) {
+      items.push({
+        title: "Memory pressure",
+        description: `Heap usage at ${formatPercent(heapPercent)}.`,
+        severity: "critical",
+      });
+    } else if (heapPercent !== null && heapPercent >= ALERT_LIMITS.heapWarning) {
+      items.push({
+        title: "Heap utilization high",
+        description: `Heap usage at ${formatPercent(heapPercent)}.`,
+        severity: "warning",
+      });
+    }
+
+    if (eventLoopP95 !== null && eventLoopP95 >= ALERT_LIMITS.eventLoopCritical) {
+      items.push({
+        title: "Event loop lag",
+        description: `P95 event loop delay at ${formatDuration(eventLoopP95)}.`,
+        severity: "critical",
+      });
+    } else if (eventLoopP95 !== null && eventLoopP95 >= ALERT_LIMITS.eventLoopWarning) {
+      items.push({
+        title: "Event loop delay",
+        description: `P95 event loop delay at ${formatDuration(eventLoopP95)}.`,
+        severity: "warning",
+      });
+    }
+
+    if (errors.perMinute > 0 && errors.perMinute < 3) {
+      items.push({
+        title: "Intermittent errors",
+        description: `${formatNumber(errors.perMinute)} errors per minute in the last window.`,
+        severity: "info",
+      });
+    }
+
+    frontend.metrics.forEach((metric) => {
+      const goodRatio = metric.sampleCount
+        ? metric.ratingCounts.good / metric.sampleCount
+        : null;
+      if (goodRatio !== null && goodRatio < 0.7) {
+        items.push({
+          title: `${metric.name} quality drop`,
+          description: `${formatPercent(goodRatio, { alreadyRatio: true })} good samples.`,
+          severity: goodRatio < 0.5 ? "critical" : "warning",
+        });
+      }
+    });
+
+    return items;
+  }, [snapshot]);
+
+  const requests = snapshot?.requests;
+  const errorCount = requests
+    ? requests.statusBuckets.clientError + requests.statusBuckets.serverError
+    : 0;
+  const successRate = requests?.total ? 1 - errorCount / requests.total : null;
+  const p95Latency = requests?.p95DurationMs ?? null;
+  const latencyTarget = ALERT_LIMITS.p95LatencyMsWarning;
+  const latencyScore = p95Latency ? Math.min((latencyTarget / p95Latency) * 100, 100) : 0;
+  const cpu = snapshot?.resources.cpu.percent ?? null;
+  const heapUsedRatio = snapshot?.resources.memory.heapTotalBytes
+    ? snapshot.resources.memory.heapUsedBytes / snapshot.resources.memory.heapTotalBytes
+    : null;
+  const uptimeHours = snapshot ? Math.round(snapshot.resources.uptimeSeconds / 3600) : null;
+
+  const alertVariant = (severity: AlertSeverity) => {
+    if (severity === "critical") return "destructive";
+    if (severity === "warning") return "secondary";
+    return "outline";
+  };
+
+  return (
+    <section className="grid gap-6 xl:grid-cols-[2fr,1fr]">
+      <Card>
+        <CardHeader>
+          <CardTitle>Operational Alerts</CardTitle>
+          <CardDescription>Signals pulled from live performance and telemetry windows.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {alerts.length === 0 && (
+            <div className="rounded-lg border border-dashed p-4 text-muted-foreground">
+              All clear. No active alerts in the current sampling window.
+            </div>
+          )}
+          {alerts.map((alert, index) => (
+            <div key={`${alert.title}-${index}`} className="rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{alert.title}</span>
+                <Badge variant={alertVariant(alert.severity)} className="uppercase">
+                  {alert.severity}
+                </Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{alert.description}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Service Level Snapshot</CardTitle>
+          <CardDescription>Quick pulse on availability and latency health.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Success rate</span>
+              <span>
+                {successRate !== null
+                  ? formatPercent(successRate, { alreadyRatio: true })
+                  : "—"}
+              </span>
+            </div>
+            <Progress value={successRate !== null ? successRate * 100 : 0} />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>P95 latency target</span>
+              <span>{p95Latency ? formatDuration(p95Latency) : "—"}</span>
+            </div>
+            <Progress value={latencyScore} />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>CPU headroom</span>
+              <span>{cpu !== null ? formatPercent(100 - cpu) : "—"}</span>
+            </div>
+            <Progress value={cpu !== null ? 100 - cpu : 0} />
+          </div>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            Uptime {uptimeHours !== null ? `${uptimeHours}h` : "—"}
+            {heapUsedRatio !== null &&
+              ` · Heap ${(heapUsedRatio * 100).toFixed(0)}%`}
+          </div>
+        </CardContent>
+      </Card>
     </section>
   );
 }
@@ -415,6 +665,10 @@ function ErrorRateSection({ snapshot, isFetching }: SectionProps) {
 function ResourceUsageSection({ snapshot, isFetching }: SectionProps) {
   const resources = snapshot?.resources;
   const uptime = resources ? Math.round(resources.uptimeSeconds / 3600) : null;
+  const heapPercent = resources?.memory.heapTotalBytes
+    ? (resources.memory.heapUsedBytes / resources.memory.heapTotalBytes) * 100
+    : null;
+  const cpuPercent = resources?.cpu.percent ?? null;
 
   return (
     <section className="space-y-3">
@@ -430,11 +684,12 @@ function ResourceUsageSection({ snapshot, isFetching }: SectionProps) {
             <div>
               <div className="text-sm text-muted-foreground">CPU</div>
               <div className="text-lg font-semibold">
-                {formatPercent(resources?.cpu.percent ?? null)}
+                {formatPercent(cpuPercent ?? null)}
               </div>
               <div className="text-xs text-muted-foreground">
                 User {formatPercent(resources?.cpu.userPercent ?? null)} · System {formatPercent(resources?.cpu.systemPercent ?? null)}
               </div>
+              {cpuPercent !== null && <Progress value={cpuPercent} className="mt-2 h-2" />}
             </div>
             <div>
               <div className="text-sm text-muted-foreground">Memory</div>
@@ -442,8 +697,9 @@ function ResourceUsageSection({ snapshot, isFetching }: SectionProps) {
                 {formatBytes(resources?.memory.heapUsedBytes ?? null)}
               </div>
               <div className="text-xs text-muted-foreground">
-                RSS {formatBytes(resources?.memory.rssBytes ?? null)}
+                Heap {formatBytes(resources?.memory.heapTotalBytes ?? null)} · RSS {formatBytes(resources?.memory.rssBytes ?? null)}
               </div>
+              {heapPercent !== null && <Progress value={heapPercent} className="mt-2 h-2" />}
             </div>
             <div>
               <div className="text-sm text-muted-foreground">Load average</div>
@@ -535,6 +791,33 @@ function FrontendMetricsSection({ snapshot, isFetching }: SectionProps) {
               </tbody>
             </table>
           </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {frontend?.metrics.length ? (
+              frontend.metrics.map((metric) => {
+                const goodRatio = metric.sampleCount
+                  ? metric.ratingCounts.good / metric.sampleCount
+                  : 0;
+                return (
+                  <div key={`${metric.name}-quality`} className="rounded-lg border p-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{metric.name} quality</span>
+                      <Badge variant={goodRatio >= 0.8 ? "secondary" : "outline"}>
+                        {formatPercent(goodRatio, { alreadyRatio: true })}
+                      </Badge>
+                    </div>
+                    <Progress value={goodRatio * 100} className="mt-2 h-2" />
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Good {formatNumber(metric.ratingCounts.good, 0)} · Needs improvement {formatNumber(metric.ratingCounts["needs-improvement"], 0)} · Poor {formatNumber(metric.ratingCounts.poor, 0)}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                Quality distribution will appear once frontend samples arrive.
+              </div>
+            )}
+          </div>
           <div>
             <h3 className="text-sm font-medium">Recent samples</h3>
             <div className="mt-2 overflow-auto rounded border">
@@ -589,6 +872,11 @@ function ApiStatusSection() {
     queryFn: () => apiRequest("GET", "/api/health").then((r) => r.json()),
     refetchInterval: getVisibilityAwareInterval(HEALTH_REFRESH_INTERVAL),
   });
+  const { data: adminHealth, isFetching: isAdminHealthFetching } = useQuery<AdminHealthStatus>({
+    queryKey: ["/api/admin/health-status"],
+    queryFn: () => apiRequest("GET", "/api/admin/health-status").then((r) => r.json()),
+    refetchInterval: getVisibilityAwareInterval(HEALTH_REFRESH_INTERVAL),
+  });
 
   return (
     <section className="space-y-3">
@@ -598,10 +886,48 @@ function ApiStatusSection() {
           Refresh
         </Button>
       </div>
-      <div className="rounded border bg-muted/30 p-4 text-sm">
-        <pre className="whitespace-pre-wrap break-words">
-          {data ? JSON.stringify(data, null, 2) : "No status data yet."}
-        </pre>
+      <div className="grid gap-4 xl:grid-cols-[1.2fr,1fr]">
+        <div className="rounded border bg-muted/30 p-4 text-sm">
+          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Public health payload</span>
+            <Badge variant="outline">{isFetching ? "refreshing" : "live"}</Badge>
+          </div>
+          <pre className="whitespace-pre-wrap break-words">
+            {data ? JSON.stringify(data, null, 2) : "No status data yet."}
+          </pre>
+        </div>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Admin health checks</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span>Database</span>
+              <Badge variant={adminHealth?.database === "ok" ? "secondary" : "destructive"}>
+                {adminHealth?.database ?? (isAdminHealthFetching ? "checking" : "unknown")}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>API gateway</span>
+              <Badge variant={adminHealth?.api === "ok" ? "secondary" : "destructive"}>
+                {adminHealth?.api ?? (isAdminHealthFetching ? "checking" : "unknown")}
+              </Badge>
+            </div>
+            <div className="rounded-md border bg-muted/40 p-3 text-xs">
+              <div className="font-semibold text-muted-foreground">Job heartbeats</div>
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span>Booking expiry</span>
+                  <span>{formatDateTime(adminHealth?.jobs?.bookingExpiration ?? null)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Payment reminders</span>
+                  <span>{formatDateTime(adminHealth?.jobs?.paymentReminder ?? null)}</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </section>
   );
@@ -654,6 +980,7 @@ function LogViewerSection() {
   const [level, setLevel] = useState("all");
   // Default to a non-admin category; admin category is hidden.
   const [category, setCategory] = useState<UiLogCategory>("customer");
+  const [search, setSearch] = useState("");
 
   const logQuery = useQuery<LogResponse>({
     queryKey: ["/api/admin/logs", { level, category }],
@@ -678,7 +1005,7 @@ function LogViewerSection() {
     setCategory(uiCategories[0] ?? "customer");
   }, [category, logQuery.data?.availableCategories]);
 
-  const logData = logQuery.data?.logs ?? [];
+  const logData = useMemo(() => logQuery.data?.logs ?? [], [logQuery.data?.logs]);
   // Hide admin category from the available set even if server provides it
   const availableCategories = new Set<UiLogCategory>(
     (
@@ -690,6 +1017,41 @@ function LogViewerSection() {
   const activeCategory = LOG_CATEGORY_OPTIONS.find((option) => option.value === category);
   const activeDescription =
     activeCategory?.description ?? "Visualise logs grouped by user segment.";
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const logStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let latestTimestamp: number | null = null;
+    logData.forEach((log) => {
+      const key = log.level.toLowerCase();
+      counts[key] = (counts[key] ?? 0) + 1;
+      const ts = Date.parse(log.timestamp);
+      if (!Number.isNaN(ts) && (latestTimestamp === null || ts > latestTimestamp)) {
+        latestTimestamp = ts;
+      }
+    });
+    return {
+      counts,
+      latestTimestamp: latestTimestamp ? new Date(latestTimestamp).toISOString() : null,
+    };
+  }, [logData]);
+
+  const filteredLogs = useMemo(() => {
+    if (!normalizedSearch) return logData;
+    return logData.filter((log) => {
+      const haystack = [
+        log.message,
+        log.category,
+        log.level,
+        log.timestamp,
+        log.metadata ? JSON.stringify(log.metadata) : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedSearch);
+    });
+  }, [logData, normalizedSearch]);
 
   return (
     <section className="space-y-4">
@@ -727,7 +1089,13 @@ function LogViewerSection() {
           </ToggleGroup>
           <p className="text-xs text-muted-foreground">{activeDescription}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Search logs..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-8 w-48"
+          />
           <label className="text-sm text-muted-foreground" htmlFor="log-level">
             Level
           </label>
@@ -753,6 +1121,15 @@ function LogViewerSection() {
           </Button>
         </div>
       </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge variant="destructive">Errors {formatNumber(logStats.counts.error ?? 0, 0)}</Badge>
+        <Badge variant="secondary">Warn {formatNumber(logStats.counts.warn ?? 0, 0)}</Badge>
+        <Badge variant="outline">Info {formatNumber(logStats.counts.info ?? 0, 0)}</Badge>
+        <Badge variant="outline">Debug {formatNumber(logStats.counts.debug ?? 0, 0)}</Badge>
+        <span>
+          Last entry {logStats.latestTimestamp ? formatDateTime(logStats.latestTimestamp) : "—"}
+        </span>
+      </div>
       <div className="overflow-hidden rounded border">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-muted/50">
@@ -765,14 +1142,14 @@ function LogViewerSection() {
             </tr>
           </thead>
           <tbody>
-            {logData.length === 0 && (
+            {filteredLogs.length === 0 && (
               <tr>
                 <td className="px-3 py-4 text-center text-muted-foreground" colSpan={5}>
                   {logQuery.isFetching ? "Loading logs..." : "No log entries found for this segment."}
                 </td>
               </tr>
             )}
-            {logData.map((log, index) => (
+            {filteredLogs.map((log, index) => (
               <tr key={`${log.timestamp}-${index}`} className="border-t">
                 <td className="px-3 py-2 align-top font-mono text-xs">{log.timestamp}</td>
                 <td className="px-3 py-2 align-top text-xs uppercase">{log.level}</td>
@@ -833,10 +1210,56 @@ function TransactionViewerSection() {
   });
 
   const data = transactionsQuery.data;
-  const transactions = data?.transactions ?? [];
+  const transactions = useMemo(() => data?.transactions ?? [], [data?.transactions]);
   const totalCount = data?.total ?? 0;
   const rangeStart = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = totalCount === 0 ? 0 : Math.min((page - 1) * pageSize + transactions.length, totalCount);
+
+  const summary = useMemo(() => {
+    const statusCounts = new Map<string, number>();
+    const customerTotals = new Map<string, number>();
+    const shopTotals = new Map<string, number>();
+    let totalValue = 0;
+    let paidValue = 0;
+    let paidCount = 0;
+
+    transactions.forEach((transaction) => {
+      statusCounts.set(
+        transaction.status,
+        (statusCounts.get(transaction.status) ?? 0) + 1,
+      );
+      const total = toNumber(transaction.total);
+      totalValue += total;
+      if (transaction.paymentStatus === "paid") {
+        paidValue += total;
+        paidCount += 1;
+      }
+      if (transaction.customer) {
+        const key = transaction.customer.name ?? transaction.customer.email ?? `Customer ${transaction.customer.id}`;
+        customerTotals.set(key, (customerTotals.get(key) ?? 0) + total);
+      }
+      if (transaction.shop) {
+        const key = transaction.shop.name ?? transaction.shop.email ?? `Shop ${transaction.shop.id}`;
+        shopTotals.set(key, (shopTotals.get(key) ?? 0) + total);
+      }
+    });
+
+    const topCustomer = Array.from(customerTotals.entries()).sort((a, b) => b[1] - a[1])[0];
+    const topShop = Array.from(shopTotals.entries()).sort((a, b) => b[1] - a[1])[0];
+    const count = transactions.length;
+
+    return {
+      count,
+      totalValue,
+      paidValue,
+      paidCount,
+      statusCounts,
+      topCustomer,
+      topShop,
+      paidRatio: count ? paidCount / count : 0,
+      avgValue: count ? totalValue / count : 0,
+    };
+  }, [transactions]);
 
   const resetPage = () => setPage(1);
 
@@ -847,6 +1270,54 @@ function TransactionViewerSection() {
         <p className="text-sm text-muted-foreground">
           Search by customer or shop, filter by status, and page through recorded transactions.
         </p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Revenue (page)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <div className="text-2xl font-semibold">{formatRupees(summary.totalValue)}</div>
+            <div className="text-xs text-muted-foreground">
+              Paid {formatRupees(summary.paidValue)} · Avg {formatRupees(summary.avgValue)}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Payment success</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="text-2xl font-semibold">
+              {summary.count
+                ? formatPercent(summary.paidRatio, { alreadyRatio: true })
+                : "—"}
+            </div>
+            <Progress value={summary.count ? summary.paidRatio * 100 : 0} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Top customer</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <div className="text-sm font-medium">{summary.topCustomer?.[0] ?? "—"}</div>
+            <div className="text-xs text-muted-foreground">
+              {summary.topCustomer ? formatRupees(summary.topCustomer[1]) : "No orders yet"}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Top shop</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <div className="text-sm font-medium">{summary.topShop?.[0] ?? "—"}</div>
+            <div className="text-xs text-muted-foreground">
+              {summary.topShop ? formatRupees(summary.topShop[1]) : "No orders yet"}
+            </div>
+          </CardContent>
+        </Card>
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Input
@@ -892,6 +1363,14 @@ function TransactionViewerSection() {
           <option value="cancelled">Cancelled</option>
           <option value="returned">Returned</option>
         </select>
+      </div>
+      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+        {Array.from(summary.statusCounts.entries()).map(([statusKey, count]) => (
+          <Badge key={statusKey} variant="outline" className="uppercase">
+            {statusKey} {formatNumber(count, 0)}
+          </Badge>
+        ))}
+        {summary.statusCounts.size === 0 && <span>No status samples yet.</span>}
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <label className="text-sm text-muted-foreground" htmlFor="page-size">
