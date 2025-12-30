@@ -1,7 +1,6 @@
 import session from "express-session";
 import pgSession from "connect-pg-simple";
 import { db } from "./db";
-import type { SQL } from "drizzle-orm";
 import logger from "./logger";
 import { getCache, setCache, invalidateCache } from "./services/cache.service";
 import { createSessionStore } from "./services/sessionStore.service";
@@ -67,6 +66,8 @@ import {
   OrderStatusUpdate,
   ProductListItem,
   OrderItemInput,
+  GlobalSearchParams,
+  GlobalSearchResult,
 } from "./storage";
 import {
   eq,
@@ -75,10 +76,13 @@ import {
   ne,
   sql,
   desc,
+  asc,
   count,
   inArray,
   gte,
   isNotNull,
+
+  type SQL,
 } from "drizzle-orm";
 import {
   toISTForStorage,
@@ -369,17 +373,7 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
-    // Ensure 'users.googleId' column exists in your Drizzle schema for the 'users' table.
-    // If 'users.googleId' causes a type error, it means the Drizzle schema object for 'users' needs to be updated
-    // to include 'googleId'. For this code to work, the database table must have this column.
-    // @ts-ignore // Remove this ignore if users.googleId is correctly typed in your schema
-    const result = await db
-      .select()
-      .from(users)
-      .where(eq(users.googleId, googleId));
-    return result[0];
-  }
+  // Note: getUserByGoogleId removed - no longer using Google OAuth
 
   async deleteUserAndData(userId: number): Promise<void> {
     await db.transaction(async (tx) => {
@@ -3445,5 +3439,194 @@ export class PostgresStorage implements IStorage {
         });
       }
     }
+  }
+
+  // Global search with database-side filtering, distance calculation, and sorting
+  async globalSearch(params: GlobalSearchParams): Promise<GlobalSearchResult[]> {
+    const { query, lat, lng, radiusKm, limit } = params;
+    const normalizedQuery = query.trim().toLowerCase();
+
+    // If location is provided, we use it for distance sorting and filtering
+    const hasLocation = lat !== undefined && lng !== undefined;
+    const effectiveRadius = radiusKm ?? DEFAULT_NEARBY_RADIUS_KM;
+
+
+
+    // Calculate distance in meters for display/sorting
+    const distanceExpr = hasLocation
+      ? sql`ST_Distance(location::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) / 1000`
+      : sql`NULL::float8`;
+
+    // Relevance scoring
+    const relevanceExpr = (nameCol: any, descCol: any) => sql`
+      CASE WHEN LOWER(${nameCol}::text || ' ' || COALESCE(${descCol}::text, '')) LIKE ${'%' + normalizedQuery + '%'} THEN 4 ELSE 0 END
+      + CASE 
+          WHEN ${hasLocation ? distanceExpr : sql`NULL`} IS NULL THEN 0
+          WHEN ${distanceExpr} < 1 THEN 2
+          WHEN ${distanceExpr} < 5 THEN 1.5
+          WHEN ${distanceExpr} < 15 THEN 1
+          WHEN ${distanceExpr} < 40 THEN 0.5
+          ELSE 0
+        END
+    `;
+
+    // 1. Services Query
+    const servicesDistExpr = hasLocation
+      ? sql`ST_Distance(users.location::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) / 1000`
+      : sql`NULL::float8`;
+
+    const servicesQuery = db
+      .select({
+        id: services.id,
+        name: services.name,
+        description: services.description,
+        price: services.price,
+        images: services.images,
+        providerId: services.providerId,
+        providerName: users.name,
+        city: users.addressCity,
+        state: users.addressState,
+        distanceKm: servicesDistExpr.as("distance_km"),
+        relevanceScore: relevanceExpr(services.name, services.description).as("relevance_score"),
+      })
+      .from(services)
+      .leftJoin(users, eq(services.providerId, users.id))
+      .where(
+        and(
+          eq(services.isDeleted, false),
+          sql`LOWER(${services.name}::text || ' ' || COALESCE(${services.description}::text, '')) LIKE ${'%' + normalizedQuery + '%'}`,
+          hasLocation ? sql`users.location IS NOT NULL AND ${servicesDistExpr} <= ${effectiveRadius}` : undefined
+        )
+      )
+      .orderBy(desc(sql`relevance_score`), asc(sql`distance_km`))
+      .limit(limit);
+
+    // 2. Products Query
+    const productsDistExpr = servicesDistExpr; // Same user table join logic
+
+    const productsQuery = db
+      .select({
+        id: products.id,
+        shopId: products.shopId,
+        name: products.name,
+        description: products.description,
+        price: products.price,
+        images: products.images,
+        ownerId: products.shopId,
+        ownerName: users.name,
+        city: users.addressCity,
+        state: users.addressState,
+        distanceKm: productsDistExpr.as("distance_km"),
+        relevanceScore: relevanceExpr(products.name, products.description).as("relevance_score"),
+      })
+      .from(products)
+      .leftJoin(users, eq(products.shopId, users.id))
+      .where(
+        and(
+          eq(products.isDeleted, false),
+          sql`${products.searchVector} @@ plainto_tsquery('english', ${normalizedQuery})`,
+          hasLocation ? sql`users.location IS NOT NULL AND ${productsDistExpr} <= ${effectiveRadius}` : undefined
+        )
+      )
+      .orderBy(desc(sql`relevance_score`), asc(sql`distance_km`))
+      .limit(limit);
+
+    // 3. Shops Query
+    const shopsDistExpr = hasLocation
+      ? sql`ST_Distance(shops.location::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) / 1000`
+      : sql`NULL::float8`;
+
+    // Use the shop filter 
+    const shopsQuery = db
+      .select({
+        id: shops.id,
+        ownerId: shops.ownerId,
+        shopName: shops.shopName,
+        description: shops.description,
+        image: users.profilePicture, // Using profile picture as shop image often
+        city: shops.shopAddressCity,
+        state: shops.shopAddressState,
+        distanceKm: shopsDistExpr.as("distance_km"),
+        relevanceScore: relevanceExpr(shops.shopName, shops.description).as("relevance_score"),
+      })
+      .from(shops)
+      .leftJoin(users, eq(shops.ownerId, users.id))
+      .where(
+        and(
+          sql`LOWER(${shops.shopName}::text || ' ' || COALESCE(${shops.description}::text, '')) LIKE ${'%' + normalizedQuery + '%'}`,
+          hasLocation ? sql`shops.location IS NOT NULL AND ${shopsDistExpr} <= ${effectiveRadius}` : undefined
+        )
+      )
+      .orderBy(desc(sql`relevance_score`), asc(sql`distance_km`))
+      .limit(limit);
+
+    // Execute queries
+    const [servicesResults, productsResults, shopsResults] = await Promise.all([
+      servicesQuery,
+      productsQuery,
+      shopsQuery,
+    ]);
+
+    // Combine and Map results
+    const combined: (GlobalSearchResult & { relevanceScore: number })[] = [];
+
+    for (const row of servicesResults) {
+      combined.push({
+        type: "service",
+        id: row.id,
+        serviceId: row.id,
+        name: row.name,
+        description: row.description,
+        price: row.price,
+        image: row.images?.[0] || null,
+        providerId: row.providerId,
+        providerName: row.providerName,
+        location: { city: row.city || null, state: row.state || null },
+        distanceKm: row.distanceKm != null ? Number(row.distanceKm) : null,
+        relevanceScore: Number(row.relevanceScore ?? 0),
+      });
+    }
+
+    for (const row of productsResults) {
+      combined.push({
+        type: "product",
+        id: row.id,
+        productId: row.id,
+        shopId: row.shopId,
+        name: row.name,
+        description: row.description,
+        price: row.price,
+        image: row.images?.[0] || null,
+        shopName: row.ownerName, // ownerName from users join
+        location: { city: row.city || null, state: row.state || null },
+        distanceKm: row.distanceKm != null ? Number(row.distanceKm) : null,
+        relevanceScore: Number(row.relevanceScore ?? 0),
+      });
+    }
+
+    for (const row of shopsResults) {
+      combined.push({
+        type: "shop",
+        id: row.ownerId, // Use ownerId as ID for consistency
+        shopId: row.id,
+        name: row.shopName,
+        description: row.description,
+        image: row.image,
+        location: { city: row.city || null, state: row.state || null },
+        distanceKm: row.distanceKm != null ? Number(row.distanceKm) : null,
+        relevanceScore: Number(row.relevanceScore ?? 0),
+      });
+    }
+
+    // Final sort in memory
+    combined.sort((a, b) => {
+      if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
+      if (a.distanceKm !== null && b.distanceKm !== null && a.distanceKm !== b.distanceKm) {
+        return a.distanceKm - b.distanceKm;
+      }
+      return (a.name ?? "").localeCompare(b.name ?? "");
+    });
+
+    return combined.slice(0, limit).map(({ relevanceScore, ...rest }) => rest);
   }
 }

@@ -69,8 +69,7 @@ const AdminHealth = lazy(() => import("@/pages/admin/AdminHealth"));
 const AdminMonitoring = lazy(() => import("@/pages/admin/AdminMonitoring"));
 
 const NotFound = lazy(() => import("@/pages/not-found"));
-const ResetPasswordPage = lazy(() => import("@/pages/reset-password-page")); // Import the new page
-const VerifyEmailPage = lazy(() => import("@/pages/verify-email-page"));
+// Email-based pages removed (verify-email, reset-password) - using phone OTP instead
 const WorkerLoginPage = lazy(() => import("@/pages/auth/WorkerLoginPage"));
 
 function ClientPerformanceMetricsTracker() {
@@ -193,8 +192,7 @@ function Router() {
       <ProtectedRoute path="/shop/promotions" component={ShopPromotions} roles={["shop", "worker"]} />
       <ProtectedRoute path="/shop/reviews" component={ShopReviews} roles={["shop", "worker"]} />
       <ProtectedRoute path="/shop/workers" component={ShopWorkers} roles={["shop"]} />
-      <Route path="/reset-password" component={ResetPasswordPage} />
-      <Route path="/verify-email" component={VerifyEmailPage} />
+      {/* Email-based routes removed (reset-password, verify-email) - using phone OTP instead */}
       <Route path="/" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>

@@ -161,9 +161,9 @@ export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>; // Added for Google OAuth
+  getUserByEmail(email: string): Promise<User | undefined>;
   getUserByPhone(phone: string): Promise<User | undefined>;
-  getUserByGoogleId(googleId: string): Promise<User | undefined>; // Added for Google OAuth
+  // Note: getUserByGoogleId removed - no longer using Google OAuth
   getAllUsers(): Promise<User[]>;
   getUsersByIds(ids: number[]): Promise<User[]>;
   getShops(filters?: {
@@ -389,9 +389,61 @@ export interface IStorage {
     endTime: string,
   ): Promise<Booking[]>;
 
+
   // User deletion and data erasure
   deleteUserAndData(userId: number): Promise<void>;
+
+  // Global search across services, products, and shops
+  globalSearch(params: GlobalSearchParams): Promise<GlobalSearchResult[]>;
 }
+
+// Types for global search
+export interface GlobalSearchParams {
+  query: string;
+  lat?: number;
+  lng?: number;
+  radiusKm?: number;
+  limit: number;
+}
+
+export type GlobalSearchResult =
+  | {
+    type: "service";
+    id: number;
+    serviceId: number;
+    name: string | null;
+    description: string | null;
+    price: string | null;
+    image: string | null;
+    providerId: number | null;
+    providerName: string | null;
+    location: { city: string | null; state: string | null };
+    distanceKm: number | null;
+  }
+  | {
+    type: "product";
+    id: number;
+    productId: number;
+    shopId: number | null;
+    name: string | null;
+    description: string | null;
+    price: string | null;
+    image: string | null;
+    shopName: string | null;
+    location: { city: string | null; state: string | null };
+    distanceKm: number | null;
+  }
+  | {
+    type: "shop";
+    id: number;
+    shopId: number;
+    name: string | null;
+    description: string | null;
+    image: string | null;
+    location: { city: string | null; state: string | null };
+    distanceKm: number | null;
+  };
+
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
@@ -905,15 +957,7 @@ export class MemStorage implements IStorage {
     );
   }
 
-  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
-    for (const user of Array.from(this.users.values())) {
-      // Ensure googleId is checked correctly, even if it's null or undefined on some user objects
-      if (user.googleId && user.googleId === googleId) {
-        return user;
-      }
-    }
-    return undefined;
-  }
+  // Note: getUserByGoogleId removed - no longer using Google OAuth
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const normalized = normalizeUsername(username);
@@ -3050,6 +3094,122 @@ export class MemStorage implements IStorage {
     for (const product of products) {
       await this.createProduct({ ...product, mrp: product.price });
     }
+  }
+
+  // Global search implementation for MemStorage (mirrors current in-memory approach for testing)
+  async globalSearch(params: GlobalSearchParams): Promise<GlobalSearchResult[]> {
+    const { query, lat, lng, radiusKm, limit } = params;
+    const normalizedQuery = query.trim().toLowerCase();
+    const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+    const origin = lat !== undefined && lng !== undefined ? { lat, lng, radiusKm: radiusKm ?? 40 } : null;
+
+    const results: (GlobalSearchResult & { relevanceScore: number })[] = [];
+
+    // Helper for distance calculation
+    const computeDistanceKm = (
+      target?: { latitude?: string | number | null; longitude?: string | number | null } | null,
+    ): number | null => {
+      if (!origin || !target) return null;
+      const targetLat = toNumericCoordinate(target.latitude);
+      const targetLng = toNumericCoordinate(target.longitude);
+      if (targetLat === null || targetLng === null) return null;
+      return haversineDistanceKm(origin.lat, origin.lng, targetLat, targetLng);
+    };
+
+    // Helper for relevance scoring
+    const buildScore = (haystack: string, distanceKm: number | null): number => {
+      let score = 0;
+      if (haystack.includes(normalizedQuery)) score += 4;
+      const tokenHits = tokens.reduce((acc, t) => acc + (haystack.includes(t) ? 1 : 0), 0);
+      score += tokenHits;
+      if (distanceKm !== null) {
+        if (distanceKm < 1) score += 2;
+        else if (distanceKm < 5) score += 1.5;
+        else if (distanceKm < 15) score += 1;
+        else if (distanceKm < 40) score += 0.5;
+      }
+      return score;
+    };
+
+    // Search services
+    for (const service of Array.from(this.services.values())) {
+      if (service.isDeleted) continue;
+      const provider = service.providerId != null ? this.users.get(service.providerId) : null;
+      const haystack = `${service.name ?? ""} ${service.description ?? ""} ${provider?.name ?? ""}`.toLowerCase();
+      if (!haystack.includes(normalizedQuery) && !tokens.every((t) => haystack.includes(t))) continue;
+      const distanceKm = provider ? computeDistanceKm(provider) : null;
+      if (origin && distanceKm !== null && distanceKm > origin.radiusKm) continue;
+      results.push({
+        type: "service",
+        id: service.id,
+        serviceId: service.id,
+        name: service.name ?? null,
+        description: service.description ?? null,
+        price: service.price ?? null,
+        image: Array.isArray(service.images) ? service.images[0] ?? null : null,
+        providerId: service.providerId ?? null,
+        providerName: provider?.name ?? null,
+        location: { city: provider?.addressCity ?? null, state: provider?.addressState ?? null },
+        distanceKm,
+        relevanceScore: buildScore(haystack, distanceKm),
+      });
+    }
+
+    // Search products
+    for (const product of Array.from(this.products.values())) {
+      if (product.isDeleted) continue;
+      const shop = product.shopId ? this.users.get(product.shopId) : null;
+      const haystack = `${product.name ?? ""} ${product.description ?? ""} ${shop?.name ?? ""}`.toLowerCase();
+      if (!haystack.includes(normalizedQuery) && !tokens.every((t) => haystack.includes(t))) continue;
+      const distanceKm = shop ? computeDistanceKm(shop) : null;
+      if (origin && distanceKm !== null && distanceKm > origin.radiusKm) continue;
+      results.push({
+        type: "product",
+        id: product.id,
+        productId: product.id,
+        shopId: product.shopId ?? null,
+        name: product.name ?? null,
+        description: product.description ?? null,
+        price: product.price ?? null,
+        image: Array.isArray(product.images) ? product.images[0] ?? null : null,
+        shopName: shop?.name ?? null,
+        location: { city: shop?.addressCity ?? null, state: shop?.addressState ?? null },
+        distanceKm,
+        relevanceScore: buildScore(haystack, distanceKm),
+      });
+    }
+
+    // Search shops (users with role 'shop')
+    for (const user of Array.from(this.users.values())) {
+      if (user.role !== "shop") continue;
+      const haystack = `${user.name ?? ""} ${user.shopProfile?.description ?? ""}`.toLowerCase();
+      if (!haystack.includes(normalizedQuery) && !tokens.every((t) => haystack.includes(t))) continue;
+      const distanceKm = computeDistanceKm(user);
+      if (origin && distanceKm !== null && distanceKm > origin.radiusKm) continue;
+      results.push({
+        type: "shop",
+        id: user.id,
+        shopId: user.id,
+        name: user.name ?? null,
+        description: user.shopProfile?.description ?? null,
+        image: user.profilePicture ?? null,
+        location: { city: user.addressCity ?? null, state: user.addressState ?? null },
+        distanceKm,
+        relevanceScore: buildScore(haystack, distanceKm),
+      });
+    }
+
+    // Sort by relevance then distance
+    results.sort((a, b) => {
+      if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
+      if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
+      if (a.distanceKm !== null) return -1;
+      if (b.distanceKm !== null) return 1;
+      return (a.name ?? "").localeCompare(b.name ?? "");
+    });
+
+    // Return without relevanceScore
+    return results.slice(0, limit).map(({ relevanceScore, ...rest }) => rest);
   }
 }
 

@@ -467,32 +467,8 @@ export const sessions = pgTable("sessions", {
   expire: timestamp("expire", { precision: 6 }).notNull(),
 });
 
-export const passwordResetTokens = pgTable("password_reset_tokens", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  token: text("token").notNull().unique(),
-  expiresAt: timestamp("expires_at").notNull(),
-});
-export const magicLinkTokens = pgTable("magic_link_tokens", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  tokenHash: text("token_hash").notNull().unique(),
-  expiresAt: timestamp("expires_at").notNull(),
-  consumedAt: timestamp("consumed_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-export const emailVerificationTokens = pgTable("email_verification_tokens", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  token: text("token").notNull().unique(),
-  expiresAt: timestamp("expires_at").notNull(),
-});
+// Note: passwordResetTokens, magicLinkTokens, emailVerificationTokens tables removed
+// Using phone OTP for auth instead (see phoneOtpTokens below)
 
 // Phone OTP tokens for forgot password and phone verification
 export const phoneOtpTokens = pgTable("phone_otp_tokens", {
@@ -1079,24 +1055,9 @@ export type OrderStatusUpdateRecord = typeof orderStatusUpdates.$inferSelect;
 export type InsertOrderStatusUpdate = z.infer<
   typeof insertOrderStatusUpdateSchema
 >;
-export const insertPasswordResetTokenSchema =
-  createInsertSchema(passwordResetTokens).strict();
-export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
-export type InsertPasswordResetToken = z.infer<
-  typeof insertPasswordResetTokenSchema
->;
-export const insertMagicLinkTokenSchema =
-  createInsertSchema(magicLinkTokens).strict();
-export type MagicLinkToken = typeof magicLinkTokens.$inferSelect;
-export type InsertMagicLinkToken = z.infer<
-  typeof insertMagicLinkTokenSchema
->;
-export const insertEmailVerificationTokenSchema =
-  createInsertSchema(emailVerificationTokens).strict();
-export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
-export type InsertEmailVerificationToken = z.infer<
-  typeof insertEmailVerificationTokenSchema
->;
+
+// Note: Token type definitions removed (passwordResetTokens, magicLinkTokens, emailVerificationTokens)
+// Using phone OTP for auth instead (see phoneOtpTokens below)
 
 // Phone OTP token types
 export const insertPhoneOtpTokenSchema =

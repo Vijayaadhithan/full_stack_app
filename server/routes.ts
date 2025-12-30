@@ -15,13 +15,7 @@ import type { LogCategory } from "@shared/logging";
 import {
   initializeAuth,
   registerAuthRoutes,
-  hashPasswordInternal,
-} from "./auth"; // Added hashPasswordInternal
-import {
-  sendEmail,
-  getPasswordResetEmailContent,
-  getMagicLinkEmailContent,
-} from "./emailService";
+} from "./auth";
 import { storage } from "./storage";
 import { sanitizeUser } from "./security/sanitizeUser";
 import { z } from "zod";
@@ -46,8 +40,6 @@ import {
   orders,
   users,
   reviews,
-  passwordResetTokens as passwordResetTokensTable,
-  magicLinkTokens as magicLinkTokensTable,
   User,
   Booking,
   Order,
@@ -90,11 +82,6 @@ import {
   type RequestWithContext,
 } from "./workerAuth";
 import {
-  requestPasswordResetLimiter,
-  resetPasswordLimiter,
-  emailLookupLimiter,
-  magicLinkRequestLimiter,
-  magicLinkLoginLimiter,
   usernameLookupLimiter,
 } from "./security/rateLimiters";
 import {
@@ -988,33 +975,6 @@ const bookingStatusSchema = z.enum([
   "rescheduled_by_provider",
 ]);
 
-const requestPasswordResetSchema = z
-  .object({
-    email: z.string().email(),
-  })
-  .strict();
-
-const resetPasswordSchema = z
-  .object({
-    token: z.string().min(1),
-    newPassword: z.string().min(8),
-  })
-  .strict();
-
-const emailLookupSchema = z
-  .object({
-    email: z.string().email(),
-  })
-  .strict();
-
-const magicLinkLoginSchema = z
-  .object({
-    token: z.string().min(1),
-  })
-  .strict();
-
-const MAGIC_LINK_EXPIRY_MS = 15 * 60 * 1000;
-
 const usernameLookupSchema = z
   .object({
     username: z
@@ -1615,35 +1575,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ available_endpoints: routes });
   });
 
-  app.post(
-    "/api/auth/email-lookup",
-    emailLookupLimiter,
-    async (req, res) => {
-      const parsedBody = emailLookupSchema.safeParse(req.body);
-      if (!parsedBody.success) {
-        return res.status(400).json(formatValidationError(parsedBody.error));
-      }
-
-      const { email } = parsedBody.data;
-      try {
-        const user = await storage.getUserByEmail(email);
-        if (!user) {
-          return res.json({ exists: false });
-        }
-
-        return res.json({
-          exists: true,
-          email: user.email,
-          name: user.name,
-          hasPassword: Boolean(user.password),
-          isSuspended: Boolean((user as any)?.isSuspended),
-        });
-      } catch (error) {
-        logger.error("Error performing email lookup:", error);
-        return res.status(500).json({ message: "Unable to process request" });
-      }
-    },
-  );
+  // Note: Email-based auth routes removed (email-lookup, magic-link, password-reset via email)
+  // Phone-based OTP auth is used instead (see auth.ts)
 
   app.post(
     "/api/auth/check-username",
@@ -1675,259 +1608,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     },
   );
-
-  app.post(
-    "/api/auth/send-magic-link",
-    magicLinkRequestLimiter,
-    async (req, res) => {
-      const parsedBody = emailLookupSchema.safeParse(req.body);
-      if (!parsedBody.success) {
-        return res.status(400).json(formatValidationError(parsedBody.error));
-      }
-
-      const { email } = parsedBody.data;
-      try {
-        const user = await storage.getUserByEmail(email);
-        if (!user || !user.email) {
-          return res.json({
-            message:
-              "If an account with that email exists, a magic link has been sent.",
-          });
-        }
-
-        if ((user as any)?.isSuspended) {
-          return res
-            .status(403)
-            .json({ message: "Account suspended. Contact support." });
-        }
-
-        await db
-          .delete(magicLinkTokensTable)
-          .where(eq(magicLinkTokensTable.userId, user.id));
-
-        const rawToken = crypto.randomBytes(32).toString("hex");
-        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-        const expiresAt = new Date(Date.now() + MAGIC_LINK_EXPIRY_MS);
-
-        await db.insert(magicLinkTokensTable).values({
-          userId: user.id,
-          tokenHash,
-          expiresAt,
-        });
-
-        const magicLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/magic-login?token=${rawToken}`;
-        const emailContent = getMagicLinkEmailContent(
-          user.name || user.username || "User",
-          magicLink,
-        );
-
-        await sendEmail({
-          to: user.email,
-          subject: emailContent.subject,
-          text: emailContent.text,
-          html: emailContent.html,
-        });
-
-        return res.json({
-          message:
-            "If an account with that email exists, a magic link has been sent.",
-        });
-      } catch (error) {
-        logger.error("Error sending magic link:", error);
-        return res
-          .status(500)
-          .json({ message: "Unable to send magic link at the moment" });
-      }
-    },
-  );
-
-  app.post(
-    "/api/auth/magic-login",
-    magicLinkLoginLimiter,
-    async (req, res, next) => {
-      const parsedBody = magicLinkLoginSchema.safeParse(req.body);
-      if (!parsedBody.success) {
-        return res.status(400).json(formatValidationError(parsedBody.error));
-      }
-
-      const tokenHash = crypto
-        .createHash("sha256")
-        .update(parsedBody.data.token)
-        .digest("hex");
-
-      try {
-        const tokenRows = await db
-          .select()
-          .from(magicLinkTokensTable)
-          .where(eq(magicLinkTokensTable.tokenHash, tokenHash))
-          .limit(1);
-        const tokenRecord = tokenRows[0];
-
-        if (
-          !tokenRecord ||
-          tokenRecord.expiresAt < new Date() ||
-          tokenRecord.consumedAt
-        ) {
-          return res
-            .status(400)
-            .json({ message: "Invalid or expired magic link" });
-        }
-
-        const user = await storage.getUser(tokenRecord.userId);
-        if (!user) {
-          await db
-            .delete(magicLinkTokensTable)
-            .where(eq(magicLinkTokensTable.id, tokenRecord.id));
-          return res.status(404).json({ message: "User not found" });
-        }
-
-        if ((user as any)?.isSuspended) {
-          await db
-            .delete(magicLinkTokensTable)
-            .where(eq(magicLinkTokensTable.id, tokenRecord.id));
-          return res
-            .status(403)
-            .json({ message: "Account suspended. Contact support." });
-        }
-
-        await db
-          .update(magicLinkTokensTable)
-          .set({ consumedAt: new Date() })
-          .where(eq(magicLinkTokensTable.id, tokenRecord.id));
-
-        const safeUser = sanitizeUser(user);
-        if (!safeUser) {
-          return res
-            .status(500)
-            .json({ message: "Unable to complete magic link login" });
-        }
-
-        req.login(safeUser as Express.User, (err) => {
-          if (err) return next(err);
-          return res.json(safeUser);
-        });
-      } catch (error) {
-        logger.error("Error completing magic link login:", error);
-        return res
-          .status(500)
-          .json({ message: "Unable to complete magic link login" });
-      }
-    },
-  );
-
-  app.post(
-    "/api/request-password-reset",
-    requestPasswordResetLimiter,
-    async (req, res) => {
-      const parsedBody = requestPasswordResetSchema.safeParse(req.body);
-      if (!parsedBody.success) {
-        return res.status(400).json(formatValidationError(parsedBody.error));
-      }
-
-      const { email } = parsedBody.data;
-
-      try {
-        const user = await storage.getUserByEmail(email);
-        if (!user) {
-          logger.info(
-            `Password reset requested for non-existent email: ${email}`,
-          );
-          return res.status(200).json({
-            message:
-              "If an account with that email exists, a password reset link has been sent.",
-          });
-        }
-
-        const rawToken = crypto.randomBytes(32).toString("hex");
-        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-        const expiresAt = new Date(Date.now() + 3600000);
-
-        await db.insert(passwordResetTokensTable).values({
-          userId: user.id,
-          token: tokenHash,
-          expiresAt,
-        });
-
-        const resetLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${rawToken}`;
-        const emailContent = getPasswordResetEmailContent(
-          user.name || user.username || "User",
-          resetLink,
-        );
-
-        if (user.email) {
-          await sendEmail({
-            to: user.email,
-            subject: emailContent.subject,
-            text: emailContent.text,
-            html: emailContent.html,
-          });
-        } else {
-          logger.warn(
-            `Password reset attempted for user ${user.id}, but no email is available.`,
-          );
-        }
-
-        return res.status(200).json({
-          message:
-            "If an account with that email exists, a password reset link has been sent.",
-        });
-      } catch (error) {
-        logger.error("Error requesting password reset:", error);
-        return res
-          .status(500)
-          .json({ message: "Error processing password reset request" });
-      }
-    },
-  );
-
-  app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
-    const parsedBody = resetPasswordSchema.safeParse(req.body);
-    if (!parsedBody.success) {
-      return res.status(400).json(formatValidationError(parsedBody.error));
-    }
-
-    const { token: rawToken, newPassword } = parsedBody.data;
-    if (!rawToken || !newPassword) {
-      return res
-        .status(400)
-        .json({ message: "Token and new password are required" });
-    }
-
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-
-    try {
-      const tokenRecords = await db
-        .select()
-        .from(passwordResetTokensTable)
-        .where(eq(passwordResetTokensTable.token, tokenHash))
-        .limit(1);
-      const tokenEntry = tokenRecords[0];
-      if (!tokenEntry || tokenEntry.expiresAt < new Date()) {
-        return res
-          .status(400)
-          .json({ message: "Invalid or expired password reset token" });
-      }
-
-      const user = await storage.getUser(tokenEntry.userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      const hashedPassword = await hashPasswordInternal(newPassword);
-      await storage.updateUser(tokenEntry.userId, { password: hashedPassword });
-
-      await db
-        .delete(passwordResetTokensTable)
-        .where(eq(passwordResetTokensTable.token, tokenHash));
-
-      return res
-        .status(200)
-        .json({ message: "Password has been reset successfully" });
-    } catch (error) {
-      logger.error("Error resetting password:", error);
-      return res.status(500).json({ message: "Error resetting password" });
-    }
-  });
 
   // Register domain routers
   app.use('/api/bookings', bookingsRouter);
@@ -3795,53 +3475,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const computeDistanceKm = (
-    origin:
-      | {
-        lat: number;
-        lng: number;
-      }
-      | null,
-    target?:
-      | {
-        latitude?: string | number | null;
-        longitude?: string | number | null;
-      }
-      | null,
-  ) => {
-    if (!origin || !target) return null;
-    const targetLat = toNumericCoordinate(target.latitude);
-    const targetLng = toNumericCoordinate(target.longitude);
-    if (targetLat === null || targetLng === null) return null;
-    return haversineDistanceKm(origin.lat, origin.lng, targetLat, targetLng);
-  };
-
-  const buildRelevanceScore = (
-    haystack: string,
-    tokens: string[],
-    normalizedQuery: string,
-    distanceKm: number | null,
-  ) => {
-    let score = 0;
-    if (haystack.includes(normalizedQuery)) {
-      score += 4;
-    }
-    const tokenHits = tokens.reduce(
-      (acc, token) => acc + (haystack.includes(token) ? 1 : 0),
-      0,
-    );
-    score += tokenHits;
-
-    if (distanceKm !== null) {
-      if (distanceKm < 1) score += 2;
-      else if (distanceKm < 5) score += 1.5;
-      else if (distanceKm < 15) score += 1;
-      else if (distanceKm < 40) score += 0.5;
-    }
-
-    return score;
-  };
-
   app.get("/api/search/global", async (req, res) => {
     try {
       const parsedQuery = globalSearchQuerySchema.safeParse(req.query);
@@ -3857,199 +3490,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         limit = GLOBAL_SEARCH_RESULT_LIMIT,
       } = parsedQuery.data;
 
-      const normalizedQuery = q.trim().toLowerCase();
-      const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
-      const origin =
-        lat !== undefined && lng !== undefined
-          ? { lat, lng, radiusKm: radius ?? DEFAULT_NEARBY_RADIUS_KM }
-          : null;
       const maxResults = Math.min(limit, GLOBAL_SEARCH_RESULT_LIMIT);
 
-      const [services, productsPayload, shops] = await Promise.all([
-        storage.getServices({
-          searchTerm: q,
-          ...(origin
-            ? {
-              lat: origin.lat,
-              lng: origin.lng,
-              radiusKm: origin.radiusKm,
-            }
-            : {}),
-        }),
-        storage.getProducts({
-          searchTerm: q,
-          page: 1,
-          pageSize: maxResults,
-          ...(origin
-            ? {
-              lat: origin.lat,
-              lng: origin.lng,
-              radiusKm: origin.radiusKm,
-            }
-            : {}),
-        }),
-        storage.getShops(),
-      ]);
-
-      const serviceProviderIds = new Set(
-        services
-          .map((service) => service.providerId)
-          .filter((id): id is number => id != null),
-      );
-      const serviceProviders =
-        serviceProviderIds.size > 0
-          ? await storage.getUsersByIds(Array.from(serviceProviderIds))
-          : [];
-      const serviceProviderMap = new Map(
-        serviceProviders.map((provider) => [provider.id, provider]),
-      );
-
-      const serviceResults = services.map((service) => {
-        const provider =
-          service.providerId != null
-            ? serviceProviderMap.get(service.providerId) ?? null
-            : null;
-        const distanceKm = provider
-          ? computeDistanceKm(
-            origin ? { lat: origin.lat, lng: origin.lng } : null,
-            provider,
-          )
-          : null;
-        const haystack = `${service.name ?? ""} ${service.description ?? ""
-          } ${provider?.name ?? ""}`.toLowerCase();
-        const relevanceScore = buildRelevanceScore(
-          haystack,
-          tokens,
-          normalizedQuery,
-          distanceKm,
-        );
-
-        return {
-          type: "service" as const,
-          id: service.id,
-          serviceId: service.id,
-          name: service.name ?? null,
-          description: service.description ?? null,
-          price: service.price ?? null,
-          image: Array.isArray(service.images) ? service.images[0] ?? null : null,
-          providerId: service.providerId ?? null,
-          providerName: provider?.name ?? null,
-          location: {
-            city: provider?.addressCity ?? null,
-            state: provider?.addressState ?? null,
-          },
-          distanceKm,
-          relevanceScore,
-        };
-      });
-
-      const productItems = productsPayload.items ?? [];
-      const productShopIds = new Set(
-        productItems
-          .map((product) => product.shopId)
-          .filter((id): id is number => id != null),
-      );
-      const productShops =
-        productShopIds.size > 0
-          ? await storage.getUsersByIds(Array.from(productShopIds))
-          : [];
-      const productShopMap = new Map(
-        productShops.map((shop) => [shop.id, shop]),
-      );
-
-      const productResults = productItems.map((product) => {
-        const shop = product.shopId ? productShopMap.get(product.shopId) ?? null : null;
-        const distanceKm = shop
-          ? computeDistanceKm(
-            origin ? { lat: origin.lat, lng: origin.lng } : null,
-            shop,
-          )
-          : null;
-        const haystack = `${product.name ?? ""} ${product.description ?? ""
-          } ${shop?.name ?? ""}`.toLowerCase();
-        const relevanceScore = buildRelevanceScore(
-          haystack,
-          tokens,
-          normalizedQuery,
-          distanceKm,
-        );
-
-        return {
-          type: "product" as const,
-          id: product.id,
-          productId: product.id,
-          shopId: product.shopId ?? null,
-          name: product.name ?? null,
-          description: product.description ?? null,
-          price: product.price ?? null,
-          image: Array.isArray(product.images) ? product.images[0] ?? null : null,
-          shopName: shop?.name ?? null,
-          location: {
-            city: shop?.addressCity ?? null,
-            state: shop?.addressState ?? null,
-          },
-          distanceKm,
-          relevanceScore,
-        };
-      });
-
-      const shopResults = shops
-        .filter((shop) => {
-          const haystack = `${shop.name ?? ""} ${shop.shopProfile?.description ?? ""
-            }`.toLowerCase();
-          if (!haystack) return false;
-          if (haystack.includes(normalizedQuery)) return true;
-          return tokens.every((token) => haystack.includes(token));
-        })
-        .map((shop) => {
-          const distanceKm = computeDistanceKm(
-            origin ? { lat: origin.lat, lng: origin.lng } : null,
-            shop,
-          );
-          const haystack = `${shop.name ?? ""} ${shop.shopProfile?.description ?? ""
-            }`.toLowerCase();
-          const relevanceScore = buildRelevanceScore(
-            haystack,
-            tokens,
-            normalizedQuery,
-            distanceKm,
-          );
-          return {
-            type: "shop" as const,
-            id: shop.id,
-            shopId: shop.id,
-            name: shop.name ?? null,
-            description: shop.shopProfile?.description ?? null,
-            image: shop.profilePicture ?? null,
-            location: {
-              city: shop.addressCity ?? null,
-              state: shop.addressState ?? null,
-            },
-            distanceKm,
-            relevanceScore,
-          };
-        });
-
-      const combined = [...serviceResults, ...productResults, ...shopResults];
-      combined.sort((a, b) => {
-        if (b.relevanceScore !== a.relevanceScore) {
-          return b.relevanceScore - a.relevanceScore;
-        }
-        if (a.distanceKm !== null && b.distanceKm !== null) {
-          if (a.distanceKm !== b.distanceKm) {
-            return a.distanceKm - b.distanceKm;
-          }
-        } else if (a.distanceKm !== null) {
-          return -1;
-        } else if (b.distanceKm !== null) {
-          return 1;
-        }
-        return (a.name ?? "").localeCompare(b.name ?? "");
-      });
-
-      const results = combined.slice(0, maxResults).map((result) => {
-        const { relevanceScore, ...payload } = result;
-        return payload;
+      // Delegate search to storage layer (database-side filtering and sorting)
+      const results = await storage.globalSearch({
+        query: q,
+        lat,
+        lng,
+        radiusKm: radius ?? DEFAULT_NEARBY_RADIUS_KM,
+        limit: maxResults,
       });
 
       res.json({
@@ -8332,7 +7781,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post(
     "/api/performance-metrics",
-    requireAuth,
     async (req, res) => {
       const parsedBody = performanceMetricEnvelopeSchema.safeParse(req.body);
       if (!parsedBody.success) {

@@ -23,6 +23,7 @@ import { ensureDefaultAdmin } from "./bootstrap";
 import { reportError } from "./monitoring/errorReporter";
 import { trackRequestStart } from "./monitoring/metrics";
 import { startLowStockDigestJob } from "./jobs/lowStockDigestJob";
+import { initializeWorker } from "./jobQueue";
 
 config();
 
@@ -442,8 +443,9 @@ app.get("/api/health", (_req, res) => {
 
 // Initialize scheduled jobs
 export async function startServer(port?: number) {
-  // Initialize scheduled jobs
+  // Initialize BullMQ worker for job processing
   if (process.env.NODE_ENV !== "test") {
+    initializeWorker();
     startBookingExpirationJob(dbStorage);
     startPaymentReminderJob(dbStorage);
     startLowStockDigestJob(dbStorage);
