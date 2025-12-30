@@ -43,6 +43,7 @@ import {
   normalizePhone,
 } from "./utils/identity";
 import { sanitizeAndValidateSecret } from "./security/secretValidators";
+import { getCache, setCache } from "./services/cache.service";
 dotenv.config();
 
 declare module "express-session" {
@@ -243,6 +244,17 @@ export function initializeAuth(app: Express) {
   passport.serializeUser((user: Express.User, done) => done(null, user.id));
   passport.deserializeUser(async (id: number, done) => {
     try {
+      const cacheKey = `user_session:${id}`;
+      const cachedUser = await getCache<Express.User>(cacheKey);
+
+      if (cachedUser) {
+        // Hydrate Date objects from JSON
+        if (typeof cachedUser.createdAt === "string") {
+          cachedUser.createdAt = new Date(cachedUser.createdAt);
+        }
+        return done(null, cachedUser);
+      }
+
       const user = await storage.getUser(id);
       if (!user) {
         return done(null, false);
@@ -259,9 +271,6 @@ export function initializeAuth(app: Express) {
             user.role === "shop" || Boolean(user.shopProfile);
           (safeUser as any).hasProviderProfile = user.role === "provider";
         } else {
-          // We use db directly here to check existence efficiently
-          // Note: Using a count or select limit 1 is more efficient than full fetch if we only need existence
-          // But for permissions, just knowing they exist is enough.
           try {
             const shopExists = await db
               .select({ id: shops.id })
@@ -282,6 +291,9 @@ export function initializeAuth(app: Express) {
             // Don't fail the whole request, just proceed without profile flags
           }
         }
+
+        // Cache the result for 60 seconds
+        await setCache(cacheKey, safeUser, 60);
       }
 
       return done(null, safeUser ?? false);

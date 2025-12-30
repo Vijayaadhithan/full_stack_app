@@ -1,4 +1,6 @@
 import rateLimit, { type Options, type RateLimitRequestHandler } from "express-rate-limit";
+import { RedisStore } from "rate-limit-redis";
+import { getRedisClient } from "../cache";
 
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -14,7 +16,7 @@ const disableRateLimiters =
 
 function noopLimiter(): RateLimitRequestHandler {
   const handler = ((_, __, next) => next()) as RateLimitRequestHandler;
-  handler.resetKey = () => {};
+  handler.resetKey = () => { };
   handler.getKey = async () => undefined;
   return handler;
 }
@@ -27,6 +29,19 @@ function buildLimiter(options: Partial<Options>): RateLimitRequestHandler {
     ...defaultSensitiveConfig,
     ...options,
   } as Options;
+
+  if (process.env.REDIS_URL) {
+    config.store = new RedisStore({
+      sendCommand: async (...args: string[]) => {
+        const client = await getRedisClient();
+        if (client) {
+          return client.sendCommand(args);
+        }
+        throw new Error("Redis client not available");
+      },
+    });
+  }
+
   return rateLimit(config);
 }
 

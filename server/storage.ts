@@ -205,6 +205,7 @@ export interface IStorage {
   ): Promise<{ data: Booking[]; total: number; totalPages: number }>; // Added
   getBookingHistoryForCustomer(customerId: number): Promise<Booking[]>; // Added
   getBookingRequestsWithStatusForCustomer(customerId: number): Promise<Booking[]>;
+  getBookingsWithRelations(ids: number[]): Promise<BookingWithRelations[]>;
   processExpiredBookings(): Promise<void>; // Added
 
   // Product operations
@@ -265,7 +266,9 @@ export interface IStorage {
   // Order items operations
   createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem>;
   getOrderItemsByOrder(orderId: number): Promise<OrderItem[]>;
+  getOrderItemsByOrder(orderId: number): Promise<OrderItem[]>;
   getOrderItemsByOrderIds(orderIds: number[]): Promise<OrderItem[]>;
+  getOrdersWithRelations(ids: number[]): Promise<OrderWithRelations[]>;
 
   // Review operations
   createReview(review: InsertReview): Promise<Review>;
@@ -444,8 +447,70 @@ export type GlobalSearchResult =
     distanceKm: number | null;
   };
 
+export type BookingWithRelations = Booking & {
+  service: (Service & { provider: User | null }) | null;
+  customer: User | null;
+};
+
+export type OrderWithRelations = Order & {
+  items: (OrderItem & { product: Product | null })[];
+  shop: User | null;
+  customer: User | null;
+};
 
 export class MemStorage implements IStorage {
+  // ... existing properties ...
+
+  async getBookingsWithRelations(ids: number[]): Promise<BookingWithRelations[]> {
+    const bookings = ids
+      .map((id) => this.bookings.get(id))
+      .filter((b): b is Booking => !!b);
+
+    const result: BookingWithRelations[] = [];
+
+    for (const booking of bookings) {
+      let service: (Service & { provider: User | null }) | null = null;
+      if (booking.serviceId && this.services.has(booking.serviceId)) {
+        const s = this.services.get(booking.serviceId)!;
+        const providerId = s.providerId;
+        const provider = providerId !== null ? this.users.get(providerId) ?? null : null;
+        service = { ...s, provider };
+      }
+
+      const customer = booking.customerId
+        ? this.users.get(booking.customerId) ?? null
+        : null;
+
+      result.push({ ...booking, service, customer });
+    }
+
+    return result;
+  }
+
+  async getOrdersWithRelations(ids: number[]): Promise<OrderWithRelations[]> {
+    const orders = ids
+      .map((id) => this.orders.get(id))
+      .filter((o): o is Order => !!o);
+
+    const result: OrderWithRelations[] = [];
+
+    for (const order of orders) {
+      const items = Array.from(this.orderItems.values())
+        .filter((i) => i.orderId === order.id)
+        .map((item) => {
+          const product = item.productId ? this.products.get(item.productId) ?? null : null;
+          return { ...item, product };
+        });
+
+      const shop = order.shopId ? this.users.get(order.shopId) ?? null : null;
+      const customer = order.customerId ? this.users.get(order.customerId) ?? null : null;
+
+      result.push({ ...order, items, shop, customer });
+    }
+
+    return result;
+  }
+
   private users: Map<number, User>;
   private services: Map<number, Service>;
   private bookings: Map<number, Booking>;

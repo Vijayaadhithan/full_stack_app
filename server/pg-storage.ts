@@ -68,6 +68,8 @@ import {
   OrderItemInput,
   GlobalSearchParams,
   GlobalSearchResult,
+  BookingWithRelations,
+  OrderWithRelations,
 } from "./storage";
 import {
   eq,
@@ -1199,6 +1201,41 @@ export class PostgresStorage implements IStorage {
       .select()
       .from(bookings)
       .where(eq(bookings.customerId, customerId));
+  }
+
+
+  async getBookingsWithRelations(ids: number[]): Promise<BookingWithRelations[]> {
+    if (ids.length === 0) return [];
+
+    return await db.query.bookings.findMany({
+      where: inArray(bookings.id, ids),
+      with: {
+        service: {
+          with: {
+            provider: true,
+          },
+        },
+        customer: true,
+      },
+    }) as unknown as BookingWithRelations[];
+  }
+
+  async getOrdersWithRelations(ids: number[]): Promise<OrderWithRelations[]> {
+    if (ids.length === 0) return [];
+
+    return await db.query.orders.findMany({
+      where: inArray(orders.id, ids),
+      with: {
+        items: {
+          with: {
+            product: true,
+          },
+        },
+        shop: true,
+        customer: true,
+      },
+      orderBy: desc(orders.orderDate),
+    }) as unknown as OrderWithRelations[];
   }
 
   // Implementation of IStorage.getBookingHistoryForCustomer

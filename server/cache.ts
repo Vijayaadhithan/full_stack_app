@@ -50,6 +50,10 @@ async function initRedis() {
     disableFlag === "on";
 
   if (redisDisabled) {
+    if (process.env.NODE_ENV === "production") {
+      logger.fatal("Redis is disabled via DISABLE_REDIS but running in PRODUCTION mode. Exiting...");
+      process.exit(1);
+    }
     if (!loggedDisabled) {
       logger.info(
         "Redis cache disabled via DISABLE_REDIS flag. Using in-memory cache for this instance.",
@@ -62,6 +66,10 @@ async function initRedis() {
 
   const redisUrl = process.env.REDIS_URL?.trim();
   if (!redisUrl) {
+    if (process.env.NODE_ENV === "production") {
+      logger.fatal("REDIS_URL not set but running in PRODUCTION mode. Exiting...");
+      process.exit(1);
+    }
     if (!loggedMissingUrl) {
       logger.info(
         "REDIS_URL not set. Using in-memory cache for this instance.",
@@ -109,6 +117,10 @@ async function initRedis() {
       redisReady = true;
       redisNextRetry = 0;
     } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        logger.fatal({ err: error }, "Failed to connect to Redis in PRODUCTION mode. Exiting...");
+        process.exit(1);
+      }
       redisClient = null;
       redisReady = false;
       redisNextRetry = Date.now() + 60_000; // Retry after 60s to avoid log spam.
@@ -122,6 +134,11 @@ async function initRedis() {
   })();
 
   await redisInitPromise;
+}
+
+export async function getRedisClient() {
+  await initRedis();
+  return redisClient;
 }
 
 export async function getCache<T>(key: string): Promise<T | undefined> {

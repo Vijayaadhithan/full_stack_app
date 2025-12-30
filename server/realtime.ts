@@ -263,3 +263,16 @@ export function notifyOrderChange(params: {
     broadcastInvalidation(shopId, [...SHOP_ORDER_KEYS, ...detailKeys]);
   }
 }
+
+export async function closeRealtimeConnections() {
+  if (publisher) {
+    await publisher.quit();
+    logger.info("Realtime publisher closed");
+    publisher = null;
+  }
+  if (subscriber) {
+    await subscriber.quit();
+    logger.info("Realtime subscriber closed");
+    subscriber = null;
+  }
+}

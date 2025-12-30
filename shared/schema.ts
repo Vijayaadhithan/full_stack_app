@@ -758,7 +758,9 @@ export const notifications = pgTable("notifications", {
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   relatedBookingId: integer("related_booking_id").references(() => bookings.id), // Optional: to link notification to a specific booking
-});
+}, (table) => ({
+  userUnreadIdx: index("notifications_user_unread_idx").on(table.userId, table.isRead),
+}));
 
 export const blockedTimeSlots = pgTable("blocked_time_slots", {
   id: serial("id").primaryKey(),
@@ -1107,3 +1109,86 @@ export const Booking = z.object({
   disputeReason: z.string().optional(),
   timeSlotLabel: timeSlotLabelSchema.nullable().optional(),
 });
+
+import { relations } from "drizzle-orm";
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  shopProfile: one(shops, {
+    fields: [users.id],
+    references: [shops.ownerId],
+  }),
+  providerProfile: one(providers, {
+    fields: [users.id],
+    references: [providers.userId],
+  }),
+  bookingsAsCustomer: many(bookings, { relationName: "customerBookings" }),
+  servicesAsProvider: many(services),
+}));
+
+export const shopsRelations = relations(shops, ({ one, many }) => ({
+  owner: one(users, {
+    fields: [shops.ownerId],
+    references: [users.id],
+  }),
+  products: many(products),
+}));
+
+export const providersRelations = relations(providers, ({ one }) => ({
+  user: one(users, {
+    fields: [providers.userId],
+    references: [users.id],
+  }),
+}));
+
+export const servicesRelations = relations(services, ({ one, many }) => ({
+  provider: one(users, {
+    fields: [services.providerId],
+    references: [users.id],
+  }),
+  bookings: many(bookings),
+}));
+
+export const bookingsRelations = relations(bookings, ({ one }) => ({
+  customer: one(users, {
+    fields: [bookings.customerId],
+    references: [users.id],
+    relationName: "customerBookings",
+  }),
+  service: one(services, {
+    fields: [bookings.serviceId],
+    references: [services.id],
+  }),
+}));
+
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  customer: one(users, {
+    fields: [orders.customerId],
+    references: [users.id],
+    relationName: "customerOrders",
+  }),
+  shop: one(users, {
+    fields: [orders.shopId],
+    references: [users.id],
+    relationName: "shopOrders",
+  }),
+  items: many(orderItems),
+}));
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderItems.orderId],
+    references: [orders.id],
+  }),
+  product: one(products, {
+    fields: [orderItems.productId],
+    references: [products.id],
+  }),
+}));
+
+export const productsRelations = relations(products, ({ one }) => ({
+  shop: one(users, {
+    fields: [products.shopId],
+    references: [users.id],
+  }),
+}));
+

@@ -9,6 +9,7 @@ type RedisClient = {
   ): Promise<[string, string[]]>;
   del(...keys: string[]): Promise<number>;
   connect(): Promise<void>;
+  quit(): Promise<void>;
   on(event: "error" | "end", listener: (err?: unknown) => void): void;
 };
 
@@ -196,5 +197,13 @@ export async function invalidateCache(pattern: string): Promise<void> {
     } while (cursor !== "0");
   } catch (err) {
     logger.warn({ err, pattern }, "Failed to invalidate Redis cache keys");
+  }
+}
+
+export async function closeRedisConnection() {
+  if (redisClient) {
+    await redisClient.quit();
+    logger.info("Redis connection closed");
+    redisClient = null;
   }
 }

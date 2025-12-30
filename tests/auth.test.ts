@@ -5,8 +5,9 @@ import request from "supertest";
 import type { MemStorage } from "../server/storage";
 
 process.env.USE_IN_MEMORY_DB = "true";
-process.env.SESSION_SECRET = "test";
+process.env.SESSION_SECRET = "MyUniqueSessionKey_ForTesting_9876543210!@#"; // Compliant secret
 process.env.DATABASE_URL = "postgres://localhost/test";
+process.env.DISABLE_RATE_LIMITERS = "true";
 
 const { storage } = await import("../server/storage");
 const { hashPasswordInternal } = await import("../server/auth");
@@ -25,6 +26,10 @@ await memStorage.createUser({
   name: "Test User",
   phone: "9000000001",
   email: "test@example.com",
+  isPhoneVerified: true,
+  emailVerified: true,
+  averageRating: "0",
+  totalReviews: 0,
 });
 
 describe("Authentication API", () => {
@@ -33,7 +38,14 @@ describe("Authentication API", () => {
     const res = await agent
       .post("/api/login")
       .send({ username: "testuser", password: "secret" });
+
     assert.equal(res.status, 200);
     assert.equal(res.body.username, "testuser");
+
+    // Verify session persistence (triggers deserializeUser)
+    const userRes = await agent.get("/api/user");
+    assert.equal(userRes.status, 200);
+    assert.equal(userRes.body.username, "testuser");
+    assert.ok(userRes.body.createdAt, "createdAt should be present");
   });
 });

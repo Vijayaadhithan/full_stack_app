@@ -44,7 +44,7 @@ function createClient(url: string, poolSize: number, role: PoolRole) {
   });
 }
 
-const primaryPoolSize = Number.parseInt(process.env.DB_POOL_SIZE || "10", 10);
+const primaryPoolSize = Number.parseInt(process.env.DB_POOL_SIZE || "50", 10);
 const parsedReadPool = Number.parseInt(process.env.DB_READ_POOL_SIZE ?? "", 10);
 const readPoolSize =
   Number.isFinite(parsedReadPool) && parsedReadPool > 0 ? parsedReadPool : primaryPoolSize;
@@ -117,4 +117,12 @@ export async function testConnection() {
     logger.error("❌ Database connection failed:", error);
     return false;
   }
+}
+
+export async function closeConnection() {
+  await primaryClient.end();
+  if (replicaClient !== primaryClient) {
+    await replicaClient.end();
+  }
+  logger.info("Database connections closed");
 }

@@ -44,7 +44,6 @@ import {
   Booking,
   Order,
   type Service,
-  type Product,
   type OrderItem,
   PaymentMethodType,
   PaymentMethodSchema,
@@ -53,13 +52,16 @@ import {
   TimeSlotLabel,
   timeSlotLabelSchema,
   shops,
+  notifications,
+  InsertNotification,
+  bookings,
 } from "@shared/schema";
 import { featureFlags, platformFees } from "@shared/config";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { db } from "./db";
 import crypto from "crypto";
 import { performance } from "node:perf_hooks";
-import { formatIndianDisplay, toIndianTime, fromIndianTime } from "@shared/date-utils"; // Import IST utility
+import { formatIndianDisplay, toIndianTime, fromIndianTime, newIndianDate } from "@shared/date-utils"; // Import IST utility
 import {
   DEFAULT_NEARBY_RADIUS_KM,
   MIN_NEARBY_RADIUS_KM,
@@ -86,6 +88,7 @@ import {
 } from "./security/rateLimiters";
 import {
   registerRealtimeClient,
+  notifyNotificationChange,
 } from "./realtime";
 import {
   hasRoleAccess,
@@ -580,59 +583,20 @@ type CustomerBookingHydrated = Booking & {
 };
 
 async function hydrateCustomerBookings(
-  bookings: Booking[],
+  bookingList: Booking[],
 ): Promise<CustomerBookingHydrated[]> {
-  if (bookings.length === 0) {
+  if (bookingList.length === 0) {
     return [];
   }
 
-  const serviceIds = Array.from(
-    new Set(
-      bookings
-        .map((booking) => booking.serviceId)
-        .filter((id): id is number => typeof id === "number"),
-    ),
-  );
-  const services =
-    serviceIds.length > 0
-      ? await storage.getServicesByIds(serviceIds)
-      : ([] as Service[]);
-  const serviceMap = new Map<number, Service>(
-    services.map((service) => [service.id, service]),
-  );
+  const bookingIds = bookingList.map((b) => b.id);
 
-  const userIds = new Set<number>();
-  for (const booking of bookings) {
-    if (typeof booking.customerId === "number") {
-      userIds.add(booking.customerId);
-    }
-    const service = booking.serviceId ? serviceMap.get(booking.serviceId) : null;
-    if (service?.providerId) {
-      userIds.add(service.providerId);
-    }
-  }
+  const bookingsWithRelations = await storage.getBookingsWithRelations(bookingIds);
 
-  const relatedUsers =
-    userIds.size > 0
-      ? await storage.getUsersByIds(Array.from(userIds))
-      : ([] as User[]);
-  const userMap = new Map<number, User>(
-    relatedUsers.map((user) => [user.id, user]),
-  );
-
-  return bookings.map((booking) => {
-    const service =
-      typeof booking.serviceId === "number"
-        ? serviceMap.get(booking.serviceId) ?? null
-        : null;
-    const customer =
-      typeof booking.customerId === "number"
-        ? userMap.get(booking.customerId) ?? null
-        : null;
-    const provider =
-      service && typeof service.providerId === "number"
-        ? userMap.get(service.providerId) ?? null
-        : null;
+  return bookingsWithRelations.map((booking) => {
+    const service = booking.service;
+    const customer = booking.customer;
+    const provider = service?.provider;
 
     let relevantAddress: Record<string, string | null> | null = null;
     if (service?.serviceLocationType === "provider_location") {
@@ -643,7 +607,7 @@ async function hydrateCustomerBookings(
 
     return {
       ...booking,
-      service,
+      service: service, // Matches CustomerBookingHydrated
       customer: customer
         ? {
           id: customer.id,
@@ -684,50 +648,19 @@ type ProviderBookingHydrated = Booking & {
 };
 
 async function hydrateProviderBookings(
-  bookings: Booking[],
+  bookingList: Booking[],
 ): Promise<ProviderBookingHydrated[]> {
-  if (bookings.length === 0) {
+  if (bookingList.length === 0) {
     return [];
   }
 
-  const serviceIds = Array.from(
-    new Set(
-      bookings
-        .map((booking) => booking.serviceId)
-        .filter((id): id is number => typeof id === "number"),
-    ),
-  );
-  const services =
-    serviceIds.length > 0
-      ? await storage.getServicesByIds(serviceIds)
-      : ([] as Service[]);
-  const serviceMap = new Map(services.map((service) => [service.id, service]));
+  const bookingIds = bookingList.map((b) => b.id);
 
-  const customerIds = Array.from(
-    new Set(
-      bookings
-        .map((booking) => booking.customerId)
-        .filter((id): id is number => typeof id === "number"),
-    ),
-  );
-  const customers =
-    customerIds.length > 0
-      ? await storage.getUsersByIds(customerIds)
-      : ([] as User[]);
-  const customerMap = new Map(
-    customers.map((customer) => [customer.id, customer]),
-  );
+  const bookingsWithRelations = await storage.getBookingsWithRelations(bookingIds);
 
-  return bookings.map((booking) => {
-    const service =
-      typeof booking.serviceId === "number"
-        ? serviceMap.get(booking.serviceId) ?? null
-        : null;
-    const customer =
-      typeof booking.customerId === "number"
-        ? customerMap.get(booking.customerId) ?? null
-        : null;
-
+  return bookingsWithRelations.map((booking) => {
+    const service = booking.service;
+    const customer = booking.customer;
     const relevantAddress = pickAddressFields(customer);
 
     return {
@@ -795,100 +728,47 @@ async function hydrateOrders(
   }
 
   const orderIds = orders.map((order) => order.id);
-  const rawItems = await storage.getOrderItemsByOrderIds(orderIds);
-  const itemsByOrderId = new Map<number, OrderItem[]>();
-  for (const item of rawItems) {
-    if (item.orderId == null) continue;
-    if (!itemsByOrderId.has(item.orderId)) {
-      itemsByOrderId.set(item.orderId, []);
-    }
-    itemsByOrderId.get(item.orderId)!.push(item);
-  }
-
-  const productIds = Array.from(
-    new Set(
-      rawItems
-        .map((item) => item.productId)
-        .filter((value): value is number => value !== null),
-    ),
-  );
-  const products =
-    productIds.length > 0
-      ? await storage.getProductsByIds(productIds)
-      : ([] as Product[]);
-  const productMap = new Map<number, Product>(
-    products.map((product) => [product.id, product]),
-  );
-
-  const userIdSet = new Set<number>();
-  if (options.includeShop) {
-    for (const order of orders) {
-      if (order.shopId != null) {
-        userIdSet.add(order.shopId);
-      }
-    }
-  }
-  if (options.includeCustomer) {
-    for (const order of orders) {
-      if (order.customerId != null) {
-        userIdSet.add(order.customerId);
-      }
-    }
-  }
-
-  const relatedUsers =
-    userIdSet.size > 0
-      ? await storage.getUsersByIds(Array.from(userIdSet))
-      : ([] as User[]);
-  const userMap = new Map<number, User>(
-    relatedUsers.map((user) => [user.id, user]),
-  );
+  const ordersWithRelations = await storage.getOrdersWithRelations(orderIds);
+  const orderMap = new Map(ordersWithRelations.map((o) => [o.id, o]));
 
   return orders.map((order) => {
-    const orderItems = itemsByOrderId.get(order.id) ?? [];
-    const hydratedItems = orderItems.map<HydratedOrderItem>((item) => {
-      const product =
-        item.productId !== null ? productMap.get(item.productId) : undefined;
-      return {
+    const relations = orderMap.get(order.id);
+    const hydratedItems =
+      relations?.items.map<HydratedOrderItem>((item) => ({
         id: item.id,
         productId: item.productId,
-        name: product?.name ?? "",
+        name: item.product?.name ?? "",
         quantity: item.quantity,
         price: item.price,
         total: item.total,
-      };
-    });
+      })) ?? [];
 
     const result: HydratedOrder = {
       ...(order as Order),
       items: hydratedItems,
     };
 
-    if (options.includeShop && order.shopId != null) {
-      const shop = userMap.get(order.shopId);
-      if (shop) {
-        const { latitude, longitude } = extractUserCoordinates(shop);
-        const address = formatUserAddress(shop);
+    if (relations) {
+      if (options.includeShop && relations.shop) {
+        const { latitude, longitude } = extractUserCoordinates(relations.shop);
+        const address = formatUserAddress(relations.shop);
         result.shop = {
-          name: shop.name,
-          phone: shop.phone,
-          email: shop.email,
+          name: relations.shop.name,
+          phone: relations.shop.phone,
+          email: relations.shop.email,
           address: address ?? null,
           latitude,
           longitude,
         };
       }
-    }
 
-    if (options.includeCustomer && order.customerId != null) {
-      const customer = userMap.get(order.customerId);
-      if (customer) {
-        const { latitude, longitude } = extractUserCoordinates(customer);
-        const address = formatUserAddress(customer);
+      if (options.includeCustomer && relations.customer) {
+        const { latitude, longitude } = extractUserCoordinates(relations.customer);
+        const address = formatUserAddress(relations.customer);
         result.customer = {
-          name: customer.name,
-          phone: customer.phone,
-          email: customer.email,
+          name: relations.customer.name,
+          phone: relations.customer.phone,
+          email: relations.customer.email,
           address: address ?? null,
           latitude,
           longitude,
@@ -1907,7 +1787,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let updatedBookingData = {};
-      let notificationPromises = [];
+      const notificationsToCreate: InsertNotification[] = [];
 
       // Scenario 1: Customer reschedules
       if (
@@ -1931,16 +1811,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               bookingDate,
               "datetime",
             );
-            notificationPromises.push(
-              storage.createNotification({
-                userId: service.providerId,
-                type: "booking_rescheduled_request",
-                title: "Reschedule Request",
-                message: `Customer ${currentUser.name || "ID: " + currentUser.id} requested to reschedule booking #${bookingId} for '${service.name}' to ${formattedRescheduleDate}. Please review.`,
-                isRead: false,
-                relatedBookingId: bookingId,
-              }),
-            );
+            notificationsToCreate.push({
+              userId: service.providerId,
+              type: "booking_rescheduled_request",
+              title: "Reschedule Request",
+              message: `Customer ${currentUser.name || "ID: " + currentUser.id} requested to reschedule booking #${bookingId} for '${service.name}' to ${formattedRescheduleDate}. Please review.`,
+              isRead: false,
+              relatedBookingId: bookingId,
+            });
           }
         }
       }
@@ -1967,19 +1845,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
               bookingDate,
               "datetime",
             );
-            notificationPromises.push(
-              storage.createNotification({
-                userId: booking.customerId,
-                type: "booking_rescheduled_by_provider",
-                title: "Booking Rescheduled by Provider",
-                message: `Provider ${currentUser.name || "ID: " + currentUser.id
-                  } has rescheduled your booking #${bookingId} for '${service.name
-                  }' to ${formattedProviderRescheduleDate}. ${comments ? "Comments: " + comments : ""
-                  }`,
-                isRead: false,
-                relatedBookingId: bookingId,
-              }),
-            );
+            notificationsToCreate.push({
+              userId: booking.customerId,
+              type: "booking_rescheduled_by_provider",
+              title: "Booking Rescheduled by Provider",
+              message: `Provider ${currentUser.name || "ID: " + currentUser.id
+                } has rescheduled your booking #${bookingId} for '${service.name
+                }' to ${formattedProviderRescheduleDate}. ${comments ? "Comments: " + comments : ""
+                }`,
+              isRead: false,
+              relatedBookingId: bookingId,
+            });
           }
         }
       }
@@ -2022,19 +1898,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
               notificationMessage = `Your reschedule request for booking #${bookingId} ('${service.name}') has been rejected. ${comments ? comments : "Please contact the provider or try rescheduling again."}`;
             }
 
-            notificationPromises.push(
-              storage.createNotification({
-                userId: booking.customerId,
-                type:
-                  status === "accepted"
-                    ? "booking_confirmed"
-                    : "booking_rejected",
-                title: notificationTitle,
-                message: notificationMessage,
-                isRead: false,
-                relatedBookingId: bookingId,
-              }),
-            );
+            notificationsToCreate.push({
+              userId: booking.customerId,
+              type:
+                status === "accepted"
+                  ? "booking_confirmed"
+                  : "booking_rejected",
+              title: notificationTitle,
+              message: notificationMessage,
+              isRead: false,
+              relatedBookingId: bookingId,
+            });
           }
         }
       }
@@ -2053,16 +1927,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (service.providerId) {
           const providerUser = await storage.getUser(service.providerId);
           if (providerUser) {
-            notificationPromises.push(
-              storage.createNotification({
-                userId: service.providerId,
-                type: "booking_cancelled_by_customer",
-                title: "Booking Cancelled",
-                message: `Booking #${bookingId} for '${service.name}' has been cancelled by the customer.`,
-                isRead: false,
-                relatedBookingId: bookingId,
-              }),
-            );
+            notificationsToCreate.push({
+              userId: service.providerId,
+              type: "booking_cancelled_by_customer",
+              title: "Booking Cancelled",
+              message: `Booking #${bookingId} for '${service.name}' has been cancelled by the customer.`,
+              isRead: false,
+              relatedBookingId: bookingId,
+            });
             // Email notifications removed
           }
         }
@@ -2075,11 +1947,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "Unauthorized or invalid action specified" });
       }
 
-      const finalUpdatedBooking = await storage.updateBooking(
-        bookingId,
-        updatedBookingData,
-      );
-      await Promise.all(notificationPromises);
+      let finalUpdatedBooking: Booking | undefined;
+
+      await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(bookings)
+          .set(updatedBookingData)
+          .where(eq(bookings.id, bookingId))
+          .returning();
+
+        if (!updated) {
+          throw new Error("Failed to update booking");
+        }
+        finalUpdatedBooking = updated;
+
+        if (notificationsToCreate.length > 0) {
+          await tx.insert(notifications).values(
+            notificationsToCreate.map((n) => ({
+              ...n,
+              type: n.type as any,
+              relatedBookingId: n.relatedBookingId ?? null,
+              createdAt: newIndianDate(),
+            })),
+          );
+        }
+      });
+
+      if (!finalUpdatedBooking) {
+        throw new Error("Failed to update booking");
+      }
+
+      // Send realtime notifications after transaction commits
+      notificationsToCreate.forEach((n) => {
+        if (n.userId) notifyNotificationChange(n.userId);
+      });
 
       logger.info(
         `[API] Successfully updated booking ${bookingId}:`,
