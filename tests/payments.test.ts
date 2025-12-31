@@ -8,6 +8,7 @@ import { featureFlags, platformFees } from "../shared/config";
 process.env.USE_IN_MEMORY_DB = "true";
 process.env.SESSION_SECRET = "test";
 process.env.DATABASE_URL = "postgres://localhost/test";
+process.env.DISABLE_RATE_LIMITERS = "true";
 
 const { storage } = await import("../server/storage");
 const { hashPasswordInternal } = await import("../server/auth");
@@ -191,7 +192,77 @@ describe("Payment APIs", () => {
     assert.equal(confirmRes.body.paymentStatus, "paid");
   });
 
-  after(() => {
-    process.exit(0);
+  // Negative test cases
+  it("rejects payment reference submission without authentication", async () => {
+    const agent = request.agent(app);
+    const res = await agent
+      .post("/api/orders/1/submit-payment-reference")
+      .send({ paymentReference: "PAY123" });
+
+    assert.equal(res.status, 401);
+  });
+
+  it("rejects payment confirmation from non-owner shop", async () => {
+    // Create an order for shop1, try to confirm with a different account
+    const customerAgent = request.agent(app);
+    await customerAgent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const productPrice = Number(product.price);
+    const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
+    const totalWithFee = productPrice + platformFee;
+    const orderRes = await customerAgent.post("/api/orders").send({
+      items: [{ productId: product.id, quantity: 1, price: product.price }],
+      total: totalWithFee.toString(),
+      subtotal: productPrice.toString(),
+      discount: "0",
+      deliveryMethod: "delivery",
+    });
+    const orderId = orderRes.body.order.id;
+
+    // Try to confirm as customer (not the shop owner)
+    const confirmRes = await customerAgent.post(`/api/orders/${orderId}/confirm-payment`);
+    assert.ok(confirmRes.status >= 400); // Should fail - customer can't confirm payment
+  });
+
+  it("rejects empty payment reference", async () => {
+    const customerAgent = request.agent(app);
+    await customerAgent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const productPrice = Number(product.price);
+    const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
+    const totalWithFee = productPrice + platformFee;
+    const orderRes = await customerAgent.post("/api/orders").send({
+      items: [{ productId: product.id, quantity: 1, price: product.price }],
+      total: totalWithFee.toString(),
+      subtotal: productPrice.toString(),
+      discount: "0",
+      deliveryMethod: "delivery",
+    });
+    const orderId = orderRes.body.order.id;
+
+    const submitRes = await customerAgent
+      .post(`/api/orders/${orderId}/submit-payment-reference`)
+      .send({ paymentReference: "" });
+
+    assert.ok(submitRes.status >= 400);
+  });
+
+  after(async () => {
+    // Proper cleanup without process.exit
+    const { closeConnection } = await import("../server/db");
+    const { closeRedisConnection } = await import("../server/services/cache.service");
+    const { closeRealtimeConnections } = await import("../server/realtime");
+
+    try {
+      await closeRealtimeConnections();
+      await closeRedisConnection();
+      await closeConnection();
+    } catch {
+      // Ignore cleanup errors in tests
+    }
   });
 });

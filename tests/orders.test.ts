@@ -8,6 +8,7 @@ import { featureFlags, platformFees } from "../shared/config";
 process.env.USE_IN_MEMORY_DB = "true";
 process.env.SESSION_SECRET = "test";
 process.env.DATABASE_URL = "postgres://localhost/test";
+process.env.DISABLE_RATE_LIMITERS = "true";
 
 const { storage } = await import("../server/storage");
 const { hashPasswordInternal } = await import("../server/auth");
@@ -103,6 +104,7 @@ describe("Orders API", () => {
       res.body.message.includes("Profile verification required"),
     );
   });
+
   it("rejects orders when totals do not match the server calculation", async () => {
     const agent = request.agent(app);
     await agent
@@ -128,7 +130,88 @@ describe("Orders API", () => {
     );
   });
 
-  after(() => {
-    process.exit(0);
+  // Negative test cases
+  it("rejects order without authentication", async () => {
+    const agent = request.agent(app);
+    const productPrice = Number(product.price);
+    const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
+    const totalWithFee = productPrice + platformFee;
+
+    const res = await agent.post("/api/orders").send({
+      items: [{ productId: product.id, quantity: 1, price: product.price }],
+      total: totalWithFee.toString(),
+      subtotal: productPrice.toString(),
+      discount: "0",
+      deliveryMethod: "delivery",
+    });
+
+    assert.equal(res.status, 401);
+  });
+
+  it("rejects order with non-existent product", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const res = await agent.post("/api/orders").send({
+      items: [{ productId: 99999, quantity: 1, price: "50" }],
+      total: "50",
+      subtotal: "50",
+      discount: "0",
+      deliveryMethod: "delivery",
+    });
+
+    assert.ok(res.status >= 400);
+  });
+
+  it("rejects order with empty items array", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const res = await agent.post("/api/orders").send({
+      items: [],
+      total: "0",
+      subtotal: "0",
+      discount: "0",
+      deliveryMethod: "delivery",
+    });
+
+    assert.ok(res.status >= 400);
+  });
+
+  it("rejects order with invalid delivery method", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const productPrice = Number(product.price);
+    const res = await agent.post("/api/orders").send({
+      items: [{ productId: product.id, quantity: 1, price: product.price }],
+      total: productPrice.toString(),
+      subtotal: productPrice.toString(),
+      discount: "0",
+      deliveryMethod: "invalid_method",
+    });
+
+    assert.equal(res.status, 400);
+  });
+
+  after(async () => {
+    // Proper cleanup without process.exit
+    const { closeConnection } = await import("../server/db");
+    const { closeRedisConnection } = await import("../server/services/cache.service");
+    const { closeRealtimeConnections } = await import("../server/realtime");
+
+    try {
+      await closeRealtimeConnections();
+      await closeRedisConnection();
+      await closeConnection();
+    } catch {
+      // Ignore cleanup errors in tests
+    }
   });
 });

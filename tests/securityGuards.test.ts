@@ -294,7 +294,7 @@ describe(
         const agent = request.agent(app);
         await login(agent, workerUser.username, passwords.worker);
 
-        mock.method(db, "select", () => ({
+        mock.method(db.primary, "select", () => ({
           from: () => ({
             where: async () => [
               {

@@ -72,7 +72,7 @@ describe("worker helpers", () => {
   it("returns linked shop id for worker users", async () => {
     const { db } = await import("../server/db");
     const selectResponses = [[{ shopId: 12 }]];
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => selectResponses.shift() ?? [],
       }),
@@ -88,7 +88,7 @@ describe("worker helpers", () => {
 
   it("returns null when worker link is missing", async () => {
     const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [],
       }),
@@ -108,7 +108,7 @@ describe("worker helpers", () => {
       [{ responsibilities: ["orders:read", "products:read"] }],
       [{ responsibilities: ["orders:read"] }],
     ];
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => responses.shift() ?? [],
       }),
@@ -134,13 +134,13 @@ describe("worker routes", () => {
     const logger = loggerModule.default;
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "execute", async () => undefined);
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "execute", async () => undefined);
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [{ id: 1 }],
       }),
     }));
-    mock.method(db, "insert", () => ({
+    mock.method(db.primary, "insert", () => ({
       values: () => ({
         returning: async () => [],
       }),
@@ -178,17 +178,17 @@ describe("worker routes", () => {
     const logger = loggerModule.default;
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "execute", async () => undefined);
+    mock.method(db.primary, "execute", async () => undefined);
 
     const selectResponses = [[], [], []];
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => selectResponses.shift() ?? [],
       }),
     }));
 
     const insertCalls: any[] = [];
-    mock.method(db, "insert", () => ({
+    mock.method(db.primary, "insert", () => ({
       values: (values: any) => {
         insertCalls.push(values);
         return {
@@ -255,7 +255,7 @@ describe("worker routes", () => {
     const logger = loggerModule.default;
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [
           {
@@ -294,7 +294,7 @@ describe("worker routes", () => {
     ]);
     const logger = loggerModule.default;
     mock.method(logger, "error", () => undefined);
-    mock.method(db, "execute", async () => undefined);
+    mock.method(db.primary, "execute", async () => undefined);
 
     const { registerWorkerRoutes } = await import(
       `../server/routes/workers.ts?test=${Date.now()}`
@@ -328,7 +328,7 @@ describe("worker routes", () => {
     const logger = loggerModule.default;
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         leftJoin: () => ({
           where: async () => [
@@ -377,7 +377,7 @@ describe("worker routes", () => {
     mock.method(logger, "error", () => undefined);
 
     const executeCalls: unknown[] = [];
-    mock.method(db, "execute", async (sqlStatement: unknown) => {
+    mock.method(db.primary, "execute", async (sqlStatement: unknown) => {
       executeCalls.push(sqlStatement);
     });
 
@@ -393,7 +393,7 @@ describe("worker routes", () => {
         createdAt: new Date(),
       },
     ];
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         leftJoin: () => ({
           where: async () => listedWorkers,
@@ -429,8 +429,8 @@ describe("worker routes", () => {
     const logger = loggerModule.default;
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "execute", async () => undefined);
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "execute", async () => undefined);
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [],
       }),
@@ -465,9 +465,9 @@ describe("worker routes", () => {
     const logger = loggerModule.default;
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "execute", async () => undefined);
+    mock.method(db.primary, "execute", async () => undefined);
     const selectResponses = [[{ shopId: 9 }]];
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => selectResponses.shift() ?? [],
       }),
@@ -475,7 +475,7 @@ describe("worker routes", () => {
 
     const updates: Array<{ table: unknown; payload: Record<string, unknown> }> =
       [];
-    mock.method(db, "update", (table: unknown) => ({
+    mock.method(db.primary, "update", (table: unknown) => ({
       set(payload: Record<string, unknown>) {
         updates.push({ table, payload });
         return {
@@ -530,19 +530,19 @@ describe("worker routes", () => {
     const logger = loggerModule.default;
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "execute", async () => undefined);
+    mock.method(db.primary, "execute", async () => undefined);
     const selectResponses = [
       [{ shopId: 9 }],
       [{ role: "worker" }],
     ];
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => selectResponses.shift() ?? [],
       }),
     }));
 
     const deleteTables: unknown[] = [];
-    mock.method(db, "delete", (table: unknown) => ({
+    mock.method(db.primary, "delete", (table: unknown) => ({
       where: async () => {
         deleteTables.push(table);
       },

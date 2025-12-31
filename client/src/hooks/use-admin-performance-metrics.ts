@@ -9,6 +9,7 @@ const METRIC_THRESHOLDS: Record<MetricName, { good: number; needsImprovement: nu
   LCP: { good: 2500, needsImprovement: 4000 },
   CLS: { good: 0.1, needsImprovement: 0.25 },
   FID: { good: 100, needsImprovement: 300 },
+  INP: { good: 200, needsImprovement: 500 },
   TTFB: { good: 800, needsImprovement: 1800 },
 };
 

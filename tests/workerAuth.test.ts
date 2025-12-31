@@ -104,7 +104,7 @@ describe("requireShopOrWorkerPermission", () => {
   });
 
   it("rejects workers without active link", async () => {
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: () => Promise.resolve([]),
       }),
@@ -125,7 +125,7 @@ describe("requireShopOrWorkerPermission", () => {
   });
 
   it("rejects workers lacking required permissions", async () => {
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: () =>
           Promise.resolve([
@@ -151,7 +151,7 @@ describe("requireShopOrWorkerPermission", () => {
   });
 
   it("hydrates worker context when permissions satisfied", async () => {
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: () =>
           Promise.resolve([
@@ -181,7 +181,7 @@ describe("requireShopOrWorkerPermission", () => {
 
 describe("worker context helpers", () => {
   it("getWorkerShopId returns the linked shop id", async () => {
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: () => Promise.resolve([{ shopId: 12 }]),
       }),
@@ -191,7 +191,7 @@ describe("worker context helpers", () => {
   });
 
   it("getWorkerShopId returns null when no link", async () => {
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: () => Promise.resolve([]),
       }),
@@ -216,7 +216,7 @@ describe("worker context helpers", () => {
   });
 
   it("resolveShopContextId looks up worker link when needed", async () => {
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: () => Promise.resolve([{ shopId: 33 }]),
       }),

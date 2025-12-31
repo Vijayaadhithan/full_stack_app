@@ -82,7 +82,7 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    const insertSpy = mock.method(db, "insert", () => ({
+    const insertSpy = mock.method(db.primary, "insert", () => ({
       values: () => ({
         returning: async () => [],
       }),
@@ -123,7 +123,7 @@ describe("promotion routes", () => {
     const insertedValues: any[] = [];
     const createdPromotion = { id: 42, name: "Summer Sale" };
 
-    mock.method(db, "insert", () => ({
+    mock.method(db.primary, "insert", () => ({
       values: (values: unknown) => {
         insertedValues.push(values);
         return {
@@ -182,7 +182,7 @@ describe("promotion routes", () => {
     mock.method(logger, "error", () => undefined);
 
     const now = Date.now();
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [
           {
@@ -249,13 +249,13 @@ describe("promotion routes", () => {
     };
     const appliedUpdates: Record<string, unknown>[] = [];
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: (table: unknown) => ({
         where: async () => (table === promotions ? [existingPromotion] : []),
       }),
     }));
 
-    mock.method(db, "update", (table: unknown) => ({
+    mock.method(db.primary, "update", (table: unknown) => ({
       set(payload: Record<string, unknown>) {
         appliedUpdates.push(payload);
         return {
@@ -309,7 +309,7 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [{ id: 18, shopId: 2, startDate: new Date() }],
       }),
@@ -345,13 +345,13 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [{ id: 19, shopId: 2, startDate: new Date() }],
       }),
     }));
     const updates: Record<string, unknown>[] = [];
-    mock.method(db, "update", () => ({
+    mock.method(db.primary, "update", () => ({
       set(payload: Record<string, unknown>) {
         updates.push(payload);
         return {
@@ -408,7 +408,7 @@ describe("promotion routes", () => {
       maxDiscount: "40",
     };
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [promotionRecord],
       }),
@@ -469,7 +469,7 @@ describe("promotion routes", () => {
       value: "10",
     };
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [promotionRecord],
       }),
@@ -519,12 +519,12 @@ describe("promotion routes", () => {
     };
     let updatedUsedCount = 0;
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [promotionRecord],
       }),
     }));
-    mock.method(db, "update", () => ({
+    mock.method(db.primary, "update", () => ({
       set(payload: Record<string, unknown>) {
         updatedUsedCount = Number(payload.usedCount);
         return {
@@ -564,7 +564,7 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [
           { id: 1, name: "Promo A" },
@@ -602,7 +602,7 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [],
       }),
@@ -637,12 +637,12 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [{ id: 12, shopId: 7 }],
       }),
     }));
-    mock.method(db, "update", () => ({
+    mock.method(db.primary, "update", () => ({
       set: () => ({
         where: () => ({
           returning: async () => [{ id: 12, isActive: false }],
@@ -680,7 +680,7 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [],
       }),
@@ -715,7 +715,7 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "delete", () => ({
+    mock.method(db.primary, "delete", () => ({
       where: () => ({
         returning: async () => [{ id: 22 }],
       }),
@@ -750,7 +750,7 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [],
       }),
@@ -785,7 +785,7 @@ describe("promotion routes", () => {
     mock.method(logger, "info", () => undefined);
     mock.method(logger, "error", () => undefined);
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         where: async () => [
           {

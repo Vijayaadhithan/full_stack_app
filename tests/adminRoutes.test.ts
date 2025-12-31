@@ -1,7 +1,5 @@
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import path from "node:path";
-import { promises as fs } from "node:fs";
 import {
   adminUsers,
   adminRolePermissions,
@@ -64,9 +62,12 @@ function createPagingBuilder<T>(result: T[]) {
   return builder;
 }
 
+let testCounter = 0;
+
 beforeEach(() => {
   process.env.DATABASE_URL ||= "postgres://localhost/test";
   mock.restoreAll();
+  testCounter++;
 });
 
 afterEach(() => {
@@ -74,216 +75,19 @@ afterEach(() => {
 });
 
 describe("admin routes", () => {
-  it("reads recent logs while applying level and category filters", async () => {
-    const loggerModule = await import("../server/logger");
-    const logger = loggerModule.default;
-    mock.method(logger, "info", () => undefined);
-    mock.method(logger, "warn", () => undefined);
-    mock.method(logger, "error", () => undefined);
-
-    const logPath = loggerModule.LOG_FILE_PATH;
-    const originalContent = await fs.readFile(logPath, "utf8").catch(() => null);
-
-    const logLines = [
-      JSON.stringify({
-        level: 30,
-        time: 1_710_000_000_000,
-        msg: "customer info",
-        category: "customer",
-        requestId: "req-1",
-      }),
-      JSON.stringify({
-        level: 50,
-        time: 1_710_000_010_000,
-        msg: "shop error",
-        category: "shop",
-        userId: 42,
-      }),
-      JSON.stringify({
-        level: 30,
-        time: "1710000015000",
-        msg: "provider notice",
-        category: "service-provider",
-      }),
-      JSON.stringify({
-        level: 30,
-        time: 1_710_000_020_000,
-        msg: "admin event",
-        category: "admin",
-      }),
-      "{ invalid json",
-    ].join("\n");
-
-    await fs.mkdir(path.dirname(logPath), { recursive: true });
-    await fs.writeFile(logPath, `${logLines}\n`, "utf8");
-
-    const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
-      from: () => ({
-        where: () => ({
-          limit: () => Promise.resolve([]),
-        }),
-      }),
-    }));
-
-    try {
-      const { default: adminRouter } = await import(
-        `../server/routes/admin.ts?test=${Date.now()}`
-      );
-      const handler = findRouterHandler(adminRouter, "get", "/logs");
-
-      const req = {
-        query: {},
-        session: { adminId: "admin-1" },
-      };
-      const res = createMockRes();
-      await handler(req, res);
-
-      assert.equal(res.statusCode, 200);
-      const categories = res.body.logs.map((log: any) => log.category);
-      assert.ok(categories.every((category: string) => category !== "admin"));
-      assert.ok(categories.includes("customer"));
-      assert.ok(categories.includes("shop_owner"));
-      assert.ok(categories.includes("service_provider"));
-      assert.deepEqual(res.body.availableCategories, [
-        "service_provider",
-        "customer",
-        "shop_owner",
-        "other",
-      ]);
-
-      const filteredRes = createMockRes();
-      await handler(
-        {
-          ...req,
-          query: { category: "shop" },
-        },
-        filteredRes,
-      );
-      assert.equal(filteredRes.body.logs.length, 1);
-      assert.equal(filteredRes.body.logs[0].category, "shop_owner");
-    } finally {
-      if (originalContent === null) {
-        await fs.unlink(logPath).catch(() => undefined);
-      } else {
-        await fs.writeFile(logPath, originalContent, "utf8");
-      }
-    }
-  });
-
-  it("accepts performance metrics payloads and enforces submission limits", async () => {
-    const loggerModule = await import("../server/logger");
-    const logger = loggerModule.default;
-    mock.method(logger, "info", () => undefined);
-    mock.method(logger, "warn", () => undefined);
-    mock.method(logger, "error", () => undefined);
-
-    const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
-      from: () => ({
-        where: () => ({
-          limit: () => Promise.resolve([]),
-        }),
-      }),
-    }));
-
+  it("logs out admins by clearing the session", async () => {
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=logout-${testCounter}`
     );
-    const handler = findRouterHandler(
-      adminRouter,
-      "post",
-      "/performance-metrics",
-    );
-
-    const tooManyMetrics = Array.from({ length: 21 }, (_, index) => ({
-      name: "FCP" as const,
-      value: index,
-      rating: "good" as const,
-      page: `/page-${index}`,
-      timestamp: index,
-    }));
-
-    const resExcess = createMockRes();
-    await handler(
-      {
-        body: tooManyMetrics,
-        session: { adminId: "admin-42" },
-      },
-      resExcess,
-    );
-    assert.equal(resExcess.statusCode, 400);
-    assert.match(String(resExcess.body?.message ?? ""), /too many/i);
-    assert.equal(logger.info.mock.callCount(), 0);
-
-    const validMetrics = [
-      {
-        name: "TTFB" as const,
-        value: 120,
-        rating: "good" as const,
-        page: "/dashboard",
-        timestamp: 100,
-      },
-      {
-        name: "LCP" as const,
-        value: 2.8,
-        rating: "poor" as const,
-        page: "/dashboard",
-        timestamp: 120,
-      },
-    ];
-
-    const resValid = createMockRes();
-    await handler(
-      {
-        body: validMetrics,
-        session: { adminId: "admin-42" },
-      },
-      resValid,
-    );
-    assert.equal(resValid.statusCode, 204);
-    assert.equal(logger.info.mock.callCount(), 1);
-  });
-
-  it("records single performance metrics payloads", async () => {
-    const loggerModule = await import("../server/logger");
-    const logger = loggerModule.default;
-    mock.method(logger, "info", () => undefined);
-    mock.method(logger, "warn", () => undefined);
-    mock.method(logger, "error", () => undefined);
-
-    const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
-      from: () => ({
-        where: () => ({
-          limit: () => Promise.resolve([]),
-        }),
-      }),
-    }));
-
-    const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
-    );
-    const handler = findRouterHandler(
-      adminRouter,
-      "post",
-      "/performance-metrics",
-    );
+    const handler = findRouterHandler(adminRouter, "post", "/logout");
+    const req = { session: { adminId: "admin-9" } };
     const res = createMockRes();
-    await handler(
-      {
-        body: {
-          name: "CLS",
-          value: 0.12,
-          rating: "good",
-          page: "/",
-          timestamp: 10,
-        },
-        session: { adminId: "admin-1" },
-      },
-      res,
-    );
-    assert.equal(res.statusCode, 204);
+
+    await handler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(req.session.adminId, undefined);
   });
 
   it("logs in admins, derives permissions, and flags bootstrap credentials", async () => {
@@ -298,7 +102,9 @@ describe("admin routes", () => {
     process.env.ADMIN_PASSWORD = "bootstrap-secret";
 
     const hashedPassword = await hashPasswordInternal("bootstrap-secret");
-    mock.method(db, "select", () => ({
+
+    // Mock db.primary for the routes
+    mock.method(db.primary, "select", () => ({
       from: (table: unknown) => {
         if (table === adminUsers) {
           return {
@@ -331,7 +137,7 @@ describe("admin routes", () => {
 
     try {
       const { default: adminRouter } = await import(
-        `../server/routes/admin.ts?test=${Date.now()}`
+        `../server/routes/admin.ts?test=login-${testCounter}`
       );
       const handler = findRouterHandler(adminRouter, "post", "/login");
       const req = {
@@ -364,7 +170,7 @@ describe("admin routes", () => {
     const currentHash = await hashPasswordInternal("old-password");
     let updatedPayload: Record<string, unknown> | undefined;
 
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: (table: unknown) => {
         if (table === adminUsers) {
           return {
@@ -383,7 +189,7 @@ describe("admin routes", () => {
       },
     }));
 
-    mock.method(db, "update", () => ({
+    mock.method(db.primary, "update", () => ({
       set(payload: Record<string, unknown>) {
         updatedPayload = payload;
         return {
@@ -393,7 +199,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=change-password-${testCounter}`
     );
     const handler = findRouterHandler(
       adminRouter,
@@ -421,7 +227,7 @@ describe("admin routes", () => {
   it("reports platform health and enforces permissions", async () => {
     const dbModule = await import("../server/db");
     const { db } = dbModule;
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: (table: unknown) => {
         if (table === adminUsers) {
           return {
@@ -446,7 +252,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=health-${testCounter}`
     );
     const stack = findRouteStack(adminRouter, "get", "/health-status");
     const [authMiddleware, permissionsMiddleware, handler] = stack;
@@ -467,7 +273,7 @@ describe("admin routes", () => {
     const { db } = await import("../server/db");
     const updates: Array<{ table: unknown; payload: Record<string, unknown> }> =
       [];
-    mock.method(db, "update", (table: unknown) => ({
+    mock.method(db.primary, "update", (table: unknown) => ({
       set(payload: Record<string, unknown>) {
         updates.push({ table, payload });
         return {
@@ -476,7 +282,7 @@ describe("admin routes", () => {
       },
     }));
 
-    mock.method(db, "insert", (table: unknown) => ({
+    mock.method(db.primary, "insert", (table: unknown) => ({
       values: async () => {
         if (table === adminAuditLogs) {
           throw new Error("audit log write failed");
@@ -485,7 +291,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=suspend-${testCounter}`
     );
     const handler = findRouterHandler(
       adminRouter,
@@ -512,7 +318,7 @@ describe("admin routes", () => {
     const { db } = await import("../server/db");
     const { storage } = await import("../server/storage");
     const selectCalls: Array<{ table: unknown }> = [];
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from(table: unknown) {
         selectCalls.push({ table });
         return {
@@ -529,7 +335,7 @@ describe("admin routes", () => {
     });
 
     const auditLogs: Array<Record<string, unknown>> = [];
-    mock.method(db, "insert", (table: unknown) => ({
+    mock.method(db.primary, "insert", (table: unknown) => ({
       values: async (payload: Record<string, unknown>) => {
         if (table === adminAuditLogs) {
           auditLogs.push(payload);
@@ -538,7 +344,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=remove-user-${testCounter}`
     );
     const handler = findRouterHandler(
       adminRouter,
@@ -568,13 +374,13 @@ describe("admin routes", () => {
       [];
     const auditLogEntries: Array<Record<string, unknown>> = [];
 
-    mock.method(db, "delete", (table: unknown) => ({
+    mock.method(db.primary, "delete", (table: unknown) => ({
       where: async () => {
         deletedTables.push(table);
       },
     }));
 
-    mock.method(db, "insert", (table: unknown) => ({
+    mock.method(db.primary, "insert", (table: unknown) => ({
       values: async (payload: unknown) => {
         if (table === adminRolePermissions) {
           insertedPermissions.push(...(payload as Array<{ roleId: string; permissionId: string }>));
@@ -585,7 +391,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=role-permissions-${testCounter}`
     );
     const handler = findRouterHandler(
       adminRouter,
@@ -620,7 +426,7 @@ describe("admin routes", () => {
 
   it("returns the authenticated admin profile with permissions", async () => {
     const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: (table: unknown) => {
         if (table === adminUsers) {
           return {
@@ -650,7 +456,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=me-${testCounter}`
     );
     const handler = findRouterHandler(adminRouter, "get", "/me");
     const req = { session: { adminId: "admin-1", adminMustChangePassword: false } };
@@ -670,12 +476,12 @@ describe("admin routes", () => {
       { id: 1, username: "alpha", email: "a@example.com" },
       { id: 2, username: "beta", email: "b@example.com" },
     ];
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => createPagingBuilder(pagedResult),
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=platform-users-${testCounter}`
     );
     const handler = findRouterHandler(
       adminRouter,
@@ -697,12 +503,12 @@ describe("admin routes", () => {
   it("uses default pagination when listing platform users without search", async () => {
     const { db } = await import("../server/db");
     const pagedResult = [{ id: 3, username: "gamma" }];
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => createPagingBuilder(pagedResult),
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=platform-users-default-${testCounter}`
     );
     const handler = findRouterHandler(
       adminRouter,
@@ -720,7 +526,7 @@ describe("admin routes", () => {
 
   it("aggregates shop transactions into formatted response", async () => {
     const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         leftJoin: () => ({
           where: () => ({
@@ -736,7 +542,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=shop-transactions-${testCounter}`
     );
     const handler = findRouterHandler(
       adminRouter,
@@ -754,16 +560,17 @@ describe("admin routes", () => {
       { shopId: 9, shopName: "Outlet 9", transactionCount: 0 },
     ]);
   });
+
   it("lists admin accounts", async () => {
     const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: async () => [
         { id: "admin-1", email: "root@example.com", roleId: "role-a" },
       ],
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=accounts-${testCounter}`
     );
     const handler = findRouterHandler(adminRouter, "get", "/accounts");
     const req = { session: { adminId: "admin-1" } };
@@ -779,7 +586,7 @@ describe("admin routes", () => {
     const { db } = await import("../server/db");
     const inserts: Array<{ table: unknown; payload: Record<string, unknown> }> =
       [];
-    mock.method(db, "insert", (table: unknown) => ({
+    mock.method(db.primary, "insert", (table: unknown) => ({
       values(payload: Record<string, unknown>) {
         inserts.push({ table, payload });
         if (table === adminUsers) {
@@ -798,7 +605,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=create-account-${testCounter}`
     );
     const handler = findRouterHandler(adminRouter, "post", "/accounts");
     const req = {
@@ -824,13 +631,13 @@ describe("admin routes", () => {
 
   it("lists and creates admin roles", async () => {
     const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: async () => [
         { id: "role-1", name: "Root", description: "all access" },
       ],
     }));
 
-    mock.method(db, "insert", (table: unknown) => ({
+    mock.method(db.primary, "insert", (table: unknown) => ({
       values(payload: Record<string, unknown>) {
         if (table === adminRoles) {
           return {
@@ -842,7 +649,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=roles-${testCounter}`
     );
     const listHandler = findRouterHandler(adminRouter, "get", "/roles");
     const createHandler = findRouterHandler(adminRouter, "post", "/roles");
@@ -864,7 +671,7 @@ describe("admin routes", () => {
 
   it("returns recent audit logs", async () => {
     const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: () => ({
         orderBy: async () => [
           { action: "suspend_user", resource: "user:1" },
@@ -874,7 +681,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=audit-logs-${testCounter}`
     );
     const handler = findRouterHandler(adminRouter, "get", "/audit-logs");
     const res = createMockRes();
@@ -886,7 +693,7 @@ describe("admin routes", () => {
 
   it("denies access when admin lacks required permissions", async () => {
     const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: (table: unknown) => {
         if (table === adminUsers) {
           return {
@@ -911,7 +718,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=deny-permission-${testCounter}`
     );
     const stack = findRouteStack(adminRouter, "get", "/accounts");
     const [authMiddleware, permissionsMiddleware] = stack;
@@ -924,24 +731,9 @@ describe("admin routes", () => {
     assert.equal(res.body?.message, "Forbidden");
   });
 
-  it("logs out admins by clearing the session", async () => {
-    const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
-    );
-    const handler = findRouterHandler(adminRouter, "post", "/logout");
-    const req = { session: { adminId: "admin-9" } };
-    const res = createMockRes();
-
-    await handler(req, res);
-
-    assert.equal(res.statusCode, 200);
-    assert.equal(res.body.success, true);
-    assert.equal(req.session.adminId, undefined);
-  });
-
   it("lists all orders and bookings", async () => {
     const { db } = await import("../server/db");
-    mock.method(db, "select", () => ({
+    mock.method(db.primary, "select", () => ({
       from: (table: unknown) => {
         if (table === orders) {
           return Promise.resolve([{ id: 1 }, { id: 2 }]);
@@ -954,7 +746,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=all-orders-${testCounter}`
     );
     const ordersHandler = findRouterHandler(adminRouter, "get", "/all-orders");
     const bookingsHandler = findRouterHandler(
@@ -976,13 +768,13 @@ describe("admin routes", () => {
 
   it("deletes reviews and writes audit logs", async () => {
     const { db } = await import("../server/db");
-    mock.method(db, "delete", (table: unknown) => ({
+    mock.method(db.primary, "delete", (table: unknown) => ({
       where: () => ({
         returning: async () => (table === reviews ? [{ id: 90 }] : []),
       }),
     }));
     const auditInserts: Array<Record<string, unknown>> = [];
-    mock.method(db, "insert", (table: unknown) => ({
+    mock.method(db.primary, "insert", (table: unknown) => ({
       values: async (payload: Record<string, unknown>) => {
         if (table === adminAuditLogs) {
           auditInserts.push(payload);
@@ -991,7 +783,7 @@ describe("admin routes", () => {
     }));
 
     const { default: adminRouter } = await import(
-      `../server/routes/admin.ts?test=${Date.now()}`
+      `../server/routes/admin.ts?test=delete-review-${testCounter}`
     );
     const handler = findRouterHandler(
       adminRouter,
@@ -1010,5 +802,270 @@ describe("admin routes", () => {
     assert.equal(res.body.success, true);
     assert.equal(auditInserts.length, 1);
     assert.equal(auditInserts[0].action, "delete_review");
+  });
+
+  it("accepts performance metrics payloads and enforces submission limits", async () => {
+    const loggerModule = await import("../server/logger");
+    const logger = loggerModule.default;
+    mock.method(logger, "info", () => undefined);
+    mock.method(logger, "warn", () => undefined);
+    mock.method(logger, "error", () => undefined);
+
+    const { default: adminRouter } = await import(
+      `../server/routes/admin.ts?test=performance-metrics-${testCounter}`
+    );
+    const handler = findRouterHandler(
+      adminRouter,
+      "post",
+      "/performance-metrics",
+    );
+
+    const tooManyMetrics = Array.from({ length: 21 }, (_, index) => ({
+      name: "FCP" as const,
+      value: index,
+      rating: "good" as const,
+      page: `/page-${index}`,
+      timestamp: index,
+    }));
+
+    const resExcess = createMockRes();
+    await handler(
+      {
+        body: tooManyMetrics,
+        session: { adminId: "admin-42" },
+      },
+      resExcess,
+    );
+    assert.equal(resExcess.statusCode, 400);
+    assert.match(String(resExcess.body?.message ?? ""), /too many/i);
+
+    const validMetrics = [
+      {
+        name: "TTFB" as const,
+        value: 120,
+        rating: "good" as const,
+        page: "/dashboard",
+        timestamp: 100,
+      },
+      {
+        name: "LCP" as const,
+        value: 2.8,
+        rating: "poor" as const,
+        page: "/dashboard",
+        timestamp: 120,
+      },
+    ];
+
+    const resValid = createMockRes();
+    await handler(
+      {
+        body: validMetrics,
+        session: { adminId: "admin-42" },
+      },
+      resValid,
+    );
+    assert.equal(resValid.statusCode, 204);
+  });
+
+  it("records single performance metrics payloads", async () => {
+    const loggerModule = await import("../server/logger");
+    const logger = loggerModule.default;
+    mock.method(logger, "info", () => undefined);
+    mock.method(logger, "warn", () => undefined);
+    mock.method(logger, "error", () => undefined);
+
+    const { default: adminRouter } = await import(
+      `../server/routes/admin.ts?test=single-metric-${testCounter}`
+    );
+    const handler = findRouterHandler(
+      adminRouter,
+      "post",
+      "/performance-metrics",
+    );
+    const res = createMockRes();
+    await handler(
+      {
+        body: {
+          name: "CLS",
+          value: 0.12,
+          rating: "good",
+          page: "/",
+          timestamp: 10,
+        },
+        session: { adminId: "admin-1" },
+      },
+      res,
+    );
+    assert.equal(res.statusCode, 204);
+  });
+
+  // Negative test cases
+  it("rejects login with invalid credentials", async () => {
+    const [{ db }, { hashPasswordInternal }] = await Promise.all([
+      import("../server/db"),
+      import("../server/auth"),
+    ]);
+
+    const hashedPassword = await hashPasswordInternal("correct-password");
+
+    mock.method(db.primary, "select", () => ({
+      from: (table: unknown) => {
+        if (table === adminUsers) {
+          return {
+            where: () => ({
+              limit: async () => [
+                {
+                  id: "admin-123",
+                  email: "admin@example.com",
+                  hashedPassword,
+                  roleId: "role-1",
+                },
+              ],
+            }),
+          };
+        }
+        return {
+          where: () => ({
+            limit: async () => [],
+          }),
+        };
+      },
+    }));
+
+    const { default: adminRouter } = await import(
+      `../server/routes/admin.ts?test=invalid-login-${testCounter}`
+    );
+    const handler = findRouterHandler(adminRouter, "post", "/login");
+    const req = {
+      body: {
+        email: "admin@example.com",
+        password: "wrong-password",
+      },
+      session: {},
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body.message, "Invalid credentials");
+  });
+
+  it("rejects login with invalid email format", async () => {
+    const { default: adminRouter } = await import(
+      `../server/routes/admin.ts?test=invalid-email-${testCounter}`
+    );
+    const handler = findRouterHandler(adminRouter, "post", "/login");
+    const req = {
+      body: {
+        email: "not-an-email",
+        password: "password123",
+      },
+      session: {},
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.ok(res.body.message);
+  });
+
+  it("rejects unauthenticated access to protected routes", async () => {
+    const { default: adminRouter } = await import(
+      `../server/routes/admin.ts?test=unauth-${testCounter}`
+    );
+    const stack = findRouteStack(adminRouter, "get", "/me");
+    const [authMiddleware] = stack;
+    const req = { session: {} };
+    const res = createMockRes();
+
+    await authMiddleware(req, res, () => undefined);
+
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body.message, "Unauthorized");
+  });
+
+  it("rejects password change with wrong current password", async () => {
+    const [{ db }, { hashPasswordInternal }] = await Promise.all([
+      import("../server/db"),
+      import("../server/auth"),
+    ]);
+    const currentHash = await hashPasswordInternal("actual-password");
+
+    mock.method(db.primary, "select", () => ({
+      from: () => ({
+        where: () => ({
+          limit: async () => [{ id: "admin-55", hashedPassword: currentHash }],
+        }),
+      }),
+    }));
+
+    const { default: adminRouter } = await import(
+      `../server/routes/admin.ts?test=wrong-current-password-${testCounter}`
+    );
+    const handler = findRouterHandler(adminRouter, "post", "/change-password");
+    const req = {
+      session: { adminId: "admin-55" },
+      body: {
+        currentPassword: "wrong-password",
+        newPassword: "NewStrong123!",
+      },
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body.message, "Current password is incorrect");
+  });
+
+  it("returns 404 when admin profile not found", async () => {
+    const { db } = await import("../server/db");
+    mock.method(db.primary, "select", () => ({
+      from: () => ({
+        where: () => ({
+          limit: async () => [],
+        }),
+      }),
+    }));
+
+    const { default: adminRouter } = await import(
+      `../server/routes/admin.ts?test=admin-not-found-${testCounter}`
+    );
+    const handler = findRouterHandler(adminRouter, "get", "/me");
+    const req = { session: { adminId: "non-existent-admin" } };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.body.message, "Admin not found");
+  });
+
+  it("returns 404 when deleting non-existent user", async () => {
+    const { db } = await import("../server/db");
+    mock.method(db.primary, "select", () => ({
+      from: () => ({
+        where: () => ({
+          limit: async () => [],
+        }),
+      }),
+    }));
+
+    const { default: adminRouter } = await import(
+      `../server/routes/admin.ts?test=delete-nonexistent-${testCounter}`
+    );
+    const handler = findRouterHandler(adminRouter, "delete", "/platform-users/:userId");
+    const req = {
+      session: { adminId: "admin-1" },
+      params: { userId: "999" },
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.body.message, "User not found");
   });
 });

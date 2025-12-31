@@ -144,15 +144,75 @@ describe("Bookings API", () => {
     assert.ok(booking.relevantAddress, "Address should be picked");
   });
 
+  // Negative test cases
+  it("rejects booking for non-existent service", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const res = await agent.post("/api/bookings").send({
+      serviceId: 99999,
+      bookingDate: new Date().toISOString(),
+      serviceLocation: "customer",
+    });
+
+    assert.ok(res.status >= 400);
+  });
+
+  it("rejects booking with invalid date format", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const res = await agent.post("/api/bookings").send({
+      serviceId: service.id,
+      bookingDate: "invalid-date",
+      serviceLocation: "customer",
+    });
+
+    assert.equal(res.status, 400);
+    assert.ok(res.body.message);
+  });
+
+  it("rejects booking without authentication", async () => {
+    const agent = request.agent(app);
+    const res = await agent.post("/api/bookings").send({
+      serviceId: service.id,
+      bookingDate: new Date().toISOString(),
+      serviceLocation: "customer",
+    });
+
+    assert.equal(res.status, 401);
+  });
+
+  it("rejects booking with missing required fields", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/login")
+      .send({ username: customer.username, password: "pass" });
+
+    const res = await agent.post("/api/bookings").send({
+      serviceId: service.id,
+      // Missing bookingDate and serviceLocation
+    });
+
+    assert.equal(res.status, 400);
+  });
+
   after(async () => {
-    // Close the server (if accessible) or just ensure connections are closed
-    // Since app is just an express instance and not a listening server, we focus on DB/Redis
+    // Proper cleanup without process.exit
     const { closeConnection } = await import("../server/db");
     const { closeRedisConnection } = await import("../server/services/cache.service");
     const { closeRealtimeConnections } = await import("../server/realtime");
 
-    await closeRealtimeConnections();
-    await closeRedisConnection();
-    await closeConnection();
+    try {
+      await closeRealtimeConnections();
+      await closeRedisConnection();
+      await closeConnection();
+    } catch {
+      // Ignore cleanup errors in tests
+    }
   });
 });
