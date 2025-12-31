@@ -272,13 +272,13 @@ export function initializeAuth(app: Express) {
           (safeUser as any).hasProviderProfile = user.role === "provider";
         } else {
           try {
-            const shopExists = await db
+            const shopExists = await db.primary
               .select({ id: shops.id })
               .from(shops)
               .where(eq(shops.ownerId, user.id))
               .limit(1);
 
-            const providerExists = await db
+            const providerExists = await db.primary
               .select({ id: providers.id })
               .from(providers)
               .where(eq(providers.userId, user.id))
@@ -540,12 +540,12 @@ export function registerAuthRoutes(app: Express) {
 
       // If they chose shop or provider, create the profile entry
       if (initialRole === "shop") {
-        await db.insert(shops).values({
+        await db.primary.insert(shops).values({
           ownerId: user.id,
           shopName: `${name}'s Shop`,
         });
       } else if (initialRole === "provider") {
-        await db.insert(providers).values({
+        await db.primary.insert(providers).values({
           userId: user.id,
         });
       }
@@ -674,7 +674,7 @@ export function registerAuthRoutes(app: Express) {
 
     try {
       // Find user by workerNumber
-      const [user] = await db
+      const [user] = await db.primary
         .select()
         .from(users)
         .where(eq(users.workerNumber, workerNumber));
@@ -692,7 +692,7 @@ export function registerAuthRoutes(app: Express) {
       }
 
       // Check if worker is active in shopWorkers table
-      const [workerLink] = await db
+      const [workerLink] = await db.primary
         .select({ active: shopWorkers.active })
         .from(shopWorkers)
         .where(eq(shopWorkers.workerUserId, user.id));
@@ -763,7 +763,7 @@ export function registerAuthRoutes(app: Express) {
       }
 
       // Delete any existing unused OTPs for this phone
-      await db.delete(phoneOtpTokens)
+      await db.primary.delete(phoneOtpTokens)
         .where(and(
           eq(phoneOtpTokens.phone, normalizedPhone),
           eq(phoneOtpTokens.purpose, "forgot_password"),
@@ -776,7 +776,7 @@ export function registerAuthRoutes(app: Express) {
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
       // Store OTP
-      await db.insert(phoneOtpTokens).values({
+      await db.primary.insert(phoneOtpTokens).values({
         phone: normalizedPhone,
         otpHash,
         purpose: "forgot_password",
@@ -816,7 +816,7 @@ export function registerAuthRoutes(app: Express) {
       const otpHash = createHash("sha256").update(otp).digest("hex");
 
       // Find valid OTP
-      const otpRecords = await db
+      const otpRecords = await db.primary
         .select()
         .from(phoneOtpTokens)
         .where(and(
@@ -866,7 +866,7 @@ export function registerAuthRoutes(app: Express) {
       const otpHash = createHash("sha256").update(otp).digest("hex");
 
       // Verify OTP is still valid
-      const otpRecords = await db
+      const otpRecords = await db.primary
         .select()
         .from(phoneOtpTokens)
         .where(and(
@@ -903,12 +903,12 @@ export function registerAuthRoutes(app: Express) {
       });
 
       // Mark OTP as used
-      await db.update(phoneOtpTokens)
+      await db.primary.update(phoneOtpTokens)
         .set({ isUsed: true })
         .where(eq(phoneOtpTokens.id, otpRecord.id));
 
       // Cleanup expired OTPs (async, don't wait)
-      db.delete(phoneOtpTokens)
+      db.primary.delete(phoneOtpTokens)
         .where(lt(phoneOtpTokens.expiresAt, new Date()))
         .catch(err => logger.warn({ err }, "Failed to cleanup expired OTPs"));
 
@@ -930,14 +930,14 @@ export function registerAuthRoutes(app: Express) {
       const userId = req.user.id;
 
       // Check if user has a shop profile
-      const shopResult = await db
+      const shopResult = await db.primary
         .select()
         .from(shops)
         .where(eq(shops.ownerId, userId))
         .limit(1);
 
       // Check if user has a provider profile
-      const providerResult = await db
+      const providerResult = await db.primary
         .select()
         .from(providers)
         .where(eq(providers.userId, userId))
@@ -971,7 +971,7 @@ export function registerAuthRoutes(app: Express) {
       const userId = req.user.id;
 
       // Check if shop already exists
-      const existing = await db
+      const existing = await db.primary
         .select()
         .from(shops)
         .where(eq(shops.ownerId, userId))
@@ -981,7 +981,7 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ message: "You already have a shop" });
       }
 
-      const [shop] = await db.insert(shops).values({
+      const [shop] = await db.primary.insert(shops).values({
         ownerId: userId,
         shopName: shopName.trim(),
         description: description?.trim(),
@@ -1014,7 +1014,7 @@ export function registerAuthRoutes(app: Express) {
       const userId = req.user.id;
 
       // Check if provider already exists
-      const existing = await db
+      const existing = await db.primary
         .select()
         .from(providers)
         .where(eq(providers.userId, userId))
@@ -1024,7 +1024,7 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ message: "You already have a provider profile" });
       }
 
-      const [provider] = await db.insert(providers).values({
+      const [provider] = await db.primary.insert(providers).values({
         userId,
         bio: bio?.trim(),
         skills: skills ?? [],

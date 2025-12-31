@@ -1,26 +1,28 @@
 /**
- * Utility functions for handling dates with Indian Standard Time (IST) in server operations
+ * Utility functions for handling dates in server operations.
+ * Store dates in UTC and only convert to IST for display.
  */
-import { toIndianTime, newIndianDate } from "@shared/date-utils";
+import { toIndianTime, fromIndianTime } from "@shared/date-utils";
 
 /**
- * Converts a Date object to IST before storing in database
- * @param date Date to convert to IST
- * @returns Date object in IST
+ * Normalizes a Date or date string for UTC storage.
+ * This does not shift the underlying instant in time.
+ * @param date Date or date string to normalize
+ * @returns Date object for storage
  */
-export function toISTForStorage(
+export function toUTCForStorage(
   date: Date | string | null | undefined,
 ): Date | null {
   if (!date) return null;
-  return toIndianTime(date);
+  return typeof date === "string" ? new Date(date) : new Date(date);
 }
 
 /**
- * Gets the current date and time in IST for database operations
+ * Gets the current date and time in IST for display operations
  * @returns Current date and time in IST
  */
 export function getCurrentISTDate(): Date {
-  return newIndianDate();
+  return toIndianTime(new Date());
 }
 
 /**
@@ -36,14 +38,31 @@ export function fromDatabaseToIST(
 }
 
 /**
- * Calculates expiration date in IST
+ * Calculates expiration date in UTC
  * @param hours Number of hours from now
- * @returns Expiration date in IST
+ * @returns Expiration date in UTC
  */
 export function getExpirationDate(hours: number): Date {
-  const expDate = getCurrentISTDate();
-  expDate.setHours(expDate.getHours() + hours);
+  const expDate = new Date();
+  expDate.setUTCHours(expDate.getUTCHours() + hours);
   return expDate;
+}
+
+/**
+ * Gets UTC bounds for the IST day containing the provided date.
+ * @param date Reference date
+ * @returns Start/end UTC instants for the IST day
+ */
+export function getISTDayBoundsUtc(date: Date): { start: Date; end: Date } {
+  const zoned = toIndianTime(date);
+  const startZoned = new Date(zoned);
+  startZoned.setHours(0, 0, 0, 0);
+  const endZoned = new Date(startZoned);
+  endZoned.setDate(endZoned.getDate() + 1);
+  return {
+    start: fromIndianTime(startZoned),
+    end: fromIndianTime(endZoned),
+  };
 }
 
 /**

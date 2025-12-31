@@ -44,7 +44,7 @@ export function requireShopOrWorkerPermission(
 
     // Workers must have explicit permissions
     if (req.user?.role === "worker") {
-      const link = await db
+      const link = await db.primary
         .select({ responsibilities: shopWorkers.responsibilities, active: shopWorkers.active, shopId: shopWorkers.shopId })
         .from(shopWorkers)
         .where(eq(shopWorkers.workerUserId, req.user.id));
@@ -70,7 +70,7 @@ export function requireShopOrWorkerContext() {
 }
 
 export async function getWorkerShopId(workerUserId: number): Promise<number | null> {
-  const result = await db
+  const result = await db.primary
     .select({ shopId: shopWorkers.shopId })
     .from(shopWorkers)
     .where(eq(shopWorkers.workerUserId, workerUserId));

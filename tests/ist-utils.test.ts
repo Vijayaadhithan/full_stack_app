@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  toISTForStorage,
+  toUTCForStorage,
   fromDatabaseToIST,
   getExpirationDate,
   getCurrentISTDate,
@@ -10,7 +10,7 @@ import {
 
 describe("IST utils", () => {
   it("converts null safely", () => {
-    assert.strictEqual(toISTForStorage(null), null);
+    assert.strictEqual(toUTCForStorage(null), null);
     assert.strictEqual(fromDatabaseToIST(null), null);
   });
 

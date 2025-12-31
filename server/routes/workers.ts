@@ -38,7 +38,7 @@ function requireRole(roles: string[]) {
 }
 
 export async function getWorkerShopId(workerUserId: number): Promise<number | null> {
-  const link = await db
+  const link = await db.primary
     .select({ shopId: shopWorkers.shopId })
     .from(shopWorkers)
     .where(eq(shopWorkers.workerUserId, workerUserId));
@@ -46,7 +46,7 @@ export async function getWorkerShopId(workerUserId: number): Promise<number | nu
 }
 
 export async function workerHasPermission(workerUserId: number, permission: WorkerResponsibility): Promise<boolean> {
-  const result = await db
+  const result = await db.primary
     .select({ responsibilities: shopWorkers.responsibilities })
     .from(shopWorkers)
     .where(eq(shopWorkers.workerUserId, workerUserId));
@@ -58,7 +58,7 @@ export function registerWorkerRoutes(app: Express) {
   // Ensure table exists (fallback if migration wasn't applied)
   async function ensureShopWorkersTable() {
     try {
-      await db.execute(sql`
+      await db.primary.execute(sql`
         CREATE TABLE IF NOT EXISTS shop_workers (
           id SERIAL PRIMARY KEY,
           shop_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -80,7 +80,7 @@ export function registerWorkerRoutes(app: Express) {
     requireAuth,
     requireRole(["worker"]),
     async (req: any, res: Response) => {
-      const result = await db
+      const result = await db.primary
         .select({ shopId: shopWorkers.shopId, responsibilities: shopWorkers.responsibilities, active: shopWorkers.active })
         .from(shopWorkers)
         .where(eq(shopWorkers.workerUserId, req.user.id));
@@ -135,7 +135,7 @@ export function registerWorkerRoutes(app: Express) {
         const normalizedPhone = normalizePhone(phone);
 
         // Ensure workerNumber (10-digit ID) is unique
-        const existing = await db
+        const existing = await db.primary
           .select()
           .from(users)
           .where(eq(users.workerNumber, workerNumber));
@@ -144,7 +144,7 @@ export function registerWorkerRoutes(app: Express) {
         }
 
         if (normalizedEmail) {
-          const emailConflict = await db
+          const emailConflict = await db.primary
             .select({ id: users.id })
             .from(users)
             .where(eq(users.email, normalizedEmail));
@@ -154,7 +154,7 @@ export function registerWorkerRoutes(app: Express) {
         }
 
         if (normalizedPhone) {
-          const phoneConflict = await db
+          const phoneConflict = await db.primary
             .select({ id: users.id })
             .from(users)
             .where(eq(users.phone, normalizedPhone));
@@ -169,7 +169,7 @@ export function registerWorkerRoutes(app: Express) {
         const generatedUsername = `worker_${workerNumber}`;
         const fallbackEmail = normalizedEmail ?? `worker_${workerNumber}@workers.local`;
 
-        const [createdUser] = await db
+        const [createdUser] = await db.primary
           .insert(users)
           .values({
             username: generatedUsername,
@@ -182,7 +182,7 @@ export function registerWorkerRoutes(app: Express) {
           } as any)
           .returning();
 
-        await db.insert(shopWorkers).values({
+        await db.primary.insert(shopWorkers).values({
           shopId: req.user!.id,
           workerUserId: createdUser.id,
           responsibilities: responsibilities as any,
@@ -212,7 +212,7 @@ export function registerWorkerRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         await ensureShopWorkersTable();
-        const result = await db
+        const result = await db.primary
           .select({
             id: users.id,
             workerNumber: users.workerNumber,
@@ -251,7 +251,7 @@ export function registerWorkerRoutes(app: Express) {
           });
         }
         const { workerNumber } = parsedQuery.data;
-        const existing = await db
+        const existing = await db.primary
           .select()
           .from(users)
           .where(eq(users.workerNumber, workerNumber));
@@ -301,7 +301,7 @@ export function registerWorkerRoutes(app: Express) {
 
       try {
         // Ensure the worker belongs to this shop
-        const link = await db
+        const link = await db.primary
           .select()
           .from(shopWorkers)
           .where(and(eq(shopWorkers.workerUserId, workerUserId), eq(shopWorkers.shopId, req.user!.id)));
@@ -309,7 +309,7 @@ export function registerWorkerRoutes(app: Express) {
 
         // Update responsibilities/active on link
         if (responsibilities || typeof active === "boolean") {
-          await db
+          await db.primary
             .update(shopWorkers)
             .set({
               ...(responsibilities ? { responsibilities: responsibilities as any } : {}),
@@ -325,7 +325,7 @@ export function registerWorkerRoutes(app: Express) {
         if (phone) updateUserData.phone = phone;
         if (pin) updateUserData.pin = await hashPasswordInternal(pin);
         if (Object.keys(updateUserData).length) {
-          await db.update(users).set(updateUserData).where(eq(users.id, workerUserId));
+          await db.primary.update(users).set(updateUserData).where(eq(users.id, workerUserId));
         }
 
         return res.json({ message: "Worker updated" });
@@ -348,7 +348,7 @@ export function registerWorkerRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid worker id" });
       }
       try {
-        const result = await db
+        const result = await db.primary
           .select({
             id: users.id,
             workerNumber: users.workerNumber,
@@ -384,19 +384,19 @@ export function registerWorkerRoutes(app: Express) {
       }
       try {
         // Verify the link belongs to this shop
-        const link = await db
+        const link = await db.primary
           .select()
           .from(shopWorkers)
           .where(and(eq(shopWorkers.workerUserId, workerUserId), eq(shopWorkers.shopId, req.user!.id)));
         if (!link[0]) return res.status(404).json({ message: "Worker not found for this shop" });
 
         // Remove link
-        await db.delete(shopWorkers).where(and(eq(shopWorkers.workerUserId, workerUserId), eq(shopWorkers.shopId, req.user!.id)));
+        await db.primary.delete(shopWorkers).where(and(eq(shopWorkers.workerUserId, workerUserId), eq(shopWorkers.shopId, req.user!.id)));
 
         // Delete user account if role is worker
-        const target = await db.select().from(users).where(eq(users.id, workerUserId));
+        const target = await db.primary.select().from(users).where(eq(users.id, workerUserId));
         if (target[0]?.role === 'worker') {
-          await db.delete(users).where(eq(users.id, workerUserId));
+          await db.primary.delete(users).where(eq(users.id, workerUserId));
         }
         return res.json({ message: "Worker removed" });
       } catch (error) {

@@ -235,14 +235,14 @@ function isAdminAuthenticated(req: any, res: any, next: any) {
 function checkPermissions(required: string[]) {
   return async (req: any, res: any, next: any) => {
     if (!req.session?.adminId) return res.status(401).json({ message: "Unauthorized" });
-    const admin = await db
+    const admin = await db.primary
       .select({ roleId: adminUsers.roleId })
       .from(adminUsers)
       .where(eq(adminUsers.id, req.session.adminId))
       .limit(1);
     const roleId = admin[0]?.roleId;
     if (!roleId) return res.status(403).json({ message: "Forbidden" });
-    const perms = await db
+    const perms = await db.primary
       .select({ action: adminPermissions.action })
       .from(adminRolePermissions)
       .innerJoin(
@@ -265,7 +265,7 @@ router.post("/login", adminLoginRateLimiter, async (req, res) => {
     return res.status(400).json(formatValidationError(parsedBody.error));
   }
   const { email, password } = parsedBody.data;
-  const rows = await db
+  const rows = await db.primary
     .select()
     .from(adminUsers)
     .where(eq(adminUsers.email, email))
@@ -285,7 +285,7 @@ router.post("/login", adminLoginRateLimiter, async (req, res) => {
 
   let permissions: string[] = [];
   if (admin.roleId) {
-    const perms = await db
+    const perms = await db.primary
       .select({ action: adminPermissions.action })
       .from(adminRolePermissions)
       .innerJoin(
@@ -311,7 +311,7 @@ router.post("/logout", (req, res) => {
 });
 
 router.get("/me", isAdminAuthenticated, async (req, res) => {
-  const rows = await db
+  const rows = await db.primary
     .select({ id: adminUsers.id, email: adminUsers.email, roleId: adminUsers.roleId })
     .from(adminUsers)
     .where(eq(adminUsers.id, req.session.adminId!))
@@ -322,7 +322,7 @@ router.get("/me", isAdminAuthenticated, async (req, res) => {
   // Derive permissions for this admin's role
   let permissions: string[] = [];
   if (base.roleId) {
-    const perms = await db
+    const perms = await db.primary
       .select({ action: adminPermissions.action })
       .from(adminRolePermissions)
       .innerJoin(
@@ -344,7 +344,7 @@ router.post("/change-password", isAdminAuthenticated, async (req, res) => {
       return res.status(400).json(formatValidationError(parsedBody.error));
     }
     const { currentPassword, newPassword } = parsedBody.data;
-    const rows = await db
+    const rows = await db.primary
       .select()
       .from(adminUsers)
       .where(eq(adminUsers.id, req.session!.adminId!))
@@ -355,7 +355,7 @@ router.post("/change-password", isAdminAuthenticated, async (req, res) => {
     if (!ok) return res.status(401).json({ message: "Current password is incorrect" });
 
     const hashedPassword = await hashPasswordInternal(newPassword);
-    await db.update(adminUsers).set({ hashedPassword }).where(eq(adminUsers.id, admin.id));
+    await db.primary.update(adminUsers).set({ hashedPassword }).where(eq(adminUsers.id, admin.id));
     if (req.session) req.session.adminMustChangePassword = false;
     res.json({ success: true });
   } catch (e: any) {
@@ -620,7 +620,7 @@ router.get(
 
     const whereClause = filters.length ? and(...filters) : undefined;
 
-    const baseQuery = db
+    const baseQuery = db.primary
       .select({
         id: orders.id,
         status: orders.status,
@@ -680,20 +680,21 @@ router.get(
 );
 
 router.get("/dashboard-stats", isAdminAuthenticated, async (_req, res) => {
+  const readDb = db.replica;
   const [userCountResult, orderCountResult, totalRevenueResult, bookingCountResult, pendingOrdersResult, todayBookingsResult] =
     await Promise.all([
-      db.select({ count: count() }).from(users),
-      db.select({ count: count() }).from(orders),
-      db
+      readDb.select({ count: count() }).from(users),
+      readDb.select({ count: count() }).from(orders),
+      readDb
         .select({ sum: sum(orders.total) })
         .from(orders)
         .where(eq(orders.paymentStatus, "paid")),
-      db.select({ count: count() }).from(bookings),
-      db
+      readDb.select({ count: count() }).from(bookings),
+      readDb
         .select({ count: count() })
         .from(orders)
         .where(eq(orders.status, "pending")),
-      db
+      readDb
         .select({ count: count() })
         .from(bookings)
         .where(sql`date(${bookings.bookingDate}) = CURRENT_DATE`),
@@ -729,7 +730,7 @@ router.get(
     const limit = parsedQuery.data.limit ?? 20;
     const search = parsedQuery.data.search ?? "";
     const offset = (page - 1) * limit;
-    const base = db.select().from(users);
+    const base = db.primary.select().from(users);
     const like = `%${search}%`;
     const all = await (search
       ? base
@@ -758,10 +759,10 @@ router.patch(
       return res.status(400).json(formatValidationError(parsedBody.error));
     }
     const { isSuspended } = parsedBody.data;
-    await db.update(users).set({ isSuspended }).where(eq(users.id, userId));
+    await db.primary.update(users).set({ isSuspended }).where(eq(users.id, userId));
     // Audit log (best-effort)
     try {
-      await db.insert(adminAuditLogs).values({
+      await db.primary.insert(adminAuditLogs).values({
         adminId: req.session!.adminId!,
         action: isSuspended ? "suspend_user" : "unsuspend_user",
         resource: `user:${userId}`,
@@ -782,7 +783,7 @@ router.delete(
     }
     const { userId } = parsedParams.data;
 
-    const userExists = await db
+    const userExists = await db.primary
       .select({ id: users.id })
       .from(users)
       .where(eq(users.id, userId))
@@ -794,7 +795,7 @@ router.delete(
     await storage.deleteUserAndData(userId);
 
     try {
-      await db.insert(adminAuditLogs).values({
+      await db.primary.insert(adminAuditLogs).values({
         adminId: req.session!.adminId!,
         action: "delete_user",
         resource: `user:${userId}`,
@@ -810,7 +811,7 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["view_all_orders"]),
   async (_req, res) => {
-    const all = await db.select().from(orders);
+    const all = await db.primary.select().from(orders);
     res.json(all);
   },
 );
@@ -820,7 +821,7 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["view_all_orders"]),
   async (_req, res) => {
-    const results = await db
+    const results = await db.primary
       .select({
         shopId: users.id,
         shopName: users.name,
@@ -850,7 +851,7 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["view_all_bookings"]),
   async (_req, res) => {
-    const all = await db.select().from(bookings);
+    const all = await db.primary.select().from(bookings);
     res.json(all);
   },
 );
@@ -865,10 +866,10 @@ router.delete(
       return res.status(400).json(formatValidationError(parsedParams.error));
     }
     const { reviewId } = parsedParams.data;
-    await db.delete(reviews).where(eq(reviews.id, reviewId));
+    await db.primary.delete(reviews).where(eq(reviews.id, reviewId));
     // Audit log (best-effort)
     try {
-      await db.insert(adminAuditLogs).values({
+      await db.primary.insert(adminAuditLogs).values({
         adminId: req.session!.adminId!,
         action: "delete_review",
         resource: `review:${reviewId}`,
@@ -883,7 +884,7 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["manage_admins"]),
   async (_req, res) => {
-    const all = await db
+    const all = await db.primary
       .select({ id: adminUsers.id, email: adminUsers.email, roleId: adminUsers.roleId, createdAt: adminUsers.createdAt })
       .from(adminUsers);
     res.json(all);
@@ -901,13 +902,13 @@ router.post(
     }
     const { email, password, roleId } = parsedBody.data;
     const hashedPassword = await hashPasswordInternal(password);
-    const [created] = await db
+    const [created] = await db.primary
       .insert(adminUsers)
       .values({ email, hashedPassword, roleId })
       .returning({ id: adminUsers.id, email: adminUsers.email, roleId: adminUsers.roleId });
     // Audit log (best-effort)
     try {
-      await db.insert(adminAuditLogs).values({
+      await db.primary.insert(adminAuditLogs).values({
         adminId: req.session!.adminId!,
         action: "create_admin",
         resource: `admin:${created.id}`,
@@ -922,7 +923,7 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["manage_admins"]),
   async (_req, res) => {
-    const roles = await db.select().from(adminRoles);
+    const roles = await db.primary.select().from(adminRoles);
     res.json(roles);
   },
 );
@@ -937,7 +938,7 @@ router.post(
       return res.status(400).json(formatValidationError(parsedBody.error));
     }
     const { name, description } = parsedBody.data;
-    const [role] = await db
+    const [role] = await db.primary
       .insert(adminRoles)
       .values({ name, description })
       .returning();
@@ -963,15 +964,15 @@ router.put(
       return res.status(400).json(formatValidationError(parsedBody.error));
     }
     const { permissionIds } = parsedBody.data;
-    await db.delete(adminRolePermissions).where(eq(adminRolePermissions.roleId, roleId));
+    await db.primary.delete(adminRolePermissions).where(eq(adminRolePermissions.roleId, roleId));
     if (permissionIds?.length) {
-      await db.insert(adminRolePermissions).values(
+      await db.primary.insert(adminRolePermissions).values(
         permissionIds.map((id) => ({ roleId, permissionId: id })),
       );
     }
     // Audit log (best-effort)
     try {
-      await db.insert(adminAuditLogs).values({
+      await db.primary.insert(adminAuditLogs).values({
         adminId: req.session!.adminId!,
         action: "update_role_permissions",
         resource: `role:${roleId}`,
@@ -987,7 +988,7 @@ router.get(
   isAdminAuthenticated,
   checkPermissions(["manage_admins"]),
   async (_req, res) => {
-    const logs = await db
+    const logs = await db.primary
       .select()
       .from(adminAuditLogs)
       .orderBy(sql`created_at DESC`);

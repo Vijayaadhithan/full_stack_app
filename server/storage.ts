@@ -48,7 +48,6 @@ import {
   TimeSlotLabel,
   ShopProfile,
 } from "@shared/schema";
-import { newIndianDate } from "../shared/date-utils";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -123,6 +122,14 @@ export interface ItemSalesTotal {
   totalAmount: number;
 }
 
+export type BookingCreateOptions = {
+  notification?: InsertNotification | null;
+};
+
+export type BookingUpdateOptions = {
+  notification?: InsertNotification | null;
+};
+
 export interface DashboardStats {
   pendingOrders: number;
   ordersInProgress: number;
@@ -186,7 +193,7 @@ export interface IStorage {
   getServices(filters?: any): Promise<Service[]>; // Added filters parameter
 
   // Booking operations
-  createBooking(booking: InsertBooking): Promise<Booking>;
+  createBooking(booking: InsertBooking, options?: BookingCreateOptions): Promise<Booking>;
   getBooking(id: number): Promise<Booking | undefined>;
   getBookingsByCustomer(
     customerId: number,
@@ -197,7 +204,11 @@ export interface IStorage {
     options?: { page: number; limit: number },
   ): Promise<{ data: Booking[]; total: number; totalPages: number }>;
   getBookingsByStatus(status: string): Promise<Booking[]>;
-  updateBooking(id: number, booking: Partial<Booking>): Promise<Booking>;
+  updateBooking(
+    id: number,
+    booking: Partial<Booking>,
+    options?: BookingUpdateOptions,
+  ): Promise<Booking>;
   getPendingBookingRequestsForProvider(providerId: number): Promise<Booking[]>; // Added
   getBookingHistoryForProvider(
     providerId: number,
@@ -1450,7 +1461,10 @@ export class MemStorage implements IStorage {
   }
 
   // Booking operations
-  async createBooking(booking: InsertBooking): Promise<Booking> {
+  async createBooking(
+    booking: InsertBooking,
+    options?: BookingCreateOptions,
+  ): Promise<Booking> {
     const id = this.currentId++;
     const newBooking: Booking = {
       id,
@@ -1500,6 +1514,10 @@ export class MemStorage implements IStorage {
       providerId,
     });
 
+    if (options?.notification) {
+      await this.createNotification(options.notification);
+    }
+
     return newBooking;
   }
 
@@ -1535,7 +1553,11 @@ export class MemStorage implements IStorage {
     );
   }
 
-  async updateBooking(id: number, booking: Partial<Booking>): Promise<Booking> {
+  async updateBooking(
+    id: number,
+    booking: Partial<Booking>,
+    options?: BookingUpdateOptions,
+  ): Promise<Booking> {
     const existing = this.bookings.get(id);
     if (!existing) throw new Error("Booking not found");
     const updated = { ...existing, ...booking };
@@ -1552,6 +1574,10 @@ export class MemStorage implements IStorage {
       customerId,
       providerId,
     });
+
+    if (options?.notification) {
+      await this.createNotification(options.notification);
+    }
 
     return updated;
   }
@@ -1684,7 +1710,7 @@ export class MemStorage implements IStorage {
     const updated = {
       ...existing,
       ...product,
-      updatedAt: product.updatedAt ?? newIndianDate(),
+      updatedAt: product.updatedAt ?? new Date(),
     };
     this.products.set(id, updated);
     return updated;
@@ -1736,7 +1762,7 @@ export class MemStorage implements IStorage {
       const nextProduct: Product = {
         ...product,
         stock: update.stock,
-        updatedAt: newIndianDate(),
+        updatedAt: new Date(),
       };
       if (update.lowStockThreshold !== undefined) {
         nextProduct.lowStockThreshold = update.lowStockThreshold;
@@ -2476,7 +2502,7 @@ export class MemStorage implements IStorage {
     const newNotification = { ...notification, id };
     this.notifications.set(id, {
       id,
-      createdAt: newNotification.createdAt || newIndianDate(), // Use newIndianDate() to create dates in IST
+      createdAt: newNotification.createdAt || new Date(),
       message: newNotification.message,
       type: newNotification.type as
         | "shop"
@@ -2509,7 +2535,7 @@ export class MemStorage implements IStorage {
       title: newNotification.title,
       message: newNotification.message,
       isRead: newNotification.isRead ?? false,
-      createdAt: newNotification.createdAt ?? newIndianDate(), // Use newIndianDate() to create dates in IST
+      createdAt: newNotification.createdAt ?? new Date(),
       relatedBookingId: null,
     };
     notifyNotificationChange(newNotification.userId ?? null);

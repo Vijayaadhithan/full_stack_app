@@ -135,7 +135,7 @@ async function notifyPromotionSubscribers(shopId: number | null | undefined) {
   }
   if (shopId == null) return;
   try {
-    const workers = await db
+    const workers = await db.primary
       .select({ workerUserId: shopWorkers.workerUserId })
       .from(shopWorkers)
       .where(and(eq(shopWorkers.shopId, shopId), eq(shopWorkers.active, true)));
@@ -265,7 +265,7 @@ export function registerPromotionRoutes(app: Express) {
           }),
         };
 
-        const promotion = await db
+        const promotion = await db.primary
           .insert(promotions)
           .values(dbValues)
           .returning();
@@ -322,7 +322,7 @@ export function registerPromotionRoutes(app: Express) {
           return res.status(403).json({ message: "Invalid shop context" });
         }
 
-        const allPromotions = await db
+        const allPromotions = await db.primary
           .select()
           .from(promotions)
           .where(eq(promotions.shopId, shopContextId));
@@ -413,7 +413,7 @@ export function registerPromotionRoutes(app: Express) {
         }
 
         const promotionId = parsedParams.data.id;
-        const [existingPromotion] = await db
+        const [existingPromotion] = await db.primary
           .select()
           .from(promotions)
           .where(
@@ -478,7 +478,7 @@ export function registerPromotionRoutes(app: Express) {
             .json({ message: "No promotion fields provided" });
         }
 
-        const [updatedPromotion] = await db
+        const [updatedPromotion] = await db.primary
           .update(promotions)
           .set(updateData)
           .where(eq(promotions.id, promotionId))
@@ -559,7 +559,7 @@ export function registerPromotionRoutes(app: Express) {
         }
 
         const promotionId = parsedParams.data.id;
-        const [promotion] = await db
+        const [promotion] = await db.primary
           .select()
           .from(promotions)
           .where(
@@ -576,7 +576,7 @@ export function registerPromotionRoutes(app: Express) {
           });
         }
 
-        const [updatedPromotion] = await db
+        const [updatedPromotion] = await db.primary
           .update(promotions)
           .set({ isActive: parsedBody.data.isActive })
           .where(eq(promotions.id, promotionId))
@@ -640,7 +640,7 @@ export function registerPromotionRoutes(app: Express) {
         }
 
         const promotionId = parsedParams.data.id;
-        const deleted = await db
+        const deleted = await db.primary
           .delete(promotions)
           .where(
             and(
@@ -707,7 +707,7 @@ export function registerPromotionRoutes(app: Express) {
         const now = new Date();
 
         // Get all active and non-expired promotions for the shop
-        const activePromotions = await db
+        const activePromotions = await db.primary
           .select()
           .from(promotions)
           .where(
@@ -798,7 +798,7 @@ export function registerPromotionRoutes(app: Express) {
         const cartItems = [...rawCartItems];
 
         // Find the promotion by code and shop
-        const promotion = await db
+        const promotion = await db.primary
           .select()
           .from(promotions)
           .where(
@@ -969,7 +969,7 @@ export function registerPromotionRoutes(app: Express) {
         const { orderId: _orderId } = bodyResult.data;
 
         // Get the promotion
-        const promotionResult = await db
+        const promotionResult = await db.primary
           .select()
           .from(promotions)
           .where(eq(promotions.id, promotionId));
@@ -1002,7 +1002,7 @@ export function registerPromotionRoutes(app: Express) {
         }
 
         // Increment the used count (add null check)
-        await db
+        await db.primary
           .update(promotions)
           .set({ usedCount: (promotion.usedCount || 0) + 1 })
           .where(eq(promotions.id, promotionId));

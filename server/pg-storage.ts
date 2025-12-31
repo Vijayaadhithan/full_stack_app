@@ -70,6 +70,8 @@ import {
   GlobalSearchResult,
   BookingWithRelations,
   OrderWithRelations,
+  BookingCreateOptions,
+  BookingUpdateOptions,
 } from "./storage";
 import {
   eq,
@@ -87,9 +89,10 @@ import {
   type SQL,
 } from "drizzle-orm";
 import {
-  toISTForStorage,
+  toUTCForStorage,
   getCurrentISTDate,
   getExpirationDate,
+  getISTDayBoundsUtc,
 } from "./ist-utils";
 import {
   normalizeEmail,
@@ -100,7 +103,7 @@ import {
   normalizeCoordinate,
   DEFAULT_NEARBY_RADIUS_KM,
 } from "./utils/geo";
-// Import date utilities for IST handling
+// Import date utilities for storage/display handling
 
 interface BlockedTimeSlot {
   id: number;
@@ -148,7 +151,7 @@ async function loadShopModes(
   if (typeof shopId !== "number") {
     return DEFAULT_SHOP_MODES;
   }
-  const rows = await db
+  const rows = await db.primary
     .select({ profile: users.shopProfile })
     .from(users)
     .where(eq(users.id, shopId))
@@ -371,14 +374,14 @@ export class PostgresStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const normalized = normalizeEmail(email);
     if (!normalized) return undefined;
-    const result = await db.select().from(users).where(eq(users.email, normalized));
+    const result = await db.primary.select().from(users).where(eq(users.email, normalized));
     return result[0];
   }
 
   // Note: getUserByGoogleId removed - no longer using Google OAuth
 
   async deleteUserAndData(userId: number): Promise<void> {
-    await db.transaction(async (tx) => {
+    await db.primary.transaction(async (tx) => {
       // Step 1: Collect all relevant IDs
 
       // Bookings related to the user (as customer or provider)
@@ -553,7 +556,7 @@ export class PostgresStorage implements IStorage {
   }
 
   // async getReviewsByCustomer(customerId: number): Promise<Review[]> {
-  // const result = await db.select().from(reviews).where(eq(reviews.customerId, customerId));
+  // const result = await db.primary.select().from(reviews).where(eq(reviews.customerId, customerId));
   // return result;
   //}
 
@@ -561,7 +564,7 @@ export class PostgresStorage implements IStorage {
     id: number,
     data: { rating?: number; review?: string; providerReply?: string },
   ): Promise<Review> {
-    const updatedReview = await db
+    const updatedReview = await db.primary
       .update(reviews)
       .set(data)
       .where(eq(reviews.id, id))
@@ -574,7 +577,7 @@ export class PostgresStorage implements IStorage {
   async processRefund(returnRequestId: number): Promise<void> {
     // Changed parameter name for clarity
     // Retrieve the return request from the database.
-    const requestResult = await db
+    const requestResult = await db.primary
       .select()
       .from(returns)
       .where(eq(returns.id, returnRequestId)); // Use returns table and parameter
@@ -589,11 +592,11 @@ export class PostgresStorage implements IStorage {
     // Process the refund.
     // In a real implementation, integrate with a payment processor here.
     // For now, we simulate refund processing by updating the request status and setting a refunded timestamp.
-    const updatedResult = await db
+    const updatedResult = await db.primary
       .update(returns) // Use returns table
       .set({
         status: "refunded",
-        resolvedAt: getCurrentISTDate(),
+        resolvedAt: new Date(),
       })
       .where(eq(returns.id, returnRequestId)) // Use returns table and parameter
       .returning();
@@ -626,7 +629,7 @@ export class PostgresStorage implements IStorage {
 
   // ─── PROMOTION OPERATIONS ─────────────────────────────────────────
   async createPromotion(promotion: InsertPromotion): Promise<Promotion> {
-    const result = await db
+    const result = await db.primary
       .insert(promotions)
       .values({
         ...promotion,
@@ -654,7 +657,7 @@ export class PostgresStorage implements IStorage {
 
     const conditions: SQL[] = [eq(products.isDeleted, false)];
     const orderByClauses: SQL[] = [];
-    let query: any = db.select().from(products);
+    let query: any = db.primary.select().from(products);
     let joinedUsers = false;
 
     if (criteria && Object.keys(criteria).length > 0) {
@@ -755,7 +758,7 @@ export class PostgresStorage implements IStorage {
     );
     const shopModes = new Map<number, typeof DEFAULT_SHOP_MODES>();
     if (shopIds.length) {
-      const shops = await db
+      const shops = await db.primary
         .select({
           id: users.id,
           profile: users.shopProfile,
@@ -796,7 +799,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getPromotionsByShop(shopId: number): Promise<Promotion[]> {
-    return await db
+    return await db.primary
       .select()
       .from(promotions)
       .where(eq(promotions.shopId, shopId));
@@ -804,14 +807,14 @@ export class PostgresStorage implements IStorage {
 
   // ─── USER OPERATIONS ─────────────────────────────────────────────
   async getUser(id: number): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.id, id));
+    const result = await db.primary.select().from(users).where(eq(users.id, id));
     return result[0];
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const normalized = normalizeUsername(username);
     if (!normalized) return undefined;
-    const result = await db
+    const result = await db.primary
       .select()
       .from(users)
       .where(eq(users.username, normalized));
@@ -821,7 +824,7 @@ export class PostgresStorage implements IStorage {
   async getUserByPhone(phone: string): Promise<User | undefined> {
     const normalized = normalizePhone(phone);
     if (!normalized) return undefined;
-    const result = await db
+    const result = await db.primary
       .select()
       .from(users)
       .where(eq(users.phone, normalized));
@@ -829,7 +832,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getAllUsers(): Promise<User[]> {
-    return await db.select().from(users);
+    return await db.primary.select().from(users);
   }
 
   async getShops(filters?: {
@@ -848,7 +851,7 @@ export class PostgresStorage implements IStorage {
     if (cached) return cached;
 
     // Query shops table and join with users to get owner info
-    const shopRecords = await db
+    const shopRecords = await db.primary
       .select()
       .from(shops)
       .leftJoin(users, eq(shops.ownerId, users.id));
@@ -912,12 +915,12 @@ export class PostgresStorage implements IStorage {
   }
 
   async getShopById(shopId: number): Promise<Shop | undefined> {
-    const result = await db.select().from(shops).where(eq(shops.id, shopId));
+    const result = await db.primary.select().from(shops).where(eq(shops.id, shopId));
     return result[0];
   }
 
   async getShopByOwnerId(ownerId: number): Promise<Shop | undefined> {
-    const result = await db.select().from(shops).where(eq(shops.ownerId, ownerId));
+    const result = await db.primary.select().from(shops).where(eq(shops.ownerId, ownerId));
     return result[0];
   }
 
@@ -970,7 +973,7 @@ export class PostgresStorage implements IStorage {
       returnsEnabled: user.returnsEnabled ?? true,
     };
 
-    const result = await db
+    const result = await db.primary
       .insert(users)
       .values(insertData as any)
       .returning();
@@ -1130,7 +1133,7 @@ export class PostgresStorage implements IStorage {
       }
     }
 
-    const result = await db
+    const result = await db.primary
       .update(users)
       .set(dataToSet)
       .where(eq(users.id, id))
@@ -1142,7 +1145,7 @@ export class PostgresStorage implements IStorage {
   // ─── SERVICE OPERATIONS ──────────────────────────────────────────
   async createService(service: InsertService): Promise<Service> {
     // Type assertion might be needed depending on InsertService definition
-    const result = await db
+    const result = await db.primary
       .insert(services)
       .values(service as any)
       .returning();
@@ -1151,13 +1154,13 @@ export class PostgresStorage implements IStorage {
 
   async getService(id: number): Promise<Service | undefined> {
     logger.info("Getting service with ID:", id);
-    const result = await db.select().from(services).where(eq(services.id, id));
+    const result = await db.primary.select().from(services).where(eq(services.id, id));
     logger.info("Found service:", result[0]);
     return result[0];
   }
   async getServicesByIds(ids: number[]): Promise<Service[]> {
     if (ids.length === 0) return [];
-    return await db
+    return await db.primary
       .select()
       .from(services)
       .where(sql`${services.id} IN ${ids}`);
@@ -1165,7 +1168,7 @@ export class PostgresStorage implements IStorage {
 
   async getUsersByIds(ids: number[]): Promise<User[]> {
     if (ids.length === 0) return [];
-    return await db
+    return await db.primary
       .select()
       .from(users)
       .where(sql`${users.id} IN ${ids}`);
@@ -1179,7 +1182,7 @@ export class PostgresStorage implements IStorage {
     const serviceIds = providerServices.map((s) => s.id);
     if (serviceIds.length === 0) return [];
 
-    const rows = await db
+    const rows = await db.primary
       .select()
       .from(bookings)
       .where(
@@ -1197,7 +1200,7 @@ export class PostgresStorage implements IStorage {
   async getBookingRequestsWithStatusForCustomer(
     customerId: number,
   ): Promise<Booking[]> {
-    return await db
+    return await db.primary
       .select()
       .from(bookings)
       .where(eq(bookings.customerId, customerId));
@@ -1207,7 +1210,7 @@ export class PostgresStorage implements IStorage {
   async getBookingsWithRelations(ids: number[]): Promise<BookingWithRelations[]> {
     if (ids.length === 0) return [];
 
-    return await db.query.bookings.findMany({
+    return await db.primary.query.bookings.findMany({
       where: inArray(bookings.id, ids),
       with: {
         service: {
@@ -1223,7 +1226,7 @@ export class PostgresStorage implements IStorage {
   async getOrdersWithRelations(ids: number[]): Promise<OrderWithRelations[]> {
     if (ids.length === 0) return [];
 
-    return await db.query.orders.findMany({
+    return await db.primary.query.orders.findMany({
       where: inArray(orders.id, ids),
       with: {
         items: {
@@ -1243,7 +1246,7 @@ export class PostgresStorage implements IStorage {
   // ─── REVIEW OPERATIONS ───────────────────────────────────────────
   async createReview(review: InsertReview): Promise<Review> {
     if (review.bookingId && review.customerId) {
-      const existing = await db
+      const existing = await db.primary
         .select()
         .from(reviews)
         .where(
@@ -1256,7 +1259,7 @@ export class PostgresStorage implements IStorage {
         throw new Error("Duplicate review");
       }
     }
-    const result = await db.insert(reviews).values(review).returning();
+    const result = await db.primary.insert(reviews).values(review).returning();
 
     // Invalidate caches
     if (review.serviceId) {
@@ -1279,7 +1282,7 @@ export class PostgresStorage implements IStorage {
     const cached = await getCache<Review[]>(cacheKey);
     if (cached) return cached;
 
-    const results = await db
+    const results = await db.primary
       .select()
       .from(reviews)
       .where(eq(reviews.serviceId, serviceId));
@@ -1293,7 +1296,7 @@ export class PostgresStorage implements IStorage {
       return [];
     }
     const uniqueIds = Array.from(new Set(serviceIds));
-    return await db
+    return await db.primary
       .select()
       .from(reviews)
       .where(inArray(reviews.serviceId, uniqueIds));
@@ -1301,7 +1304,7 @@ export class PostgresStorage implements IStorage {
 
   async getReviewsByProvider(providerId: number): Promise<Review[]> {
     // Optimized: Single JOIN query instead of two separate queries
-    const rows = await db
+    const rows = await db.primary
       .select({
         id: reviews.id,
         customerId: reviews.customerId,
@@ -1322,7 +1325,7 @@ export class PostgresStorage implements IStorage {
   async getReviewsByCustomer(
     customerId: number,
   ): Promise<(Review & { serviceName: string | null })[]> {
-    const results = await db
+    const results = await db.primary
       .select({
         id: reviews.id,
         customerId: reviews.customerId,
@@ -1349,7 +1352,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getReviewById(id: number): Promise<Review | undefined> {
-    const result = await db.select().from(reviews).where(eq(reviews.id, id));
+    const result = await db.primary.select().from(reviews).where(eq(reviews.id, id));
     return result[0];
   }
 
@@ -1359,7 +1362,7 @@ export class PostgresStorage implements IStorage {
     data: { rating?: number; review?: string },
   ): Promise<Review> {
     // First, verify the review belongs to the customer
-    const reviewCheck = await db
+    const reviewCheck = await db.primary
       .select({ id: reviews.id, customerId: reviews.customerId })
       .from(reviews)
       .where(eq(reviews.id, reviewId));
@@ -1373,7 +1376,7 @@ export class PostgresStorage implements IStorage {
     }
 
     // Proceed with the update
-    const result = await db
+    const result = await db.primary
       .update(reviews)
       .set(data)
       .where(eq(reviews.id, reviewId))
@@ -1386,31 +1389,31 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
   async updateProviderRating(providerId: number): Promise<void> {
-    const providerServices = await db
+    const providerServices = await db.primary
       .select({ id: services.id })
       .from(services)
       .where(eq(services.providerId, providerId));
     const serviceIds = providerServices.map((s) => s.id);
     if (serviceIds.length === 0) {
-      await db.execute(
+      await db.primary.execute(
         sql`UPDATE users SET average_rating = NULL WHERE id = ${providerId}`,
       );
       return;
     }
-    const ratings = await db
+    const ratings = await db.primary
       .select({ rating: reviews.rating })
       .from(reviews)
       .where(sql`${reviews.serviceId} IN ${serviceIds}`);
     const total = ratings.reduce((sum, r) => sum + r.rating, 0);
     const average = ratings.length > 0 ? total / ratings.length : null;
-    await db.execute(
+    await db.primary.execute(
       sql`UPDATE users SET average_rating = ${average}, total_reviews = ${ratings.length} WHERE id = ${providerId}`,
     );
   }
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
   async getBookingHistoryForCustomer(customerId: number): Promise<Booking[]> {
-    return await db
+    return await db.primary
       .select()
       .from(bookings)
       .where(
@@ -1424,7 +1427,7 @@ export class PostgresStorage implements IStorage {
   // Removed duplicate processExpiredBookings implementation to avoid conflicts.
 
   async getServicesByProvider(providerId: number): Promise<Service[]> {
-    return await db
+    return await db.primary
       .select()
       .from(services)
       .where(
@@ -1437,7 +1440,7 @@ export class PostgresStorage implements IStorage {
     const cached = await getCache<Service[]>(key);
     if (cached) return cached;
 
-    const result = await db
+    const result = await db.primary
       .select()
       .from(services)
       .where(
@@ -1451,7 +1454,7 @@ export class PostgresStorage implements IStorage {
     id: number,
     serviceUpdate: Partial<Service>,
   ): Promise<Service> {
-    const result = await db
+    const result = await db.primary
       .update(services)
       .set(serviceUpdate as any) // Pass the update data directly
       .where(eq(services.id, id))
@@ -1462,7 +1465,7 @@ export class PostgresStorage implements IStorage {
 
   async deleteService(id: number): Promise<void> {
     // Instead of deleting, mark as deleted (soft delete)
-    const result = await db
+    const result = await db.primary
       .update(services)
       .set({ isDeleted: true })
       .where(eq(services.id, id))
@@ -1477,7 +1480,7 @@ export class PostgresStorage implements IStorage {
     if (filters?.excludeProviderId !== undefined) {
       conditions.push(ne(services.providerId, filters.excludeProviderId));
     }
-    let query: any = db.select().from(services);
+    let query: any = db.primary.select().from(services);
     let joinedProviders = false;
     const escapeLikePattern = (value: string) =>
       value.replace(/[%_]/g, (char) => `\\${char}`);
@@ -1589,12 +1592,15 @@ export class PostgresStorage implements IStorage {
   }
 
   // ─── BOOKING OPERATIONS ──────────────────────────────────────────
-  async createBooking(booking: InsertBooking): Promise<Booking> {
-    // Set default values for new bookings with IST timestamps
+  async createBooking(
+    booking: InsertBooking,
+    options?: BookingCreateOptions,
+  ): Promise<Booking> {
+    // Set default values for new bookings in UTC
     const bookingWithDefaults = {
       ...booking,
-      createdAt: getCurrentISTDate(),
-      // Set expiresAt to 24 hours from now in IST if needed
+      createdAt: new Date(),
+      // Set expiresAt to 24 hours from now in UTC if needed
       expiresAt: booking.expiresAt || getExpirationDate(24),
       status: booking.status as
         | "pending"
@@ -1606,27 +1612,43 @@ export class PostgresStorage implements IStorage {
         | "expired",
       paymentStatus: booking.paymentStatus as "pending" | "paid" | "refunded",
     };
-    const result = await db
-      .insert(bookings)
-      .values({
-        ...bookingWithDefaults,
-        paymentStatus: bookingWithDefaults.paymentStatus as
-          | "pending"
-          | "verifying"
-          | "paid"
-          | "failed",
-      })
-      .returning();
+    const notification = options?.notification ?? null;
+    const createdBooking = await db.primary.transaction(async (tx) => {
+      const result = await tx
+        .insert(bookings)
+        .values({
+          ...bookingWithDefaults,
+          paymentStatus: bookingWithDefaults.paymentStatus as
+            | "pending"
+            | "verifying"
+            | "paid"
+            | "failed",
+        })
+        .returning();
 
-    // Add entry to booking history with IST timestamp
-    const createdBooking = result[0];
+      const inserted = result[0];
+      if (!inserted) {
+        throw new Error("Failed to create booking");
+      }
 
-    await db.insert(bookingHistory).values({
-      bookingId: createdBooking.id,
-      status: createdBooking.status,
-      changedAt: getCurrentISTDate(),
-      changedBy: booking.customerId,
-      comments: "Booking created",
+      // Add entry to booking history with UTC timestamp
+      await tx.insert(bookingHistory).values({
+        bookingId: inserted.id,
+        status: inserted.status,
+        changedAt: new Date(),
+        changedBy: booking.customerId,
+        comments: "Booking created",
+      });
+
+      if (notification) {
+        await tx.insert(notifications).values({
+          ...notification,
+          type: notification.type as any,
+          relatedBookingId: notification.relatedBookingId ?? null,
+        });
+      }
+
+      return inserted;
     });
 
     let providerId: number | null = null;
@@ -1640,11 +1662,15 @@ export class PostgresStorage implements IStorage {
       providerId,
     });
 
+    if (notification) {
+      notifyNotificationChange(notification.userId ?? null);
+    }
+
     return createdBooking;
   }
 
   async getBooking(id: number): Promise<Booking | undefined> {
-    const result = await db.select().from(bookings).where(eq(bookings.id, id));
+    const result = await db.primary.select().from(bookings).where(eq(bookings.id, id));
     return result[0];
   }
 
@@ -1657,7 +1683,7 @@ export class PostgresStorage implements IStorage {
       ? and(baseCondition, eq(bookings.status, filters.status))
       : baseCondition;
 
-    return await db
+    return await db.primary
       .select()
       .from(bookings)
       .where(whereClause)
@@ -1680,7 +1706,7 @@ export class PostgresStorage implements IStorage {
     const offset = (page - 1) * limit;
 
     // Get total count
-    const totalResult = await db
+    const totalResult = await db.primary
       .select({ count: sql<number>`count(*)` })
       .from(bookings)
       .where(inArray(bookings.serviceId, serviceIds));
@@ -1688,7 +1714,7 @@ export class PostgresStorage implements IStorage {
     const totalPages = Math.ceil(total / limit);
 
     // Get paginated data
-    const data = await db
+    const data = await db.primary
       .select()
       .from(bookings)
       .where(inArray(bookings.serviceId, serviceIds))
@@ -1700,89 +1726,107 @@ export class PostgresStorage implements IStorage {
   }
 
   async getBookingsByStatus(status: string): Promise<Booking[]> {
-    return await db
+    return await db.primary
       .select()
       .from(bookings)
       .where(eq(bookings.status, status as any));
   }
 
-  async updateBooking(id: number, booking: Partial<Booking>): Promise<Booking> {
-    // Get the current booking to track status changes
-    const currentBooking = await this.getBooking(id);
-    if (!currentBooking) throw new Error("Booking not found");
+  async updateBooking(
+    id: number,
+    booking: Partial<Booking>,
+    options?: BookingUpdateOptions,
+  ): Promise<Booking> {
+    const notification = options?.notification ?? null;
+    const { updatedBooking, currentBooking, didUpdate } =
+      await db.primary.transaction(async (tx) => {
+        const rows = await tx.select().from(bookings).where(eq(bookings.id, id));
+        const currentBooking = rows[0];
+        if (!currentBooking) throw new Error("Booking not found");
 
-    // Construct the update object, only including defined fields
-    const updateData: Partial<Booking> = {}; // Removed updatedAt: getCurrentISTDate()
-    for (const key in booking) {
-      if (booking[key as keyof Booking] !== undefined) {
-        (updateData as any)[key] = booking[key as keyof Booking];
-      }
-    }
+        // Construct the update object, only including defined fields
+        const updateData: Partial<Booking> = {}; // Removed updatedAt from default updates
+        for (const key in booking) {
+          if (booking[key as keyof Booking] !== undefined) {
+            (updateData as any)[key] = booking[key as keyof Booking];
+          }
+        }
 
-    // If no actual fields to update (other than updatedAt), return current booking
-    if (Object.keys(updateData).length === 1 && (updateData as any).updatedAt) {
-      // Optionally, you might still want to update 'updatedAt' or decide if this scenario is an error
-      // For now, let's assume if only updatedAt is there, no meaningful update was intended beyond timestamp.
-      // To be safe, and if Drizzle handles empty .set() gracefully or errors, this could be db.update().set({updatedAt: updateData.updatedAt})
-      // However, if booking object was empty, this means no change was requested.
-      // Consider if an empty booking object (no status, no comments etc.) should even reach here.
-      // Returning currentBooking if no actual data fields were provided for update.
-      // If an update with only 'undefined' values was passed, this prevents an error.
-      logger.warn(
-        `[DB DEBUG] updateBooking called for ID ${id} with no actual data changes.`,
-      );
-      // return currentBooking; // Or proceed to update just `updatedAt` if that's desired.
-    }
+        // If no actual fields to update (other than updatedAt), return current booking
+        if (Object.keys(updateData).length === 1 && (updateData as any).updatedAt) {
+          // Optionally, you might still want to update 'updatedAt' or decide if this scenario is an error
+          // For now, let's assume if only updatedAt is there, no meaningful update was intended beyond timestamp.
+          // To be safe, and if Drizzle handles empty .set() gracefully or errors, this could be db.primary.update().set({updatedAt: updateData.updatedAt})
+          // However, if booking object was empty, this means no change was requested.
+          // Consider if an empty booking object (no status, no comments etc.) should even reach here.
+          // Returning currentBooking if no actual data fields were provided for update.
+          // If an update with only 'undefined' values was passed, this prevents an error.
+          logger.warn(
+            `[DB DEBUG] updateBooking called for ID ${id} with no actual data changes.`,
+          );
+          // return currentBooking; // Or proceed to update just `updatedAt` if that's desired.
+        }
 
-    // Ensure there's something to update beyond just `updatedAt` if we don't return early
-    if (
-      Object.keys(updateData).length <= 1 &&
-      !booking.status &&
-      !booking.comments
-    ) {
-      // If only updatedAt is set and no other meaningful fields like status or comments are present in the original 'booking' partial,
-      // it implies no actual change was intended or all provided fields were undefined.
-      // To prevent an empty update or an update with only 'updatedAt' when no other changes are specified,
-      // we can return the current booking. This behavior might need adjustment based on specific requirements.
-      logger.info(
-        `[DB DEBUG] updateBooking for ID ${id}: No effective changes provided. Returning current booking.`,
-      );
-      return currentBooking;
-    }
+        // Ensure there's something to update beyond just `updatedAt` if we don't return early
+        if (
+          Object.keys(updateData).length <= 1 &&
+          !booking.status &&
+          !booking.comments
+        ) {
+          // If only updatedAt is set and no other meaningful fields like status or comments are present in the original 'booking' partial,
+          // it implies no actual change was intended or all provided fields were undefined.
+          // To prevent an empty update or an update with only 'updatedAt' when no other changes are specified,
+          // we can return the current booking. This behavior might need adjustment based on specific requirements.
+          logger.info(
+            `[DB DEBUG] updateBooking for ID ${id}: No effective changes provided. Returning current booking.`,
+          );
+          return { updatedBooking: currentBooking, currentBooking, didUpdate: false };
+        }
 
-    const result = await db
-      .update(bookings)
-      .set(updateData) // Use the filtered updateData
-      .where(eq(bookings.id, id))
-      .returning();
-
-    // If the status changed, add an entry in the booking history table with IST timestamp
-    // Ensure booking.status is checked against undefined before using it
-    if (
-      booking.status !== undefined &&
-      booking.status !== currentBooking.status
-    ) {
-      await db.insert(bookingHistory).values({
-        bookingId: id,
-        status: booking.status, // Safe to use booking.status here due to the check
-        changedAt: getCurrentISTDate(),
-        // Use booking.comments if defined, otherwise generate a default message
-        comments:
-          booking.comments !== undefined
-            ? booking.comments
-            : `Status changed from ${currentBooking.status} to ${booking.status}`,
-      });
-      // If status is no longer pending, clear the expiration date
-      if (booking.status !== "pending") {
-        await db
+        const result = await tx
           .update(bookings)
-          .set({ expiresAt: null })
-          .where(eq(bookings.id, id));
-      }
-    }
+          .set(updateData) // Use the filtered updateData
+          .where(eq(bookings.id, id))
+          .returning();
 
-    const updatedBooking = result[0];
-    if (!updatedBooking) throw new Error("Booking not found or update failed");
+        const updatedBooking = result[0];
+        if (!updatedBooking) throw new Error("Booking not found or update failed");
+
+        // If the status changed, add an entry in the booking history table with UTC timestamp
+        // Ensure booking.status is checked against undefined before using it
+        if (
+          booking.status !== undefined &&
+          booking.status !== currentBooking.status
+        ) {
+          await tx.insert(bookingHistory).values({
+            bookingId: id,
+            status: booking.status, // Safe to use booking.status here due to the check
+            changedAt: new Date(),
+            // Use booking.comments if defined, otherwise generate a default message
+            comments:
+              booking.comments !== undefined
+                ? booking.comments
+                : `Status changed from ${currentBooking.status} to ${booking.status}`,
+          });
+          // If status is no longer pending, clear the expiration date
+          if (booking.status !== "pending") {
+            await tx
+              .update(bookings)
+              .set({ expiresAt: null })
+              .where(eq(bookings.id, id));
+          }
+        }
+
+        if (notification) {
+          await tx.insert(notifications).values({
+            ...notification,
+            type: notification.type as any,
+            relatedBookingId: notification.relatedBookingId ?? null,
+          });
+        }
+
+        return { updatedBooking, currentBooking, didUpdate: true };
+      });
 
     const serviceId = booking.serviceId ?? currentBooking.serviceId;
     let providerId: number | null = null;
@@ -1791,17 +1835,22 @@ export class PostgresStorage implements IStorage {
       providerId = service?.providerId ?? null;
     }
 
-    notifyBookingChange({
-      customerId: currentBooking.customerId ?? null,
-      providerId,
-    });
+    if (didUpdate) {
+      notifyBookingChange({
+        customerId: currentBooking.customerId ?? null,
+        providerId,
+      });
+      if (notification) {
+        notifyNotificationChange(notification.userId ?? null);
+      }
+    }
 
     return updatedBooking;
   }
 
   // ─── PRODUCT OPERATIONS ──────────────────────────────────────────
   async createProduct(product: InsertProduct): Promise<Product> {
-    const result = await db
+    const result = await db.primary
       .insert(products)
       .values(product as typeof products.$inferInsert)
       .returning();
@@ -1809,12 +1858,12 @@ export class PostgresStorage implements IStorage {
   }
 
   async getProduct(id: number): Promise<Product | undefined> {
-    const result = await db.select().from(products).where(eq(products.id, id));
+    const result = await db.primary.select().from(products).where(eq(products.id, id));
     return result[0];
   }
 
   async getProductsByShop(shopId: number): Promise<Product[]> {
-    return await db
+    return await db.primary
       .select()
       .from(products)
       .where(and(eq(products.shopId, shopId), eq(products.isDeleted, false)));
@@ -1825,7 +1874,7 @@ export class PostgresStorage implements IStorage {
     const cached = await getCache<Product[]>(key);
     if (cached) return cached;
 
-    const result = await db
+    const result = await db.primary
       .select()
       .from(products)
       .where(
@@ -1840,7 +1889,7 @@ export class PostgresStorage implements IStorage {
       return [];
     }
     const uniqueIds = Array.from(new Set(ids));
-    return await db
+    return await db.primary
       .select()
       .from(products)
       .where(
@@ -1849,7 +1898,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async updateProduct(id: number, product: Partial<Product>): Promise<Product> {
-    const result = await db
+    const result = await db.primary
       .update(products)
       .set(product)
       .where(eq(products.id, id))
@@ -1879,7 +1928,7 @@ export class PostgresStorage implements IStorage {
       );
     }
 
-    const query = db
+    const query = db.primary
       .select()
       .from(products)
       .where(and(...conditions))
@@ -1902,7 +1951,7 @@ export class PostgresStorage implements IStorage {
     const updated: Product[] = [];
 
     for (const update of updates) {
-      const result = await db
+      const result = await db.primary
         .update(products)
         .set({
           stock: update.stock,
@@ -1910,7 +1959,7 @@ export class PostgresStorage implements IStorage {
             update.lowStockThreshold !== undefined
               ? update.lowStockThreshold
               : undefined,
-          updatedAt: getCurrentISTDate(),
+          updatedAt: new Date(),
         })
         .where(and(eq(products.id, update.productId), eq(products.isDeleted, false)))
         .returning();
@@ -1928,11 +1977,11 @@ export class PostgresStorage implements IStorage {
   async removeProductFromAllCarts(productId: number): Promise<void> {
     logger.info(`Removing product ID ${productId} from all carts`);
     try {
-      const affectedCustomers = await db
+      const affectedCustomers = await db.primary
         .select({ customerId: cart.customerId })
         .from(cart)
         .where(eq(cart.productId, productId));
-      await db.delete(cart).where(eq(cart.productId, productId));
+      await db.primary.delete(cart).where(eq(cart.productId, productId));
       logger.info(
         `Successfully removed product ID ${productId} from all carts`,
       );
@@ -1952,11 +2001,11 @@ export class PostgresStorage implements IStorage {
   async removeProductFromAllWishlists(productId: number): Promise<void> {
     logger.info(`Removing product ID ${productId} from all wishlists`);
     try {
-      const affectedCustomers = await db
+      const affectedCustomers = await db.primary
         .select({ customerId: wishlist.customerId })
         .from(wishlist)
         .where(eq(wishlist.productId, productId));
-      await db.delete(wishlist).where(eq(wishlist.productId, productId));
+      await db.primary.delete(wishlist).where(eq(wishlist.productId, productId));
       logger.info(
         `Successfully removed product ID ${productId} from all wishlists`,
       );
@@ -1977,7 +2026,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async deleteProduct(id: number): Promise<void> {
-    const productExists = await db
+    const productExists = await db.primary
       .select()
       .from(products)
       .where(eq(products.id, id));
@@ -1988,7 +2037,7 @@ export class PostgresStorage implements IStorage {
       await this.removeProductFromAllWishlists(id);
 
       // Use soft deletion instead of hard deletion
-      const result = await db
+      const result = await db.primary
         .update(products)
         .set({ isDeleted: true })
         .where(eq(products.id, id))
@@ -2020,7 +2069,7 @@ export class PostgresStorage implements IStorage {
 
     try {
       // Get the product being added to find its shopId
-      const productToAddResult = await db
+      const productToAddResult = await db.primary
         .select({ shopId: products.shopId })
         .from(products)
         .where(eq(products.id, productId));
@@ -2032,7 +2081,7 @@ export class PostgresStorage implements IStorage {
       logger.info(`Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
 
       // Get current cart items for the customer
-      const currentCartItems = await db
+      const currentCartItems = await db.primary
         .select({ productId: cart.productId })
         .from(cart)
         .where(eq(cart.customerId, customerId));
@@ -2044,7 +2093,7 @@ export class PostgresStorage implements IStorage {
         // If cart is not empty, check if the new item's shop matches the existing items' shop
         const firstCartProductId = currentCartItems[0].productId;
         logger.info(`First item in cart has product ID ${firstCartProductId}`);
-        const firstProductResult = await db
+        const firstProductResult = await db.primary
           .select({ shopId: products.shopId })
           .from(products)
           .where(eq(products.id, firstCartProductId!));
@@ -2072,7 +2121,7 @@ export class PostgresStorage implements IStorage {
 
       // Proceed with adding or updating the cart item
       // First, get product stock to validate against
-      const productDetails = await db
+      const productDetails = await db.primary
         .select({ stock: products.stock })
         .from(products)
         .where(eq(products.id, productId))
@@ -2098,7 +2147,7 @@ export class PostgresStorage implements IStorage {
         logger.info(
           `Quantity ${quantity} is zero or less for product ID ${productId}. Removing from cart for customer ID ${customerId}.`,
         );
-        await db
+        await db.primary
           .delete(cart)
           .where(
             and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
@@ -2110,7 +2159,7 @@ export class PostgresStorage implements IStorage {
         return; // Exit after removing
       }
 
-      const existingCartItem = await db
+      const existingCartItem = await db.primary
         .select()
         .from(cart)
         .where(
@@ -2123,7 +2172,7 @@ export class PostgresStorage implements IStorage {
         logger.info(
           `Updating existing cart item for customer ID ${customerId}, product ID ${productId}. New quantity: ${quantity}`,
         );
-        await db
+        await db.primary
           .update(cart)
           .set({ quantity: quantity }) // Direct assignment
           .where(
@@ -2134,7 +2183,7 @@ export class PostgresStorage implements IStorage {
         logger.info(
           `Creating new cart item for customer ID ${customerId}, product ID ${productId} with quantity ${quantity}`,
         );
-        await db.insert(cart).values({ customerId, productId, quantity });
+        await db.primary.insert(cart).values({ customerId, productId, quantity });
       }
       logger.info(
         `Successfully added/updated product ID ${productId} with quantity ${quantity} in cart for customer ID ${customerId}`,
@@ -2159,7 +2208,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async removeFromCart(customerId: number, productId: number): Promise<void> {
-    await db
+    await db.primary
       .delete(cart)
       .where(
         and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
@@ -2172,7 +2221,7 @@ export class PostgresStorage implements IStorage {
   ): Promise<{ product: Product; quantity: number }[]> {
     logger.info(`Getting cart for customer ID: ${customerId}`);
     try {
-      const cartItems = await db
+      const cartItems = await db.primary
         .select()
         .from(cart)
         .where(eq(cart.customerId, customerId));
@@ -2194,7 +2243,7 @@ export class PostgresStorage implements IStorage {
 
       const productsList =
         productIds.length > 0
-          ? await db
+          ? await db.primary
             .select()
             .from(products)
             .where(inArray(products.id, productIds))
@@ -2218,7 +2267,7 @@ export class PostgresStorage implements IStorage {
       }
 
       if (missingProductIds.length > 0) {
-        await db
+        await db.primary
           .delete(cart)
           .where(
             and(
@@ -2237,13 +2286,13 @@ export class PostgresStorage implements IStorage {
   }
 
   async clearCart(customerId: number): Promise<void> {
-    await db.delete(cart).where(eq(cart.customerId, customerId));
+    await db.primary.delete(cart).where(eq(cart.customerId, customerId));
     notifyCartChange(customerId);
   }
 
   // ─── WISHLIST OPERATIONS ─────────────────────────────────────────
   async addToWishlist(customerId: number, productId: number): Promise<void> {
-    const existingItem = await db
+    const existingItem = await db.primary
       .select()
       .from(wishlist)
       .where(
@@ -2253,7 +2302,7 @@ export class PostgresStorage implements IStorage {
         ),
       );
     if (existingItem.length === 0) {
-      await db.insert(wishlist).values({ customerId, productId });
+      await db.primary.insert(wishlist).values({ customerId, productId });
     }
     notifyWishlistChange(customerId);
   }
@@ -2262,7 +2311,7 @@ export class PostgresStorage implements IStorage {
     customerId: number,
     productId: number,
   ): Promise<void> {
-    await db
+    await db.primary
       .delete(wishlist)
       .where(
         and(
@@ -2274,7 +2323,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getWishlist(customerId: number): Promise<Product[]> {
-    const wishlistItems = await db
+    const wishlistItems = await db.primary
       .select()
       .from(wishlist)
       .where(eq(wishlist.customerId, customerId));
@@ -2293,7 +2342,7 @@ export class PostgresStorage implements IStorage {
 
     const productsList =
       productIds.length > 0
-        ? await db
+        ? await db.primary
           .select()
           .from(products)
           .where(inArray(products.id, productIds))
@@ -2316,7 +2365,7 @@ export class PostgresStorage implements IStorage {
     }
 
     if (staleProductIds.length > 0) {
-      await db
+      await db.primary
         .delete(wishlist)
         .where(
           and(
@@ -2349,9 +2398,9 @@ export class PostgresStorage implements IStorage {
         | "paid"
         | "failed",
     };
-    const result = await db.insert(orders).values(orderToInsert).returning();
+    const result = await db.primary.insert(orders).values(orderToInsert).returning();
     const created = result[0];
-    await db.insert(orderStatusUpdates).values({
+    await db.primary.insert(orderStatusUpdates).values({
       orderId: created.id,
       status: "pending",
       trackingInfo: created.trackingInfo,
@@ -2373,7 +2422,7 @@ export class PostgresStorage implements IStorage {
       throw new Error("Cannot create an order without items");
     }
 
-    const createdOrder = await db.transaction(async (tx) => {
+    const createdOrder = await db.primary.transaction(async (tx) => {
       const shopModes = await loadShopModes(order.shopId);
       const enforceStock = !(shopModes.catalogModeEnabled || shopModes.openOrderMode);
       const productIds = Array.from(
@@ -2483,7 +2532,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getOrder(id: number): Promise<Order | undefined> {
-    const result = await db.select().from(orders).where(eq(orders.id, id));
+    const result = await db.primary.select().from(orders).where(eq(orders.id, id));
     return result[0];
   }
 
@@ -2499,7 +2548,7 @@ export class PostgresStorage implements IStorage {
     const whereClause =
       conditions.length > 1 ? and(...conditions) : conditions[0];
 
-    return await db
+    return await db.primary
       .select()
       .from(orders)
       .where(whereClause)
@@ -2517,7 +2566,7 @@ export class PostgresStorage implements IStorage {
       }
     }
 
-    return await db
+    return await db.primary
       .select()
       .from(orders)
       .where(and(...conditions))
@@ -2525,7 +2574,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getRecentOrdersByShop(shopId: number): Promise<Order[]> {
-    const result = await db
+    const result = await db.primary
       .select()
       .from(orders)
       .where(eq(orders.shopId, shopId))
@@ -2536,6 +2585,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getShopDashboardStats(shopId: number) {
+    const readDb = db.replica;
     const now = getCurrentISTDate();
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
@@ -2565,36 +2615,36 @@ export class PostgresStorage implements IStorage {
       customerSpendRows,
       itemSalesRows,
     ] = await Promise.all([
-      db
+      readDb
         .select({ value: count() })
         .from(orders)
         .where(and(eq(orders.shopId, shopId), eq(orders.status, "pending"))),
-      db
+      readDb
         .select({ value: count() })
         .from(orders)
         .where(and(eq(orders.shopId, shopId), eq(orders.status, "packed"))),
-      db
+      readDb
         .select({ value: count() })
         .from(orders)
         .where(and(eq(orders.shopId, shopId), eq(orders.status, "delivered"))),
-      db
+      readDb
         .select({ value: count() })
         .from(products)
         .where(eq(products.shopId, shopId)),
-      db
+      readDb
         .select({ value: count() })
         .from(products)
         .where(and(eq(products.shopId, shopId), lt(products.stock, 10))),
-      db
+      readDb
         .select({ value: totalRevenueSql })
         .from(orders)
         .where(and(paidOrderFilters, gte(orders.orderDate, startOfDay))),
-      db
+      readDb
         .select({ value: totalRevenueSql })
         .from(orders)
         .where(and(paidOrderFilters, gte(orders.orderDate, startOfMonth))),
-      db.select({ value: totalRevenueSql }).from(orders).where(paidOrderFilters),
-      db
+      readDb.select({ value: totalRevenueSql }).from(orders).where(paidOrderFilters),
+      readDb
         .select({
           customerId: orders.customerId,
           name: users.name,
@@ -2607,7 +2657,7 @@ export class PostgresStorage implements IStorage {
         .where(and(paidOrderFilters, isNotNull(orders.customerId)))
         .groupBy(orders.customerId, users.name, users.phone)
         .orderBy(desc(customerSpendSql)),
-      db
+      readDb
         .select({
           productId: orderItems.productId,
           name: products.name,
@@ -2667,7 +2717,7 @@ export class PostgresStorage implements IStorage {
     if (!customerIds.length) return outstanding;
 
     const amountDueSql = sql<number>`coalesce(sum(${orders.total}::double precision), 0)`;
-    const rows = await db
+    const rows = await db.primary
       .select({
         customerId: orders.customerId,
         amountDue: amountDueSql,
@@ -2694,7 +2744,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async updateOrder(id: number, order: Partial<Order>): Promise<Order> {
-    const result = await db
+    const result = await db.primary
       .update(orders)
       .set(order)
       .where(eq(orders.id, id))
@@ -2710,7 +2760,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
-    const result = await db
+    const result = await db.primary
       .insert(orderItems)
       .values({
         ...orderItem,
@@ -2726,7 +2776,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async updateProductStock(productId: number, quantity: number): Promise<void> {
-    const productResult = await db
+    const productResult = await db.primary
       .select()
       .from(products)
       .where(eq(products.id, productId));
@@ -2736,14 +2786,14 @@ export class PostgresStorage implements IStorage {
     const newStock = (product.stock ?? 0) - quantity;
     if (newStock < 0)
       throw new Error(`Insufficient stock for product ID ${productId}`);
-    await db
+    await db.primary
       .update(products)
       .set({ stock: newStock })
       .where(eq(products.id, productId));
   }
 
   async getOrderItemsByOrder(orderId: number): Promise<OrderItem[]> {
-    return await db
+    return await db.primary
       .select()
       .from(orderItems)
       .where(eq(orderItems.orderId, orderId));
@@ -2754,7 +2804,7 @@ export class PostgresStorage implements IStorage {
       return [];
     }
     const unique = Array.from(new Set(orderIds));
-    return await db
+    return await db.primary
       .select()
       .from(orderItems)
       .where(inArray(orderItems.orderId, unique));
@@ -2764,7 +2814,7 @@ export class PostgresStorage implements IStorage {
   async createNotification(
     notification: InsertNotification,
   ): Promise<Notification> {
-    const result = await db
+    const result = await db.primary
       .insert(notifications)
       .values({
         ...notification,
@@ -2789,7 +2839,7 @@ export class PostgresStorage implements IStorage {
     const offset = (page - 1) * limit;
 
     // Count total
-    const [countResult] = await db
+    const [countResult] = await db.primary
       .select({ count: count() })
       .from(notifications)
       .where(eq(notifications.userId, userId));
@@ -2797,7 +2847,7 @@ export class PostgresStorage implements IStorage {
     const totalPages = Math.ceil(total / limit);
 
     // Get data
-    const data = await db
+    const data = await db.primary
       .select({
         id: notifications.id,
         userId: notifications.userId,
@@ -2823,7 +2873,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async markNotificationAsRead(id: number): Promise<void> {
-    const updated = await db
+    const updated = await db.primary
       .update(notifications)
       .set({ isRead: true })
       .where(eq(notifications.id, id))
@@ -2836,7 +2886,7 @@ export class PostgresStorage implements IStorage {
 
   async markAllNotificationsAsRead(userId: number): Promise<void> {
     // Mark ALL notifications for this user as read (no role filtering)
-    await db
+    await db.primary
       .update(notifications)
       .set({ isRead: true })
       .where(eq(notifications.userId, userId));
@@ -2845,7 +2895,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async deleteNotification(id: number): Promise<void> {
-    const deleted = await db
+    const deleted = await db.primary
       .delete(notifications)
       .where(eq(notifications.id, id))
       .returning({ userId: notifications.userId });
@@ -2874,28 +2924,24 @@ export class PostgresStorage implements IStorage {
       }
     }
 
-    const istDate = toISTForStorage(date) ?? date;
-    const startOfDay = new Date(istDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const nextDay = new Date(startOfDay);
-    nextDay.setDate(nextDay.getDate() + 1);
-    const dateStr = startOfDay.toISOString().split("T")[0];
+    const { start: startOfDay, end: nextDay } = getISTDayBoundsUtc(date);
     const activeStatusCondition = sql`${bookings.status} NOT IN ('cancelled','rejected','expired')`;
 
     // Check if the slot is blocked by the provider
-    const [blocked] = await db
+    const [blocked] = await db.primary
       .select({ id: blockedTimeSlots.id })
       .from(blockedTimeSlots)
       .where(
         and(
           eq(blockedTimeSlots.serviceId, serviceId),
-          sql`DATE(${blockedTimeSlots.date}) = ${dateStr}`,
+          gte(blockedTimeSlots.date, startOfDay),
+          lt(blockedTimeSlots.date, nextDay),
         ),
       );
     if (blocked) return false;
 
     // Enforce max daily + per-slot capacity
-    const [{ value: countForDay }] = await db
+    const [{ value: countForDay }] = await db.primary
       .select({ value: count() })
       .from(bookings)
       .where(
@@ -2926,7 +2972,7 @@ export class PostgresStorage implements IStorage {
     );
 
     const slotCondition = sql`(${bookings.timeSlotLabel} IS NULL OR ${bookings.timeSlotLabel} = ${timeSlotLabel})`;
-    const [{ value: countForSlot }] = await db
+    const [{ value: countForSlot }] = await db.primary
       .select({ value: count() })
       .from(bookings)
       .where(
@@ -2952,14 +2998,14 @@ export class PostgresStorage implements IStorage {
 
   // For booking history sorting, we compute the last update timestamp asynchronously.
   async getBookingHistory(bookingId: number): Promise<any[]> {
-    return await db
+    return await db.primary
       .select()
       .from(bookingHistory)
       .where(eq(bookingHistory.bookingId, bookingId));
   }
 
   async getExpiredBookings(): Promise<Booking[]> {
-    return await db
+    return await db.primary
       .select()
       .from(bookings)
       .where(
@@ -3023,13 +3069,9 @@ export class PostgresStorage implements IStorage {
     serviceId: number,
     date: Date,
   ): Promise<Booking[]> {
-    const istDate = toISTForStorage(date) ?? date;
-    const startDate = new Date(istDate);
-    startDate.setHours(0, 0, 0, 0);
-    const nextDate = new Date(startDate);
-    nextDate.setDate(nextDate.getDate() + 1);
+    const { start: startDate, end: nextDate } = getISTDayBoundsUtc(date);
 
-    return await db
+    return await db.primary
       .select()
       .from(bookings)
       .where(
@@ -3047,12 +3089,10 @@ export class PostgresStorage implements IStorage {
     _providerId: number,
     date: Date,
   ): Promise<Booking[]> {
-    // Convert date to start and end of day in IST
-    const istDate = toISTForStorage(date);
-    const startDate = new Date(istDate ?? new Date());
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(istDate ?? new Date());
-    endDate.setHours(23, 59, 59, 999);
+    // Convert date to start and end of day in IST (returned as UTC instants)
+    const { start: startDate, end: endDate } = getISTDayBoundsUtc(date);
+    void startDate;
+    void endDate;
     // Implementation joining services and bookings tables
     return [];
   }
@@ -3074,7 +3114,7 @@ export class PostgresStorage implements IStorage {
     const offset = (page - 1) * limit;
 
     // Get services for this provider
-    const providerServices = await db
+    const providerServices = await db.primary
       .select({ id: services.id })
       .from(services)
       .where(eq(services.providerId, providerId));
@@ -3086,7 +3126,7 @@ export class PostgresStorage implements IStorage {
     }
 
     // Count total
-    const [countResult] = await db
+    const [countResult] = await db.primary
       .select({ count: count() })
       .from(bookings)
       .where(
@@ -3099,7 +3139,7 @@ export class PostgresStorage implements IStorage {
     const totalPages = Math.ceil(total / limit);
 
     // Get data
-    const data = await db
+    const data = await db.primary
       .select()
       .from(bookings)
       .where(
@@ -3129,7 +3169,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async respondToReview(reviewId: number, response: string): Promise<Review> {
-    const result = await db
+    const result = await db.primary
       .update(reviews)
       .set({ providerReply: response })
       .where(eq(reviews.id, reviewId))
@@ -3142,7 +3182,7 @@ export class PostgresStorage implements IStorage {
     review: InsertProductReview,
   ): Promise<ProductReview> {
     if (review.orderId && review.customerId && review.productId) {
-      const existing = await db
+      const existing = await db.primary
         .select()
         .from(productReviews)
         .where(
@@ -3155,14 +3195,14 @@ export class PostgresStorage implements IStorage {
         .limit(1);
       if (existing[0]) throw new Error("Duplicate review");
     }
-    const result = await db.insert(productReviews).values(review).returning();
+    const result = await db.primary.insert(productReviews).values(review).returning();
     return result[0];
   }
 
   async getProductReviewsByProduct(
     productId: number,
   ): Promise<ProductReview[]> {
-    const result = await db
+    const result = await db.primary
       .select()
       .from(productReviews)
       .where(eq(productReviews.productId, productId));
@@ -3170,13 +3210,13 @@ export class PostgresStorage implements IStorage {
   }
 
   async getProductReviewsByShop(shopId: number): Promise<ProductReview[]> {
-    const productIds = await db
+    const productIds = await db.primary
       .select({ id: products.id })
       .from(products)
       .where(eq(products.shopId, shopId));
     const ids = productIds.map((p) => p.id);
     if (ids.length === 0) return [];
-    return await db
+    return await db.primary
       .select()
       .from(productReviews)
       .where(sql`${productReviews.productId} in ${ids}`);
@@ -3185,7 +3225,7 @@ export class PostgresStorage implements IStorage {
   async getProductReviewsByCustomer(
     customerId: number,
   ): Promise<(ProductReview & { productName: string | null })[]> {
-    const results = await db
+    const results = await db.primary
       .select({
         id: productReviews.id,
         productId: productReviews.productId,
@@ -3211,7 +3251,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getProductReviewById(id: number): Promise<ProductReview | undefined> {
-    const result = await db
+    const result = await db.primary
       .select()
       .from(productReviews)
       .where(eq(productReviews.id, id));
@@ -3229,7 +3269,7 @@ export class PostgresStorage implements IStorage {
       updateData.shopReply = data.shopReply;
       updateData.repliedAt = new Date();
     }
-    const result = await db
+    const result = await db.primary
       .update(productReviews)
       .set(updateData)
       .where(eq(productReviews.id, id))
@@ -3247,16 +3287,17 @@ export class PostgresStorage implements IStorage {
     data: InsertBlockedTimeSlot,
   ): Promise<BlockedTimeSlot> {
     // Implementation would depend on your database structure
-    // Convert date to IST
+    // Normalize date for UTC storage
+    const normalizedDate = toUTCForStorage(data.date);
+    if (!normalizedDate) {
+      throw new Error("Invalid date for blocked time slot");
+    }
     const blockedSlot = {
       id: Math.floor(Math.random() * 10000), // In a real DB this would be auto-generated
       ...data,
-      date: toISTForStorage(data.date),
+      date: normalizedDate,
     };
     // Insert blocked time slot into the table (implementation required)
-    if (!blockedSlot.date) {
-      throw new Error("Invalid date for blocked time slot");
-    }
     // Type assertion is safe here because we check for null above
     return blockedSlot as BlockedTimeSlot;
   }
@@ -3288,7 +3329,7 @@ export class PostgresStorage implements IStorage {
     const order = await this.getOrder(orderId);
     if (!order) throw new Error("Order not found");
 
-    // Update the order status with IST timestamp
+    // Update the order status with UTC timestamp
     // Only include updatedAt if it exists in the Order type
     const updateData: any = {
       status,
@@ -3298,7 +3339,7 @@ export class PostgresStorage implements IStorage {
       updateData.updatedAt = new Date();
     }
     const updated = await this.updateOrder(orderId, updateData);
-    await db.insert(orderStatusUpdates).values({
+    await db.primary.insert(orderStatusUpdates).values({
       orderId,
       status,
       trackingInfo: trackingInfo || order.trackingInfo,
@@ -3308,7 +3349,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getOrderTimeline(orderId: number): Promise<OrderStatusUpdate[]> {
-    const updates = await db
+    const updates = await db.primary
       .select()
       .from(orderStatusUpdates)
       .where(eq(orderStatusUpdates.orderId, orderId))
@@ -3376,7 +3417,7 @@ export class PostgresStorage implements IStorage {
     customerId: number,
     serviceId: number,
   ): Promise<number> {
-    const entries = await db
+    const entries = await db.primary
       .select()
       .from(waitlist)
       .where(eq(waitlist.serviceId, serviceId))
@@ -3388,7 +3429,7 @@ export class PostgresStorage implements IStorage {
   async createReturnRequest(
     returnRequest: InsertReturnRequest,
   ): Promise<ReturnRequest> {
-    const result = await db
+    const result = await db.primary
       .insert(returns)
       .values({
         ...returnRequest,
@@ -3422,16 +3463,16 @@ export class PostgresStorage implements IStorage {
   }
 
   async getReturnRequest(id: number): Promise<ReturnRequest | undefined> {
-    const res = await db.select().from(returns).where(eq(returns.id, id));
+    const res = await db.primary.select().from(returns).where(eq(returns.id, id));
     return res[0];
   }
 
   async getReturnRequestsByOrder(orderId: number): Promise<ReturnRequest[]> {
-    return await db.select().from(returns).where(eq(returns.orderId, orderId));
+    return await db.primary.select().from(returns).where(eq(returns.orderId, orderId));
   }
 
   async getReturnRequestsForShop(shopId: number): Promise<ReturnRequest[]> {
-    const rows = await db
+    const rows = await db.primary
       .select()
       .from(returns)
       .innerJoin(orders, eq(returns.orderId, orders.id))
@@ -3443,7 +3484,7 @@ export class PostgresStorage implements IStorage {
     id: number,
     update: Partial<ReturnRequest>,
   ): Promise<ReturnRequest> {
-    const result = await db
+    const result = await db.primary
       .update(returns)
       .set(update)
       .where(eq(returns.id, id))
@@ -3465,7 +3506,7 @@ export class PostgresStorage implements IStorage {
 
   async deleteReturnRequest(id: number): Promise<void> {
     const existing = await this.getReturnRequest(id);
-    await db.delete(returns).where(eq(returns.id, id));
+    await db.primary.delete(returns).where(eq(returns.id, id));
     if (existing?.orderId != null) {
       const order = await this.getOrder(existing.orderId);
       if (order) {
@@ -3512,7 +3553,7 @@ export class PostgresStorage implements IStorage {
       ? sql`ST_Distance(users.location::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) / 1000`
       : sql`NULL::float8`;
 
-    const servicesQuery = db
+    const servicesQuery = db.primary
       .select({
         id: services.id,
         name: services.name,
@@ -3541,7 +3582,7 @@ export class PostgresStorage implements IStorage {
     // 2. Products Query
     const productsDistExpr = servicesDistExpr; // Same user table join logic
 
-    const productsQuery = db
+    const productsQuery = db.primary
       .select({
         id: products.id,
         shopId: products.shopId,
@@ -3574,7 +3615,7 @@ export class PostgresStorage implements IStorage {
       : sql`NULL::float8`;
 
     // Use the shop filter 
-    const shopsQuery = db
+    const shopsQuery = db.primary
       .select({
         id: shops.id,
         ownerId: shops.ownerId,

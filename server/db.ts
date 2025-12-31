@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../shared/schema";
@@ -15,7 +14,6 @@ if (!process.env.DATABASE_URL) {
 type PoolRole = "primary" | "replica";
 
 const slowThreshold = Number(process.env.DB_SLOW_THRESHOLD_MS || 200);
-const readPreference = new AsyncLocalStorage<boolean>();
 
 function createDebugLogger(role: PoolRole) {
   const label = role === "replica" ? "DB:READ" : "DB";
@@ -61,42 +59,14 @@ const replicaClient =
 const primaryDb = drizzle(primaryClient, { schema });
 const replicaDb = replicaClient === primaryClient ? primaryDb : drizzle(replicaClient, { schema });
 if (replicaClient === primaryClient) {
-  logger.info("No DATABASE_REPLICA_URL configured; SELECT statements use the primary database.");
+  logger.info("No DATABASE_REPLICA_URL configured; db.replica uses the primary database.");
 } else {
-  logger.info("DATABASE_REPLICA_URL detected; routing SELECT statements to the read replica.");
+  logger.info("DATABASE_REPLICA_URL detected; use db.replica for non-critical reads.");
 }
-
-const READ_METHODS = new Set<string>(["select"]);
-
-function shouldUsePrimaryReads() {
-  return readPreference.getStore() === true || replicaDb === primaryDb;
-}
-
-const dbProxy = new Proxy(primaryDb, {
-  get(target, prop, receiver) {
-    if (typeof prop === "string" && READ_METHODS.has(prop)) {
-      const source = shouldUsePrimaryReads() ? target : replicaDb;
-      const value = Reflect.get(source as object, prop, receiver);
-      if (typeof value === "function") {
-        return value.bind(source);
-      }
-      return value;
-    }
-    return Reflect.get(target as object, prop, receiver);
-  },
-  set(target, prop, value, receiver) {
-    if (typeof prop === "string" && READ_METHODS.has(prop) && replicaDb !== target) {
-      Reflect.set(replicaDb as object, prop, value);
-    }
-    return Reflect.set(target as object, prop, value, receiver);
-  },
-});
-
-export const db = dbProxy as typeof primaryDb;
-
-export function runWithPrimaryReads<T>(callback: () => T): T {
-  return readPreference.run(true, callback);
-}
+export const db = {
+  primary: primaryDb,
+  replica: replicaDb,
+};
 
 export async function testConnection() {
   if (process.env.NODE_ENV === "test" || process.env.USE_IN_MEMORY_DB === "true") {

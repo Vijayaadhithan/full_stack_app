@@ -61,7 +61,7 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { db } from "./db";
 import crypto from "crypto";
 import { performance } from "node:perf_hooks";
-import { formatIndianDisplay, toIndianTime, fromIndianTime, newIndianDate } from "@shared/date-utils"; // Import IST utility
+import { formatIndianDisplay, toIndianTime, fromIndianTime } from "@shared/date-utils"; // Import IST utility
 import {
   DEFAULT_NEARBY_RADIUS_KM,
   MIN_NEARBY_RADIUS_KM,
@@ -279,7 +279,7 @@ async function fetchShopOwnerWithProfile(
   }
 
   try {
-    const records = await db
+    const records = await db.primary
       .select()
       .from(shops)
       .where(eq(shops.ownerId, ownerId))
@@ -463,7 +463,7 @@ async function evaluatePayLaterEligibility(
     };
   }
 
-  const priorOrders = await db
+  const priorOrders = await db.primary
     .select({ value: sql<number>`count(*)` })
     .from(orders)
     .where(
@@ -1470,7 +1470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { username } = parsedBody.data;
       const normalized = username.toLowerCase();
       try {
-        const match = await db
+        const match = await db.primary
           .select({ id: users.id })
           .from(users)
           .where(eq(users.username, normalized))
@@ -1949,7 +1949,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let finalUpdatedBooking: Booking | undefined;
 
-      await db.transaction(async (tx) => {
+      await db.primary.transaction(async (tx) => {
         const [updated] = await tx
           .update(bookings)
           .set(updatedBookingData)
@@ -1967,7 +1967,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ...n,
               type: n.type as any,
               relatedBookingId: n.relatedBookingId ?? null,
-              createdAt: newIndianDate(),
+              createdAt: new Date(),
             })),
           );
         }
@@ -2266,7 +2266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (context === "shop" && (req.user?.role === "shop" || req.user?.hasShopProfile)) {
         // Update Shop Location
-        await db
+        await db.primary
           .update(shops)
           .set({
             shopLocationLat: String(lat),
@@ -2337,7 +2337,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     `;
 
     // Query shops table joined with users
-    const shopRecords = await db
+    const shopRecords = await db.primary
       .select()
       .from(shops)
       .leftJoin(users, eq(shops.ownerId, users.id))
@@ -2516,7 +2516,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         if (Object.keys(shopUpdate).length > 0) {
-          await db
+          await db.primary
             .update(shops)
             .set({ ...shopUpdate, updatedAt: new Date() })
             .where(eq(shops.ownerId, userId));
@@ -2550,7 +2550,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get current shop for the logged-in user
   app.get("/api/shops/current", requireAuth, async (req, res) => {
     try {
-      const shop = await db.query.shops.findFirst({
+      const shop = await db.primary.query.shops.findFirst({
         where: eq(shops.ownerId, req.user!.id),
       });
 
@@ -2639,7 +2639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const shopId = getValidatedParam(req, "id");
 
       // Prefer owner ID lookup, fall back to shop table ID
-      const byOwnerId = await db
+      const byOwnerId = await db.primary
         .select()
         .from(shops)
         .leftJoin(users, eq(shops.ownerId, users.id))
@@ -2647,7 +2647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
       const byShopId =
         byOwnerId[0] ??
-        (await db
+        (await db.primary
           .select()
           .from(shops)
           .leftJoin(users, eq(shops.ownerId, users.id))
@@ -3810,22 +3810,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Selected time slot is not available" });
         }
 
-        const booking = await storage.createBooking({
-          customerId: req.user!.id,
-          serviceId,
-          bookingDate: bookingDateTime,
-          timeSlotLabel: normalizedSlotLabel,
-          status: "pending",
-          paymentStatus: "pending",
-          serviceLocation,
-        });
-
-        await storage.createNotification({
-          userId: service.providerId,
-          type: "booking_request",
-          title: "New Booking Request",
-          message: `You have a new booking request for ${service.name}`,
-        });
+        const booking = await storage.createBooking(
+          {
+            customerId: req.user!.id,
+            serviceId,
+            bookingDate: bookingDateTime,
+            timeSlotLabel: normalizedSlotLabel,
+            status: "pending",
+            paymentStatus: "pending",
+            serviceLocation,
+          },
+          {
+            notification: {
+              userId: service.providerId,
+              type: "booking_request",
+              title: "New Booking Request",
+              message: `You have a new booking request for ${service.name}`,
+            },
+          },
+        );
 
         // --- Payment provider integration hook (if configured) ---
         res.status(201).json({ booking, paymentRequired: false });
@@ -3960,19 +3963,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updatedBooking = await storage.updateBooking(
           bookingId,
           updateData,
+          {
+            notification: {
+              userId: booking.customerId,
+              type: "booking_update",
+              title: notificationTitle,
+              message: notificationMessage,
+            },
+          },
         );
 
         logger.info(
           `[API PATCH /api/bookings/:id/status] Booking ID: ${bookingId}. Status updated to ${updatedBooking.status}. Email notifications are disabled for booking updates.`,
         );
-
-        // Create notification for customer
-        await storage.createNotification({
-          userId: booking.customerId,
-          type: "booking_update",
-          title: notificationTitle,
-          message: notificationMessage,
-        });
 
         logger.info(
           `[API] Booking status updated successfully: ID=${bookingId}, Status=${status}`,
@@ -4039,18 +4042,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        const updatedBooking = await storage.updateBooking(bookingId, {
-          status: "en_route",
-        });
+        const notification = booking.customerId
+          ? {
+              userId: booking.customerId,
+              type: "booking_update",
+              title: "Provider En Route",
+              message: "Your provider has started the trip and is on the way.",
+            }
+          : null;
 
-        if (booking.customerId) {
-          await storage.createNotification({
-            userId: booking.customerId,
-            type: "booking_update",
-            title: "Provider En Route",
-            message: "Your provider has started the trip and is on the way.",
-          });
-        }
+        const updatedBooking = await storage.updateBooking(
+          bookingId,
+          { status: "en_route" },
+          notification ? { notification } : undefined,
+        );
 
         res.json({
           booking: updatedBooking,
@@ -4111,16 +4116,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Booking not awaiting payment" });
         }
 
-        const updatedBooking = await storage.updateBooking(bookingId, {
-          status: "completed",
-        });
-
-        await storage.createNotification({
-          userId: booking.customerId,
-          type: "booking_update",
-          title: "Payment Confirmed",
-          message: `Provider confirmed payment for booking #${bookingId}.`,
-        });
+        const updatedBooking = await storage.updateBooking(
+          bookingId,
+          { status: "completed" },
+          {
+            notification: {
+              userId: booking.customerId,
+              type: "booking_update",
+              title: "Payment Confirmed",
+              message: `Provider confirmed payment for booking #${bookingId}.`,
+            },
+          },
+        );
         res.json({ booking: updatedBooking });
       } catch (error) {
         logger.error("Error completing service by provider:", error);
@@ -4197,19 +4204,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Booking not ready for payment" });
         }
 
+        const providerId =
+          (await storage.getService(booking.serviceId!))?.providerId ?? null;
+
         // Update booking status to completed
-        const updatedBooking = await storage.updateBooking(bookingId, {
-          status: "awaiting_payment",
-          paymentReference,
-        });
-
-        await storage.createNotification({
-          userId: (await storage.getService(booking.serviceId!))!.providerId,
-          type: "booking_update",
-          title: "Payment Submitted",
-          message: `Customer submitted payment reference for booking #${bookingId}.`,
-        });
-
+        const updatedBooking = await storage.updateBooking(
+          bookingId,
+          {
+            status: "awaiting_payment",
+            paymentReference,
+          },
+          {
+            notification: {
+              userId: providerId,
+              type: "booking_update",
+              title: "Payment Submitted",
+              message: `Customer submitted payment reference for booking #${bookingId}.`,
+            },
+          },
+        );
 
         res.json({ booking: updatedBooking });
       } catch (error) {
@@ -4956,7 +4969,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "You can only review your own bookings." });
         }
 
-        const existingReview = await db
+        const existingReview = await db.primary
           .select()
           .from(reviews)
           .where(
@@ -5429,7 +5442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // If a promotion is applied, verify it's valid
         if (promotionId) {
-          const promotionResult = await db
+          const promotionResult = await db.primary
             .select()
             .from(promotions)
             .where(eq(promotions.id, promotionId));
@@ -6836,9 +6849,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["provider"]),
     async (req, res) => {
       try {
-        const booking = await storage.updateBooking(getValidatedParam(req, "id"), {
-          status: "accepted",
-        });
+        const bookingId = getValidatedParam(req, "id");
+        const existingBooking = await storage.getBooking(bookingId);
+        if (!existingBooking) {
+          return res.status(404).json({ message: "Booking not found" });
+        }
+
+        const confirmationMessage = `Your booking for ${formatIndianDisplay(existingBooking.bookingDate, "date")} has been confirmed.`;
+        const notification = existingBooking.customerId
+          ? {
+              userId: existingBooking.customerId,
+              type: "booking",
+              title: "Booking Confirmed",
+              message: confirmationMessage,
+            }
+          : null;
+
+        const booking = await storage.updateBooking(
+          bookingId,
+          {
+            status: "accepted",
+          },
+          notification ? { notification } : undefined,
+        );
 
         // Send confirmation notifications
         const customer =
@@ -6846,18 +6879,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? await storage.getUser(booking.customerId)
             : null;
         if (customer) {
-          // Create in-app notification
-          await storage.createNotification({
-            userId: customer.id,
-            type: "booking",
-            title: "Booking Confirmed",
-            message: `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
-          });
-
           // Send SMS notification
           await storage.sendSMSNotification(
             customer.phone,
-            `Your booking for ${formatIndianDisplay(booking.bookingDate, "date")} has been confirmed.`, // Use formatIndianDisplay
+            confirmationMessage, // Use formatIndianDisplay
           );
 
           // Email notifications removed

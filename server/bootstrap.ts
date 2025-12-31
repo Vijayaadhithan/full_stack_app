@@ -1,4 +1,4 @@
-import { db, runWithPrimaryReads } from "./db";
+import { db } from "./db";
 import {
   adminUsers,
   adminRoles,
@@ -12,7 +12,6 @@ import { sanitizeAndValidateSecret } from "./security/secretValidators";
 
 const bootstrapDeps = {
   db,
-  runWithPrimaryReads,
 };
 
 export function __setBootstrapDepsForTesting(
@@ -62,7 +61,8 @@ export async function ensureDefaultAdmin() {
     throw new Error(message);
   }
 
-  await bootstrapDeps.runWithPrimaryReads(async () => {
+  const primaryDb = bootstrapDeps.db.primary;
+  {
     // 1) Seed permissions (idempotent)
     const requiredPermissions = [
       { action: "view_health", description: "View platform health" },
@@ -74,43 +74,43 @@ export async function ensureDefaultAdmin() {
       { action: "manage_settings", description: "Manage platform settings" },
     ];
     for (const perm of requiredPermissions) {
-      const exists = await bootstrapDeps.db
+      const exists = await primaryDb
         .select()
         .from(adminPermissions)
         .where(eq(adminPermissions.action, perm.action))
         .limit(1);
       if (exists.length === 0) {
-        await bootstrapDeps.db.insert(adminPermissions).values(perm);
+        await primaryDb.insert(adminPermissions).values(perm);
       }
     }
 
     // 2) Ensure Super Admin role exists
     const roleName = "Super Admin";
     let role = (
-      await bootstrapDeps.db.select().from(adminRoles).where(eq(adminRoles.name, roleName)).limit(1)
+      await primaryDb.select().from(adminRoles).where(eq(adminRoles.name, roleName)).limit(1)
     )[0];
     if (!role) {
-      [role] = await bootstrapDeps.db
+      [role] = await primaryDb
         .insert(adminRoles)
         .values({ name: roleName, description: "Full access to all actions" })
         .returning();
     }
 
     // 3) Link Super Admin to all permissions (idempotent)
-    const perms = await bootstrapDeps.db.select().from(adminPermissions);
+    const perms = await primaryDb.select().from(adminPermissions);
     for (const p of perms) {
-      const link = await bootstrapDeps.db
+      const link = await primaryDb
         .select()
         .from(adminRolePermissions)
         .where(and(eq(adminRolePermissions.roleId, role.id), eq(adminRolePermissions.permissionId, p.id)))
         .limit(1);
       if (link.length === 0) {
-        await bootstrapDeps.db.insert(adminRolePermissions).values({ roleId: role.id, permissionId: p.id });
+        await primaryDb.insert(adminRolePermissions).values({ roleId: role.id, permissionId: p.id });
       }
     }
 
     // 4) Ensure env admin exists and is assigned Super Admin + has password set
-    const byEmail = await bootstrapDeps.db
+    const byEmail = await primaryDb
       .select()
       .from(adminUsers)
       .where(eq(adminUsers.email, envEmail))
@@ -119,7 +119,7 @@ export async function ensureDefaultAdmin() {
     const hashedPassword = await hashPasswordInternal(envPassword);
     if (byEmail.length > 0) {
       const existing = byEmail[0];
-      await bootstrapDeps.db
+      await primaryDb
         .update(adminUsers)
         .set({ hashedPassword, roleId: existing.roleId ?? role.id })
         .where(eq(adminUsers.id, existing.id));
@@ -127,12 +127,12 @@ export async function ensureDefaultAdmin() {
         `Admin bootstrap: ensured ${envEmail} exists and has Super Admin role.`,
       );
     } else {
-      await bootstrapDeps.db
+      await primaryDb
         .insert(adminUsers)
         .values({ email: envEmail, hashedPassword, roleId: role.id });
       logger.info(
         `Admin bootstrap: created admin ${envEmail}. Rotate credentials if this was an initial setup secret.`,
       );
     }
-  });
+  }
 }

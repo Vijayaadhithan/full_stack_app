@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import themePlugin from "@replit/vite-plugin-shadcn-theme-json";
 import path, { dirname } from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+// Removed @replit/vite-plugin-runtime-error-modal - causes spurious "unknown runtime error" overlays
 import { fileURLToPath } from "url";
 import { getNetworkConfig } from "./config/network";
 
@@ -38,7 +38,10 @@ const hmrConfig: {
   host?: string;
   port?: number;
   protocol?: string;
-} = {};
+  overlay?: boolean;
+} = {
+  overlay: false, // Disable error overlay
+};
 
 if (hmrHost) {
   hmrConfig.host = hmrHost;
@@ -56,7 +59,6 @@ const __dirname = dirname(__filename);
 export default defineConfig({
   plugins: [
     react(),
-    runtimeErrorOverlay(),
     themePlugin(),
     ...(process.env.NODE_ENV !== "production" &&
       process.env.REPL_ID !== undefined
