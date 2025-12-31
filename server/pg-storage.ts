@@ -657,7 +657,8 @@ export class PostgresStorage implements IStorage {
 
     const conditions: SQL[] = [eq(products.isDeleted, false)];
     const orderByClauses: SQL[] = [];
-    let query: any = db.primary.select().from(products);
+    // PERFORMANCE FIX: Use replica for read-heavy product queries
+    let query: any = db.replica.select().from(products);
     let joinedUsers = false;
 
     if (criteria && Object.keys(criteria).length > 0) {
@@ -807,7 +808,8 @@ export class PostgresStorage implements IStorage {
 
   // ─── USER OPERATIONS ─────────────────────────────────────────────
   async getUser(id: number): Promise<User | undefined> {
-    const result = await db.primary.select().from(users).where(eq(users.id, id));
+    // PERFORMANCE FIX: Use replica for read operations
+    const result = await db.replica.select().from(users).where(eq(users.id, id));
     return result[0];
   }
 
@@ -831,8 +833,15 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getAllUsers(): Promise<User[]> {
-    return await db.primary.select().from(users);
+  async getAllUsers(options?: { limit?: number; offset?: number }): Promise<User[]> {
+    // PERFORMANCE FIX: Add pagination to prevent memory issues with large user counts
+    const limit = options?.limit ?? 1000;
+    const offset = options?.offset ?? 0;
+    return await db.primary
+      .select()
+      .from(users)
+      .limit(limit)
+      .offset(offset);
   }
 
   async getShops(filters?: {
@@ -1948,28 +1957,43 @@ export class PostgresStorage implements IStorage {
       lowStockThreshold?: number | null;
     }[],
   ): Promise<Product[]> {
+    if (updates.length === 0) return [];
+
+    // PERFORMANCE FIX: Process updates in parallel batches instead of sequential N+1 queries
+    const BATCH_SIZE = 50;
     const updated: Product[] = [];
 
-    for (const update of updates) {
-      const result = await db.primary
-        .update(products)
-        .set({
-          stock: update.stock,
-          lowStockThreshold:
-            update.lowStockThreshold !== undefined
-              ? update.lowStockThreshold
-              : undefined,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(products.id, update.productId), eq(products.isDeleted, false)))
-        .returning();
+    await db.primary.transaction(async (tx) => {
+      for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+        const batch = updates.slice(i, i + BATCH_SIZE);
 
-      if (!result[0]) {
-        throw new Error(`Product not found: ${update.productId}`);
+        // Execute batch updates in parallel
+        const batchResults = await Promise.all(
+          batch.map(update =>
+            tx
+              .update(products)
+              .set({
+                stock: update.stock,
+                lowStockThreshold:
+                  update.lowStockThreshold !== undefined
+                    ? update.lowStockThreshold
+                    : undefined,
+                updatedAt: new Date(),
+              })
+              .where(and(eq(products.id, update.productId), eq(products.isDeleted, false)))
+              .returning()
+          )
+        );
+
+        for (let j = 0; j < batchResults.length; j++) {
+          const result = batchResults[j];
+          if (!result || !result[0]) {
+            throw new Error(`Product not found: ${batch[j].productId}`);
+          }
+          updated.push(result[0]);
+        }
       }
-
-      updated.push(result[0]);
-    }
+    });
 
     return updated;
   }
@@ -2528,6 +2552,11 @@ export class PostgresStorage implements IStorage {
       orderId: createdOrder.id,
     });
 
+    // Invalidate dashboard stats cache when new order is created
+    if (createdOrder.shopId != null) {
+      await invalidateCache(`dashboard_stats:${createdOrder.shopId}`);
+    }
+
     return createdOrder;
   }
 
@@ -2585,6 +2614,24 @@ export class PostgresStorage implements IStorage {
   }
 
   async getShopDashboardStats(shopId: number) {
+    // Check cache first to reduce database load
+    const cacheKey = `dashboard_stats:${shopId}`;
+    const cached = await getCache<{
+      pendingOrders: number;
+      ordersInProgress: number;
+      completedOrders: number;
+      totalProducts: number;
+      lowStockItems: number;
+      earningsToday: number;
+      earningsMonth: number;
+      earningsTotal: number;
+      customerSpendTotals: { customerId: number; name: string | null; phone: string | null; totalSpent: number; orderCount: number }[];
+      itemSalesTotals: { productId: number; name: string | null; quantity: number; totalAmount: number }[];
+    }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const readDb = db.replica;
     const now = getCurrentISTDate();
     const startOfDay = new Date(now);
@@ -2680,7 +2727,7 @@ export class PostgresStorage implements IStorage {
         .orderBy(desc(itemRevenueSql)),
     ]);
 
-    return {
+    const stats = {
       pendingOrders: pendingResult[0]?.value ?? 0,
       ordersInProgress: inProgressResult[0]?.value ?? 0,
       completedOrders: completedResult[0]?.value ?? 0,
@@ -2707,6 +2754,10 @@ export class PostgresStorage implements IStorage {
           totalAmount: Number(row.totalAmount ?? 0),
         })),
     };
+
+    // Cache for 5 minutes (300 seconds = 300000ms)
+    await setCache(cacheKey, stats, 300);
+    return stats;
   }
 
   async getPayLaterOutstandingAmounts(
@@ -2756,6 +2807,10 @@ export class PostgresStorage implements IStorage {
       shopId: updated.shopId ?? null,
       orderId: updated.id,
     });
+    // Invalidate dashboard stats cache when order changes
+    if (updated.shopId != null) {
+      await invalidateCache(`dashboard_stats:${updated.shopId}`);
+    }
     return updated;
   }
 
@@ -3015,32 +3070,52 @@ export class PostgresStorage implements IStorage {
 
   async processExpiredBookings(): Promise<void> {
     const expiredBookings = await this.getExpiredBookings();
-    for (const booking of expiredBookings) {
-      await this.updateBooking(booking.id, {
-        status: "expired",
-        comments: "Automatically expired after 7 days",
-      });
-      await this.createNotification({
-        userId: booking.customerId,
-        type: "booking_expired",
-        title: "Booking Request Expired",
-        message:
-          "Your booking request has expired as the service provider did not respond within 7 days.",
-        isRead: false,
-      });
-      const service =
-        typeof booking.serviceId === "number"
-          ? await this.getService(booking.serviceId)
-          : undefined;
-      if (service) {
+    if (expiredBookings.length === 0) return;
+
+    // PERFORMANCE FIX: Pre-fetch all services in one query instead of N queries
+    const serviceIds = Array.from(new Set(
+      expiredBookings
+        .map(b => b.serviceId)
+        .filter((id): id is number => typeof id === "number")
+    ));
+    const servicesList = serviceIds.length > 0
+      ? await this.getServicesByIds(serviceIds)
+      : [];
+    const serviceMap = new Map(servicesList.map(s => [s.id, s]));
+
+    // PERFORMANCE FIX: Process bookings in parallel batches
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < expiredBookings.length; i += BATCH_SIZE) {
+      const batch = expiredBookings.slice(i, i + BATCH_SIZE);
+
+      await Promise.all(batch.map(async (booking) => {
+        await this.updateBooking(booking.id, {
+          status: "expired",
+          comments: "Automatically expired after 7 days",
+        });
+
         await this.createNotification({
-          userId: service.providerId,
+          userId: booking.customerId,
           type: "booking_expired",
           title: "Booking Request Expired",
-          message: `A booking request for ${service.name} has expired as you did not respond within 7 days.`,
+          message:
+            "Your booking request has expired as the service provider did not respond within 7 days.",
           isRead: false,
         });
-      }
+
+        const service = typeof booking.serviceId === "number"
+          ? serviceMap.get(booking.serviceId)
+          : undefined;
+        if (service) {
+          await this.createNotification({
+            userId: service.providerId,
+            type: "booking_expired",
+            title: "Booking Request Expired",
+            message: `A booking request for ${service.name} has expired as you did not respond within 7 days.`,
+            isRead: false,
+          });
+        }
+      }));
     }
   }
 

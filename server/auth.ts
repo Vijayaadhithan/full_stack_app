@@ -279,8 +279,8 @@ export function initializeAuth(app: Express) {
 
       // Check for shop and provider profiles
       if (safeUser) {
-        const skipDbProfiles =
-          process.env.NODE_ENV === "test" || process.env.USE_IN_MEMORY_DB === "true";
+        // Skip DB profile lookup in test environment
+        const skipDbProfiles = process.env.NODE_ENV === "test";
 
         if (skipDbProfiles) {
           (safeUser as any).hasShopProfile =
@@ -288,17 +288,19 @@ export function initializeAuth(app: Express) {
           (safeUser as any).hasProviderProfile = user.role === "provider";
         } else {
           try {
-            const shopExists = await db.primary
-              .select({ id: shops.id })
-              .from(shops)
-              .where(eq(shops.ownerId, user.id))
-              .limit(1);
-
-            const providerExists = await db.primary
-              .select({ id: providers.id })
-              .from(providers)
-              .where(eq(providers.userId, user.id))
-              .limit(1);
+            // PERFORMANCE FIX: Execute both queries in parallel instead of sequentially
+            const [shopExists, providerExists] = await Promise.all([
+              db.primary
+                .select({ id: shops.id })
+                .from(shops)
+                .where(eq(shops.ownerId, user.id))
+                .limit(1),
+              db.primary
+                .select({ id: providers.id })
+                .from(providers)
+                .where(eq(providers.userId, user.id))
+                .limit(1),
+            ]);
 
             (safeUser as any).hasShopProfile = shopExists.length > 0;
             (safeUser as any).hasProviderProfile = providerExists.length > 0;
@@ -308,8 +310,8 @@ export function initializeAuth(app: Express) {
           }
         }
 
-        // Cache the result for 60 seconds
-        await setCache(cacheKey, safeUser, 60);
+        // PERFORMANCE FIX: Increased cache TTL from 60s to 300s (5 minutes)
+        await setCache(cacheKey, safeUser, 300);
       }
 
       return done(null, safeUser ?? false);

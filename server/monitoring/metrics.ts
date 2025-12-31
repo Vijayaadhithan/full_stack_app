@@ -45,9 +45,63 @@ type StatusBuckets = {
   serverError: number;
 };
 
-const requestRecords: RequestSample[] = [];
-const recentErrors: RequestRecord[] = [];
-const frontendRecords: FrontendRecord[] = [];
+// PERFORMANCE FIX: Circular buffer class for O(1) insert/eviction instead of O(n) shift()
+class CircularBuffer<T> {
+  private buffer: (T | undefined)[];
+  private head = 0;
+  private tail = 0;
+  private count = 0;
+  private readonly capacity: number;
+
+  constructor(capacity: number) {
+    this.capacity = capacity;
+    this.buffer = new Array(capacity);
+  }
+
+  push(item: T): void {
+    this.buffer[this.tail] = item;
+    this.tail = (this.tail + 1) % this.capacity;
+    if (this.count < this.capacity) {
+      this.count++;
+    } else {
+      // Buffer is full, move head forward (overwrite oldest)
+      this.head = (this.head + 1) % this.capacity;
+    }
+  }
+
+  // Get all items in order (oldest first)
+  toArray(): T[] {
+    const result: T[] = [];
+    for (let i = 0; i < this.count; i++) {
+      const idx = (this.head + i) % this.capacity;
+      const item = this.buffer[idx];
+      if (item !== undefined) {
+        result.push(item);
+      }
+    }
+    return result;
+  }
+
+  // Filter items by predicate (for time-based pruning)
+  filter(predicate: (item: T) => boolean): T[] {
+    return this.toArray().filter(predicate);
+  }
+
+  get size(): number {
+    return this.count;
+  }
+
+  clear(): void {
+    this.buffer = new Array(this.capacity);
+    this.head = 0;
+    this.tail = 0;
+    this.count = 0;
+  }
+}
+
+const requestRecords = new CircularBuffer<RequestSample>(MAX_REQUEST_SAMPLES);
+const recentErrors = new CircularBuffer<RequestRecord>(MAX_RECENT_ERRORS);
+const frontendRecords = new CircularBuffer<FrontendRecord>(MAX_FRONTEND_SAMPLES);
 
 let inFlightRequests = 0;
 
@@ -57,23 +111,20 @@ loopDelayHistogram.enable();
 let lastCpuUsage = process.cpuUsage();
 let lastCpuTimestamp = performance.now();
 
-function pruneRequests(now: number) {
-  const requestCutoff = now - REQUEST_WINDOW_MS;
-  while (requestRecords.length && requestRecords[0]!.timestamp < requestCutoff) {
-    requestRecords.shift();
-  }
-
-  const errorCutoff = now - ERROR_WINDOW_MS;
-  while (recentErrors.length && recentErrors[0]!.timestamp < errorCutoff) {
-    recentErrors.shift();
-  }
+// Simplified prune - circular buffer handles size limits, just filter by time when reading
+function getFilteredRequests(now: number): RequestSample[] {
+  const cutoff = now - REQUEST_WINDOW_MS;
+  return requestRecords.filter(r => r.timestamp >= cutoff);
 }
 
-function pruneFrontend(now: number) {
+function getFilteredErrors(now: number): RequestRecord[] {
+  const cutoff = now - ERROR_WINDOW_MS;
+  return recentErrors.filter(r => r.timestamp >= cutoff);
+}
+
+function getFilteredFrontend(now: number): FrontendRecord[] {
   const cutoff = now - FRONTEND_WINDOW_MS;
-  while (frontendRecords.length && frontendRecords[0]!.timestamp < cutoff) {
-    frontendRecords.shift();
-  }
+  return frontendRecords.filter(r => r.timestamp >= cutoff);
 }
 
 function calculateAverage(values: number[]): number | null {
@@ -189,16 +240,11 @@ export function trackRequestStart(): (details: {
     };
 
     requestRecords.push(record);
-    if (requestRecords.length > MAX_REQUEST_SAMPLES) {
-      requestRecords.shift();
-    }
-    pruneRequests(timestamp);
+    // Circular buffer handles size limit automatically - no need to shift or prune
 
     if (status >= 400) {
       recentErrors.push(record);
-      if (recentErrors.length > MAX_RECENT_ERRORS) {
-        recentErrors.shift();
-      }
+      // Circular buffer handles size limit automatically
     }
 
     inFlightRequests = Math.max(0, inFlightRequests - 1);
@@ -223,17 +269,15 @@ export function recordFrontendMetric(
   };
 
   frontendRecords.push(record);
-  if (frontendRecords.length > MAX_FRONTEND_SAMPLES) {
-    frontendRecords.shift();
-  }
-  pruneFrontend(Date.now());
+  // Circular buffer handles size limit automatically
 }
 
 function buildRequestSummary(now: number): RequestSummary {
-  pruneRequests(now);
-  const records = requestRecords
-    .slice()
-    .filter((record) => !record.path.startsWith("/api/admin"));
+  const records = getFilteredRequests(now)
+    .filter((record: RequestSample) =>
+      !record.path.startsWith("/api/admin") &&
+      !record.path.startsWith("/api/events")
+    );
   const durations = records.map((record) => record.durationMs);
   const windowStart = records[0]?.timestamp ?? now;
   const effectiveWindow = Math.max(1000, Math.min(REQUEST_WINDOW_MS, now - windowStart));
@@ -288,12 +332,11 @@ function buildRequestSummary(now: number): RequestSummary {
 }
 
 function buildErrorSummary(now: number): ErrorSummary {
-  pruneRequests(now);
   const fiveMinuteCutoff = now - 5 * 60 * 1000;
   const oneHourCutoff = now - 60 * 60 * 1000;
 
-  const relevantErrors = recentErrors.filter(
-    (record) => record.status !== 499 && !record.path.startsWith("/api/admin"),
+  const relevantErrors = getFilteredErrors(now).filter(
+    (record: RequestRecord) => record.status !== 499 && !record.path.startsWith("/api/admin"),
   );
 
   let lastFiveMinutes = 0;
@@ -345,11 +388,9 @@ function buildResourceSnapshot(now: number): ResourceSnapshot {
 }
 
 function buildFrontendSummary(now: number): FrontendSummary {
-  pruneFrontend(now);
-  const records = frontendRecords
-    .slice()
+  const records = getFilteredFrontend(now)
     .filter(
-      (record) => !isAdminTelemetry(record.page, record.segment, record.details),
+      (record: FrontendRecord) => !isAdminTelemetry(record.page, record.segment, record.details),
     );
   const grouped = new Map<
     PerformanceMetric["name"],
@@ -393,7 +434,7 @@ function buildFrontendSummary(now: number): FrontendSummary {
 
   metrics.sort((a, b) => a.name.localeCompare(b.name));
 
-  const recentSamples = records.slice(-20).map(({ segment: _segment, ...rest }) => rest);
+  const recentSamples = records.slice(-20).map(({ segment: _segment, ...rest }: FrontendRecord) => rest);
 
   return {
     metrics,

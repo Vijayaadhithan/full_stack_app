@@ -2536,9 +2536,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (req.user) Object.assign(req.user, safeUser);
-      if (req.user?.role === "shop" || req.user?.hasShopProfile) {
-        await invalidateCache(`shop_detail_${userId}`);
-      }
+      // Invalidate both shop details and user session to ensure fresh data on next request
+      await invalidateCache(`shop_detail_${userId}`);
+      await invalidateCache(`user_session:${userId}`);
       res.json(safeUser);
     } catch (error) {
       logger.error("Error updating user:", error);
@@ -3380,7 +3380,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/search/global", async (req, res) => {
+
+  const handleGlobalSearch: RequestHandler = async (req, res) => {
     try {
       const parsedQuery = globalSearchQuerySchema.safeParse(req.query);
       if (!parsedQuery.success) {
@@ -3417,7 +3418,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           error instanceof Error ? error.message : "Failed to perform search",
       });
     }
-  });
+  };
+
+  app.get("/api/search/global", handleGlobalSearch);
+  app.get("/api/search", handleGlobalSearch);
 
   app.get(
     "/api/services/:id",

@@ -28,7 +28,7 @@ let loggedMissingModule = false;
 // Simple in-memory cache with TTL for when Redis is unavailable
 type LocalCacheEntry = { data: unknown; expiresAt: number };
 const localCache = new Map<string, LocalCacheEntry>();
-const MAX_LOCAL_CACHE_SIZE = 100;
+const MAX_LOCAL_CACHE_SIZE = 500;
 let loggedLocalCacheFallback = false;
 
 function getLocalCache<T>(key: string): T | null {

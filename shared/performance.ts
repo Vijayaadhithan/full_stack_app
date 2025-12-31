@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const performanceMetricSchema = z.object({
-  name: z.enum(["FCP", "LCP", "CLS", "FID", "TTFB"]),
+  name: z.enum(["FCP", "LCP", "CLS", "FID", "TTFB", "INP"]),
   value: z.number(),
   rating: z.enum(["good", "needs-improvement", "poor"]),
   page: z.string(),
