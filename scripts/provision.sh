@@ -3,7 +3,7 @@ set -e
 
 REPO_URL=${REPO_URL:-"https://example.com/full_stack_app.git"}
 APP_DIR=${APP_DIR:-"/opt/full_stack_app"}
-NODE_VERSION=${NODE_VERSION:-"18.x"}
+NODE_VERSION=${NODE_VERSION:-"20.x"}
 DATABASE_URL=${DATABASE_URL:-"postgres://user:pass@localhost:5432/app"}
 BACKUP_BUCKET=${BACKUP_BUCKET:-"s3://my-bucket/backups"}
 
@@ -24,7 +24,7 @@ fi
 cat <<ENV > "$APP_DIR/.env"
 DATABASE_URL=$DATABASE_URL
 NODE_ENV=production
-PORT=3000
+PORT=5000
 ENV
 
 # Build and start with PM2

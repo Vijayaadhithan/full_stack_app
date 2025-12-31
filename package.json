@@ -75,6 +75,7 @@
     "express-rate-limit": "^7.5.1",
     "express-session": "^1.18.1",
     "firebase": "^12.7.0",
+    "firebase-admin": "^13.6.0",
     "framer-motion": "^11.13.1",
     "google-auth-library": "^9.15.1",
     "googleapis": "^149.0.0",

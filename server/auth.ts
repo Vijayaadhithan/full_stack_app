@@ -8,6 +8,11 @@ import logger from "./logger";
 import { scrypt, randomBytes, timingSafeEqual, createHash } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
+import {
+  initializeFirebaseAdmin,
+  verifyAndExtractPhone,
+  isFirebaseAdminAvailable,
+} from "./services/firebase-admin";
 
 import {
   User as SelectUser,
@@ -154,6 +159,17 @@ async function comparePasswords(
 }
 
 export function initializeAuth(app: Express) {
+  // Initialize Firebase Admin SDK for server-side token verification
+  const firebaseInitialized = initializeFirebaseAdmin();
+  if (firebaseInitialized) {
+    logger.info("Firebase Admin SDK initialized for OTP verification");
+  } else {
+    logger.warn(
+      "Firebase Admin SDK not initialized. Registration and PIN reset will require " +
+      "FIREBASE_SERVICE_ACCOUNT_PATH environment variable to be set."
+    );
+  }
+
   const sessionSecret = sanitizeAndValidateSecret(
     "SESSION_SECRET",
     process.env.SESSION_SECRET,
@@ -493,7 +509,8 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Rural Registration: Phone + Name + PIN (after OTP verification on client)
+  // Rural Registration: Phone + Name + PIN (after OTP verification via Firebase)
+  // SECURITY: Phone number is now extracted from verified Firebase ID token, not from request body
   app.post("/api/auth/rural-register", registerLimiter, async (req, res, next) => {
     const parsed = ruralRegisterSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -503,12 +520,30 @@ export function registerAuthRoutes(app: Express) {
       });
     }
 
-    const { phone, name, pin, initialRole, language } = parsed.data;
-    const normalizedPhone = normalizePhone(phone);
+    const { firebaseIdToken, name, pin, initialRole, language } = parsed.data;
 
-    if (!normalizedPhone) {
-      return res.status(400).json({ message: "Invalid phone format" });
+    // SECURITY FIX: Verify Firebase ID token and extract phone number server-side
+    if (!isFirebaseAdminAvailable()) {
+      logger.error("Firebase Admin not available - cannot verify OTP");
+      return res.status(503).json({
+        message: "Phone verification service unavailable. Please try again later.",
+      });
     }
+
+    const verificationResult = await verifyAndExtractPhone(firebaseIdToken);
+    if (!verificationResult.success || !verificationResult.phone) {
+      logger.warn({ error: verificationResult.error }, "Firebase token verification failed");
+      return res.status(401).json({
+        message: verificationResult.error || "Phone verification failed. Please try again.",
+      });
+    }
+
+    const normalizedPhone = normalizePhone(verificationResult.phone);
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone format from verification" });
+    }
+
+    logger.info({ phone: normalizedPhone }, "Firebase token verified, proceeding with registration");
 
     try {
       // Check if phone already exists
@@ -530,7 +565,7 @@ export function registerAuthRoutes(app: Express) {
         pin: hashedPin,
         role: initialRole ?? "customer",
         language: language ?? "ta",
-        isPhoneVerified: true, // Verified via OTP on client
+        isPhoneVerified: true, // Now actually verified via Firebase
         emailVerified: false,
         averageRating: "0",
         totalReviews: 0,
@@ -620,7 +655,8 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Reset PIN (after OTP verification on client)
+  // Reset PIN (after OTP verification via Firebase)
+  // SECURITY: Phone number is now extracted from verified Firebase ID token
   app.post("/api/auth/reset-pin", loginLimiter, async (req, res) => {
     const parsed = resetPinSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -630,12 +666,30 @@ export function registerAuthRoutes(app: Express) {
       });
     }
 
-    const { phone, newPin } = parsed.data;
-    const normalizedPhone = normalizePhone(phone);
+    const { firebaseIdToken, newPin } = parsed.data;
 
-    if (!normalizedPhone) {
-      return res.status(400).json({ message: "Invalid phone format" });
+    // SECURITY FIX: Verify Firebase ID token and extract phone number server-side
+    if (!isFirebaseAdminAvailable()) {
+      logger.error("Firebase Admin not available - cannot verify OTP for PIN reset");
+      return res.status(503).json({
+        message: "Phone verification service unavailable. Please try again later.",
+      });
     }
+
+    const verificationResult = await verifyAndExtractPhone(firebaseIdToken);
+    if (!verificationResult.success || !verificationResult.phone) {
+      logger.warn({ error: verificationResult.error }, "Firebase token verification failed for PIN reset");
+      return res.status(401).json({
+        message: verificationResult.error || "Phone verification failed. Please try again.",
+      });
+    }
+
+    const normalizedPhone = normalizePhone(verificationResult.phone);
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: "Invalid phone format from verification" });
+    }
+
+    logger.info({ phone: normalizedPhone }, "Firebase token verified, proceeding with PIN reset");
 
     try {
       const user = await storage.getUserByPhone(normalizedPhone);

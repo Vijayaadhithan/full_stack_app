@@ -1,46 +1,36 @@
 # Indian E-commerce and Service Booking Platform
 
-All-in-one marketplace where customers can shop for products, book service providers, manage orders, and interact with shops or workers in real time. The repository bundles:
+All-in-one marketplace where customers can shop for products, book services, manage orders, and interact with shops or workers in real time. The repository bundles:
 
-- **Customer web app** (React + TanStack Query + Vite)
-- **Shop / Provider dashboards** with role-based access control
-- **Express/Node API** backed by PostgreSQL & Drizzle ORM
-- **Real-time notifications + background jobs** (bookings, orders, returns)
+- Customer web app (React + TanStack Query + Vite)
+- Shop / provider dashboards plus worker sub-accounts
+- Admin console with monitoring, audits, and platform controls
+- Express/Node API backed by PostgreSQL + Drizzle ORM
+- Real-time updates (SSE + Redis) and background jobs (BullMQ)
+- Rural-first auth (phone + PIN) with optional Firebase OTP
 
-Use this README to get up and running quickly, understand the environment variables, and learn where to find production health information. For mobile and Firebase/Android specifics, see the companion guide: [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md).
+Use this README to get up and running quickly. For mobile and Firebase/Android specifics, see [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md).
 
 ## Table of contents
 
 1. [Local development setup](#local-development-setup)
-2. [Running & testing](#running-the-application)
-3. [Observability & troubleshooting](#observability--troubleshooting)
-4. [Environment variables](#environment-variables)
-5. [Production deployment](#production-deployment)
-6. [Role overview](#role-overview)
-7. [Useful scripts](#available-scripts)
+2. [Running the application](#running-the-application)
+3. [Authentication flows](#authentication-flows)
+4. [Realtime & observability](#realtime--observability)
+5. [Environment variables](#environment-variables)
+6. [Additional docs](#additional-docs)
+7. [Background jobs](#background-jobs)
+8. [Production deployment](#production-deployment)
+9. [Role overview](#role-overview)
+10. [Useful scripts](#useful-scripts)
 
 ## Local Development Setup
 
 ### Prerequisites
 
 1. Node.js (v20.x or later)
-
-```bash
-# On Windows/Mac, download from https://nodejs.org
-# On Ubuntu/Debian
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-```
-
-2. PostgreSQL database
-
-```bash
-# On Windows, download from https://www.postgresql.org/download/windows/
-# On Mac
-brew install postgresql
-# On Ubuntu/Debian
-sudo apt-get install postgresql postgresql-contrib
-```
+2. PostgreSQL (v14+ recommended)
+3. Redis (optional for local dev; required in production for caching, rate limiting, jobs, and realtime)
 
 ### Environment Setup
 
@@ -54,26 +44,20 @@ cd <project-directory>
 2. Create and configure your `.env` file:
 
 ```bash
-cp .env.example .env
+cp .env_example .env
 ```
 
-3. Update the `.env` file with your configuration (see [Environment variables](#environment-variables) for full list):
+3. Minimum configuration:
 
 ```env
-# Database Configuration
 DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-PGDATABASE=dbname
-PGHOST=localhost
-PGPORT=5432
-PGUSER=user
-PGPASSWORD=password
-
-# Server Configuration
-PORT=5000
-NODE_ENV=development
-SESSION_SECRET=your-session-secret
-
+SESSION_SECRET=ChangeMeToAStrongSecret
+ADMIN_EMAIL=admin@yourdomain.com
+ADMIN_PASSWORD=ChangeMeToAStrongPassword
+VITE_API_URL=http://localhost:5000
 ```
+
+`SESSION_SECRET` and `ADMIN_PASSWORD` are validated for strength in production; use long, random values.
 
 ### Installation
 
@@ -104,7 +88,7 @@ npm run db:migrate
 
 The baseline script validates that every table in the latest snapshot already exists; it aborts early (without writing anything) if something is missing so you never mark partial schemas as applied by accident.
 
-### Running the Application
+## Running the Application
 
 1. Start the development server:
 
@@ -122,10 +106,15 @@ The application will be available at:
 
 - Frontend: http://localhost:5173
 - API: http://localhost:5000/api
+- Swagger UI: http://localhost:5000/api/docs
+- Admin UI: http://localhost:5173/admin/login
+- Worker login: http://localhost:5173/worker-login
+
+Optional: set `USE_IN_MEMORY_DB=true` to run the API with in-memory storage (useful for quick demos/tests; not for production).
 
 ### Checking public catalog endpoints
 
-The core catalog routes (services, products, and shops) are now public, so you can test them without logging in. With the API running on `http://localhost:5000`, run the following from any terminal:
+The core catalog routes (services, products, and shops) are public, so you can test them without logging in. With the API running on `http://localhost:5000`, run the following from any terminal:
 
 ```bash
 # List all shops (public)
@@ -154,16 +143,17 @@ You can omit the `jq` pipes if it is not installed; they are only there to prett
 
 ### Browsing via the frontend
 
-The Vite client now lets anonymous visitors open the catalog screens directly. Once both dev servers are running (`npm run dev:server` and `npm run dev:client`), open these URLs in your browser:
+The Vite client lets anonymous visitors open the catalog screens directly. Once both dev servers are running (`npm run dev:server` and `npm run dev:client`), open these URLs in your browser:
 
 - `http://localhost:5173/customer/browse-services`
 - `http://localhost:5173/customer/browse-products`
 - `http://localhost:5173/customer/browse-shops`
-- `http://localhost:5173/customer/shops/<id>` – replace `<id>` with a shop id from `/api/shops`
-- `http://localhost:5173/customer/shops/<shopId>/products/<productId>` – ids from the products API
-- `http://localhost:5173/customer/service-details/<serviceId>` and `/customer/service-provider/<serviceId>` – ids from `/api/services`
+- `http://localhost:5173/customer/shops/<id>` - replace `<id>` with a shop id from `/api/shops`
+- `http://localhost:5173/customer/shops/<shopId>/products/<productId>` - ids from the products API
+- `http://localhost:5173/customer/shops/<id>/quick-order` - quick text order flow
+- `http://localhost:5173/customer/service-details/<serviceId>` and `/customer/service-provider/<serviceId>` - ids from `/api/services`
 
-If you browse anonymously, cart/wishlist buttons will still redirect you to sign in because those actions call protected routes, but the read-only data now renders without authentication.
+If you browse anonymously, cart/wishlist buttons will still redirect you to sign in because those actions call protected routes, but the read-only data renders without authentication.
 
 ### LAN / Device Testing
 
@@ -175,18 +165,150 @@ If you browse anonymously, cart/wishlist buttons will still redirect you to sign
    - `ALLOWED_ORIGINS=http://<your-LAN-ip>:5173,http://<your-LAN-ip>:5000` so CORS accepts cross-origin requests.
 3. (Optional) Set `CAPACITOR_SERVER_URL=http://<your-LAN-ip>:5173` when running `npx cap run android` for on-device hot reload.
 4. Restart `npm run dev:server` and `npm run dev:client`. Other devices on the same network can now open `http://<your-LAN-ip>:5173`.
-5. When you need to share the app outside your LAN, expose ports 5000 and 5173 via your router (port forwarding) or deploy the stack to a VPS. In that scenario, point `FRONTEND_URL`, `APP_BASE_URL`, and `VITE_API_URL` at the publicly reachable hostname and list it in `ALLOWED_ORIGINS`. The development server now relaxes CORS by default; set `STRICT_CORS=true` in `.env` if you want to re-enable the allowlist even during local development.
+5. When you need to share the app outside your LAN, expose ports 5000 and 5173 via your router (port forwarding) or deploy the stack to a VPS. In that scenario, point `FRONTEND_URL`, `APP_BASE_URL`, and `VITE_API_URL` at the publicly reachable hostname and list it in `ALLOWED_ORIGINS`. The development server relaxes CORS by default; set `STRICT_CORS=true` in `.env` if you want to enforce the allowlist even during local development.
 
 ### Network configuration file (optional)
 
 If you prefer not to touch `.env` for every network change, copy
 `config/network-config.example.json` to `config/network-config.json` and edit
-the hosts/ports. The backend and Vite dev server will read that file on boot
+the hosts/ports. The backend and Vite dev server read that file on boot
 and merge the values with the environment variables. You can also set
 `NETWORK_CONFIG_PATH` to point to a different JSON file per environment.
 
 > Need to reach the app from outside your LAN? See `docs/remote-access.md`
 > for port-forwarding vs Cloudflare Tunnel steps.
+
+## Authentication flows
+
+- **Standard registration/login**: `POST /api/register`, `POST /api/login`, `GET /api/user`, `POST /api/logout` (username/email/phone + password).
+- **Rural phone + PIN**: `POST /api/auth/check-user`, `POST /api/auth/rural-register`, `POST /api/auth/login-pin`, `POST /api/auth/reset-pin`.
+- **Worker login**: `POST /api/auth/worker-login` (10-digit worker number + 4-digit PIN).
+- **Server-managed OTP reset (optional)**: `POST /api/auth/forgot-password-otp`, `POST /api/auth/verify-reset-otp`, `POST /api/auth/reset-password`.
+- **CSRF protection**: `GET /api/csrf-token` returns a token; the client auto-sends `x-csrf-token` for non-GET requests.
+
+The frontend Forgot PIN flow uses Firebase Phone Auth via `client/src/lib/firebase.ts`. Rural OTP in `RuralAuthFlow` is currently a UI step; wire in Firebase if you want server-verifiable OTP.
+
+Google OAuth is not currently wired in the backend. The UI button points at `/auth/google`, which you must implement if you want Google sign-in.
+
+## Realtime & Observability
+
+- **Realtime invalidation**: `GET /api/events` opens an EventSource stream and broadcasts cache invalidations (notifications, orders, cart, etc). Redis Pub/Sub fan-out is used when `REDIS_URL` is set.
+- **Logs**: structured logs are written to `logs/app.log` by Pino. Configure `LOG_LEVEL`, `LOG_FILE_PATH`, `LOG_TO_STDOUT`.
+- **Health**: `GET /api/health` for basic liveness; admin-only health + logs under `/api/admin/health-status` and `/api/admin/logs`.
+- **Monitoring**: `GET /api/admin/monitoring/summary` for request/error/resource telemetry; frontend metrics are posted to `/api/performance-metrics`.
+- **Request IDs**: every response includes `x-request-id` so you can correlate client errors with log entries.
+- **Live monitor script**: `npm run monitor` polls `/api/health` or `LIVE_MONITOR_URL`.
+
+## Environment variables
+
+Start with `.env_example` for the full list. Commonly tuned variables:
+
+**Core**
+- `DATABASE_URL`, `DATABASE_REPLICA_URL`
+- `DB_POOL_SIZE`, `DB_READ_POOL_SIZE`, `DB_SLOW_THRESHOLD_MS`
+- `NODE_ENV`, `PORT`, `HOST`, `USE_IN_MEMORY_DB`
+
+**Security & sessions**
+- `SESSION_SECRET`
+- `SESSION_STORE` (`redis` or `postgres`)
+- `SESSION_TTL_SECONDS`, `SESSION_REDIS_PREFIX`
+- `SESSION_COOKIE_SAMESITE`, `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_DOMAIN`
+
+**URLs & CORS**
+- `FRONTEND_URL`, `APP_BASE_URL`
+- `ALLOWED_ORIGINS`, `STRICT_CORS`
+- `DEV_SERVER_HOST`, `DEV_SERVER_PORT`, `DEV_SERVER_HMR_HOST`, `DEV_SERVER_HMR_PORT`, `DEV_SERVER_HMR_PROTOCOL`
+- `NETWORK_CONFIG_PATH`, `API_PROXY_TARGET`
+
+**Redis & realtime**
+- `REDIS_URL`, `DISABLE_REDIS`
+
+**Admin**
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+
+**Jobs**
+- `BOOKING_EXPIRATION_CRON`, `PAYMENT_REMINDER_CRON`, `LOW_STOCK_DIGEST_CRON`, `CRON_TZ`
+- `PAYMENT_REMINDER_DAYS`, `PAYMENT_DISPUTE_DAYS`
+- `JOB_LOCK_TTL_MS`, `BOOKING_EXPIRATION_LOCK_TTL_MS`, `PAYMENT_REMINDER_LOCK_TTL_MS`, `LOW_STOCK_DIGEST_LOCK_TTL_MS`
+- `DISABLE_JOB_LOCK`
+
+**Client**
+- `VITE_API_URL`, `VITE_APP_BASE_URL`, `VITE_FALLBACK_API_URL`
+- `VITE_FIREBASE_*` (Firebase Phone Auth / OTP)
+- `CAPACITOR_SERVER_URL` (Capacitor live reload)
+
+**HTTPS (optional)**
+- `HTTPS_ENABLED`, `HTTPS_KEY_PATH`, `HTTPS_CERT_PATH`, `HTTPS_PASSPHRASE`, `HTTPS_CA_PATH`
+
+For a full list with descriptions, see `docs/environment-reference.md`.
+
+## Additional docs
+
+- `docs/environment-reference.md` - detailed environment variable descriptions
+- `docs/api-quickstart.md` - curl examples for auth, CSRF, and core flows
+- `docs/role-endpoint-matrix.md` - role-based endpoint overview
+- `docs/deployment-runbook.md` - production deployment checklist
+- `docs/mobile-and-cloud-setup.md` - Android/Capacitor and Firebase setup
+- `docs/remote-access.md` - LAN and public access options
+
+## Background jobs
+
+The API schedules repeatable BullMQ jobs (Redis-backed):
+
+- **Booking expiration**: marks stale pending bookings as expired (`BOOKING_EXPIRATION_CRON`).
+- **Payment reminders**: nudges unpaid bookings and escalates disputes (`PAYMENT_REMINDER_DAYS`, `PAYMENT_DISPUTE_DAYS`).
+- **Low stock digest**: notifies shops about low inventory (`LOW_STOCK_DIGEST_CRON`).
+
+Distributed job locks use Redis (`JOB_LOCK_*`) to avoid duplicates across instances. Set `DISABLE_JOB_LOCK=true` only when you intentionally want every instance to run jobs.
+
+## Production Deployment
+
+1. Build both the client and API bundles:
+
+```bash
+npm run build
+```
+
+2. Start the compiled server with the provided `ecosystem.config.js` definition:
+
+```bash
+npm install --global pm2
+pm2 start ecosystem.config.js
+pm2 startup
+pm2 save
+```
+
+Production notes:
+- Redis is required for caching, rate limiting, job queues, and realtime fan-out.
+- Set `NODE_ENV=production`, `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `FRONTEND_URL`, `APP_BASE_URL`, `ALLOWED_ORIGINS`, `REDIS_URL`.
+- Optional HTTPS termination: set `HTTPS_ENABLED=true` and provide certificate paths.
+
+## Role overview
+
+| Role | Capabilities |
+| --- | --- |
+| **Customer** | Browse/order products, book services, manage cart & wishlist, track bookings/orders |
+| **Shop owner** | Manage inventory, workers, orders, returns, promotions |
+| **Worker** | Scoped to assigned shop with permission-based access (orders, inventory, analytics) |
+| **Service provider** | Manage services/bookings, respond to customer requests |
+| **Admin** | Platform-wide controls; role/permission-driven access; audit logs |
+
+## Useful scripts
+
+- `npm run dev:server` - start the backend API
+- `npm run dev:client` - start the frontend development server
+- `npm run build` - build for production
+- `npm run start` - run the compiled server
+- `npm run db:generate` - generate Drizzle migrations
+- `npm run db:migrate` - apply migrations
+- `npm run db:migrate:baseline` - baseline existing schema
+- `npm run check` - type check
+- `npm run lint` - run ESLint
+- `npm run format` - format files using Prettier
+- `npm run test` - run tests
+- `npm run test:coverage` - test coverage (c8)
+- `npm run test:report` - write test logs & coverage report
+- `npm run monitor` - poll `/api/health` on an interval
 
 ## Running tests
 
@@ -195,7 +317,7 @@ npm run check   # type check / lint
 npm run test    # run the Node test suite (uses in-memory storage by default)
 ```
 
-`npm run test` now logs per-route timings (see below) which helps correlate failing tests or slow suites with specific API calls.
+`npm run test` logs per-route timings which helps correlate failing tests or slow suites with specific API calls.
 
 ### Load testing with k6
 
@@ -227,284 +349,4 @@ We keep a scripted load test (`load-test.js`) that spins up a verified shop, pro
    - `TEST_CATEGORY` or `PLATFORM_FEE` to align with your seed data
    - `ENABLE_REG_SPIKE=true` to include the optional anonymous registration burst (keep the rate limiters disabled when doing so).
 
-The script enforces the success criteria documented in the prompt (`http_req_failed < 1%`, GET p95 < 500 ms). Review the console report or the `logs/app.log` entries for any failures, then re-enable rate limiting once the test is complete.
-
-## Observability & Troubleshooting
-
-- **Structured logs** go to `logs/app.log` (via Pino). Look for entries such as `Fetched customer orders` or `Fetched shop orders` to inspect query vs hydration time.
-- **Slow requests**: debug entries include `prepMs`, `hydrateMs`, and `totalMs`. If `prepMs` spikes, investigate DB/index usage; if `hydrateMs` spikes, optimize batching in `hydrateOrders` / `hydrateCustomerBookings`.
-- **Performance metrics**: `/api/performance-metrics` accepts browser-reported timings; review logs for outliers.
-- **Live metrics**: when deployed with PM2, use `pm2 status`, `pm2 logs server`, or the built-in monitoring dashboard to watch request/minute, latency, and error rate. A persistent 5%+ error rate usually signals misconfigured OAuth or SMTP credentials.
-- **Traceability**: every response now carries an `x-request-id` header and logs include the same identifier so you can correlate client failures with backend traces.
-- **Common symptoms**
-  - Long tail latencies (> 5 s) with low CPU → likely waiting on the database or external email/OAuth providers (enable `DEBUG_TIMING=true` if you add custom timers).
-  - 400 errors on `/api/upload` → ensure the request uses `multipart/form-data` and is under the 5 MB image limit.
-  - OAuth failures → confirm Google Cloud credentials match the origins listed in `.env`.
-
-## Environment variables
-
-Add these to `.env` (prefix with `VITE_` for client-side usage when noted):
-
-| Variable | Description |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `DATABASE_REPLICA_URL` | Optional PostgreSQL read replica used for `SELECT` queries |
-| `DB_POOL_SIZE` / `DB_READ_POOL_SIZE` | Connection pool sizes for primary/read pools |
-| `DB_SLOW_THRESHOLD_MS` | Millisecond threshold before a query is logged as slow |
-| `SESSION_SECRET` | Session encryption secret for Express |
-| `PORT`, `HOST` | API bind port/host |
-| `FRONTEND_URL`, `APP_BASE_URL` | URLs used for redirects/session cookies |
-| `ALLOWED_ORIGINS` | Comma-separated list for CORS (set `STRICT_CORS=true` to enforce even in dev) |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth credentials |
-| `FRONTEND_URL` / `APP_BASE_URL` | Must be HTTPS in production for secure cookies |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` | Nodemailer SMTP configuration for transactional email |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Bootstrap admin account (required in production) |
-| `REDIS_URL`, `DISABLE_REDIS` | Enable Redis-backed caching and session storage (recommended for production) |
-| `SESSION_STORE` | Force `redis` or `postgres` for express-session storage |
-| `DISABLE_RATE_LIMITERS` | Set to `true` only during load tests to bypass login/signup rate limits |
-| `CAPACITOR_*` | Mobile bridge options; see [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md) |
-
-Refer to `config/network-config.json` if you prefer JSON-based overrides for local/LAN testing.
-
-## Production Deployment
-1. Build both the client and API bundles:
-
-   ```bash
-   npm run build
-   ```
-
-2. Install [PM2](https://pm2.keymetrics.io/) globally if you have not already:
-
-   ```bash
-   npm install --global pm2
-   ```
-
-3. Start the compiled server with the provided `ecosystem.config.js` definition:
-
-   ```bash
-   pm2 start ecosystem.config.js
-   ```
-
-4. (Optional) Enable PM2 startup scripts so the API restarts automatically when the host reboots:
-
-   ```bash
-   pm2 startup
-   pm2 save
-   ```
-
-You can inspect runtime health with `pm2 status` and tail structured logs with `pm2 logs server`.
-### Google OAuth Login Flow
-
-1. The React app links users to `http://localhost:5000/auth/google`
-   (replace the domain with your API) when they click **Login with Google**.
-2. The Express backend route `/auth/google` redirects the user to Google.
-3. After approval, Google sends the user back to
-   `/auth/google/callback` on the backend.
-4. The backend creates a session cookie and then redirects the user to
-   your frontend domain (e.g., `http://localhost:5173/customer`) based on their
-   role.
-
-In the Google Cloud Console, configure your OAuth client with:
-
-- **Authorized JavaScript origins**
-  - `https://your-production-frontend.com`
-  - `http://localhost:5173`
-- **Authorized redirect URIs**
-  - `https://your-production-api.com/auth/google/callback`
-  - `http://localhost:5000/auth/google/callback`
-- **Authorized Admin URIs**
-  - `http://localhost:5173/admin/login`
-
-### Simple admin login sample
-
-Email: admin@example.com
-Password: admin12345
-To customize in .env: set ADMIN_EMAIL and ADMIN_PASSWORD before starting the server.
-
-## Role overview
-
-| Role | Capabilities |
-| --- | --- |
-| **Customer** | Browse/order products, book services, manage cart & wishlist, track bookings/orders |
-| **Shop owner** | Manage inventory, workers, orders, returns, promotions |
-| **Worker** | Scoped to assigned shop with permission-based access (orders, inventory, analytics) |
-| **Service provider** | Manage services/bookings, respond to customer requests |
-| **Admin** | Platform-wide controls; seeded via `ensureDefaultAdmin` on boot |
-
-### Development Guidelines
-
-1. The frontend React application is in the `client/` directory
-2. Backend Express application is in the `server/` directory
-3. Shared types and schemas are in the `shared/` directory
-4. Database migrations are managed using Drizzle ORM
-
-### Available Scripts
-
-- `npm run dev:server` – start the backend API
-- `npm run dev:client` – start the frontend development server
-- `npm run build` – build for production
-- `npm run start` – run the compiled server
-- `npm run lint` – run ESLint on the project
-- `npm run format` – format files using Prettier
-
-### Troubleshooting
-
-1. If you encounter database connection issues:
-   - Verify PostgreSQL is running
-   - Check database credentials in `.env`
-   - Ensure the database exists
-
-2. Orders fail with "insufficient stock"
-   - The transactional order flow decrements stock atomically. Verify products have enough inventory and no other order depleted stock concurrently.
-
-3. Google login fails locally
-   - Make sure `GOOGLE_CLIENT_ID/SECRET` match your Google Cloud project and that `http://localhost:5000/auth/google/callback` is in the redirect list.
-
-Need focused instructions for Android builds, Firebase push notifications, or email/OAuth? See [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md).
-
-2. If the server won't start:
-   - Check if port 5000 is available
-   - Verify all environment variables are set
-   - Check for any error messages in the console
-
-3. Common Issues:
-   - "Module not found": Run `npm install` again
-   - "Database connection failed": Check PostgreSQL service status
-   - "Port already in use": Kill the process using port 5000 or change PORT in `.env`
-
-### Testing
-
-1. To run tests:
-
-```bash
-npm test
-```
-
-2. To run specific test suites:
-
-```bash
-npm test -- --grep "test-name"
-```
-
-3. To generate a coverage report and save logs:
-
-```bash
-npm run test:report
-```
-The results will be written to `reports/test.log` and coverage HTML will be available in the `coverage` directory.
-
-Start development:
-
-- `npm run dev:server` – run the backend API
-- `npm run dev:client` – run the React frontend
-
-- `npm run build` – build for production
-- `npm run start` – run the compiled server
-- `pm2 start ecosystem.config.js` – run the server in cluster mode using PM2
-- `npm run lint` – run ESLint
-- `npm run format` – run Prettier
-- `npm test` – execute unit tests
-
-### Running with PM2
-
-Build the project and start the server in cluster mode:
-
-```bash
-npm run build
-pm2 start ecosystem.config.js
-```
-## Features
-
-### Customer Features
-
-- Browse and book services
-- Shop for products from various vendors
-- Track orders and bookings
-- Review and rate services/products
-- Multi-language support (English, Hindi, Tamil)
-
-### Service Provider Features
-
-- Service listing and management
-- Booking management
-- Real-time availability updates
-- Customer review management
-- Analytics dashboard
-
-### Shop Owner Features
-
-1. Product Management
-   - Add, edit, delete products
-   - Inventory management
-   - Set pricing and discounts
-   - Image upload support
-
-2. Order Management
-   - Process customer orders
-   - Update order status
-   - Handle returns and refunds
-   - Real-time notifications
-
-3. Promotions & Analytics
-   - Create promotional offers
-   - Track sales performance
-   - Monitor inventory levels
-   - View customer reviews
-
-## Project Structure
-
-```
-├── client/              # Frontend React application
-│   ├── src/
-│   │   ├── components/  # Reusable components
-│   │   ├── hooks/      # Custom React hooks
-│   │   ├── lib/        # Utility functions
-│   │   └── pages/      # Page components
-├── server/             # Backend Express application
-├── shared/             # Shared types and schemas
-└── README.md
-```
-
-## User Roles
-
-1. Customers
-   - Register/login
-   - Browse services and products
-   - Make bookings and purchases
-   - Track orders
-   - Write reviews
-
-2. Service Providers
-   - Manage service listings
-   - Handle bookings
-   - Respond to reviews
-   - Track earnings
-
-3. Shop Owners
-   - Manage product catalog
-   - Process orders
-   - Handle inventory
-   - Create promotions
-
-## Tech Stack
-
-- Frontend: React.js with TypeScript
-- Backend: Express.js
-- Database: PostgreSQL
-- ORM: Drizzle
-- UI Components: shadcn/ui
-- State Management: TanStack Query
-- Routing: wouter
-- Forms: react-hook-form
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+The script enforces the success criteria documented in the prompt (`http_req_failed < 1%`, GET p95 < 500 ms). Review the console report or the `logs/app.log` entries for any failures, then re-enable rate limiting once the test is complete.

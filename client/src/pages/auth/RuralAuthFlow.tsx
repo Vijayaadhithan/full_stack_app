@@ -7,6 +7,14 @@ import { Label } from "@/components/ui/label";
 import doorstepLogo from "@/assets/doorstep-ds-logo.png";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+    initRecaptcha,
+    sendOTP,
+    verifyOTP,
+    cleanupRecaptcha,
+    isFirebaseConfigured,
+} from "@/lib/firebase";
+import type { RecaptchaVerifier } from "firebase/auth";
 
 type AuthStep = "phone" | "otp" | "pin-entry" | "pin-setup" | "profile-setup";
 type Language = "en" | "ta";
@@ -94,6 +102,12 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
     const [name, setName] = useState("");
     const [selectedRole, setSelectedRole] = useState<"customer" | "shop" | "provider">("customer");
 
+    // Firebase state
+    const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
+    const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+    const [recaptchaReady, setRecaptchaReady] = useState(false);
+    const sendOtpButtonId = "send-otp-button";
+
     // Refs for large inputs
     const phoneInputRef = useRef<HTMLInputElement>(null);
     const pinInputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +119,40 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
         if (savedPhone) {
             setPhone(savedPhone);
         }
+    }, []);
+
+    // Initialize reCAPTCHA when on phone step (for new user registration)
+    useEffect(() => {
+        if (step === "phone" && isFirebaseConfigured) {
+            let cancelled = false;
+            const timer = setTimeout(async () => {
+                try {
+                    const verifier = await initRecaptcha(sendOtpButtonId);
+                    if (!cancelled && verifier) {
+                        recaptchaRef.current = verifier;
+                        setRecaptchaReady(true);
+                        console.log("reCAPTCHA ready for registration");
+                    }
+                } catch (error) {
+                    console.error("Failed to initialize reCAPTCHA:", error);
+                    setRecaptchaReady(false);
+                }
+            }, 300);
+
+            return () => {
+                cancelled = true;
+                clearTimeout(timer);
+            };
+        } else if (step !== "phone") {
+            setRecaptchaReady(false);
+        }
+    }, [step]);
+
+    // Cleanup reCAPTCHA on unmount
+    useEffect(() => {
+        return () => {
+            cleanupRecaptcha();
+        };
     }, []);
 
     // Focus inputs on step change
@@ -133,12 +181,63 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
             localStorage.setItem("lastPhone", phone);
 
             if (data.exists) {
+                // Existing user - go to PIN login
                 setIsExistingUser(true);
                 setUserName(data.name || "");
                 setStep("pin-entry");
             } else {
-                setIsExistingUser(false);
-                setStep("otp");
+                // New user - need to send OTP via Firebase
+                if (!isFirebaseConfigured) {
+                    toast({
+                        title: "Configuration Error",
+                        description: "Phone verification not configured. Please contact support.",
+                        variant: "destructive"
+                    });
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Initialize reCAPTCHA if not ready
+                if (!recaptchaRef.current || !recaptchaReady) {
+                    try {
+                        const verifier = await initRecaptcha(sendOtpButtonId);
+                        if (verifier) {
+                            recaptchaRef.current = verifier;
+                            setRecaptchaReady(true);
+                        } else {
+                            toast({
+                                title: "Error",
+                                description: "Security verification failed. Please refresh and try again.",
+                                variant: "destructive"
+                            });
+                            setIsLoading(false);
+                            return;
+                        }
+                    } catch (e) {
+                        console.error("reCAPTCHA init failed:", e);
+                        toast({
+                            title: "Error",
+                            description: "Security verification failed. Please try again.",
+                            variant: "destructive"
+                        });
+                        setIsLoading(false);
+                        return;
+                    }
+                }
+
+                // Send OTP via Firebase
+                try {
+                    await sendOTP(phone, recaptchaRef.current);
+                    setIsExistingUser(false);
+                    setStep("otp");
+                    toast({ title: "OTP Sent", description: `OTP sent to +91 ${phone}` });
+                } catch (err: any) {
+                    const errorMessage = err?.message || "Failed to send OTP. Please try again.";
+                    toast({ title: "Error", description: errorMessage, variant: "destructive" });
+                    // Re-initialize reCAPTCHA on error
+                    cleanupRecaptcha();
+                    setRecaptchaReady(false);
+                }
             }
         } catch (error) {
             toast({ title: "Error", description: "Could not check phone number", variant: "destructive" });
@@ -147,7 +246,7 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
         }
     }
 
-    // Handle OTP verification
+    // Handle OTP verification via Firebase
     async function handleOtpVerify() {
         if (otp.length !== 6) {
             toast({ title: "Invalid OTP", description: "Please enter 6 digits", variant: "destructive" });
@@ -155,9 +254,24 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
         }
 
         setIsLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setIsLoading(false);
-        setStep("profile-setup");
+        try {
+            // Verify OTP with Firebase and get the ID token
+            const idToken = await verifyOTP(otp);
+            if (!idToken) {
+                toast({ title: "Verification Failed", description: "Could not verify OTP. Please try again.", variant: "destructive" });
+                return;
+            }
+
+            // Store the Firebase ID token for registration
+            setFirebaseIdToken(idToken);
+            setStep("profile-setup");
+            toast({ title: "Verified!", description: "Phone number verified successfully" });
+        } catch (err: any) {
+            const errorMessage = err?.message || "Invalid OTP. Please try again.";
+            toast({ title: "Error", description: errorMessage, variant: "destructive" });
+        } finally {
+            setIsLoading(false);
+        }
     }
 
     // Handle PIN login
@@ -221,10 +335,23 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
             return;
         }
 
+        // SECURITY: Must have Firebase ID token from OTP verification
+        if (!firebaseIdToken) {
+            toast({
+                title: "Session Expired",
+                description: "Please verify your phone number again.",
+                variant: "destructive"
+            });
+            setStep("phone");
+            return;
+        }
+
         setIsLoading(true);
         try {
+            // SECURITY: Send Firebase ID token instead of phone number
+            // The server will extract and verify the phone from the token
             const res = await apiRequest("POST", "/api/auth/rural-register", {
-                phone,
+                firebaseIdToken,
                 name: name.trim(),
                 pin,
                 initialRole: selectedRole,
@@ -354,6 +481,7 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
                                     </div>
 
                                     <Button
+                                        id="send-otp-button"
                                         onClick={handlePhoneSubmit}
                                         disabled={isLoading || phone.length !== 10}
                                         className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30 transition-all duration-300 hover:shadow-orange-500/50 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"

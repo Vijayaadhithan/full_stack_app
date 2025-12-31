@@ -13,6 +13,8 @@ type CsrfRequest = Request & {
 
 type CsrfOptions = {
   ignoreMethods?: string[];
+  /** Paths to exempt from CSRF protection (e.g., analytics endpoints using sendBeacon) */
+  ignorePaths?: string[];
 };
 
 declare global {
@@ -159,6 +161,9 @@ export function createCsrfProtection(options?: CsrfOptions): RequestHandler {
     ...ignoredMethods,
   ]);
 
+  // Paths to exempt from CSRF (e.g., analytics endpoints using sendBeacon)
+  const ignorePaths = new Set(options?.ignorePaths ?? []);
+
   return (req, _res, next) => {
     let secret: string;
     try {
@@ -171,6 +176,11 @@ export function createCsrfProtection(options?: CsrfOptions): RequestHandler {
 
     const method = normalizeMethod(req.method);
     if (ignoreSet.has(method)) {
+      return next();
+    }
+
+    // Skip CSRF validation for exempt paths (e.g., sendBeacon analytics)
+    if (ignorePaths.has(req.path)) {
       return next();
     }
 

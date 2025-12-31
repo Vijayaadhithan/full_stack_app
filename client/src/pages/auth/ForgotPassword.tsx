@@ -85,6 +85,7 @@ export default function ForgotPassword({
   const [_showPassword, _setShowPassword] = useState(false);
   const [_showConfirmPassword, _setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
 
   const otpInputRef = useRef<HTMLInputElement>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
@@ -194,8 +195,14 @@ export default function ForgotPassword({
     setError(null);
 
     try {
-      // Verify OTP with Firebase
-      await verifyOTP(otp);
+      // Verify OTP with Firebase and get the ID token
+      const idToken = await verifyOTP(otp);
+      if (!idToken) {
+        setError("Could not verify OTP. Please try again.");
+        return;
+      }
+      // Store the token for PIN reset
+      setFirebaseIdToken(idToken);
       setStep("new-password");
     } catch (err: any) {
       setError(err?.message || fp.invalidOtp);
@@ -204,7 +211,7 @@ export default function ForgotPassword({
     }
   }
 
-  // Handle PIN reset (Firebase verified the OTP, now we just reset the PIN)
+  // Handle PIN reset (send Firebase ID token for server-side verification)
   async function handleResetPassword() {
     if (newPassword.length !== 4 || !/^\d{4}$/.test(newPassword)) {
       setError(fp.pinInvalid);
@@ -216,13 +223,21 @@ export default function ForgotPassword({
       return;
     }
 
+    // SECURITY: Must have Firebase ID token from OTP verification
+    if (!firebaseIdToken) {
+      setError("Session expired. Please verify your phone number again.");
+      setStep("phone");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // Call backend to reset PIN (phone is already verified via Firebase)
+      // SECURITY: Send Firebase ID token instead of phone number
+      // The server will extract and verify the phone from the token
       const res = await apiRequest("POST", "/api/auth/reset-pin", {
-        phone,
+        firebaseIdToken,
         newPin: newPassword,
       });
 

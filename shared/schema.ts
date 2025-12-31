@@ -829,8 +829,9 @@ export const pinSchema = z
   .regex(/^\d{4}$/, "PIN must be exactly 4 digits");
 
 // Schema for rural registration (phone + PIN based)
+// NOTE: phone is extracted server-side from the verified Firebase token
 export const ruralRegisterSchema = z.object({
-  phone: phoneSchema,
+  firebaseIdToken: z.string().min(1, "Firebase verification token is required"),
   name: z.string().min(1, "Name is required").max(100, "Name too long"),
   pin: pinSchema,
   initialRole: z.enum(["customer", "shop", "provider"]).optional().default("customer"),
@@ -863,8 +864,9 @@ export const checkUserSchema = z.object({
 export type CheckUserData = z.infer<typeof checkUserSchema>;
 
 // Schema for PIN reset
+// NOTE: phone is extracted server-side from the verified Firebase token
 export const resetPinSchema = z.object({
-  phone: phoneSchema,
+  firebaseIdToken: z.string().min(1, "Firebase verification token is required"),
   newPin: pinSchema,
 });
 

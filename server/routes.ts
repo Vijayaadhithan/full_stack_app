@@ -1300,7 +1300,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "test-csrf-token";
         next();
       })
-      : createCsrfProtection({ ignoreMethods: ["GET", "HEAD", "OPTIONS"] });
+      : createCsrfProtection({
+        ignoreMethods: ["GET", "HEAD", "OPTIONS"],
+        // Exempt analytics endpoint - sendBeacon doesn't preserve session cookies for CSRF
+        ignorePaths: ["/api/performance-metrics"],
+      });
 
   app.use(csrfProtection);
   registerAuthRoutes(app);
@@ -4044,11 +4048,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const notification = booking.customerId
           ? {
-              userId: booking.customerId,
-              type: "booking_update",
-              title: "Provider En Route",
-              message: "Your provider has started the trip and is on the way.",
-            }
+            userId: booking.customerId,
+            type: "booking_update",
+            title: "Provider En Route",
+            message: "Your provider has started the trip and is on the way.",
+          }
           : null;
 
         const updatedBooking = await storage.updateBooking(
@@ -6858,11 +6862,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const confirmationMessage = `Your booking for ${formatIndianDisplay(existingBooking.bookingDate, "date")} has been confirmed.`;
         const notification = existingBooking.customerId
           ? {
-              userId: existingBooking.customerId,
-              type: "booking",
-              title: "Booking Confirmed",
-              message: confirmationMessage,
-            }
+            userId: existingBooking.customerId,
+            type: "booking",
+            title: "Booking Confirmed",
+            message: confirmationMessage,
+          }
           : null;
 
         const booking = await storage.updateBooking(
