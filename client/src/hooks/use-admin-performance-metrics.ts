@@ -13,6 +13,11 @@ const METRIC_THRESHOLDS: Record<MetricName, { good: number; needsImprovement: nu
   TTFB: { good: 800, needsImprovement: 1800 },
 };
 
+// PERFORMANCE FIX: Buffer metrics and send as batch to reduce network requests
+const MAX_BUFFER_SIZE = 5;
+let adminMetricBuffer: PerformanceMetric[] = [];
+let adminFlushScheduled = false;
+
 function getMetricRating(name: MetricName, value: number): PerformanceMetric["rating"] {
   const thresholds = METRIC_THRESHOLDS[name];
   if (!thresholds) return "needs-improvement";
@@ -21,9 +26,16 @@ function getMetricRating(name: MetricName, value: number): PerformanceMetric["ra
   return "poor";
 }
 
-async function postMetric(metric: PerformanceMetric) {
+async function flushAdminMetricBuffer() {
+  if (adminMetricBuffer.length === 0) return;
+
+  const metricsToSend = [...adminMetricBuffer];
+  adminMetricBuffer = [];
+  adminFlushScheduled = false;
+
   const csrfToken = await getCsrfToken();
-  const payload = { ...metric, _csrf: csrfToken };
+  // Send array of metrics with CSRF token in each
+  const payload = metricsToSend.map(m => ({ ...m, _csrf: csrfToken }));
   const body = JSON.stringify(payload);
 
   const metricUrl = new URL("/api/admin/performance-metrics", API_BASE_URL).toString();
@@ -37,6 +49,26 @@ async function postMetric(metric: PerformanceMetric) {
   }
 
   await apiRequest("POST", "/api/admin/performance-metrics", payload);
+}
+
+function queueAdminMetric(metric: PerformanceMetric) {
+  adminMetricBuffer.push(metric);
+
+  // Flush immediately if buffer is full
+  if (adminMetricBuffer.length >= MAX_BUFFER_SIZE) {
+    flushAdminMetricBuffer().catch(() => { });
+    return;
+  }
+
+  // Schedule flush for next idle period if not already scheduled
+  if (!adminFlushScheduled) {
+    adminFlushScheduled = true;
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => flushAdminMetricBuffer().catch(() => { }), { timeout: 2000 });
+    } else {
+      setTimeout(() => flushAdminMetricBuffer().catch(() => { }), 1000);
+    }
+  }
 }
 
 export function useAdminPerformanceMetrics() {
@@ -59,12 +91,11 @@ export function useAdminPerformanceMetrics() {
         details?: PerformanceMetric["details"];
       },
     ) => {
-      postMetric({
+      // Use queueAdminMetric for batching - metrics are flushed together
+      queueAdminMetric({
         ...metric,
         page,
         timestamp: Date.now(),
-      }).catch(() => {
-        // ignore metric upload errors
       });
     };
 
@@ -175,6 +206,8 @@ export function useAdminPerformanceMetrics() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         flushMetrics();
+        // Flush the batched metric buffer when page goes hidden
+        flushAdminMetricBuffer().catch(() => { });
         lcpObserver?.disconnect();
         clsObserver?.disconnect();
         fidObserver?.disconnect();

@@ -21,6 +21,11 @@ type MetricPayload = Omit<PerformanceMetric, "page" | "timestamp"> & {
   details?: PerformanceMetric["details"];
 };
 
+// PERFORMANCE FIX: Buffer metrics and send as batch to reduce network requests
+const MAX_BUFFER_SIZE = 5;
+let metricBuffer: PerformanceMetric[] = [];
+let flushScheduled = false;
+
 function getMetricRating(name: MetricName, value: number): PerformanceMetric["rating"] {
   const thresholds = METRIC_THRESHOLDS[name];
   if (!thresholds) return "needs-improvement";
@@ -40,12 +45,19 @@ function isSameOrigin(targetUrl: URL): boolean {
   }
 }
 
-async function postMetric(metric: PerformanceMetric) {
+async function flushMetricBuffer() {
+  if (metricBuffer.length === 0) return;
+
+  const metricsToSend = [...metricBuffer];
+  metricBuffer = [];
+  flushScheduled = false;
+
   const metricUrl = new URL("/api/performance-metrics", API_BASE_URL);
 
   if (typeof navigator !== "undefined" && navigator.sendBeacon && isSameOrigin(metricUrl)) {
     const csrfToken = await getCsrfToken();
-    const payload = { ...metric, _csrf: csrfToken } as Record<string, unknown>;
+    // Send array of metrics with CSRF token in each
+    const payload = metricsToSend.map(m => ({ ...m, _csrf: csrfToken }));
     const body = JSON.stringify(payload);
     const blob = new Blob([body], { type: "application/json" });
     const sent = navigator.sendBeacon(metricUrl.toString(), blob);
@@ -54,7 +66,28 @@ async function postMetric(metric: PerformanceMetric) {
     }
   }
 
-  await apiRequest("POST", "/api/performance-metrics", metric);
+  // Fallback to fetch with array payload
+  await apiRequest("POST", "/api/performance-metrics", metricsToSend);
+}
+
+function queueMetric(metric: PerformanceMetric) {
+  metricBuffer.push(metric);
+
+  // Flush immediately if buffer is full
+  if (metricBuffer.length >= MAX_BUFFER_SIZE) {
+    flushMetricBuffer().catch(() => { });
+    return;
+  }
+
+  // Schedule flush for next idle period if not already scheduled
+  if (!flushScheduled) {
+    flushScheduled = true;
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => flushMetricBuffer().catch(() => { }), { timeout: 2000 });
+    } else {
+      setTimeout(() => flushMetricBuffer().catch(() => { }), 1000);
+    }
+  }
 }
 
 export function useClientPerformanceMetrics(role: UserRole) {
@@ -88,9 +121,8 @@ export function useClientPerformanceMetrics(role: UserRole) {
         },
       };
 
-      postMetric(enriched).catch(() => {
-        // ignore metric upload errors
-      });
+      // Use queueMetric for batching - metrics are flushed together
+      queueMetric(enriched);
     };
 
     const navigationEntries = performance.getEntriesByType(
@@ -200,6 +232,8 @@ export function useClientPerformanceMetrics(role: UserRole) {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         flushMetrics();
+        // Flush the batched metric buffer when page goes hidden
+        flushMetricBuffer().catch(() => { });
         lcpObserver?.disconnect();
         clsObserver?.disconnect();
         fidObserver?.disconnect();

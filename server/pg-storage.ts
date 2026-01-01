@@ -848,24 +848,47 @@ export class PostgresStorage implements IStorage {
     locationCity?: string;
     locationState?: string;
     excludeOwnerId?: number;
+    limit?: number;
   }): Promise<User[]> {
+    // PERFORMANCE FIX: Add limit to prevent unbounded result sets
+    const maxResults = filters?.limit ?? 100;
+
     // Build cache key from filters
     const filterParts: string[] = [];
     if (filters?.locationCity) filterParts.push(`city:${filters.locationCity.toLowerCase()}`);
     if (filters?.locationState) filterParts.push(`state:${filters.locationState.toLowerCase()}`);
     if (filters?.excludeOwnerId) filterParts.push(`excl:${filters.excludeOwnerId}`);
+    filterParts.push(`limit:${maxResults}`);
     const cacheKey = `shops:list:${filterParts.join(':')}`;
 
     const cached = await getCache<User[]>(cacheKey);
     if (cached) return cached;
 
-    // Query shops table and join with users to get owner info
-    const shopRecords = await db.primary
+    // PERFORMANCE FIX: Build SQL conditions instead of JS-side filtering
+    const conditions: SQL[] = [];
+    if (filters?.excludeOwnerId !== undefined) {
+      conditions.push(sql`${shops.ownerId} != ${filters.excludeOwnerId}`);
+    }
+    if (filters?.locationCity) {
+      conditions.push(sql`LOWER(${shops.shopAddressCity}) = LOWER(${filters.locationCity})`);
+    }
+    if (filters?.locationState) {
+      conditions.push(sql`LOWER(${shops.shopAddressState}) = LOWER(${filters.locationState})`);
+    }
+
+    // Query shops table with SQL filters and join with users
+    let query = db.primary
       .select()
       .from(shops)
       .leftJoin(users, eq(shops.ownerId, users.id));
 
-    // Filter and transform to User-like objects for backward compatibility
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
+    }
+
+    const shopRecords = await query.limit(maxResults);
+
+    // Transform to User-like objects for backward compatibility
     const results: User[] = [];
 
     for (const record of shopRecords) {
@@ -873,17 +896,6 @@ export class PostgresStorage implements IStorage {
       const owner = record.users;
 
       if (!owner) continue;
-
-      // Apply filters
-      if (filters?.excludeOwnerId !== undefined && shop.ownerId === filters.excludeOwnerId) {
-        continue;
-      }
-      if (filters?.locationCity && shop.shopAddressCity?.toLowerCase() !== filters.locationCity.toLowerCase()) {
-        continue;
-      }
-      if (filters?.locationState && shop.shopAddressState?.toLowerCase() !== filters.locationState.toLowerCase()) {
-        continue;
-      }
 
       // Build a User-like object with shop profile data
       results.push({
@@ -1685,8 +1697,12 @@ export class PostgresStorage implements IStorage {
 
   async getBookingsByCustomer(
     customerId: number,
-    filters?: { status?: Booking["status"] },
+    filters?: { status?: Booking["status"]; limit?: number; offset?: number },
   ): Promise<Booking[]> {
+    // PERFORMANCE FIX: Add pagination to prevent unbounded result sets
+    const limit = filters?.limit ?? 100;
+    const offset = filters?.offset ?? 0;
+
     const baseCondition = eq(bookings.customerId, customerId);
     const whereClause = filters?.status
       ? and(baseCondition, eq(bookings.status, filters.status))
@@ -1696,7 +1712,9 @@ export class PostgresStorage implements IStorage {
       .select()
       .from(bookings)
       .where(whereClause)
-      .orderBy(desc(bookings.bookingDate));
+      .orderBy(desc(bookings.bookingDate))
+      .limit(limit)
+      .offset(offset);
   }
 
   async getBookingsByProvider(
@@ -1734,11 +1752,14 @@ export class PostgresStorage implements IStorage {
     return { data, total, totalPages };
   }
 
-  async getBookingsByStatus(status: string): Promise<Booking[]> {
+  async getBookingsByStatus(status: string, limit = 100): Promise<Booking[]> {
+    // PERFORMANCE FIX: Add limit to prevent unbounded result sets
     return await db.primary
       .select()
       .from(bookings)
-      .where(eq(bookings.status, status as any));
+      .where(eq(bookings.status, status as any))
+      .orderBy(desc(bookings.bookingDate))
+      .limit(limit);
   }
 
   async updateBooking(
@@ -2567,8 +2588,12 @@ export class PostgresStorage implements IStorage {
 
   async getOrdersByCustomer(
     customerId: number,
-    filters?: { status?: Order["status"] },
+    filters?: { status?: Order["status"]; limit?: number; offset?: number },
   ): Promise<Order[]> {
+    // PERFORMANCE FIX: Add pagination to prevent unbounded result sets
+    const limit = filters?.limit ?? 100;
+    const offset = filters?.offset ?? 0;
+
     const conditions = [eq(orders.customerId, customerId)];
     if (filters?.status) {
       conditions.push(eq(orders.status, filters.status as any));
@@ -2581,10 +2606,20 @@ export class PostgresStorage implements IStorage {
       .select()
       .from(orders)
       .where(whereClause)
-      .orderBy(desc(orders.orderDate));
+      .orderBy(desc(orders.orderDate))
+      .limit(limit)
+      .offset(offset);
   }
 
-  async getOrdersByShop(shopId: number, status?: string | string[]): Promise<Order[]> {
+  async getOrdersByShop(
+    shopId: number,
+    status?: string | string[],
+    options?: { limit?: number; offset?: number },
+  ): Promise<Order[]> {
+    // PERFORMANCE FIX: Add pagination to prevent unbounded result sets
+    const limit = options?.limit ?? 100;
+    const offset = options?.offset ?? 0;
+
     const conditions = [eq(orders.shopId, shopId)];
     if (status && status !== "all_orders") {
       if (Array.isArray(status)) {
@@ -2599,7 +2634,9 @@ export class PostgresStorage implements IStorage {
       .select()
       .from(orders)
       .where(and(...conditions))
-      .orderBy(desc(orders.orderDate));
+      .orderBy(desc(orders.orderDate))
+      .limit(limit)
+      .offset(offset);
   }
 
   async getRecentOrdersByShop(shopId: number): Promise<Order[]> {

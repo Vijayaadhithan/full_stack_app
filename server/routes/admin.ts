@@ -416,44 +416,50 @@ router.get(
           .split(/\r?\n/)
           .filter((line) => line.trim().length > 0);
 
-        const parsed = lines
-          .map((line) => {
-            try {
-              return JSON.parse(line) as Record<string, unknown>;
-            } catch {
-              return null;
-            }
-          })
-          .filter((entry): entry is Record<string, unknown> => entry !== null);
+        // PERFORMANCE FIX: Parse and filter lazily, terminate early once limit reached
+        // Process lines in reverse order (newest first) to find matches faster
+        const logs: Array<{
+          timestamp: string;
+          level: string;
+          message: string;
+          category: string;
+          metadata?: Record<string, unknown>;
+        }> = [];
 
-        const filtered = parsed.filter((entry) => {
-          if (typeof entry.level !== "number") return false;
+        for (let i = lines.length - 1; i >= 0 && logs.length < limit; i--) {
+          const line = lines[i];
+          let entry: Record<string, unknown>;
+          try {
+            entry = JSON.parse(line) as Record<string, unknown>;
+          } catch {
+            continue; // Skip invalid JSON
+          }
+
+          // Apply filters before processing
+          if (typeof entry.level !== "number") continue;
+
+          const entryCategory = normalizeLogCategory((entry as { category?: unknown }).category) ?? "other";
+
+          // Filter by category
           if (normalizedCategory) {
-            // Hide admin category entirely
-            if (normalizedCategory === "admin") return false;
-            const entryCategory = normalizeLogCategory((entry as { category?: unknown }).category);
-            if ((entryCategory ?? "other") !== normalizedCategory) {
-              return false;
-            }
+            if (normalizedCategory === "admin") continue;
+            if (entryCategory !== normalizedCategory) continue;
+          } else {
+            // Exclude admin logs from default view
+            if (entryCategory === "admin") continue;
           }
-          // If no category filter supplied, exclude admin logs from default view
-          if (!normalizedCategory) {
-            const entryCategory = normalizeLogCategory((entry as { category?: unknown }).category) ?? "other";
-            if (entryCategory === "admin") return false;
-          }
-          if (!filteredLevels) return true;
-          return filteredLevels.includes(entry.level);
-        });
 
-        const slice = filtered.slice(-limit).reverse();
-        const logs = slice.map((entry) => {
+          // Filter by level
+          if (filteredLevels && !filteredLevels.includes(entry.level as number)) continue;
+
+          // Entry passed all filters - transform it
           const {
             level,
             time,
             msg,
             pid,
             hostname,
-            category: entryCategoryRaw,
+            category: _entryCategoryRaw,
             userId,
             userRole,
             adminId,
@@ -481,7 +487,6 @@ router.get(
             }
           }
 
-          const logCategory = normalizeLogCategory(entryCategoryRaw) ?? "other";
           const metadata: Record<string, unknown> = {};
           if (userId !== undefined) metadata.userId = userId;
           if (userRole !== undefined) metadata.userRole = userRole;
@@ -493,14 +498,14 @@ router.get(
           delete metadata.pid;
           delete metadata.hostname;
 
-          return {
+          logs.push({
             timestamp,
             level: levelNameByNumber[level] ?? String(level),
             message: msg ?? "",
-            category: logCategory,
+            category: entryCategory,
             metadata: Object.keys(metadata).length ? metadata : undefined,
-          };
-        });
+          });
+        }
 
         return res.json({
           logs,
@@ -537,10 +542,11 @@ router.post(
         .json({ message: "Too many metrics submitted at once" });
     }
 
-    logger.info(
+    // PERFORMANCE FIX: Use debug level and minimal payload to reduce I/O overhead
+    logger.debug(
       {
         adminId: req.session?.adminId,
-        metrics,
+        metricsCount: metrics.length,
         source: "admin-ui",
       },
       "Received admin performance metrics",
@@ -655,17 +661,17 @@ router.get(
       orderDate: row.orderDate ? row.orderDate.toISOString() : null,
       customer: row.customerId
         ? {
-            id: row.customerId,
-            name: row.customerName ?? null,
-            email: row.customerEmail ?? null,
-          }
+          id: row.customerId,
+          name: row.customerName ?? null,
+          email: row.customerEmail ?? null,
+        }
         : null,
       shop: row.shopId
         ? {
-            id: row.shopId,
-            name: row.shopName ?? null,
-            email: row.shopEmail ?? null,
-          }
+          id: row.shopId,
+          name: row.shopName ?? null,
+          email: row.shopEmail ?? null,
+        }
         : null,
     }));
 
@@ -734,11 +740,11 @@ router.get(
     const like = `%${search}%`;
     const all = await (search
       ? base
-          .where(
-            sql`${users.username} ILIKE ${like} OR ${users.email} ILIKE ${like} OR ${users.name} ILIKE ${like}`,
-          )
-          .limit(limit)
-          .offset(offset)
+        .where(
+          sql`${users.username} ILIKE ${like} OR ${users.email} ILIKE ${like} OR ${users.name} ILIKE ${like}`,
+        )
+        .limit(limit)
+        .offset(offset)
       : base.limit(limit).offset(offset));
     res.json(all);
   },
@@ -767,7 +773,7 @@ router.patch(
         action: isSuspended ? "suspend_user" : "unsuspend_user",
         resource: `user:${userId}`,
       });
-    } catch {}
+    } catch { }
     res.json({ success: true });
   },
 );
@@ -800,7 +806,7 @@ router.delete(
         action: "delete_user",
         resource: `user:${userId}`,
       });
-    } catch {}
+    } catch { }
 
     res.json({ success: true });
   },
@@ -874,7 +880,7 @@ router.delete(
         action: "delete_review",
         resource: `review:${reviewId}`,
       });
-    } catch {}
+    } catch { }
     res.json({ success: true });
   },
 );
@@ -913,7 +919,7 @@ router.post(
         action: "create_admin",
         resource: `admin:${created.id}`,
       });
-    } catch {}
+    } catch { }
     res.json(created);
   },
 );
@@ -977,7 +983,7 @@ router.put(
         action: "update_role_permissions",
         resource: `role:${roleId}`,
       });
-    } catch {}
+    } catch { }
     res.json({ success: true });
   },
 );

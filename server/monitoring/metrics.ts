@@ -443,13 +443,29 @@ function buildFrontendSummary(now: number): FrontendSummary {
   };
 }
 
+// PERFORMANCE FIX: Cache monitoring snapshot to avoid recomputing percentiles on every request
+let cachedSnapshot: MonitoringSnapshot | null = null;
+let cachedSnapshotTimestamp = 0;
+const SNAPSHOT_CACHE_TTL_MS = 5000; // 5 second cache
+
 export function getMonitoringSnapshot(): MonitoringSnapshot {
   const now = Date.now();
-  return {
+
+  // Return cached snapshot if still valid
+  if (cachedSnapshot && (now - cachedSnapshotTimestamp) < SNAPSHOT_CACHE_TTL_MS) {
+    return cachedSnapshot;
+  }
+
+  // Recompute and cache
+  cachedSnapshot = {
     updatedAt: now,
     requests: buildRequestSummary(now),
     errors: buildErrorSummary(now),
     resources: buildResourceSnapshot(performance.now()),
     frontend: buildFrontendSummary(now),
   };
+  cachedSnapshotTimestamp = now;
+
+  return cachedSnapshot;
 }
+

@@ -132,6 +132,7 @@ export interface IStorage {
     locationCity?: string;
     locationState?: string;
     excludeOwnerId?: number;
+    limit?: number;
   }): Promise<User[]>;
   getShopByOwnerId(ownerId: number): Promise<{ id: number; ownerId: number } | undefined>;
   createUser(user: InsertUser): Promise<User>;
@@ -152,13 +153,13 @@ export interface IStorage {
   getBooking(id: number): Promise<Booking | undefined>;
   getBookingsByCustomer(
     customerId: number,
-    filters?: { status?: Booking["status"] },
+    filters?: { status?: Booking["status"]; limit?: number; offset?: number },
   ): Promise<Booking[]>;
   getBookingsByProvider(
     providerId: number,
     options?: { page: number; limit: number },
   ): Promise<{ data: Booking[]; total: number; totalPages: number }>;
-  getBookingsByStatus(status: string): Promise<Booking[]>;
+  getBookingsByStatus(status: string, limit?: number): Promise<Booking[]>;
   updateBooking(
     id: number,
     booking: Partial<Booking>,
@@ -218,9 +219,9 @@ export interface IStorage {
   getOrder(id: number): Promise<Order | undefined>;
   getOrdersByCustomer(
     customerId: number,
-    filters?: { status?: Order["status"] },
+    filters?: { status?: Order["status"]; limit?: number; offset?: number },
   ): Promise<Order[]>;
-  getOrdersByShop(shopId: number, status?: string | string[]): Promise<Order[]>;
+  getOrdersByShop(shopId: number, status?: string | string[], options?: { limit?: number; offset?: number }): Promise<Order[]>;
   getRecentOrdersByShop(shopId: number): Promise<Order[]>;
   getShopDashboardStats(shopId: number): Promise<DashboardStats>;
   getPayLaterOutstandingAmounts(

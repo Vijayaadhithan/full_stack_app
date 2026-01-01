@@ -3,7 +3,12 @@ import logger from "./logger";
 interface CacheEntry<T> {
   expire: number;
   value: T;
+  insertedAt: number; // Track insertion time for LRU-like eviction
 }
+
+// PERFORMANCE FIX: Add max cache size to prevent unbounded memory growth
+const MAX_CACHE_ENTRIES = 1000;
+const CLEANUP_INTERVAL_MS = 60_000; // Cleanup every 60 seconds
 
 const memoryCache = new Map<string, CacheEntry<unknown>>();
 
@@ -14,6 +19,40 @@ let redisNextRetry = 0;
 let loggedMissingUrl = false;
 let loggedDisabled = false;
 let redisModuleLoader: (() => Promise<any>) | null = null;
+let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+// PERFORMANCE FIX: Periodic cleanup of expired entries
+function startCleanupTimer() {
+  if (cleanupTimer) return;
+  cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    let removedCount = 0;
+    for (const [key, entry] of Array.from(memoryCache.entries())) {
+      if (entry.expire <= now) {
+        memoryCache.delete(key);
+        removedCount++;
+      }
+    }
+    if (removedCount > 0) {
+      logger.debug({ removedCount, remainingSize: memoryCache.size }, "Cache cleanup completed");
+    }
+  }, CLEANUP_INTERVAL_MS);
+  // Don't prevent process exit
+  cleanupTimer.unref();
+}
+
+// PERFORMANCE FIX: Evict oldest entries when cache is full
+function evictOldestEntries(count: number) {
+  if (count <= 0) return;
+  // Sort by insertedAt to find oldest entries
+  const entries = Array.from(memoryCache.entries())
+    .sort((a, b) => a[1].insertedAt - b[1].insertedAt)
+    .slice(0, count);
+  for (const [key] of entries) {
+    memoryCache.delete(key);
+  }
+}
+
 export function __resetCacheForTesting() {
   redisClient = null;
   redisReady = false;
@@ -23,6 +62,10 @@ export function __resetCacheForTesting() {
   loggedDisabled = false;
   redisModuleLoader = null;
   memoryCache.clear();
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  }
 }
 export function __setRedisModuleLoaderForTesting(
   loader: (() => Promise<any>) | null,
@@ -181,7 +224,16 @@ export async function setCache<T>(
     }
   }
 
-  memoryCache.set(key, { value, expire: Date.now() + ttlMs });
+  // PERFORMANCE FIX: Start cleanup timer on first cache use
+  startCleanupTimer();
+
+  // PERFORMANCE FIX: Evict oldest entries if cache is full
+  if (!memoryCache.has(key) && memoryCache.size >= MAX_CACHE_ENTRIES) {
+    const entriesToEvict = Math.max(1, Math.floor(MAX_CACHE_ENTRIES * 0.1)); // Evict 10%
+    evictOldestEntries(entriesToEvict);
+  }
+
+  memoryCache.set(key, { value, expire: Date.now() + ttlMs, insertedAt: Date.now() });
 }
 
 export async function invalidateCache(key: string): Promise<void> {

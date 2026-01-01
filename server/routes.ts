@@ -4572,9 +4572,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ];
 
       try {
+        // PERFORMANCE FIX: Limit the amount of historical data fetched
         const [orders, bookings] = await Promise.all([
-          storage.getOrdersByCustomer(customerId),
-          storage.getBookingsByCustomer(customerId),
+          storage.getOrdersByCustomer(customerId, { limit: 50 }),
+          storage.getBookingsByCustomer(customerId, { limit: 50 }),
         ]);
 
         const eligibleOrders = orders.filter((order) =>
