@@ -215,6 +215,12 @@ export function notifyNotificationChange(userId: number | null | undefined) {
   broadcastInvalidation(userId, NOTIFICATION_KEYS);
 }
 
+export function notifyNotificationChanges(userIds: (number | null | undefined)[]) {
+  const validIds = userIds.filter((id): id is number => id != null);
+  if (validIds.length === 0) return;
+  broadcastInvalidation(validIds, NOTIFICATION_KEYS);
+}
+
 export function notifyBookingChange(params: {
   customerId?: number | null;
   providerId?: number | null;

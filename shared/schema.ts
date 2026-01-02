@@ -447,6 +447,12 @@ export const bookings = pgTable(
     bookingsStatusIdx: index("bookings_status_idx").on(table.status),
     bookingsDateIdx: index("bookings_booking_date_idx").on(table.bookingDate),
     bookingsTimeSlotIdx: index("idx_bookings_time_slot_label").on(table.timeSlotLabel),
+    // PERF: Composite index for availability checks (service + date + status)
+    bookingsServiceDateStatusIdx: index("idx_bookings_service_date_status").on(
+      table.serviceId,
+      table.bookingDate,
+      table.status,
+    ),
   }),
 );
 
@@ -576,6 +582,12 @@ export const products = pgTable(
       "gin",
       table.searchVector,
     ),
+    // PERF: Composite index for shop product listings (excludes deleted, filters by availability)
+    productsShopListingIdx: index("idx_products_shop_listing").on(
+      table.shopId,
+      table.isDeleted,
+      table.isAvailable,
+    ),
   }),
 );
 
@@ -641,6 +653,10 @@ export const orders = pgTable(
     ordersShopIdx: index("orders_shop_id_idx").on(table.shopId),
     ordersStatusIdx: index("orders_status_idx").on(table.status),
     ordersOrderDateIdx: index("orders_order_date_idx").on(table.orderDate),
+    // PERF: Composite index for shop order filtering by status
+    ordersShopStatusIdx: index("idx_orders_shop_status").on(table.shopId, table.status),
+    // PERF: Composite index for customer order history (ordered by date descending)
+    ordersCustomerDateIdx: index("idx_orders_customer_date").on(table.customerId, table.orderDate),
   }),
 );
 
@@ -760,6 +776,8 @@ export const notifications = pgTable("notifications", {
   relatedBookingId: integer("related_booking_id").references(() => bookings.id), // Optional: to link notification to a specific booking
 }, (table) => ({
   userUnreadIdx: index("notifications_user_unread_idx").on(table.userId, table.isRead),
+  // PERF: Composite index for fetching recent notifications sorted by date
+  userCreatedAtIdx: index("idx_notifications_user_created").on(table.userId, table.createdAt),
 }));
 
 export const blockedTimeSlots = pgTable("blocked_time_slots", {

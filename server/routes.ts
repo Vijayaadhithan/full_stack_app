@@ -88,7 +88,7 @@ import {
 } from "./security/rateLimiters";
 import {
   registerRealtimeClient,
-  notifyNotificationChange,
+  notifyNotificationChanges,
 } from "./realtime";
 import {
   hasRoleAccess,
@@ -158,6 +158,30 @@ function sanitizeFilename(originalName: string): string {
   return `${normalized}${ensuredExt}`;
 }
 
+// Magic bytes for common image formats (for XSS prevention)
+const IMAGE_MAGIC_BYTES: { type: string; bytes: number[] }[] = [
+  { type: "image/png", bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] }, // PNG
+  { type: "image/jpeg", bytes: [0xff, 0xd8, 0xff] }, // JPEG
+  { type: "image/gif", bytes: [0x47, 0x49, 0x46, 0x38] }, // GIF87a/89a
+  { type: "image/webp", bytes: [0x52, 0x49, 0x46, 0x46] }, // RIFF (for WebP)
+  { type: "image/bmp", bytes: [0x42, 0x4d] }, // BMP
+];
+
+// SECURITY: Block SVG to prevent XSS via script injection
+const BLOCKED_MIME_TYPES = new Set([
+  "image/svg+xml",
+  "text/xml",
+  "application/xml",
+]);
+
+const BLOCKED_EXTENSIONS = new Set([".svg", ".xml", ".html", ".htm", ".xhtml"]);
+
+function validateImageMagicBytes(buffer: Buffer): boolean {
+  return IMAGE_MAGIC_BYTES.some(({ bytes }) =>
+    bytes.every((byte, index) => buffer[index] === byte),
+  );
+}
+
 const uploadStorage = multer.diskStorage({
   destination(_req, _file, cb) {
     cb(null, UPLOADS_DIRECTORY);
@@ -173,13 +197,40 @@ const uploadMiddleware = multer({
   storage: uploadStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
+    // SECURITY: Block SVG and other risky file types that can contain scripts
+    if (BLOCKED_MIME_TYPES.has(file.mimetype.toLowerCase())) {
+      cb(new Error("SVG and XML files are not allowed for security reasons"));
+      return;
+    }
+
+    // Block by extension as well (defense in depth)
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (BLOCKED_EXTENSIONS.has(ext)) {
+      cb(new Error("This file extension is not allowed for security reasons"));
+      return;
+    }
+
+    // Only allow actual image types
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type"));
+      cb(new Error("Invalid file type: only image files are allowed"));
     }
   },
 });
+
+// SECURITY: Validate magic bytes after upload to prevent MIME spoofing
+async function validateUploadedFile(filePath: string): Promise<boolean> {
+  try {
+    const fd = await fs.promises.open(filePath, "r");
+    const buffer = Buffer.alloc(12);
+    await fd.read(buffer, 0, 12, 0);
+    await fd.close();
+    return validateImageMagicBytes(buffer);
+  } catch {
+    return false;
+  }
+}
 
 type RequestWithAuth = Request & {
   user?:
@@ -1502,7 +1553,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const uploadSingleQr = uploadMiddleware.single("qr");
 
   app.post("/api/upload", requireAuth, (req, res) => {
-    uploadSingleFile(req, res, (err) => {
+    uploadSingleFile(req, res, async (err) => {
       if (err) {
         const message =
           err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
@@ -1515,6 +1566,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      // SECURITY: Validate magic bytes to prevent MIME spoofing
+      const filePath = path.join(UPLOADS_DIRECTORY, req.file.filename);
+      const isValidImage = await validateUploadedFile(filePath);
+      if (!isValidImage) {
+        // Delete the invalid file
+        try {
+          await fs.promises.unlink(filePath);
+        } catch {
+          // Best effort cleanup
+        }
+        return res.status(400).json({ message: "Invalid image file: file content does not match expected format" });
       }
 
       res.json({
@@ -1525,7 +1589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/users/upload-qr", requireAuth, (req, res) => {
-    uploadSingleQr(req, res, (err) => {
+    uploadSingleQr(req, res, async (err) => {
       if (err) {
         const message =
           err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
@@ -1540,12 +1604,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
+      // SECURITY: Validate magic bytes to prevent MIME spoofing
+      const filePath = path.join(UPLOADS_DIRECTORY, req.file.filename);
+      const isValidImage = await validateUploadedFile(filePath);
+      if (!isValidImage) {
+        // Delete the invalid file
+        try {
+          await fs.promises.unlink(filePath);
+        } catch {
+          // Best effort cleanup
+        }
+        return res.status(400).json({ message: "Invalid image file: file content does not match expected format" });
+      }
+
       const url = `/uploads/${req.file.filename}`;
       res.json({ url });
     });
   });
 
-  app.use("/uploads", express.static(UPLOADS_DIRECTORY));
+  // SECURITY: Serve uploads with Content-Disposition to prevent browser interpretation
+  // and nosniff header to prevent MIME-type sniffing attacks
+  app.use("/uploads", (_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", "attachment");
+    next();
+  }, express.static(UPLOADS_DIRECTORY));
 
   // Booking Notification System
   // Get pending booking requests for a provider
@@ -1982,9 +2065,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Send realtime notifications after transaction commits
-      notificationsToCreate.forEach((n) => {
-        if (n.userId) notifyNotificationChange(n.userId);
-      });
+      notifyNotificationChanges(notificationsToCreate.map((n) => n.userId));
 
       logger.info(
         `[API] Successfully updated booking ${bookingId}:`,

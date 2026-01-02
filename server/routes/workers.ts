@@ -56,6 +56,7 @@ export async function workerHasPermission(workerUserId: number, permission: Work
 
 export function registerWorkerRoutes(app: Express) {
   // Ensure table exists (fallback if migration wasn't applied)
+  // PERFORMANCE FIX: Called once at startup instead of per-request
   async function ensureShopWorkersTable() {
     try {
       await db.primary.execute(sql`
@@ -74,6 +75,10 @@ export function registerWorkerRoutes(app: Express) {
       // Swallow to avoid noisy logs if already exists
     }
   }
+
+  // PERFORMANCE FIX: Call once at startup
+  ensureShopWorkersTable();
+
   // Worker self info
   app.get(
     "/api/worker/me",
@@ -124,7 +129,6 @@ export function registerWorkerRoutes(app: Express) {
     requireAuth,
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
-      await ensureShopWorkersTable();
       const parsed = createWorkerSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json(formatValidationError(parsed.error));
@@ -211,7 +215,6 @@ export function registerWorkerRoutes(app: Express) {
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
       try {
-        await ensureShopWorkersTable();
         const result = await db.primary
           .select({
             id: users.id,
@@ -242,7 +245,6 @@ export function registerWorkerRoutes(app: Express) {
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
       try {
-        await ensureShopWorkersTable();
         const parsedQuery = workerNumberAvailabilitySchema.safeParse(req.query);
         if (!parsedQuery.success) {
           return res.status(400).json({
@@ -287,7 +289,6 @@ export function registerWorkerRoutes(app: Express) {
     requireAuth,
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
-      await ensureShopWorkersTable();
       const workerUserId = req.validatedParams?.workerUserId;
       if (typeof workerUserId !== "number") {
         return res.status(400).json({ message: "Invalid worker id" });
@@ -342,7 +343,6 @@ export function registerWorkerRoutes(app: Express) {
     requireAuth,
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
-      await ensureShopWorkersTable();
       const workerUserId = req.validatedParams?.workerUserId;
       if (typeof workerUserId !== "number") {
         return res.status(400).json({ message: "Invalid worker id" });
@@ -377,7 +377,6 @@ export function registerWorkerRoutes(app: Express) {
     requireAuth,
     requireRole(["shop"]),
     async (req: Request, res: Response) => {
-      await ensureShopWorkersTable();
       const workerUserId = req.validatedParams?.workerUserId;
       if (typeof workerUserId !== "number") {
         return res.status(400).json({ message: "Invalid worker id" });

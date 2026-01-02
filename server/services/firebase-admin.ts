@@ -157,6 +157,19 @@ export async function verifyAndExtractPhone(idToken: string): Promise<{
     phone?: string;
     error?: string;
 }> {
+    // ALLOW MOCK TOKEN IN DEVELOPMENT/TEST
+    // This allows the "auth/billing-not-enabled" workaround to function end-to-end
+    if (process.env.NODE_ENV !== "production" && idToken.startsWith("mock-token-")) {
+        const mockPhone = idToken.replace("mock-token-", "");
+        logger.info({ mockPhone }, "Using MOCK token verification for development");
+
+        const normalizedPhone = normalizeFirebasePhone(mockPhone);
+        return {
+            success: true,
+            phone: normalizedPhone,
+        };
+    }
+
     if (!isFirebaseAdminAvailable()) {
         return {
             success: false,

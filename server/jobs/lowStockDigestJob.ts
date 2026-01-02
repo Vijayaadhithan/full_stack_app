@@ -21,23 +21,28 @@ async function processLowStockDigest(storage: IStorage): Promise<void> {
     async () => {
       lastRun = new Date();
       try {
-        const shops = await storage.getShops();
-        for (const shop of shops) {
-          if (typeof shop.id !== "number") continue;
+        // PERFORMANCE FIX: Fetch all low-stock products in single query
+        // instead of N+1 queries per shop
+        const allLowStockProducts = await storage.getLowStockProducts({ limit: 1000 });
 
-          const lowStockItems = await storage.getLowStockProducts({
-            shopId: shop.id,
-          });
+        // Group products by shopId
+        const productsByShop = new Map<number, typeof allLowStockProducts>();
+        for (const product of allLowStockProducts) {
+          if (!product.shopId) continue;
+          const existing = productsByShop.get(product.shopId) ?? [];
+          existing.push(product);
+          productsByShop.set(product.shopId, existing);
+        }
 
-          if (!lowStockItems.length) continue;
-
+        // Create notifications for each shop with low stock items
+        for (const [shopId, lowStockItems] of Array.from(productsByShop)) {
           const count = lowStockItems.length;
           const title = "Low stock alert";
           const itemLabel = count === 1 ? "item is" : "items are";
           const message = `${count} ${itemLabel} low on stock. Open Inventory > Quick Edit to restock.`;
 
           await storage.createNotification({
-            userId: shop.id,
+            userId: shopId,
             type: "shop",
             title,
             message,
@@ -45,7 +50,7 @@ async function processLowStockDigest(storage: IStorage): Promise<void> {
         }
 
         logger.info(
-          { shopsProcessed: shops.length },
+          { shopsProcessed: productsByShop.size },
           "[LowStockDigest] Inventory digest completed"
         );
       } catch (error) {

@@ -47,9 +47,21 @@ const tables = [
 async function truncateAll() {
     console.log('⚠️  Truncating all tables (keeping structure)...\n');
 
+    // SECURITY: Validate table names against whitelist to prevent SQL injection
+    // Each table name is explicitly validated before being used in the query
+    const validTableNamePattern = /^[a-z_][a-z0-9_]*$/;
+
     for (const table of tables) {
+        // Validate table name format (alphanumeric + underscores only)
+        if (!validTableNamePattern.test(table)) {
+            console.log(`⚠️  Skipped: ${table} - Invalid table name format`);
+            continue;
+        }
+
         try {
-            await sql.unsafe(`TRUNCATE TABLE "${table}" RESTART IDENTITY CASCADE`);
+            // Use tagged template with sql() identifier helper for safe table reference
+            // This is equivalent to sql.unsafe but makes the safety explicit via validation
+            await sql`TRUNCATE TABLE ${sql(table)} RESTART IDENTITY CASCADE`;
             console.log(`✅ Truncated: ${table}`);
         } catch (error: any) {
             // Table might not exist yet (e.g., if migrations haven't run)
