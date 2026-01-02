@@ -253,7 +253,7 @@ export function initializeAuth(app: Express) {
         return done(null, false);
       }
       const sanitizedUser = sanitizeUser(userRecord);
-      return done(null, sanitizedUser ?? false);
+      return done(null, (sanitizedUser as Express.User) ?? false);
     }),
   );
 
@@ -314,7 +314,7 @@ export function initializeAuth(app: Express) {
         await setCache(cacheKey, safeUser, 300);
       }
 
-      return done(null, safeUser ?? false);
+      return done(null, (safeUser as Express.User) ?? false);
     } catch (error) {
       return done(error as Error);
     }

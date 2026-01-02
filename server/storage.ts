@@ -374,6 +374,7 @@ export interface GlobalSearchParams {
   lng?: number;
   radiusKm?: number;
   limit: number;
+  excludeUserId?: number; // Exclude user's own services, products, and shops
 }
 
 export type GlobalSearchResult =

@@ -3633,38 +3633,44 @@ export class PostgresStorage implements IStorage {
 
   // Global search with database-side filtering, distance calculation, and sorting
   async globalSearch(params: GlobalSearchParams): Promise<GlobalSearchResult[]> {
-    const { query, lat, lng, radiusKm, limit } = params;
+    const { query, lat, lng, limit, excludeUserId } = params;
     const normalizedQuery = query.trim().toLowerCase();
 
-    // If location is provided, we use it for distance sorting and filtering
+    // If location is provided, we use it for distance sorting
     const hasLocation = lat !== undefined && lng !== undefined;
-    const effectiveRadius = radiusKm ?? DEFAULT_NEARBY_RADIUS_KM;
 
-
-
-    // Calculate distance in meters for display/sorting
-    const distanceExpr = hasLocation
-      ? sql`ST_Distance(location::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) / 1000`
+    // Haversine distance expression for users table (services/products join to users)
+    const usersDistanceExpr = hasLocation
+      ? sql`${EARTH_RADIUS_KM} * 2 * asin(sqrt(
+          power(sin((radians(${users.latitude}::float8) - radians(${lat})) / 2), 2) +
+          cos(radians(${lat})) * cos(radians(${users.latitude}::float8)) *
+          power(sin((radians(${users.longitude}::float8) - radians(${lng})) / 2), 2)
+        ))`
       : sql`NULL::float8`;
 
-    // Relevance scoring
-    const relevanceExpr = (nameCol: any, descCol: any) => sql`
+    // Haversine distance expression for shops table
+    const shopsDistanceExpr = hasLocation
+      ? sql`${EARTH_RADIUS_KM} * 2 * asin(sqrt(
+          power(sin((radians(${shops.shopLocationLat}::float8) - radians(${lat})) / 2), 2) +
+          cos(radians(${lat})) * cos(radians(${shops.shopLocationLat}::float8)) *
+          power(sin((radians(${shops.shopLocationLng}::float8) - radians(${lng})) / 2), 2)
+        ))`
+      : sql`NULL::float8`;
+
+    // Relevance scoring helper
+    const relevanceExpr = (nameCol: any, descCol: any, distExpr: any) => sql`
       CASE WHEN LOWER(${nameCol}::text || ' ' || COALESCE(${descCol}::text, '')) LIKE ${'%' + normalizedQuery + '%'} THEN 4 ELSE 0 END
       + CASE 
-          WHEN ${hasLocation ? distanceExpr : sql`NULL`} IS NULL THEN 0
-          WHEN ${distanceExpr} < 1 THEN 2
-          WHEN ${distanceExpr} < 5 THEN 1.5
-          WHEN ${distanceExpr} < 15 THEN 1
-          WHEN ${distanceExpr} < 40 THEN 0.5
+          WHEN ${distExpr} IS NULL THEN 0
+          WHEN ${distExpr} < 1 THEN 2
+          WHEN ${distExpr} < 5 THEN 1.5
+          WHEN ${distExpr} < 15 THEN 1
+          WHEN ${distExpr} < 40 THEN 0.5
           ELSE 0
         END
     `;
 
-    // 1. Services Query
-    const servicesDistExpr = hasLocation
-      ? sql`ST_Distance(users.location::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) / 1000`
-      : sql`NULL::float8`;
-
+    // 1. Services Query - exclude user's own services by providerId
     const servicesQuery = db.primary
       .select({
         id: services.id,
@@ -3676,8 +3682,8 @@ export class PostgresStorage implements IStorage {
         providerName: users.name,
         city: users.addressCity,
         state: users.addressState,
-        distanceKm: servicesDistExpr.as("distance_km"),
-        relevanceScore: relevanceExpr(services.name, services.description).as("relevance_score"),
+        distanceKm: usersDistanceExpr.as("distance_km"),
+        relevanceScore: relevanceExpr(services.name, services.description, usersDistanceExpr).as("relevance_score"),
       })
       .from(services)
       .leftJoin(users, eq(services.providerId, users.id))
@@ -3685,14 +3691,23 @@ export class PostgresStorage implements IStorage {
         and(
           eq(services.isDeleted, false),
           sql`LOWER(${services.name}::text || ' ' || COALESCE(${services.description}::text, '')) LIKE ${'%' + normalizedQuery + '%'}`,
-          hasLocation ? sql`users.location IS NOT NULL AND ${servicesDistExpr} <= ${effectiveRadius}` : undefined
+          // Exclude user's own services
+          excludeUserId !== undefined ? ne(services.providerId, excludeUserId) : undefined
         )
       )
       .orderBy(desc(sql`relevance_score`), asc(sql`distance_km`))
       .limit(limit);
 
-    // 2. Products Query
-    const productsDistExpr = servicesDistExpr; // Same user table join logic
+    // 2. Products Query - exclude user's own products (products from shops they own)
+    // Use LIKE query for better matching of short product names/codes like "A1"
+    // Join through shops table to get proper shop location for distance filtering
+    const productsDistanceExpr = hasLocation
+      ? sql`${EARTH_RADIUS_KM} * 2 * asin(sqrt(
+          power(sin((radians(${shops.shopLocationLat}::float8) - radians(${lat})) / 2), 2) +
+          cos(radians(${lat})) * cos(radians(${shops.shopLocationLat}::float8)) *
+          power(sin((radians(${shops.shopLocationLng}::float8) - radians(${lng})) / 2), 2)
+        ))`
+      : sql`NULL::float8`;
 
     const productsQuery = db.primary
       .select({
@@ -3702,49 +3717,46 @@ export class PostgresStorage implements IStorage {
         description: products.description,
         price: products.price,
         images: products.images,
-        ownerId: products.shopId,
-        ownerName: users.name,
-        city: users.addressCity,
-        state: users.addressState,
-        distanceKm: productsDistExpr.as("distance_km"),
-        relevanceScore: relevanceExpr(products.name, products.description).as("relevance_score"),
+        ownerId: shops.ownerId,
+        ownerName: shops.shopName,
+        city: shops.shopAddressCity,
+        state: shops.shopAddressState,
+        distanceKm: productsDistanceExpr.as("distance_km"),
+        relevanceScore: relevanceExpr(products.name, products.description, productsDistanceExpr).as("relevance_score"),
       })
       .from(products)
-      .leftJoin(users, eq(products.shopId, users.id))
+      .leftJoin(shops, eq(products.shopId, shops.ownerId))
       .where(
         and(
           eq(products.isDeleted, false),
-          sql`${products.searchVector} @@ plainto_tsquery('english', ${normalizedQuery})`,
-          hasLocation ? sql`users.location IS NOT NULL AND ${productsDistExpr} <= ${effectiveRadius}` : undefined
+          sql`LOWER(${products.name}::text || ' ' || COALESCE(${products.description}::text, '')) LIKE ${'%' + normalizedQuery + '%'}`,
+          // Exclude user's own products (products from their shop)
+          excludeUserId !== undefined ? ne(products.shopId, excludeUserId) : undefined
         )
       )
       .orderBy(desc(sql`relevance_score`), asc(sql`distance_km`))
       .limit(limit);
 
-    // 3. Shops Query
-    const shopsDistExpr = hasLocation
-      ? sql`ST_Distance(shops.location::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) / 1000`
-      : sql`NULL::float8`;
-
-    // Use the shop filter 
+    // 3. Shops Query - exclude user's own shop
     const shopsQuery = db.primary
       .select({
         id: shops.id,
         ownerId: shops.ownerId,
         shopName: shops.shopName,
         description: shops.description,
-        image: users.profilePicture, // Using profile picture as shop image often
+        image: users.profilePicture,
         city: shops.shopAddressCity,
         state: shops.shopAddressState,
-        distanceKm: shopsDistExpr.as("distance_km"),
-        relevanceScore: relevanceExpr(shops.shopName, shops.description).as("relevance_score"),
+        distanceKm: shopsDistanceExpr.as("distance_km"),
+        relevanceScore: relevanceExpr(shops.shopName, shops.description, shopsDistanceExpr).as("relevance_score"),
       })
       .from(shops)
       .leftJoin(users, eq(shops.ownerId, users.id))
       .where(
         and(
           sql`LOWER(${shops.shopName}::text || ' ' || COALESCE(${shops.description}::text, '')) LIKE ${'%' + normalizedQuery + '%'}`,
-          hasLocation ? sql`shops.location IS NOT NULL AND ${shopsDistExpr} <= ${effectiveRadius}` : undefined
+          // Exclude user's own shop
+          excludeUserId !== undefined ? ne(shops.ownerId, excludeUserId) : undefined
         )
       )
       .orderBy(desc(sql`relevance_score`), asc(sql`distance_km`))

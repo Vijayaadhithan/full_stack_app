@@ -15,8 +15,21 @@ type SseConnection = {
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
+// Connection limits to prevent memory exhaustion
+export const MAX_CONNECTIONS_PER_USER = 5;
+export const MAX_TOTAL_CONNECTIONS = 10000;
+
 const connections = new Map<number, Set<SseConnection>>();
 const connectionToUser = new WeakMap<SseConnection, number>();
+
+function getTotalConnectionCount(): number {
+  let total = 0;
+  connections.forEach((set) => {
+    total += set.size;
+  });
+  return total;
+}
+
 
 function writeEvent(connection: SseConnection, payload: SseEvent) {
   try {
@@ -52,7 +65,22 @@ function createHeartbeat(connection: SseConnection) {
   return interval;
 }
 
-export function registerRealtimeClient(res: Response, userId: number) {
+export function registerRealtimeClient(res: Response, userId: number): boolean {
+  // Check global connection limit
+  if (getTotalConnectionCount() >= MAX_TOTAL_CONNECTIONS) {
+    logger.warn({ userId }, "SSE connection rejected: global limit reached");
+    res.status(503).json({ message: "Server at capacity, try again later" });
+    return false;
+  }
+
+  // Check per-user connection limit
+  const existingUserConns = connections.get(userId);
+  if (existingUserConns && existingUserConns.size >= MAX_CONNECTIONS_PER_USER) {
+    logger.warn({ userId, count: existingUserConns.size }, "SSE connection rejected: per-user limit reached");
+    res.status(429).json({ message: "Too many connections, close existing tabs" });
+    return false;
+  }
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -80,6 +108,8 @@ export function registerRealtimeClient(res: Response, userId: number) {
   const remove = () => cleanupConnection(connection);
   res.once("close", remove);
   res.once("error", remove);
+
+  return true;
 }
 
 function broadcastToUser(userId: number, payload: SseEvent) {

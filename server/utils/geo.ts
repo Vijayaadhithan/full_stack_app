@@ -1,6 +1,6 @@
-export const DEFAULT_NEARBY_RADIUS_KM = 60;
+export const DEFAULT_NEARBY_RADIUS_KM = 20;
 export const MIN_NEARBY_RADIUS_KM = 1;
-export const MAX_NEARBY_RADIUS_KM = 500;
+export const MAX_NEARBY_RADIUS_KM = 100;
 const EARTH_RADIUS_KM = 6371;
 
 export type CoordinateInput = number | string | null | undefined;
@@ -52,9 +52,9 @@ export function haversineDistanceKm(
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(toRadians(lat1)) *
-      Math.cos(toRadians(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos(toRadians(lat2)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return EARTH_RADIUS_KM * c;
 }

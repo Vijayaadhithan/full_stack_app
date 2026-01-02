@@ -371,7 +371,7 @@ app.disable("x-powered-by");
 // Trust first proxy (needed for correct client IPs behind proxies/load balancers)
 app.set("trust proxy", 1);
 app.use(helmet(helmetConfig));
-app.use(express.json());
+app.use(express.json({ limit: "500kb" }));
 app.use(
   cors({
     origin: allowAllOrigins

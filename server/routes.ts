@@ -3480,12 +3480,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const maxResults = Math.min(limit, GLOBAL_SEARCH_RESULT_LIMIT);
 
       // Delegate search to storage layer (database-side filtering and sorting)
+      // Exclude the current user's own services, products, and shops
+      const currentUserId = (req as any).user?.id as number | undefined;
       const results = await storage.globalSearch({
         query: q,
         lat,
         lng,
         radiusKm: radius ?? DEFAULT_NEARBY_RADIUS_KM,
         limit: maxResults,
+        excludeUserId: currentUserId,
       });
 
       res.json({

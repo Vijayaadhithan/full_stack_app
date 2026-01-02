@@ -14,6 +14,12 @@ const defaultSensitiveConfig: Partial<Options> = {
 const disableRateLimiters =
   String(process.env.DISABLE_RATE_LIMITERS || "").toLowerCase() === "true";
 
+// Production safeguard: Prevent rate limiter bypass in production
+if (process.env.NODE_ENV === "production" && disableRateLimiters) {
+  throw new Error("Rate limiters cannot be disabled in production");
+}
+
+
 function noopLimiter(): RateLimitRequestHandler {
   const handler = ((_, __, next) => next()) as RateLimitRequestHandler;
   handler.resetKey = () => { };

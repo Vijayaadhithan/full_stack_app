@@ -525,6 +525,8 @@ export const reviews = pgTable(
   },
   (table) => {
     return {
+      reviewsServiceIdx: index("reviews_service_id_idx").on(table.serviceId),
+      reviewsCustomerIdx: index("reviews_customer_id_idx").on(table.customerId),
       customerBookingUnique: unique("customer_booking_unique").on(
         table.customerId,
         table.bookingId,

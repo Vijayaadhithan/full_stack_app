@@ -10,8 +10,8 @@ export type Coordinates = {
 export type LocationSource = "profile" | "device" | "manual" | null;
 
 export const MIN_RADIUS_KM = 5;
-export const MAX_RADIUS_KM = 200;
-export const DEFAULT_RADIUS_KM = 60;
+export const MAX_RADIUS_KM = 100;
+export const DEFAULT_RADIUS_KM = 20;
 const RADIUS_STORAGE_FALLBACK_KEY = "location-radius";
 
 const isBrowser = typeof window !== "undefined";

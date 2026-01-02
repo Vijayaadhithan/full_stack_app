@@ -8,6 +8,7 @@ import { LanguageProvider } from "@/contexts/language-context";
 import { UserProvider } from "@/contexts/UserContext";
 import { ProtectedRoute } from "./lib/protected-route";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import RouteErrorBoundary from "@/components/RouteErrorBoundary";
 import {
   initializePushNotifications,
 } from "@/lib/permissions"; // Added imports
@@ -228,7 +229,6 @@ function App() {
             <PermissionRequester />
             <AdminProvider>
               <ErrorBoundary>
-                {/* Use the existing Router function component here */}
                 <Suspense
                   fallback={
                     <div className="flex min-h-screen items-center justify-center">
@@ -236,7 +236,9 @@ function App() {
                     </div>
                   }
                 >
-                  <Router />
+                  <RouteErrorBoundary routeName="App">
+                    <Router />
+                  </RouteErrorBoundary>
                 </Suspense>
               </ErrorBoundary>
               <Toaster />
