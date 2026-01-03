@@ -28,6 +28,8 @@ import {
 import { useLocationFilter } from "@/hooks/use-location-filter";
 import { LocationFilterPopover } from "@/components/location/location-filter-popover";
 import { useLanguage } from "@/contexts/language-context";
+import { CategoryIcon } from "@/components/ui/category-icon";
+import { getProductImage } from "@shared/predefinedImages";
 
 const container = {
   hidden: { opacity: 0 },
@@ -50,10 +52,10 @@ export default function BrowseProducts() {
   const locationFilter = useLocationFilter({ storageKey: "products-radius" });
   const locationQuery = locationFilter.location
     ? {
-        lat: locationFilter.location.latitude,
-        lng: locationFilter.location.longitude,
-        radius: locationFilter.radius,
-      }
+      lat: locationFilter.location.latitude,
+      lng: locationFilter.location.longitude,
+      radius: locationFilter.radius,
+    }
     : null;
 
   type ProductFilters = {
@@ -105,15 +107,15 @@ export default function BrowseProducts() {
     description: string | null;
     price: string;
     mrp: string | null;
-  category: string | null;
-  images: string[];
-  shopId: number | null;
-  isAvailable: boolean;
-  stock: number | null;
-  catalogModeEnabled?: boolean;
-  openOrderMode?: boolean;
-  allowPayLater?: boolean;
-};
+    category: string | null;
+    images: string[];
+    shopId: number | null;
+    isAvailable: boolean;
+    stock: number | null;
+    catalogModeEnabled?: boolean;
+    openOrderMode?: boolean;
+    allowPayLater?: boolean;
+  };
 
   type ProductListResponse = {
     page: number;
@@ -217,10 +219,10 @@ export default function BrowseProducts() {
       const optimisticCart = previousCart
         ? existingItem
           ? previousCart.map((item) =>
-              item.product.id === product.id
-                ? { ...item, quantity: item.quantity + 1 }
-                : item,
-            )
+            item.product.id === product.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item,
+          )
           : [...previousCart, { product, quantity: 1 }]
         : [{ product, quantity: 1 }];
 
@@ -484,15 +486,15 @@ export default function BrowseProducts() {
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               {locationFilter.location
                 ? t("products_location_within")
-                    .replace("{radius}", String(locationFilter.radius))
-                    .replace(
-                      "{lat}",
-                      locationFilter.location.latitude.toFixed(3),
-                    )
-                    .replace(
-                      "{lng}",
-                      locationFilter.location.longitude.toFixed(3),
-                    )
+                  .replace("{radius}", String(locationFilter.radius))
+                  .replace(
+                    "{lat}",
+                    locationFilter.location.latitude.toFixed(3),
+                  )
+                  .replace(
+                    "{lng}",
+                    locationFilter.location.longitude.toFixed(3),
+                  )
                 : t("products_location_empty")}
             </div>
           </CardContent>
@@ -523,12 +525,12 @@ export default function BrowseProducts() {
         ) : (
           <>
             <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-	              {filteredProducts.map((product) => {
-	                const openOrderAllowed = Boolean(
-	                  product.openOrderMode || product.catalogModeEnabled,
-	                );
-	                const stockCount = Number(product.stock ?? 0);
-	                const outOfStock = stockCount <= 0 && !openOrderAllowed;
+              {filteredProducts.map((product) => {
+                const openOrderAllowed = Boolean(
+                  product.openOrderMode || product.catalogModeEnabled,
+                );
+                const stockCount = Number(product.stock ?? 0);
+                const outOfStock = stockCount <= 0 && !openOrderAllowed;
                 return (
                   <motion.div
                     key={product.id}
@@ -540,14 +542,11 @@ export default function BrowseProducts() {
                       href={`/customer/shops/${product.shopId}/products/${product.id}`}
                     >
                       <Card className="h-full flex flex-col cursor-pointer overflow-hidden rounded-2xl border bg-white/80 shadow-sm transition-shadow duration-200 hover:shadow-lg">
-                        <div className="aspect-square relative overflow-hidden">
-                          <img
-                            src={
-                              product.images?.[0] ||
-                              "https://via.placeholder.com/400"
-                            }
-                            alt={product.name}
-                            className="object-cover w-full h-full"
+                        <div className="aspect-square relative overflow-hidden flex items-center justify-center bg-gradient-to-br from-muted/30 to-muted/60">
+                          <CategoryIcon
+                            category={getProductImage(product.category || 'other')}
+                            size="lg"
+                            showLabel={false}
                           />
                         </div>
                         <CardContent className="flex-1 p-4">
@@ -601,11 +600,11 @@ export default function BrowseProducts() {
                               {t("product_out_of_stock")}
                             </p>
                           ) : null}
-	                          {stockCount <= 0 && openOrderAllowed ? (
-	                            <p className="text-xs text-amber-700 mt-1">
-	                              {t("product_available_on_request")}
-	                            </p>
-	                          ) : null}
+                          {stockCount <= 0 && openOrderAllowed ? (
+                            <p className="text-xs text-amber-700 mt-1">
+                              {t("product_available_on_request")}
+                            </p>
+                          ) : null}
                         </CardContent>
                       </Card>
                     </Link>

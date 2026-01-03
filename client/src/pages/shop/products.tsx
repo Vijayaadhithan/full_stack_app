@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import { ShopLayout } from "@/components/layout/shop-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,15 +19,21 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-// Textarea import removed - used in lazy loaded component
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useLanguage } from "@/contexts/language-context";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Edit2, Trash2, Mic } from "lucide-react";
+import { Loader2, Plus, Edit2, Trash2 } from "lucide-react";
 import { Product } from "@shared/schema";
 import { productFilterConfig } from "@shared/config";
 import { z } from "zod";
@@ -86,12 +92,9 @@ export default function ShopProducts() {
   const [, navigate] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [quickAddName, setQuickAddName] = useState("");
   const [quickAddPrice, setQuickAddPrice] = useState("");
-  const [quickAddImage, setQuickAddImage] = useState<string | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const speechRecognitionRef = useRef<any>(null);
+  const [quickAddCategory, setQuickAddCategory] = useState("groceries");
 
   const findCategory = (value: string) => {
     const lower = value.toLowerCase();
@@ -215,98 +218,6 @@ export default function ShopProducts() {
     }
   };
 
-  const handleImageUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const files = event.target.files;
-    if (!files?.length) return;
-
-    try {
-      const formData = new FormData();
-      formData.append("file", files[0]);
-
-      const res = await apiRequest("POST", "/api/upload", formData);
-      if (!res.ok) throw new Error("Failed to upload image");
-
-      const { path } = await res.json();
-      const currentImages = form.getValues("images") || [];
-      form.setValue("images", [...currentImages, path]);
-      setImageUploadError(null);
-    } catch (error) {
-      setImageUploadError("Failed to upload image. Please try again.");
-    }
-  };
-
-  const handleRemoveImage = (index: number) => {
-    const currentImages = form.getValues("images") || [];
-    form.setValue(
-      "images",
-      currentImages.filter((_, i) => i !== index),
-    );
-  };
-
-  const handleQuickImageChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await apiRequest("POST", "/api/upload", formData);
-      if (!res.ok) {
-        throw new Error("Failed to upload image");
-      }
-      const { path } = await res.json();
-      setQuickAddImage(path);
-    } catch (error) {
-      toast({
-        title: t("error"),
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to upload image for quick add",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const startVoiceCapture = () => {
-    const SpeechRecognition =
-      (window as any).webkitSpeechRecognition ||
-      (window as any).SpeechRecognition;
-    if (!SpeechRecognition) {
-      toast({
-        title: t("error"),
-        description: "Your browser does not support speech input.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!speechRecognitionRef.current) {
-      const recognition = new SpeechRecognition();
-      recognition.lang = "en-IN";
-      recognition.onresult = (event: any) => {
-        const transcript = event.results?.[0]?.[0]?.transcript;
-        if (transcript) {
-          setQuickAddName(transcript);
-        }
-      };
-      recognition.onerror = () => {
-        toast({
-          title: t("error"),
-          description: "Could not capture audio. Please try again.",
-          variant: "destructive",
-        });
-        setIsListening(false);
-      };
-      recognition.onend = () => setIsListening(false);
-      speechRecognitionRef.current = recognition;
-    }
-    setIsListening(true);
-    speechRecognitionRef.current!.start();
-  };
-
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
       if (!shopContextId) {
@@ -380,7 +291,7 @@ export default function ShopProducts() {
         throw new Error("Unable to determine shop context for this action");
       }
       if (!quickAddName.trim()) {
-        throw new Error("Speak or type a product name");
+        throw new Error("Enter a product name");
       }
       const numericPrice = Number(quickAddPrice);
       if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
@@ -390,7 +301,7 @@ export default function ShopProducts() {
       const res = await apiRequest("POST", "/api/products/quick-add", {
         name: quickAddName.trim(),
         price: numericPrice.toFixed(2),
-        image: quickAddImage ?? undefined,
+        category: quickAddCategory,
       });
       if (!res.ok) {
         const error = await res.json();
@@ -402,7 +313,7 @@ export default function ShopProducts() {
       invalidateProductsQuery();
       setQuickAddName("");
       setQuickAddPrice("");
-      setQuickAddImage(null);
+      setQuickAddCategory("groceries");
       toast({
         title: "Product added",
         description: "Quick add item created. You can enrich details later.",
@@ -670,8 +581,8 @@ export default function ShopProducts() {
                     <div className="flex items-center gap-2">
                       <span
                         className={`rounded-full px-2 py-1 text-xs font-semibold ${isAvailable
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-muted text-muted-foreground"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-muted text-muted-foreground"
                           }`}
                       >
                         {isAvailable
@@ -768,9 +679,6 @@ export default function ShopProducts() {
                   form={form}
                   showAdvancedOptions={showAdvancedOptions}
                   setShowAdvancedOptions={setShowAdvancedOptions}
-                  handleImageUpload={handleImageUpload}
-                  handleRemoveImage={handleRemoveImage}
-                  imageUploadError={imageUploadError}
                   specKey={specKey}
                   specValue={specValue}
                   setSpecKey={setSpecKey}
@@ -793,28 +701,37 @@ export default function ShopProducts() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Snap a product photo, speak the name, and set a price. We&apos;ll create a basic listing instantly.
+                Quickly add a product with just name, price, and category.
               </p>
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Product photo</Label>
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    disabled={!canWriteProducts}
-                    onChange={handleQuickImageChange}
-                  />
-                  {quickAddImage && (
-                    <img
-                      src={quickAddImage}
-                      alt="Quick add preview"
-                      className="h-20 w-20 rounded-md border object-cover"
-                    />
-                  )}
+                  <Label className="text-sm font-medium">Category</Label>
+                  <Select
+                    value={quickAddCategory}
+                    onValueChange={setQuickAddCategory}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {productFilterConfig.categories.slice(0, 10).map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Price</Label>
+                  <Label className="text-sm font-medium">Product name</Label>
+                  <Input
+                    value={quickAddName}
+                    onChange={(e) => setQuickAddName(e.target.value)}
+                    placeholder="Type the name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Price (₹)</Label>
                   <Input
                     type="number"
                     min="0"
@@ -823,29 +740,6 @@ export default function ShopProducts() {
                     onChange={(e) => setQuickAddPrice(e.target.value)}
                     placeholder="0.00"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Product name</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={quickAddName}
-                      onChange={(e) => setQuickAddName(e.target.value)}
-                      placeholder="Say or type the name"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={startVoiceCapture}
-                      disabled={isListening}
-                    >
-                      <Mic
-                        className={`h-4 w-4 ${isListening ? "text-red-500" : ""}`}
-                      />
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Tap the mic and speak the product name.
-                  </p>
                 </div>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -860,7 +754,7 @@ export default function ShopProducts() {
                   {quickAddMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Add with photo &amp; voice
+                  Quick Add
                 </Button>
               </div>
             </CardContent>

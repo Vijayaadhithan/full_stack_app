@@ -68,7 +68,6 @@ const shopProfileSchema = z.object({
   pickupAvailable: z.boolean().optional(),
   deliveryAvailable: z.boolean().optional(),
   returnsEnabled: z.boolean().optional(),
-  upiQrCodeUrl: z.string().optional(),
   catalogModeEnabled: z.boolean().optional(),
   openOrderMode: z.boolean().optional(),
   allowPayLater: z.boolean().optional(),
@@ -117,7 +116,6 @@ export default function ShopProfile() {
     phone: user?.phone || "",
     email: user?.email || "",
     upiId: user?.upiId || "",
-    upiQrCodeUrl: user?.upiQrCodeUrl || "",
     pickupAvailable: user?.pickupAvailable ?? true,
     deliveryAvailable: user?.deliveryAvailable ?? false,
     returnsEnabled: user?.returnsEnabled ?? true,
@@ -180,7 +178,6 @@ export default function ShopProfile() {
         name,
         email,
         upiId,
-        upiQrCodeUrl,
         pickupAvailable,
         deliveryAvailable,
         returnsEnabled,
@@ -197,7 +194,6 @@ export default function ShopProfile() {
         email,
         name,
         upiId,
-        upiQrCodeUrl,
         pickupAvailable,
         returnsEnabled,
         deliveryAvailable,
@@ -688,52 +684,6 @@ export default function ShopProfile() {
                         </FormItem>
                       )}
                     />
-                    <div className="space-y-2">
-                      <Label>UPI QR Code</Label>
-                      <Input
-                        type="file"
-                        disabled={!editMode}
-                        onChange={async (e) => {
-                          if (!e.target.files || e.target.files.length === 0)
-                            return;
-                          const file = e.target.files[0];
-                          const formData = new FormData();
-                          formData.append("qr", file);
-                          try {
-                            const res = await apiRequest(
-                              "POST",
-                              "/api/users/upload-qr",
-                              formData,
-                            );
-                            if (res.ok) {
-                              const data = await res.json();
-                              form.setValue("upiQrCodeUrl", data.url);
-                            } else {
-                              const err = await res.json();
-                              toast({
-                                title: "Upload Failed",
-                                description:
-                                  err.message || "Failed to upload QR code",
-                                variant: "destructive",
-                              });
-                            }
-                          } catch (err) {
-                            toast({
-                              title: "Upload Failed",
-                              description: (err as Error).message,
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                      />
-                      {form.watch("upiQrCodeUrl") && (
-                        <img
-                          src={form.watch("upiQrCodeUrl")!}
-                          alt="QR Code"
-                          className="h-32 w-32 object-contain border mt-2"
-                        />
-                      )}
-                    </div>
                   </div>
                 </div>
 

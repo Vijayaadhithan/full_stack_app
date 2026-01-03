@@ -24,9 +24,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { productFilterConfig } from "@shared/config";
-import { AlertCircle, ImagePlus, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
 import type { Product } from "@shared/schema";
+import { CategoryIcon } from "@/components/ui/category-icon";
+import { productCategoryImages } from "@shared/predefinedImages";
 
 type ProductFormDialogProps = {
   t: (key: string) => string;
@@ -34,9 +36,6 @@ type ProductFormDialogProps = {
   form: UseFormReturn<any>;
   showAdvancedOptions: boolean;
   setShowAdvancedOptions: (value: boolean) => void;
-  handleImageUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleRemoveImage: (index: number) => void;
-  imageUploadError: string | null;
   specKey: string;
   specValue: string;
   setSpecKey: (value: string) => void;
@@ -48,15 +47,29 @@ type ProductFormDialogProps = {
   updatePending: boolean;
 };
 
+/**
+ * Preview component for showing category icon
+ */
+function CategoryIconPreview({ categoryId }: { categoryId: string }) {
+  const category = productCategoryImages[categoryId];
+  if (!category) return null;
+
+  return (
+    <CategoryIcon
+      category={category}
+      size="lg"
+      showLabel
+      showTamilLabel
+    />
+  );
+}
+
 export default function ProductFormDialog({
   t,
   editingProduct,
   form,
   showAdvancedOptions,
   setShowAdvancedOptions,
-  handleImageUpload,
-  handleRemoveImage,
-  imageUploadError,
   specKey,
   specValue,
   setSpecKey,
@@ -155,11 +168,10 @@ export default function ProductFormDialog({
                       </div>
                       <div className="mt-3 flex items-center justify-between">
                         <span
-                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                            isAvailable
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-muted text-muted-foreground"
-                          }`}
+                          className={`rounded-full px-2 py-1 text-xs font-semibold ${isAvailable
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-muted text-muted-foreground"
+                            }`}
                         >
                           {isAvailable
                             ? t("inventory_have_it")
@@ -178,46 +190,18 @@ export default function ProductFormDialog({
               />
             </div>
 
-            <div className="space-y-4">
-              <FormLabel>{t("product_images")}</FormLabel>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                {(form.watch("images") as string[] | undefined)?.map(
-                  (image, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={image}
-                        alt=""
-                        className="w-full h-24 object-cover rounded"
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-1 right-1"
-                        onClick={() => handleRemoveImage(index)}
-                      >
-                        <AlertCircle className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ),
-                )}
-                <label className="border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer">
-                  <ImagePlus className="h-8 w-8 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground mt-2">
-                    {t("add_image")}
-                  </span>
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                    accept="image/*"
-                  />
-                </label>
+            {/* Category-based product icon preview */}
+            {form.watch("category") && (
+              <div className="p-4 bg-muted/30 rounded-lg space-y-2">
+                <FormLabel className="text-muted-foreground text-sm">{t("product_icon")}</FormLabel>
+                <div className="flex items-center gap-3">
+                  <CategoryIconPreview categoryId={form.watch("category") as string} />
+                  <p className="text-sm text-muted-foreground">
+                    {t("category_icon_auto_hint")}
+                  </p>
+                </div>
               </div>
-              {imageUploadError && (
-                <p className="text-sm text-destructive">{imageUploadError}</p>
-              )}
-            </div>
+            )}
 
             <details className="rounded-md border bg-muted/30 p-3">
               <summary className="cursor-pointer text-sm font-medium">
@@ -405,7 +389,7 @@ export default function ProductFormDialog({
                     <div className="flex flex-wrap gap-2 mt-2">
                       {Object.entries(
                         (form.watch("specifications") as Record<string, string>) ||
-                          {},
+                        {},
                       ).map(([key, value]) => (
                         <div
                           key={key}

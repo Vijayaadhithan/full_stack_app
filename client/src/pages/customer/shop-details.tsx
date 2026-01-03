@@ -30,6 +30,8 @@ import { useParams, Link } from "wouter";
 import Meta from "@/components/meta";
 import type { PublicShop } from "@/types/public-shop";
 import { useLanguage } from "@/contexts/language-context";
+import { CategoryIcon } from "@/components/ui/category-icon";
+import { getProductImage } from "@shared/predefinedImages";
 
 const container = {
   hidden: { opacity: 0 },
@@ -495,14 +497,11 @@ export default function ShopDetails() {
                       className="block h-full"
                     >
                       <Card className="h-full flex flex-col cursor-pointer overflow-hidden rounded-2xl border bg-white/80 shadow-sm transition-shadow duration-200 hover:shadow-lg">
-                        <div className="aspect-square relative overflow-hidden">
-                          <img
-                            src={
-                              product.images?.[0] ||
-                              "https://via.placeholder.com/400"
-                            }
-                            alt={product.name}
-                            className="object-cover w-full h-full"
+                        <div className="aspect-square relative overflow-hidden flex items-center justify-center bg-gradient-to-br from-muted/30 to-muted/60">
+                          <CategoryIcon
+                            category={getProductImage(product.category || 'other')}
+                            size="lg"
+                            showLabel={false}
                           />
                           {product.mrp &&
                             parseFloat(product.mrp) > parseFloat(product.price) && (

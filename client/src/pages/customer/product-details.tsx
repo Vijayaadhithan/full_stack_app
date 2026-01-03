@@ -21,6 +21,8 @@ import { ProductDetail } from "@shared/api-contract";
 import { apiClient } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/use-auth";
 import type { PublicShop } from "@/types/public-shop";
+import { CategoryIcon, ProductCategoryBadge } from "@/components/ui/category-icon";
+import { getProductImage } from "@shared/predefinedImages";
 
 export default function ProductDetails() {
   const { toast } = useToast();
@@ -321,13 +323,17 @@ export default function ProductDetails() {
             </div>
           </CardHeader>
           <CardContent className="grid md:grid-cols-2 gap-6">
-            <div className="aspect-square relative overflow-hidden rounded-lg border">
-              <img
-                src={product.images?.[0] || "https://via.placeholder.com/600"}
-                alt={product.name}
-                className="object-cover w-full h-full"
-              />
-              {/* Discount display removed as 'discount' property doesn't exist on Product type */}
+            <div className="aspect-square relative overflow-hidden rounded-lg border flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted">
+              {(() => {
+                const categoryImage = getProductImage(product.category || 'other');
+                return (
+                  <CategoryIcon
+                    category={categoryImage}
+                    size="xl"
+                    showLabel={false}
+                  />
+                );
+              })()}
             </div>
             <div className="space-y-4">
               <p className="text-muted-foreground">{product.description}</p>
@@ -358,9 +364,10 @@ export default function ProductDetails() {
                 </p>
               )}
               {product.category && (
-                <p className="text-sm text-muted-foreground">
-                  Category: {product.category}
-                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Category:</span>
+                  <ProductCategoryBadge category={getProductImage(product.category)} />
+                </div>
               )}
               {/* Add more product details here if needed, e.g., specifications */}
               <div className="flex gap-3 pt-4">
@@ -435,8 +442,8 @@ export default function ProductDetails() {
                           <Star
                             key={index}
                             className={`h-4 w-4 ${index < review.rating
-                                ? "fill-yellow-400 text-yellow-500"
-                                : "text-muted-foreground"
+                              ? "fill-yellow-400 text-yellow-500"
+                              : "text-muted-foreground"
                               }`}
                           />
                         ))}
