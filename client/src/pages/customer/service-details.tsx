@@ -13,11 +13,13 @@ import { Button } from "@/components/ui/button";
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Loader2, MapPin, Star, Clock, Sparkles } from "lucide-react";
+import { Loader2, MapPin, Star, Clock } from "lucide-react";
 import Meta from "@/components/meta";
 import { ServiceDetail } from "@shared/api-contract";
 import { apiClient } from "@/lib/apiClient";
 import { useLanguage } from "@/contexts/language-context";
+import { CategoryIcon } from "@/components/ui/category-icon";
+import { getServiceImage } from "@shared/predefinedImages";
 
 export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
@@ -82,7 +84,7 @@ export default function ServiceDetails() {
 
   const providerName = service.provider?.name ?? t("provider_label");
   const providerInitial = providerName.charAt(0).toUpperCase();
-  const serviceImage = service.images?.[0] ?? null;
+  const categoryImage = getServiceImage(service.category);
   const providerAddress = [
     service.provider?.addressStreet,
     service.provider?.addressCity,
@@ -117,18 +119,12 @@ export default function ServiceDetails() {
         <Card className="overflow-hidden border-0 bg-gradient-to-br from-sky-50 via-white to-emerald-50 shadow-sm">
           <CardContent className="p-0">
             <div className="grid gap-6 p-6 md:grid-cols-[220px_1fr]">
-              <div className="h-40 w-full overflow-hidden rounded-2xl bg-muted/60">
-                {serviceImage ? (
-                  <img
-                    src={serviceImage}
-                    alt={service.name}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-slate-500">
-                    <Sparkles className="h-8 w-8" />
-                  </div>
-                )}
+              <div className="h-40 w-full overflow-hidden rounded-2xl flex items-center justify-center bg-gradient-to-br from-muted/30 to-muted/60">
+                <CategoryIcon
+                  category={categoryImage}
+                  size="xl"
+                  showLabel={false}
+                />
               </div>
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -239,8 +235,8 @@ export default function ServiceDetails() {
                         <Star
                           key={index}
                           className={`h-4 w-4 ${index < review.rating
-                              ? "fill-yellow-400 text-yellow-500"
-                              : "text-muted-foreground"
+                            ? "fill-yellow-400 text-yellow-500"
+                            : "text-muted-foreground"
                             }`}
                         />
                       ))}

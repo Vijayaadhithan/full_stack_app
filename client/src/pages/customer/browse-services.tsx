@@ -11,12 +11,6 @@ import {
   Clock,
   Search,
   Filter,
-  Grid,
-  Sparkles,
-  Briefcase,
-  HeartPulse,
-  BookOpen,
-  Wrench,
   CalendarDays,
   Siren,
 } from "lucide-react";
@@ -36,6 +30,8 @@ import {
   Coordinates as GeoCoordinates,
 } from "@/hooks/use-location-filter";
 import { LocationFilterPopover } from "@/components/location/location-filter-popover";
+import { CategoryIcon } from "@/components/ui/category-icon";
+import { getServiceImage, serviceCategoryImages, getGradientCSS } from "@shared/predefinedImages";
 
 const container = {
   hidden: { opacity: 0 },
@@ -82,49 +78,14 @@ const computeDistance = (
   return haversineDistance(origin.latitude, origin.longitude, lat, lng);
 };
 
+// Category tiles using predefined service images
 const categoryTiles = [
-  {
-    value: "all",
-    label: "All Services",
-    icon: Grid,
-    image: "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=800&auto=format&fit=crop",
-    description: "Explore everything we offer"
-  },
-  {
-    value: "Beauty & Wellness",
-    label: "Beauty",
-    icon: Sparkles,
-    image: "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?q=80&w=800&auto=format&fit=crop",
-    description: "Salon, makeup & spa"
-  },
-  {
-    value: "Home Services",
-    label: "Home Fixes",
-    icon: Wrench,
-    image: "https://images.unsplash.com/photo-1581578731117-104f8a746956?q=80&w=800&auto=format&fit=crop",
-    description: "Plumbing, electrical & repairs"
-  },
-  {
-    value: "Professional Services",
-    label: "Pros",
-    icon: Briefcase,
-    image: "https://images.unsplash.com/photo-1664575602276-acd073f104c1?q=80&w=800&auto=format&fit=crop",
-    description: "Consulting & legal help"
-  },
-  {
-    value: "Health & Fitness",
-    label: "Health",
-    icon: HeartPulse,
-    image: "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?q=80&w=800&auto=format&fit=crop",
-    description: "Yoga, gym & training"
-  },
-  {
-    value: "Education & Training",
-    label: "Learning",
-    icon: BookOpen,
-    image: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=800&auto=format&fit=crop",
-    description: "Tutors & classes"
-  },
+  { value: "all", label: "All Services", description: "Explore everything we offer" },
+  { value: "plumbing", label: "Plumbing", description: "Pipes & water service" },
+  { value: "electrical_work", label: "Electrical", description: "Wiring & fixtures" },
+  { value: "carpentry", label: "Carpentry", description: "Wood & furniture work" },
+  { value: "beauty_salon", label: "Beauty", description: "Salon & makeup" },
+  { value: "motor_repair", label: "Vehicle", description: "Two-wheeler service" },
 ];
 
 type ProviderSummary = {
@@ -358,6 +319,9 @@ export default function BrowseServices() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {categoryTiles.map((tile) => {
             const isActive = filters.category === tile.value;
+            const categoryImage = tile.value === 'all'
+              ? serviceCategoryImages.other_service
+              : getServiceImage(tile.value);
             return (
               <motion.div
                 key={tile.value}
@@ -370,17 +334,19 @@ export default function BrowseServices() {
                     relative cursor-pointer group overflow-hidden rounded-xl aspect-[4/5]
                     ${isActive ? 'ring-2 ring-primary ring-offset-2' : ''}
                   `}
+                  style={{
+                    background: getGradientCSS(categoryImage.gradient, '135deg'),
+                  }}
                 >
-                  <div className="absolute inset-0 bg-black/40 group-hover:bg-black/50 transition-colors z-10" />
-                  <img
-                    src={tile.image}
-                    alt={tile.label}
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                  />
-                  <div className="absolute inset-0 z-20 p-4 flex flex-col justify-end text-white">
-                    <tile.icon className="h-6 w-6 mb-2 opacity-90" />
-                    <h3 className="font-bold text-lg leading-tight mb-1">{tile.label}</h3>
-                    <p className="text-xs text-white/80 line-clamp-2">{tile.description}</p>
+                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors z-10" />
+                  <div className="absolute inset-0 z-20 p-4 flex flex-col items-center justify-center text-white">
+                    <CategoryIcon
+                      category={categoryImage}
+                      size="lg"
+                      showLabel={false}
+                    />
+                    <h3 className="font-bold text-lg leading-tight mt-3 text-center">{tile.label}</h3>
+                    <p className="text-xs text-white/80 line-clamp-2 text-center mt-1">{tile.description}</p>
                   </div>
                 </div>
               </motion.div>
