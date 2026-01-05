@@ -202,7 +202,8 @@ export function useLocationFilter(
       },
       {
         enableHighAccuracy: true,
-        timeout: 15_000,
+        timeout: 30000,
+        maximumAge: 60000,
       },
     );
   }, [toast]);
