@@ -240,3 +240,11 @@ Adjust bucket names and credentials to match your environment.
 - `docs/api-quickstart.md` - curl examples for auth, CSRF, and core flows
 - `docs/role-endpoint-matrix.md` - role-based endpoint overview
 - `docs/deployment-runbook.md` - production deployment checklist
+
+
+
+cd /var/www/doorstep-api
+git pull origin main
+npm install
+npm run build
+pm2 restart server

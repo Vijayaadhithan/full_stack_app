@@ -839,10 +839,15 @@ export function registerAuthRoutes(app: Express) {
         expiresAt,
       });
 
-      // In development, log OTP to console
-      // In production, integrate with SMS provider (Twilio, MSG91, etc.)
-      logger.info(`[FORGOT PASSWORD OTP] Phone: ${normalizedPhone}, OTP: ${otp}`);
-      console.log(`\n🔐 FORGOT PASSWORD OTP for ${normalizedPhone}: ${otp}\n`);
+      // SECURITY: Only log OTP in development - never expose in production logs!
+      if (process.env.NODE_ENV === 'development') {
+        logger.info(`[FORGOT PASSWORD OTP] Phone: ${normalizedPhone}, OTP: ${otp}`);
+        console.log(`\n🔐 FORGOT PASSWORD OTP for ${normalizedPhone}: ${otp}\n`);
+      } else {
+        // In production, only log that OTP was sent (without the actual OTP value)
+        logger.info(`[FORGOT PASSWORD OTP] OTP sent to phone: ${normalizedPhone.slice(0, -4)}****`);
+        // TODO: Integrate with SMS provider (Twilio, MSG91, etc.) for actual SMS delivery
+      }
 
       return res.json({ success: true, message: "OTP sent successfully" });
     } catch (error) {
