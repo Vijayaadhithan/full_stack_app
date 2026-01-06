@@ -143,8 +143,13 @@ class AuthViewModel @Inject constructor(
     
     /**
      * Check if user exists by phone number
+     * @param activity Required for Firebase Phone Auth reCAPTCHA
      */
-    fun checkUser(onExistingUser: () -> Unit, onNewUser: () -> Unit) {
+    fun checkUser(
+        activity: android.app.Activity,
+        onExistingUser: () -> Unit,
+        onNewUser: () -> Unit
+    ) {
         if (_phone.value.length != 10) {
             _error.value = "Please enter a valid 10-digit phone number"
             return
@@ -164,34 +169,88 @@ class AuthViewModel @Inject constructor(
                     _userExists.value = result.data.exists
                     _existingUserName.value = result.data.name
                     
+                    _isLoading.value = false
                     if (result.data.exists) {
                         onExistingUser()
                     } else {
                         // New user - need to send OTP
-                        sendOtp(onSuccess = onNewUser)
+                        sendOtpWithActivity(activity, onSuccess = onNewUser)
                     }
                 }
                 is Result.Error -> {
                     _error.value = result.message
+                    _isLoading.value = false
                 }
                 is Result.Loading -> {}
             }
-            
-            _isLoading.value = false
         }
     }
     
     /**
-     * Send OTP via Firebase
+     * Send OTP via Firebase - requires Activity for reCAPTCHA
+     */
+    fun sendOtpWithActivity(activity: android.app.Activity, onSuccess: () -> Unit) {
+        val phoneNumber = "+91${_phone.value}"
+        
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            
+            val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+                override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+                    // Auto-verification (rare, mainly for testing)
+                    viewModelScope.launch {
+                        try {
+                            val authResult = firebaseAuth.signInWithCredential(credential).await()
+                            firebaseIdToken = authResult.user?.getIdToken(true)?.await()?.token
+                            _isLoading.value = false
+                            onSuccess()
+                        } catch (e: Exception) {
+                            _isLoading.value = false
+                            _error.value = e.message ?: "Auto-verification failed"
+                        }
+                    }
+                }
+                
+                override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
+                    _isLoading.value = false
+                    _error.value = when {
+                        e.message?.contains("blocked") == true -> 
+                            "Too many requests. Please try again later."
+                        e.message?.contains("invalid") == true ->
+                            "Invalid phone number. Please check and try again."
+                        else -> e.message ?: "Failed to send OTP"
+                    }
+                }
+                
+                override fun onCodeSent(
+                    vId: String,
+                    token: PhoneAuthProvider.ForceResendingToken
+                ) {
+                    verificationId = vId
+                    _isLoading.value = false
+                    onSuccess()
+                }
+            }
+            
+            val options = PhoneAuthOptions.newBuilder(firebaseAuth)
+                .setPhoneNumber(phoneNumber)
+                .setTimeout(60L, TimeUnit.SECONDS)
+                .setActivity(activity)
+                .setCallbacks(callbacks)
+                .build()
+            
+            PhoneAuthProvider.verifyPhoneNumber(options)
+        }
+    }
+    
+    /**
+     * Send OTP via Firebase (fallback without Activity - shows error)
      */
     private fun sendOtp(onSuccess: () -> Unit) {
-        // For now, we'll simulate OTP. In production, use PhoneAuthProvider
-        // This would require Activity reference for reCAPTCHA
-        viewModelScope.launch {
-            // Simulating OTP sent - in production, implement Firebase Phone Auth
-            _error.value = "OTP feature requires Firebase configuration. Please set up google-services.json"
-            // onSuccess() // Call this after OTP is sent
-        }
+        // This is called when Activity is not available
+        // In practice, we should always have access to Activity via the UI
+        _error.value = "Please use the app's login screen to send OTP"
     }
     
     /**
@@ -329,6 +388,44 @@ class AuthViewModel @Inject constructor(
             _confirmPin.value = ""
             _otp.value = ""
             _name.value = ""
+        }
+    }
+    
+    /**
+     * Reset PIN after OTP verification
+     */
+    fun resetPin(onSuccess: () -> Unit) {
+        if (_pin.value.length != 4) {
+            _error.value = "Please enter a valid 4-digit PIN"
+            return
+        }
+        
+        if (_pin.value != _confirmPin.value) {
+            _error.value = "PINs do not match"
+            return
+        }
+        
+        val token = firebaseIdToken
+        if (token == null) {
+            _error.value = "Session expired. Please verify your phone again."
+            return
+        }
+        
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            
+            when (val result = authRepository.resetPin(token, _pin.value)) {
+                is Result.Success -> {
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
         }
     }
     

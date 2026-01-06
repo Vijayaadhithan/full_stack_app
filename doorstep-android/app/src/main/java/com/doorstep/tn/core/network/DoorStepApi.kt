@@ -3,6 +3,7 @@ package com.doorstep.tn.core.network
 import com.doorstep.tn.auth.data.model.CheckUserRequest
 import com.doorstep.tn.auth.data.model.CheckUserResponse
 import com.doorstep.tn.auth.data.model.LoginPinRequest
+import com.doorstep.tn.auth.data.model.ResetPinRequest
 import com.doorstep.tn.auth.data.model.RuralRegisterRequest
 import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.customer.data.model.Product
@@ -34,6 +35,9 @@ interface DoorStepApi {
     
     @POST("api/logout")
     suspend fun logout(): Response<Unit>
+    
+    @POST("api/auth/reset-pin")
+    suspend fun resetPin(@Body request: ResetPinRequest): Response<Unit>
     
     // ==================== PRODUCTS ENDPOINTS ====================
     

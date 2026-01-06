@@ -57,3 +57,12 @@ data class UserResponse(
     @Json(name = "hasShopProfile") val hasShopProfile: Boolean? = false,
     @Json(name = "hasProviderProfile") val hasProviderProfile: Boolean? = false
 )
+
+/**
+ * Request for PIN reset
+ */
+@JsonClass(generateAdapter = true)
+data class ResetPinRequest(
+    @Json(name = "firebaseIdToken") val firebaseIdToken: String,
+    @Json(name = "newPin") val newPin: String
+)

@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -36,6 +37,9 @@ fun PhoneEntryScreen(
     onNavigateToPin: () -> Unit,
     onNavigateToOtp: () -> Unit
 ) {
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    
     val language by viewModel.language.collectAsState()
     val phone by viewModel.phone.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -207,10 +211,16 @@ fun PhoneEntryScreen(
                     Button(
                         onClick = {
                             viewModel.clearError()
-                            viewModel.checkUser(
-                                onExistingUser = onNavigateToPin,
-                                onNewUser = onNavigateToOtp
-                            )
+                            activity?.let { act ->
+                                viewModel.checkUser(
+                                    activity = act,
+                                    onExistingUser = onNavigateToPin,
+                                    onNewUser = onNavigateToOtp
+                                )
+                            } ?: run {
+                                // Fallback if activity is null (shouldn't happen)
+                                viewModel.clearError()
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()

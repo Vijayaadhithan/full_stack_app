@@ -3,6 +3,7 @@ package com.doorstep.tn.auth.data.repository
 import com.doorstep.tn.auth.data.model.CheckUserRequest
 import com.doorstep.tn.auth.data.model.CheckUserResponse
 import com.doorstep.tn.auth.data.model.LoginPinRequest
+import com.doorstep.tn.auth.data.model.ResetPinRequest
 import com.doorstep.tn.auth.data.model.RuralRegisterRequest
 import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.core.network.DoorStepApi
@@ -119,6 +120,27 @@ class AuthRepository @Inject constructor(
         } catch (e: Exception) {
             // Even if logout fails on server, we clear local state
             Result.Success(Unit)
+        }
+    }
+    
+    /**
+     * Reset PIN using Firebase ID token
+     */
+    suspend fun resetPin(firebaseIdToken: String, newPin: String): Result<Unit> {
+        return try {
+            val response = api.resetPin(ResetPinRequest(firebaseIdToken, newPin))
+            if (response.isSuccessful) {
+                Result.Success(Unit)
+            } else {
+                val errorMessage = when (response.code()) {
+                    401 -> "Session expired. Please verify your phone again."
+                    404 -> "User not found"
+                    else -> response.message()
+                }
+                Result.Error(errorMessage, response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to reset PIN")
         }
     }
 }

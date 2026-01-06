@@ -70,7 +70,21 @@ object Translations {
         // Profile
         val profile: String,
         val logout: String,
-        val settings: String
+        val settings: String,
+        
+        // Forgot PIN
+        val resetPin: String,
+        val enterPhoneToReset: String,
+        val sendOtp: String,
+        val verifyOtp: String,
+        val resendOtp: String,
+        val newPin: String,
+        val otpSentTo: String,
+        val createNewPin: String,
+        val pinResetSuccess: String,
+        val pinResetSuccessMessage: String,
+        val backToLogin: String,
+        val phoneNumber: String
     )
     
     val en = Strings(
@@ -138,7 +152,21 @@ object Translations {
         // Profile
         profile = "Profile",
         logout = "Logout",
-        settings = "Settings"
+        settings = "Settings",
+        
+        // Forgot PIN
+        resetPin = "Reset PIN",
+        enterPhoneToReset = "Enter your phone to reset PIN",
+        sendOtp = "Send OTP",
+        verifyOtp = "Verify OTP",
+        resendOtp = "Resend OTP",
+        newPin = "New PIN",
+        otpSentTo = "OTP sent to",
+        createNewPin = "Create a new secure PIN",
+        pinResetSuccess = "PIN Reset!",
+        pinResetSuccessMessage = "Your PIN has been reset successfully. You can now login with your new PIN.",
+        backToLogin = "Back to Login",
+        phoneNumber = "Phone Number"
     )
     
     val ta = Strings(
@@ -206,7 +234,21 @@ object Translations {
         // Profile
         profile = "சுயவிவரம்",
         logout = "வெளியேறு",
-        settings = "அமைப்புகள்"
+        settings = "அமைப்புகள்",
+        
+        // Forgot PIN
+        resetPin = "PIN மீட்டமை",
+        enterPhoneToReset = "PIN மீட்டமைக்க உங்கள் மொபைல் எண்",
+        sendOtp = "OTP அனுப்பு",
+        verifyOtp = "OTP சரிபார்",
+        resendOtp = "OTP மீண்டும் அனுப்பு",
+        newPin = "புதிய PIN",
+        otpSentTo = "OTP அனுப்பப்பட்டது",
+        createNewPin = "புதிய பாதுகாப்பான PIN உருவாக்கு",
+        pinResetSuccess = "PIN மீட்டமைக்கப்பட்டது!",
+        pinResetSuccessMessage = "உங்கள் PIN வெற்றிகரமாக மீட்டமைக்கப்பட்டது. புதிய PIN உடன் உள்நுழையலாம்.",
+        backToLogin = "உள்நுழைவுக்கு திரும்பு",
+        phoneNumber = "மொபைல் எண்"
     )
     
     fun get(language: String): Strings {

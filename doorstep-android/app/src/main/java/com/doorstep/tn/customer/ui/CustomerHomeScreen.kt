@@ -20,7 +20,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.customer.data.model.Booking
+import com.doorstep.tn.customer.data.model.Order
 
 /**
  * Customer Home Dashboard Screen
@@ -28,6 +31,7 @@ import com.doorstep.tn.common.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerHomeScreen(
+    viewModel: CustomerViewModel = hiltViewModel(),
     onNavigateToProducts: () -> Unit,
     onNavigateToServices: () -> Unit,
     onNavigateToCart: () -> Unit,
@@ -36,6 +40,19 @@ fun CustomerHomeScreen(
     onNavigateToProfile: () -> Unit,
     onLogout: () -> Unit
 ) {
+    // Collect state from ViewModel
+    val orders by viewModel.orders.collectAsState()
+    val bookings by viewModel.bookings.collectAsState()
+    val cartItems by viewModel.cartItems.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    
+    // Load data on first composition
+    LaunchedEffect(Unit) {
+        viewModel.loadOrders()
+        viewModel.loadBookings()
+        viewModel.loadCart()
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -58,7 +75,9 @@ fun CustomerHomeScreen(
                     IconButton(onClick = onNavigateToCart) {
                         BadgedBox(
                             badge = {
-                                Badge { Text("3") }
+                                if (cartItems.isNotEmpty()) {
+                                    Badge { Text("${cartItems.size}") }
+                                }
                             }
                         ) {
                             Icon(
@@ -151,7 +170,7 @@ fun CustomerHomeScreen(
                 }
             }
             
-            // My Orders Section
+            // My Orders Section - Show real data
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -170,17 +189,36 @@ fun CustomerHomeScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Sample order card
-                OrderPreviewCard(
-                    orderId = "#ORD-1234",
-                    status = "Dispatched",
-                    itemCount = 3,
-                    total = "₹450",
-                    onClick = onNavigateToOrders
-                )
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(80.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = OrangePrimary)
+                    }
+                } else if (orders.isEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateCard)
+                    ) {
+                        Text(
+                            text = "No orders yet. Start shopping!",
+                            color = WhiteTextMuted,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
+                    // Show latest order
+                    val latestOrder = orders.first()
+                    OrderPreviewCard(
+                        order = latestOrder,
+                        onClick = onNavigateToOrders
+                    )
+                }
             }
             
-            // My Bookings Section
+            // My Bookings Section - Show real data
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -199,13 +237,33 @@ fun CustomerHomeScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                BookingPreviewCard(
-                    serviceName = "AC Repair",
-                    providerName = "Kumar Services",
-                    date = "Tomorrow, 10 AM",
-                    status = "Confirmed",
-                    onClick = onNavigateToBookings
-                )
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(80.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = OrangePrimary)
+                    }
+                } else if (bookings.isEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateCard)
+                    ) {
+                        Text(
+                            text = "No bookings yet. Browse services!",
+                            color = WhiteTextMuted,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
+                    // Show latest booking
+                    val latestBooking = bookings.first()
+                    BookingPreviewCard(
+                        booking = latestBooking,
+                        onClick = onNavigateToBookings
+                    )
+                }
             }
             
             // Logout
@@ -310,12 +368,16 @@ private fun CategoryChip(
 
 @Composable
 private fun OrderPreviewCard(
-    orderId: String,
-    status: String,
-    itemCount: Int,
-    total: String,
+    order: Order,
     onClick: () -> Unit
 ) {
+    val statusColor = when (order.status.lowercase()) {
+        "delivered" -> SuccessGreen
+        "dispatched", "shipped" -> ProviderBlue
+        "cancelled" -> ErrorRed
+        else -> OrangePrimary
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -332,13 +394,13 @@ private fun OrderPreviewCard(
         ) {
             Column {
                 Text(
-                    text = orderId,
+                    text = "#ORD-${order.id}",
                     style = MaterialTheme.typography.titleSmall,
                     color = WhiteText,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "$itemCount items • $total",
+                    text = "${order.items?.size ?: 0} items • ₹${order.total}",
                     style = MaterialTheme.typography.bodySmall,
                     color = WhiteTextMuted
                 )
@@ -346,11 +408,11 @@ private fun OrderPreviewCard(
             
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = SuccessGreen.copy(alpha = 0.2f)
+                color = statusColor.copy(alpha = 0.2f)
             ) {
                 Text(
-                    text = status,
-                    color = SuccessGreen,
+                    text = order.status.replaceFirstChar { it.uppercase() },
+                    color = statusColor,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
@@ -361,12 +423,16 @@ private fun OrderPreviewCard(
 
 @Composable
 private fun BookingPreviewCard(
-    serviceName: String,
-    providerName: String,
-    date: String,
-    status: String,
+    booking: Booking,
     onClick: () -> Unit
 ) {
+    val statusColor = when (booking.status.lowercase()) {
+        "confirmed", "accepted" -> SuccessGreen
+        "pending" -> OrangePrimary
+        "rejected", "cancelled" -> ErrorRed
+        else -> ProviderBlue
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -383,30 +449,32 @@ private fun BookingPreviewCard(
         ) {
             Column {
                 Text(
-                    text = serviceName,
+                    text = booking.service?.name ?: "Service #${booking.serviceId}",
                     style = MaterialTheme.typography.titleSmall,
                     color = WhiteText,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = providerName,
+                    text = booking.timeSlotLabel ?: "Scheduled",
                     style = MaterialTheme.typography.bodySmall,
                     color = WhiteTextMuted
                 )
-                Text(
-                    text = date,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = OrangePrimary
-                )
+                booking.bookingDate?.let { date ->
+                    Text(
+                        text = date,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OrangePrimary
+                    )
+                }
             }
             
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = ProviderBlue.copy(alpha = 0.2f)
+                color = statusColor.copy(alpha = 0.2f)
             ) {
                 Text(
-                    text = status,
-                    color = ProviderBlue,
+                    text = booking.status.replaceFirstChar { it.uppercase() },
+                    color = statusColor,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )

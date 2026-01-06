@@ -16,6 +16,7 @@ import com.doorstep.tn.auth.ui.OtpVerifyScreen
 import com.doorstep.tn.auth.ui.PinEntryScreen
 import com.doorstep.tn.auth.ui.ProfileSetupScreen
 import com.doorstep.tn.auth.ui.PinSetupScreen
+import com.doorstep.tn.auth.ui.ForgotPinScreen
 import com.doorstep.tn.customer.ui.CustomerHomeScreen
 import com.doorstep.tn.customer.ui.products.ProductsListScreen
 import com.doorstep.tn.customer.ui.services.ServicesListScreen
@@ -35,6 +36,7 @@ object Routes {
     const val PIN_ENTRY = "pin_entry"
     const val PROFILE_SETUP = "profile_setup"
     const val PIN_SETUP = "pin_setup"
+    const val FORGOT_PIN = "forgot_pin"
     
     // Customer routes
     const val CUSTOMER_HOME = "customer_home"
@@ -136,7 +138,19 @@ fun DoorStepNavHost(
                         popUpTo(Routes.PHONE_ENTRY) { inclusive = true }
                     }
                 },
-                onForgotPin = { /* TODO: Implement forgot PIN flow */ }
+                onForgotPin = { navController.navigate(Routes.FORGOT_PIN) }
+            )
+        }
+        
+        composable(Routes.FORGOT_PIN) {
+            ForgotPinScreen(
+                viewModel = authViewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onPinResetSuccess = {
+                    navController.navigate(Routes.PHONE_ENTRY) {
+                        popUpTo(Routes.PHONE_ENTRY) { inclusive = true }
+                    }
+                }
             )
         }
         
