@@ -158,6 +158,12 @@ let staticAssetsMounted = false;
 function mountStaticAssets() {
   if (staticAssetsMounted) return;
 
+  // Skip static file serving if explicitly disabled (for API-only deployments)
+  if (process.env.DISABLE_STATIC_FILES === "true") {
+    logger.info("Static file serving disabled via DISABLE_STATIC_FILES");
+    return;
+  }
+
   const indexHtmlPath = path.join(staticAssetsDir, "index.html");
   const staticDirExists = fs.existsSync(staticAssetsDir);
   const indexHtmlExists = staticDirExists && fs.existsSync(indexHtmlPath);
