@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.DoorStepTN" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/orange_primary</item>
+        <item name="android:colorPrimaryDark">@color/orange_dark</item>
+        <item name="android:colorAccent">@color/amber_secondary</item>
+        <item name="android:windowBackground">@color/slate_darker</item>
+        <item name="android:statusBarColor">@color/slate_darker</item>
+        <item name="android:navigationBarColor">@color/slate_darker</item>
+    </style>
+</resources>

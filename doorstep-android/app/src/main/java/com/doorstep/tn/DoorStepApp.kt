@@ -1,0 +1,17 @@
+package com.doorstep.tn
+
+import android.app.Application
+import dagger.hilt.android.HiltAndroidApp
+
+/**
+ * Application class for DoorStep TN.
+ * Annotated with @HiltAndroidApp to enable Hilt dependency injection.
+ */
+@HiltAndroidApp
+class DoorStepApp : Application() {
+    
+    override fun onCreate() {
+        super.onCreate()
+        // Application initialization can go here
+    }
+}

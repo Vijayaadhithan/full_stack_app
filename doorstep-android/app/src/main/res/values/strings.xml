@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DoorStep TN</string>
+    
+    <!-- Auth -->
+    <string name="enter_phone">Enter your mobile number</string>
+    <string name="phone_placeholder">9876543210</string>
+    <string name="get_otp">Continue</string>
+    <string name="enter_otp">Enter OTP</string>
+    <string name="verify">Verify</string>
+    <string name="enter_pin">Enter your PIN</string>
+    <string name="create_pin">Create a 4-digit PIN</string>
+    <string name="confirm_pin">Confirm PIN</string>
+    <string name="forgot_pin">Forgot PIN?</string>
+    <string name="login">Login</string>
+    <string name="next">Next</string>
+    <string name="back">Back</string>
+    <string name="your_name">Your Name</string>
+    <string name="choose_role">How will you use the app?</string>
+    <string name="customer">Customer</string>
+    <string name="customer_desc">Book services &amp; shop products</string>
+    <string name="shop_owner">Shop Owner</string>
+    <string name="shop_desc">Sell your products</string>
+    <string name="provider">Service Provider</string>
+    <string name="provider_desc">Offer your services</string>
+    <string name="welcome">Welcome!</string>
+    <string name="complete">Complete Setup</string>
+    <string name="switch_lang">தமிழ்</string>
+    <string name="tagline">Your local services, delivered</string>
+    
+    <!-- Common -->
+    <string name="search">Search</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="loading">Loading…</string>
+    <string name="error">Error</string>
+    <string name="retry">Retry</string>
+    <string name="no_data">No data available</string>
+    
+    <!-- Customer -->
+    <string name="browse_products">Browse Products</string>
+    <string name="browse_services">Browse Services</string>
+    <string name="my_cart">My Cart</string>
+    <string name="my_orders">My Orders</string>
+    <string name="my_bookings">My Bookings</string>
+    <string name="view_all">View All</string>
+    <string name="add_to_cart">Add to Cart</string>
+    <string name="book_now">Book Now</string>
+    <string name="checkout">Checkout</string>
+    
+    <!-- Shop -->
+    <string name="dashboard">Dashboard</string>
+    <string name="products">Products</string>
+    <string name="orders">Orders</string>
+    <string name="workers">Workers</string>
+    <string name="promotions">Promotions</string>
+    <string name="inventory">Inventory</string>
+    
+    <!-- Provider -->
+    <string name="services">Services</string>
+    <string name="bookings">Bookings</string>
+    <string name="earnings">Earnings</string>
+    <string name="availability">Availability</string>
+    
+    <!-- Profile -->
+    <string name="profile">Profile</string>
+    <string name="logout">Logout</string>
+    <string name="settings">Settings</string>
+</resources>

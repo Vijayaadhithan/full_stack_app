@@ -1,0 +1,97 @@
+# DoorStep Android App - Comprehensive .gitignore
+
+# ================== Build Outputs ==================
+# Build folders in any subdirectory
+**/build/
+build/
+
+# APK and App Bundle files
+*.apk
+*.aab
+*.ap_
+
+# Compiled class files
+*.class
+*.dex
+
+# Generated files
+bin/
+gen/
+out/
+
+# ================== Gradle ==================
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# Gradle build cache
+.gradle-build-cache/
+
+# ================== IDE - Android Studio / IntelliJ ==================
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+
+# Android Studio Navigation editor temp files
+.navigation/
+
+# Android Studio captures folder
+captures/
+
+# Keystore files (sensitive - don't commit!)
+*.jks
+*.keystore
+
+# ================== Local Configuration ==================
+# Local properties (SDK path, etc.)
+local.properties
+
+# Firebase config (contains API keys)
+google-services.json
+
+# ================== Native Code ==================
+.externalNativeBuild/
+.cxx/
+obj/
+
+# ================== OS Generated Files ==================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# ================== Logs ==================
+*.log
+crash-reports/
+
+# ================== Testing ==================
+.test-results/
+test-output/
+
+# ================== Misc ==================
+# Proguard folder
+proguard/
+
+# Android Profiler files
+*.hprof
+
+# Coverage reports
+*.ec
+
+# Lint reports
+lint/
+lint-results*.html
+lint-results*.xml
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output

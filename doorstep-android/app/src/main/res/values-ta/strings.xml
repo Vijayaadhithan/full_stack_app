@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">டோர்ஸ்டெப் TN</string>
+    
+    <!-- Auth -->
+    <string name="enter_phone">உங்கள் மொபைல் எண்</string>
+    <string name="phone_placeholder">9876543210</string>
+    <string name="get_otp">தொடரவும்</string>
+    <string name="enter_otp">OTP உள்ளிடுக</string>
+    <string name="verify">சரிபார்க்கவும்</string>
+    <string name="enter_pin">உங்கள் PIN</string>
+    <string name="create_pin">4 இலக்க PIN உருவாக்கவும்</string>
+    <string name="confirm_pin">PIN உறுதிப்படுத்தவும்</string>
+    <string name="forgot_pin">PIN மறந்துவிட்டதா?</string>
+    <string name="login">உள்நுழை</string>
+    <string name="next">அடுத்து</string>
+    <string name="back">பின்</string>
+    <string name="your_name">உங்கள் பெயர்</string>
+    <string name="choose_role">நீங்கள் யார்?</string>
+    <string name="customer">வாடிக்கையாளர்</string>
+    <string name="customer_desc">சேவைகளை முன்பதிவு செய்க</string>
+    <string name="shop_owner">கடை உரிமையாளர்</string>
+    <string name="shop_desc">பொருட்களை விற்கவும்</string>
+    <string name="provider">சேவை வழங்குநர்</string>
+    <string name="provider_desc">சேவைகளை வழங்கவும்</string>
+    <string name="welcome">வரவேற்பு!</string>
+    <string name="complete">அமைப்பை முடிக்கவும்</string>
+    <string name="switch_lang">English</string>
+    <string name="tagline">உங்கள் உள்ளூர் சேவைகள்</string>
+    
+    <!-- Common -->
+    <string name="search">தேடு</string>
+    <string name="cancel">ரத்து செய்</string>
+    <string name="save">சேமி</string>
+    <string name="delete">நீக்கு</string>
+    <string name="loading">ஏற்றுகிறது…</string>
+    <string name="error">பிழை</string>
+    <string name="retry">மீண்டும் முயற்சி</string>
+    <string name="no_data">தரவு இல்லை</string>
+    
+    <!-- Customer -->
+    <string name="browse_products">பொருட்களை பார்க்க</string>
+    <string name="browse_services">சேவைகளை பார்க்க</string>
+    <string name="my_cart">என் கார்ட்</string>
+    <string name="my_orders">என் ஆர்டர்கள்</string>
+    <string name="my_bookings">என் முன்பதிவுகள்</string>
+    <string name="view_all">அனைத்தும் பார்க்க</string>
+    <string name="add_to_cart">கார்ட்டில் சேர்</string>
+    <string name="book_now">இப்போது புக் செய்</string>
+    <string name="checkout">செக்அவுட்</string>
+    
+    <!-- Shop -->
+    <string name="dashboard">டாஷ்போர்டு</string>
+    <string name="products">பொருட்கள்</string>
+    <string name="orders">ஆர்டர்கள்</string>
+    <string name="workers">ஊழியர்கள்</string>
+    <string name="promotions">தள்ளுபடிகள்</string>
+    <string name="inventory">சரக்கு</string>
+    
+    <!-- Provider -->
+    <string name="services">சேவைகள்</string>
+    <string name="bookings">முன்பதிவுகள்</string>
+    <string name="earnings">வருமானம்</string>
+    <string name="availability">கிடைக்கும் நேரம்</string>
+    
+    <!-- Profile -->
+    <string name="profile">சுயவிவரம்</string>
+    <string name="logout">வெளியேறு</string>
+    <string name="settings">அமைப்புகள்</string>
+</resources>

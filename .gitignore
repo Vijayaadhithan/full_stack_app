@@ -10,3 +10,24 @@ vite.config.ts.*
 /logs
 app.log
 config/network-config.json
+
+# ================== Android ==================
+# Build outputs (catches 2000+ files)
+doorstep-android/**/build/
+doorstep-android/.gradle/
+doorstep-android/.idea/
+doorstep-android/local.properties
+doorstep-android/app/google-services.json
+doorstep-android/*.apk
+doorstep-android/*.aab
+*.hprof
+
+# ================== IDE ==================
+.idea/
+*.iml
+*.iws
+.vscode/settings.json
+
+# ================== OS ==================
+Thumbs.db
+ehthumbs.db

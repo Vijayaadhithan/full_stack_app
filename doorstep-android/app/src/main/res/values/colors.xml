@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary colors -->
+    <color name="orange_primary">#FFF97316</color>
+    <color name="orange_light">#FFFB923C</color>
+    <color name="orange_dark">#FFEA580C</color>
+    <color name="amber_secondary">#FFF59E0B</color>
+    <color name="amber_light">#FFFBBF24</color>
+    
+    <!-- Background colors -->
+    <color name="slate_background">#FF1E293B</color>
+    <color name="slate_darker">#FF0F172A</color>
+    <color name="slate_card">#FF334155</color>
+    
+    <!-- Text colors -->
+    <color name="white_text">#FFFFFFFF</color>
+    <color name="white_text_muted">#B3FFFFFF</color>
+    <color name="white_text_subtle">#66FFFFFF</color>
+    
+    <!-- Status colors -->
+    <color name="success_green">#FF10B981</color>
+    <color name="error_red">#FFEF4444</color>
+    <color name="warning_yellow">#FFFBBF24</color>
+    
+    <!-- Role colors -->
+    <color name="customer_orange">#FFF97316</color>
+    <color name="shop_green">#FF10B981</color>
+    <color name="provider_blue">#FF3B82F6</color>
+    
+    <!-- Glass effect -->
+    <color name="glass_white">#1AFFFFFF</color>
+    <color name="glass_border">#33FFFFFF</color>
+</resources>
