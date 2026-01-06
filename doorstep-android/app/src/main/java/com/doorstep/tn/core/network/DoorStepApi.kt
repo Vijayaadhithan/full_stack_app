@@ -32,7 +32,7 @@ interface DoorStepApi {
     @GET("api/user")
     suspend fun getCurrentUser(): Response<UserResponse>
     
-    @POST("api/auth/logout")
+    @POST("api/logout")
     suspend fun logout(): Response<Unit>
     
     // ==================== PRODUCTS ENDPOINTS ====================

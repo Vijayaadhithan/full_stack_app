@@ -1,265 +1,186 @@
-import { Geolocation } from "@capacitor/geolocation";
-import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
-import { LocalNotifications } from "@capacitor/local-notifications";
-import { PushNotifications, Token } from "@capacitor/push-notifications";
-import { Capacitor } from "@capacitor/core";
-
-const isTestEnvironment =
-  typeof process !== "undefined" && process.env?.NODE_ENV === "test";
-
-const safeConsole = {
-  log: (...args: Parameters<typeof console.log>) => {
-    if (!isTestEnvironment) {
-      console.log(...args);
-    }
-  },
-  info: (...args: Parameters<typeof console.info>) => {
-    if (!isTestEnvironment) {
-      console.info(...args);
-    }
-  },
-  warn: (...args: Parameters<typeof console.warn>) => {
-    if (!isTestEnvironment) {
-      console.warn(...args);
-    }
-  },
-  error: (...args: Parameters<typeof console.error>) => {
-    if (!isTestEnvironment) {
-      console.error(...args);
-    }
-  },
-};
-
-const permissionDeps = {
-  Geolocation,
-  Filesystem,
-  Directory,
-  Encoding,
-  LocalNotifications,
-  PushNotifications,
-  Capacitor,
-};
-
-export function __setPermissionsDepsForTesting(
-  overrides: Partial<typeof permissionDeps>,
-) {
-  Object.assign(permissionDeps, overrides);
-}
+/**
+ * Permissions module - Web-only version
+ * Uses standard browser APIs instead of Capacitor
+ * 
+ * Note: For the native Android app, permissions are handled natively.
+ * This file is for the web frontend only.
+ */
 
 // --- Geolocation Permissions ---
+
 export const checkLocationPermission = async (): Promise<string> => {
-  try {
-    const status = await permissionDeps.Geolocation.checkPermissions();
-    return status.location;
-  } catch (e) {
-    safeConsole.error("Error checking location permission:", e);
-    return "denied"; // Default to denied on error
+  if (!navigator.geolocation) {
+    return "unsupported";
   }
+
+  if (navigator.permissions) {
+    try {
+      const result = await navigator.permissions.query({ name: "geolocation" });
+      return result.state; // "granted", "denied", or "prompt"
+    } catch (e) {
+      console.warn("Error checking location permission:", e);
+      return "unknown";
+    }
+  }
+
+  return "unknown";
 };
 
 export const requestLocationPermission = async (): Promise<string> => {
-  try {
-    const status = await permissionDeps.Geolocation.requestPermissions();
-    return status.location;
-  } catch (e) {
-    safeConsole.error("Error requesting location permission:", e);
-    return "denied";
+  if (!navigator.geolocation) {
+    return "unsupported";
   }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      () => resolve("granted"),
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          resolve("denied");
+        } else {
+          resolve("error");
+        }
+      },
+      { timeout: 5000 }
+    );
+  });
 };
 
-export const getCurrentPosition = async () => {
-  try {
-    const permission = await requestLocationPermission();
-    if (permission === "granted") {
-      const coordinates = await permissionDeps.Geolocation.getCurrentPosition();
-      safeConsole.log("Current position:", coordinates);
-      return coordinates;
-    } else {
-      safeConsole.warn("Location permission not granted.");
-      return null;
-    }
-  } catch (e) {
-    safeConsole.error("Error getting current position:", e);
+export const getCurrentPosition = async (): Promise<GeolocationPosition | null> => {
+  if (!navigator.geolocation) {
+    console.warn("Geolocation not supported");
     return null;
   }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        console.log("Current position:", position);
+        resolve(position);
+      },
+      (error) => {
+        console.error("Error getting location:", error.message);
+        resolve(null);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000,
+      }
+    );
+  });
 };
 
-// --- Filesystem (Storage) Permissions (Approximation) ---
-// Note: Capacitor's Filesystem API doesn't have explicit permission checks like permissionDeps.Geolocation.
-// Permissions are generally handled by the OS when the app tries to read/write.
-// We'll simulate a check by trying a benign read operation.
+// --- Notification Permissions ---
 
-export const checkStoragePermission = async (): Promise<boolean> => {
-  try {
-    // Try to read a non-existent file to see if basic access is allowed.
-    // This is an indirect way to check if storage is generally accessible.
-    await permissionDeps.Filesystem.readFile({
-      path: "capacitor.check.txt",
-      directory: permissionDeps.Directory.Data, // Or permissionDeps.Directory.Documents / permissionDeps.Directory.ExternalStorage depending on need
-      encoding: permissionDeps.Encoding.UTF8,
-    });
-    return true; // If it doesn't throw, we assume some level of access
-  } catch (e: any) {
-    if (
-      e.message === "File does not exist." ||
-      e.message === "File not found"
-    ) {
-      // This is an expected error if the file doesn't exist, implies we can try to access storage
-      return true;
-    }
-    safeConsole.warn("Storage access might be restricted:", e);
-    return false; // Other errors might indicate a permission issue
-  }
-};
-
-// Example: Writing a file (implicitly requests permission if needed on some platforms/versions)
-export const writeFileToStorage = async (fileName: string, data: string) => {
-  try {
-    await permissionDeps.Filesystem.writeFile({
-      path: fileName,
-      data: data,
-      directory: permissionDeps.Directory.Data, // Choose appropriate directory
-      encoding: permissionDeps.Encoding.UTF8,
-    });
-    safeConsole.log("File written successfully:", fileName);
-    const contents = await permissionDeps.Filesystem.readFile({
-      path: fileName,
-      directory: permissionDeps.Directory.Data,
-      encoding: permissionDeps.Encoding.UTF8,
-    });
-    safeConsole.log("File content:", contents.data);
-    return true;
-  } catch (e) {
-    safeConsole.error("Error writing file:", e);
-    return false;
-  }
-};
-
-// --- Local Notifications Permissions ---
 export const checkNotificationPermission = async (): Promise<string> => {
-  try {
-    const status = await permissionDeps.LocalNotifications.checkPermissions();
-    return status.display;
-  } catch (e) {
-    safeConsole.error("Error checking notification permission:", e);
-    return "denied";
+  if (!("Notification" in window)) {
+    return "unsupported";
   }
+  return Notification.permission; // "granted", "denied", or "default"
 };
 
 export const requestNotificationPermission = async (): Promise<string> => {
+  if (!("Notification" in window)) {
+    return "unsupported";
+  }
+
   try {
-    const status = await permissionDeps.LocalNotifications.requestPermissions();
-    return status.display;
+    const permission = await Notification.requestPermission();
+    return permission;
   } catch (e) {
-    safeConsole.error("Error requesting notification permission:", e);
+    console.error("Error requesting notification permission:", e);
     return "denied";
   }
 };
 
-export const scheduleLocalNotification = async () => {
-  try {
-    const permission = await requestNotificationPermission();
-    if (permission === "granted") {
-      await permissionDeps.LocalNotifications.schedule({
-        notifications: [
-          {
-            title: "Test Notification",
-            body: "This is a test local notification!",
-            id: 1,
-            schedule: { at: new Date(Date.now() + 1000 * 5) }, // 5 seconds from now
-            sound: undefined,
-            attachments: undefined,
-            actionTypeId: "",
-            extra: null,
-          },
-        ],
-      });
-      safeConsole.log("Local notification scheduled");
-    } else {
-      safeConsole.warn("Notification permission not granted.");
-    }
-  } catch (e) {
-    safeConsole.error("Error scheduling local notification:", e);
-  }
-};
-
-// --- Push Notifications ---
-// Basic setup, registration, and listeners.
-// Full implementation requires a backend service (e.g., Firebase Cloud Messaging).
-
-export const registerPushNotifications = async () => {
-  if (!permissionDeps.Capacitor.isNativePlatform()) {
-    safeConsole.log("Push notifications not supported on web.");
-    return false;
-  }
-  let permStatus = await permissionDeps.PushNotifications.checkPermissions();
-
-  if (permStatus.receive === "prompt") {
-    permStatus = await permissionDeps.PushNotifications.requestPermissions();
-  }
-
-  if (permStatus.receive !== "granted") {
-    safeConsole.warn("Push notification permission not granted.");
-    return false;
-  }
-
-  // Register with Apple / Google to receive push via APNS/FCM
-  await permissionDeps.PushNotifications.register();
-  return true;
-};
-
-export const addPushNotificationListeners = () => {
-  if (!permissionDeps.Capacitor.isNativePlatform()) {
-    return; // Do nothing on web
-  }
-  // On success, we should be able to receive notifications
-  permissionDeps.PushNotifications.addListener("registration", (token: Token) => {
-    safeConsole.info("Push registration success, token: " + token.value);
-    // Send token to your server here to store it for sending pushes
-  });
-
-  // Some issue with registration, perhaps definitional
-  permissionDeps.PushNotifications.addListener("registrationError", (error: any) => {
-    safeConsole.error("Error on push registration: " + JSON.stringify(error));
-  });
-
-  // Show us the notification payload if the app is open on our device
-  permissionDeps.PushNotifications.addListener(
-    "pushNotificationReceived",
-    (notification: any) => {
-      safeConsole.log("Push received: " + JSON.stringify(notification));
-      // You might want to display a local notification here if the app is in the foreground
-      // or update UI based on the payload
-    },
-  );
-
-  // Method called when tapping on a notification
-  permissionDeps.PushNotifications.addListener(
-    "pushNotificationActionPerformed",
-    (notification: any) => {
-      safeConsole.log("Push action performed: " + JSON.stringify(notification));
-      // Navigate to a specific screen or perform an action based on the notification
-    },
-  );
-};
-
-// Call this early in your app's lifecycle, e.g., in App.tsx
-export const initializePushNotifications = async () => {
-  if (!permissionDeps.Capacitor.isNativePlatform()) {
-    safeConsole.log("Skipping push notification initialization on web.");
+export const showNotification = (title: string, options?: NotificationOptions): void => {
+  if (!("Notification" in window)) {
+    console.warn("Notifications not supported");
     return;
   }
-  const registered = await registerPushNotifications();
-  if (registered) {
-    addPushNotificationListeners();
+
+  if (Notification.permission === "granted") {
+    new Notification(title, options);
+  } else {
+    console.warn("Notification permission not granted");
   }
 };
 
-// --- General Notes ---
-// 1. Web Functionality: Most of your existing web application logic (UI rendering, API calls to your backend)
-//    should work as is within the Capacitor WebView. Capacitor primarily bridges native device features.
-// 2. In-App Notifications: If your current "in-app notifications" are custom UI elements displayed within your web app's HTML/JS,
-//    they will continue to work. The LocalNotifications and PushNotifications plugins are for native OS-level notifications.
-//    You can, however, trigger your existing in-app notification UI when a push notification is received while the app is open.
-// 3. Contacts: Accessing device contacts typically requires a dedicated Cordova plugin (e.g., `cordova-plugin-contacts`)
-//    and setting it up with permissionDeps.Capacitor. This is a more involved process than the direct Capacitor plugins.
+// --- Storage Permissions ---
+// Web storage (localStorage, sessionStorage) doesn't require explicit permissions
+
+export const checkStoragePermission = async (): Promise<boolean> => {
+  try {
+    localStorage.setItem("__test__", "test");
+    localStorage.removeItem("__test__");
+    return true;
+  } catch (e) {
+    console.warn("Storage access restricted:", e);
+    return false;
+  }
+};
+
+// --- Push Notifications (Web) ---
+// For service worker based push notifications
+
+export const registerPushNotifications = async (): Promise<boolean> => {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    console.log("Push notifications not supported");
+    return false;
+  }
+
+  try {
+    const permission = await requestNotificationPermission();
+    if (permission !== "granted") {
+      console.warn("Notification permission denied");
+      return false;
+    }
+
+    // Service worker registration would go here
+    console.log("Push notification registration ready");
+    return true;
+  } catch (e) {
+    console.error("Error registering push notifications:", e);
+    return false;
+  }
+};
+
+export const initializePushNotifications = async (): Promise<void> => {
+  const registered = await registerPushNotifications();
+  if (registered) {
+    console.log("Push notifications initialized");
+  }
+};
+
+// --- Placeholder functions for compatibility ---
+// These are no-ops since we don't have native capabilities on web
+
+export const addPushNotificationListeners = (): void => {
+  // No-op on web
+};
+
+export const scheduleLocalNotification = async (): Promise<void> => {
+  // Use web notifications instead
+  if (Notification.permission === "granted") {
+    new Notification("Test Notification", {
+      body: "This is a test notification!",
+      icon: "/favicon.ico",
+    });
+  }
+};
+
+export const writeFileToStorage = async (
+  _fileName: string,
+  _data: string
+): Promise<boolean> => {
+  console.warn("File storage is handled differently on web");
+  return false;
+};
+
+// For testing
+export function __setPermissionsDepsForTesting(
+  _overrides: Record<string, unknown>
+): void {
+  // No-op for web
+}

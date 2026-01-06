@@ -1,50 +1,73 @@
 import React, { useState, useEffect } from "react";
-import { Capacitor } from "@capacitor/core";
-import {
-  checkLocationPermission,
-  requestLocationPermission,
-  getCurrentPosition,
-} from "@/lib/permissions";
 
+/**
+ * Permission Requester Component - Web-only version
+ * Uses standard browser Geolocation API instead of Capacitor
+ */
 const PermissionRequester: React.FC = () => {
-  const isNative = Capacitor.isNativePlatform();
   const showDebugUi =
     import.meta.env.DEV ||
     `${import.meta.env.VITE_ENABLE_PERMISSION_DEBUG ?? ""}`.toLowerCase() ===
-      "true";
-  const shouldRender = isNative && showDebugUi;
-  const [locationPermission, setLocationPermission] =
-    useState<string>("unknown");
-  const [currentCoordinates, setCurrentCoordinates] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+    "true";
 
-  useEffect(() => {
-    if (!shouldRender) {
-      return;
-    }
-    const fetchPermissionStatus = async () => {
-      setIsLoading(true);
-      const status = await checkLocationPermission();
-      setLocationPermission(status);
-      setIsLoading(false);
-    };
-    fetchPermissionStatus();
-  }, [shouldRender]);
-
-  const handleRequestLocation = async () => {
-    setIsLoading(true);
-    const status = await requestLocationPermission();
-    setLocationPermission(status);
-    if (status === "granted") {
-      const coords = await getCurrentPosition();
-      setCurrentCoordinates(coords);
-    }
-    setIsLoading(false);
-  };
-
-  if (!shouldRender) {
+  // Only show in development mode
+  if (!showDebugUi) {
     return null;
   }
+
+  const [locationPermission, setLocationPermission] =
+    useState<string>("unknown");
+  const [currentCoordinates, setCurrentCoordinates] = useState<GeolocationCoordinates | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check if geolocation is supported
+    if (!navigator.geolocation) {
+      setLocationPermission("unsupported");
+      return;
+    }
+
+    // Check permission state if available
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: "geolocation" }).then((result) => {
+        setLocationPermission(result.state);
+        result.addEventListener("change", () => {
+          setLocationPermission(result.state);
+        });
+      }).catch(() => {
+        setLocationPermission("unknown");
+      });
+    }
+  }, []);
+
+  const handleRequestLocation = async () => {
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by your browser");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentCoordinates(position.coords);
+        setLocationPermission("granted");
+        setIsLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLocationPermission(err.code === 1 ? "denied" : "error");
+        setIsLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000,
+      }
+    );
+  };
 
   return (
     <div
@@ -53,40 +76,49 @@ const PermissionRequester: React.FC = () => {
         padding: "16px",
         margin: "16px 0",
         borderRadius: "8px",
+        backgroundColor: "#f5f5f5",
       }}
     >
-      <h4>Location Permission Management</h4>
+      <h4>📍 Location Permission (Debug)</h4>
       <p>
-        Current Location Permission Status:{" "}
-        <strong>{locationPermission}</strong>
+        Status: <strong>{locationPermission}</strong>
       </p>
+      {error && <p style={{ color: "red" }}>Error: {error}</p>}
+
       {locationPermission !== "granted" && (
         <button
           onClick={handleRequestLocation}
-          disabled={isLoading || locationPermission === "granted"}
+          disabled={isLoading}
+          style={{
+            padding: "8px 16px",
+            cursor: isLoading ? "not-allowed" : "pointer",
+          }}
         >
           {isLoading ? "Processing..." : "Request Location Permission"}
         </button>
       )}
+
       {locationPermission === "granted" && !currentCoordinates && (
         <button
-          onClick={async () => {
-            setIsLoading(true);
-            const coords = await getCurrentPosition();
-            setCurrentCoordinates(coords);
-            setIsLoading(false);
-          }}
+          onClick={handleRequestLocation}
           disabled={isLoading}
+          style={{ padding: "8px 16px" }}
         >
           {isLoading ? "Fetching..." : "Get Current Location"}
         </button>
       )}
+
       {currentCoordinates && (
-        <div>
-          <p>Current Coordinates:</p>
-          <pre>{JSON.stringify(currentCoordinates, null, 2)}</pre>
+        <div style={{ marginTop: "12px" }}>
+          <p><strong>Current Coordinates:</strong></p>
+          <pre style={{ background: "#e0e0e0", padding: "8px", borderRadius: "4px" }}>
+            Latitude: {currentCoordinates.latitude}
+            Longitude: {currentCoordinates.longitude}
+            Accuracy: {currentCoordinates.accuracy}m
+          </pre>
         </div>
       )}
+
       {isLoading && <p>Loading...</p>}
     </div>
   );
