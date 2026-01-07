@@ -34,7 +34,9 @@ fun CustomerHomeScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
     onNavigateToProducts: () -> Unit,
     onNavigateToServices: () -> Unit,
+    onNavigateToShops: () -> Unit,
     onNavigateToCart: () -> Unit,
+    onNavigateToWishlist: () -> Unit,
     onNavigateToOrders: () -> Unit,
     onNavigateToBookings: () -> Unit,
     onNavigateToProfile: () -> Unit,
@@ -59,7 +61,7 @@ fun CustomerHomeScreen(
                 title = {
                     Column {
                         Text(
-                            text = "DoorStep TN",
+                            text = "DoorStep",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = OrangePrimary
@@ -72,6 +74,14 @@ fun CustomerHomeScreen(
                     }
                 },
                 actions = {
+                    // Wishlist icon (matching web dashboard header)
+                    IconButton(onClick = onNavigateToWishlist) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Wishlist",
+                            tint = WhiteText
+                        )
+                    }
                     IconButton(onClick = onNavigateToCart) {
                         BadgedBox(
                             badge = {
@@ -136,6 +146,13 @@ fun CustomerHomeScreen(
                         color = ProviderBlue,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToServices
+                    )
+                    QuickActionCard(
+                        icon = Icons.Default.Store,
+                        label = "Shops",
+                        color = ShopGreen,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateToShops
                     )
                 }
             }

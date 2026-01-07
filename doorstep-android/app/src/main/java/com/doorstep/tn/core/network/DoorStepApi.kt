@@ -7,10 +7,15 @@ import com.doorstep.tn.auth.data.model.ResetPinRequest
 import com.doorstep.tn.auth.data.model.RuralRegisterRequest
 import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.customer.data.model.Product
+import com.doorstep.tn.customer.data.model.ProductsResponse
 import com.doorstep.tn.customer.data.model.Service
+import com.doorstep.tn.customer.data.model.Shop
 import com.doorstep.tn.customer.data.model.Order
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.data.model.CartItem
+import com.doorstep.tn.core.network.AddToCartRequest
+import com.doorstep.tn.core.network.AddToWishlistRequest
+import com.doorstep.tn.core.network.UpdateProfileRequest
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -43,49 +48,92 @@ interface DoorStepApi {
     
     @GET("api/products")
     suspend fun getProducts(
-        @Query("search") search: String? = null,
+        @Query("searchTerm") search: String? = null,
         @Query("category") category: String? = null,
-        @Query("limit") limit: Int = 20,
-        @Query("offset") offset: Int = 0
-    ): Response<List<Product>>
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 24
+    ): Response<ProductsResponse>
     
     @GET("api/products/{id}")
     suspend fun getProductById(@Path("id") productId: Int): Response<Product>
+    
+    @GET("api/shops/{shopId}/products/{productId}")
+    suspend fun getShopProduct(
+        @Path("shopId") shopId: Int,
+        @Path("productId") productId: Int
+    ): Response<Product>
     
     // ==================== SERVICES ENDPOINTS ====================
     
     @GET("api/services")
     suspend fun getServices(
         @Query("category") category: String? = null,
+        @Query("searchTerm") searchTerm: String? = null,
         @Query("lat") latitude: Double? = null,
-        @Query("lng") longitude: Double? = null,
-        @Query("limit") limit: Int = 20
+        @Query("lng") longitude: Double? = null
     ): Response<List<Service>>
     
     @GET("api/services/{id}")
     suspend fun getServiceById(@Path("id") serviceId: Int): Response<Service>
+    
+    // ==================== SHOPS ENDPOINTS ====================
+    
+    @GET("api/shops")
+    suspend fun getShops(
+        @Query("category") category: String? = null,
+        @Query("lat") latitude: Double? = null,
+        @Query("lng") longitude: Double? = null,
+        @Query("search") search: String? = null
+    ): Response<List<Shop>>
+    
+    @GET("api/shops/{id}")
+    suspend fun getShopById(@Path("id") shopId: Int): Response<Shop>
+    
+    @GET("api/products/shop/{id}")
+    suspend fun getShopProducts(@Path("id") shopId: Int): Response<List<Product>>
     
     // ==================== CART ENDPOINTS ====================
     
     @GET("api/cart")
     suspend fun getCart(): Response<List<CartItem>>
     
+    // POST /api/cart with {productId, quantity} - matches web app
     @POST("api/cart")
-    suspend fun addToCart(@Body item: CartItem): Response<CartItem>
+    suspend fun addToCart(@Body request: AddToCartRequest): Response<CartItem>
     
-    @DELETE("api/cart/{id}")
-    suspend fun removeFromCart(@Path("id") itemId: Int): Response<Unit>
+    // DELETE /api/cart/{productId} - uses productId as in web app
+    @DELETE("api/cart/{productId}")
+    suspend fun removeFromCart(@Path("productId") productId: Int): Response<Unit>
+    
+    // ==================== WISHLIST ENDPOINTS ====================
+    
+    @GET("api/wishlist")
+    suspend fun getWishlist(): Response<List<Product>>
+    
+    @POST("api/wishlist")
+    suspend fun addToWishlist(@Body request: AddToWishlistRequest): Response<Unit>
+    
+    @DELETE("api/wishlist/{productId}")
+    suspend fun removeFromWishlist(@Path("productId") productId: Int): Response<Unit>
+    
+    // ==================== PROFILE ENDPOINTS ====================
+    
+    @PATCH("api/users/{id}")
+    suspend fun updateProfile(
+        @Path("id") userId: Int,
+        @Body data: UpdateProfileRequest
+    ): Response<UserResponse>
     
     // ==================== ORDERS ENDPOINTS ====================
     
     @GET("api/orders/customer")
-    suspend fun getCustomerOrders(): Response<List<Order>>
+    suspend fun getCustomerOrders(@Query("status") status: String? = null): Response<List<Order>>
     
     @GET("api/orders/{id}")
     suspend fun getOrderById(@Path("id") orderId: Int): Response<Order>
     
     @POST("api/orders")
-    suspend fun createOrder(@Body order: Order): Response<Order>
+    suspend fun createOrder(@Body request: CreateOrderRequest): Response<Order>
     
     // ==================== BOOKINGS ENDPOINTS ====================
     
@@ -96,7 +144,7 @@ interface DoorStepApi {
     suspend fun getBookingById(@Path("id") bookingId: Int): Response<Booking>
     
     @POST("api/bookings")
-    suspend fun createBooking(@Body booking: Booking): Response<Booking>
+    suspend fun createBooking(@Body request: CreateBookingRequest): Response<BookingResponse>
     
     // ==================== SHOP ENDPOINTS ====================
     

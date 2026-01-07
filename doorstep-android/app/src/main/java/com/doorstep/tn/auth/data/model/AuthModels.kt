@@ -54,8 +54,18 @@ data class UserResponse(
     @Json(name = "language") val language: String? = "en",
     @Json(name = "profilePicture") val profilePicture: String? = null,
     @Json(name = "verificationStatus") val verificationStatus: String? = null,
+    @Json(name = "profileCompleteness") val profileCompleteness: Int? = null,
     @Json(name = "hasShopProfile") val hasShopProfile: Boolean? = false,
-    @Json(name = "hasProviderProfile") val hasProviderProfile: Boolean? = false
+    @Json(name = "hasProviderProfile") val hasProviderProfile: Boolean? = false,
+    @Json(name = "upiId") val upiId: String? = null,
+    @Json(name = "addressStreet") val addressStreet: String? = null,
+    @Json(name = "addressCity") val addressCity: String? = null,
+    @Json(name = "addressState") val addressState: String? = null,
+    @Json(name = "addressPostalCode") val addressPostalCode: String? = null,
+    @Json(name = "addressCountry") val addressCountry: String? = null,
+    @Json(name = "addressLandmark") val addressLandmark: String? = null,
+    @Json(name = "latitude") val latitude: String? = null,
+    @Json(name = "longitude") val longitude: String? = null
 )
 
 /**

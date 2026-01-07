@@ -51,6 +51,9 @@ class AuthViewModel @Inject constructor(
     private val _userName = MutableStateFlow<String?>(null)
     val userName: StateFlow<String?> = _userName.asStateFlow()
     
+    private val _currentUser = MutableStateFlow<UserResponse?>(null)
+    val user: StateFlow<UserResponse?> = _currentUser.asStateFlow()
+    
     // Form State
     private val _phone = MutableStateFlow("")
     val phone: StateFlow<String> = _phone.asStateFlow()
@@ -96,6 +99,29 @@ class AuthViewModel @Inject constructor(
             // Load last used phone number
             prefs[PreferenceKeys.LAST_PHONE]?.let {
                 _phone.value = it
+            }
+            
+            // If logged in, load user data from API
+            if (_isLoggedIn.value) {
+                loadCurrentUser()
+            }
+        }
+    }
+    
+    // Load current user data from API
+    private fun loadCurrentUser() {
+        viewModelScope.launch {
+            when (val result = authRepository.getCurrentUser()) {
+                is Result.Success -> {
+                    _currentUser.value = result.data
+                    _userName.value = result.data.name
+                    _userRole.value = result.data.role
+                }
+                is Result.Error -> {
+                    // User session may be invalid, logged out
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
             }
         }
     }
@@ -443,5 +469,6 @@ class AuthViewModel @Inject constructor(
         _isLoggedIn.value = true
         _userRole.value = user.role
         _userName.value = user.name
+        _currentUser.value = user
     }
 }

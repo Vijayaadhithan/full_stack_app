@@ -1,7 +1,6 @@
 package com.doorstep.tn.customer.ui.bookings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,36 +18,67 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.util.StatusUtils
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.ui.CustomerViewModel
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 /**
- * Bookings List Screen
+ * My Bookings Screen - Matches web app's /customer/bookings page exactly
+ * Shows booking info INLINE - no navigation to detail page
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookingsListScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit,
-    onNavigateToBooking: (Int) -> Unit
+    onNavigateBack: () -> Unit
 ) {
     val bookings by viewModel.bookings.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     
-    var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Upcoming", "Completed", "Cancelled")
+    // Time filter: Upcoming or Past (like web)
+    var selectedTimeFilter by remember { mutableStateOf("Upcoming") }
+    // Status filter (like web)
+    var selectedStatusFilter by remember { mutableStateOf("All") }
+    
+    val timeFilters = listOf("Upcoming", "Past")
+    val statusFilters = listOf("All", "Pending", "Accepted", "Rejected", "Completed")
     
     LaunchedEffect(Unit) {
         viewModel.loadBookings()
     }
     
+    // Filter bookings by time and status (matching web logic)
+    val today = LocalDate.now()
     val filteredBookings = bookings.filter { booking ->
-        when (selectedTab) {
-            0 -> booking.status.lowercase() in listOf("pending", "confirmed", "in_progress")
-            1 -> booking.status.lowercase() == "completed"
-            2 -> booking.status.lowercase() == "cancelled"
+        val bookingDate = try {
+            // Parse ISO date format
+            LocalDate.parse(booking.bookingDate?.take(10) ?: "")
+        } catch (e: Exception) {
+            today
+        }
+        
+        val timeMatch = when (selectedTimeFilter) {
+            "Upcoming" -> !bookingDate.isBefore(today) && 
+                         booking.status.lowercase() !in listOf("completed", "cancelled", "rejected")
+            "Past" -> bookingDate.isBefore(today) || 
+                     booking.status.lowercase() in listOf("completed", "cancelled", "rejected")
             else -> true
         }
+        
+        val statusMatch = when (selectedStatusFilter) {
+            "All" -> true
+            "Pending" -> booking.status.lowercase() == "pending"
+            "Accepted" -> booking.status.lowercase() in listOf("accepted", "en_route")
+            "Rejected" -> booking.status.lowercase() == "rejected"
+            "Completed" -> booking.status.lowercase() == "completed"
+            else -> true
+        }
+        
+        timeMatch && statusMatch
     }
     
     Scaffold(
@@ -74,28 +104,54 @@ fun BookingsListScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Tab Row
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = SlateBackground,
-                contentColor = WhiteText,
-                divider = {}
+            // Time Filter Row (like web's WHEN section)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = {
-                            Text(
-                                text = title,
-                                color = if (selectedTab == index) ProviderBlue else WhiteTextMuted
-                            )
-                        }
+                timeFilters.forEach { filter ->
+                    FilterChip(
+                        selected = selectedTimeFilter == filter,
+                        onClick = { selectedTimeFilter = filter },
+                        label = { Text(filter) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = OrangePrimary,
+                            selectedLabelColor = WhiteText,
+                            containerColor = SlateCard,
+                            labelColor = WhiteTextMuted
+                        )
                     )
                 }
             }
             
-            // Bookings List
+            // Status Filter Row (like web's STATUS section)
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .height(40.dp)
+            ) {
+                statusFilters.forEachIndexed { index, filter ->
+                    SegmentedButton(
+                        selected = selectedStatusFilter == filter,
+                        onClick = { selectedStatusFilter = filter },
+                        shape = SegmentedButtonDefaults.itemShape(index, statusFilters.size),
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = OrangePrimary,
+                            activeContentColor = WhiteText,
+                            inactiveContainerColor = SlateCard,
+                            inactiveContentColor = WhiteTextMuted
+                        )
+                    ) {
+                        Text(filter, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
             if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -117,9 +173,14 @@ fun BookingsListScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No ${tabs[selectedTab].lowercase()} bookings",
+                            text = "No bookings found",
                             style = MaterialTheme.typography.titleMedium,
                             color = WhiteTextMuted
+                        )
+                        Text(
+                            text = "Pick a filter on the left.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = WhiteTextMuted.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -130,10 +191,8 @@ fun BookingsListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(filteredBookings) { booking ->
-                        BookingCard(
-                            booking = booking,
-                            onClick = { onNavigateToBooking(booking.id) }
-                        )
+                        // Booking card with ALL info inline - no navigation
+                        BookingCardInline(booking = booking)
                     }
                 }
             }
@@ -141,24 +200,18 @@ fun BookingsListScreen(
     }
 }
 
+/**
+ * Booking Card - Shows all booking info inline like web app
+ * No onClick navigation - matching web behavior exactly
+ */
 @Composable
-private fun BookingCard(
-    booking: Booking,
-    onClick: () -> Unit
-) {
-    val statusColor = when (booking.status.lowercase()) {
-        "completed" -> SuccessGreen
-        "cancelled" -> ErrorRed
-        "pending" -> WarningYellow
-        "confirmed" -> ProviderBlue
-        "in_progress" -> OrangePrimary
-        else -> WhiteTextMuted
-    }
+private fun BookingCardInline(booking: Booking) {
+    val statusColor = StatusUtils.getBookingStatusColor(booking.status)
+    val statusBgColor = StatusUtils.getBookingStatusBgColor(booking.status)
+    val statusLabel = StatusUtils.getBookingStatusLabel(booking.status)
     
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = SlateCard)
     ) {
@@ -167,115 +220,208 @@ private fun BookingCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
+            // Header: Service name + Status badge (like web)
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Service Icon
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(ProviderBlue.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Build,
-                        contentDescription = null,
-                        tint = ProviderBlue,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
+                Text(
+                    text = booking.service?.name ?: "Service Booking",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = WhiteText,
+                    fontWeight = FontWeight.SemiBold
+                )
                 
-                Spacer(modifier = Modifier.width(16.dp))
-                
-                // Booking Info
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = booking.service?.name ?: "Service Booking",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = WhiteText,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    booking.bookingDate?.let { date ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CalendarToday,
-                                contentDescription = null,
-                                tint = WhiteTextMuted,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = date,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = WhiteTextMuted
-                            )
-                        }
-                    }
-                    
-                    booking.timeSlotLabel?.let { time ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = WhiteTextMuted,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = time,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = WhiteTextMuted
-                            )
-                        }
-                    }
-                }
-                
-                // Status
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = statusColor.copy(alpha = 0.2f)
+                    shape = RoundedCornerShape(4.dp),
+                    color = statusBgColor
                 ) {
                     Text(
-                        text = booking.status.replace("_", " ").replaceFirstChar { it.uppercase() },
+                        text = statusLabel,
                         color = statusColor,
                         style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
             
-            // Action buttons for pending bookings
-            if (booking.status.lowercase() in listOf("pending", "confirmed")) {
-                Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Date (formatted nicely like web: dd MMMM yyyy)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Event,
+                    contentDescription = null,
+                    tint = WhiteTextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = formatBookingDate(booking.bookingDate),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = WhiteTextMuted
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            // Time slot (like web: Morning (Flexible))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = WhiteTextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = formatTimeSlot(booking.timeSlotLabel),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = WhiteTextMuted
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            // Location (like web: Service at your location / Provider's location)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = null,
+                    tint = WhiteTextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = getLocationLabel(booking.serviceLocation),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = WhiteTextMuted
+                )
+            }
+            
+            // Provider info section (like web's provider section)
+            booking.provider?.let { provider ->
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = GlassWhite)
+                Spacer(modifier = Modifier.height(12.dp))
                 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onClick,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
-                    ) {
-                        Text("Cancel")
-                    }
-                    
-                    Button(
-                        onClick = onClick,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = ProviderBlue)
-                    ) {
-                        Text("Reschedule")
+                // Provider name (like web: Provider: Nason)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Provider: ",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = WhiteTextMuted,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = provider.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = WhiteText
+                    )
+                }
+                
+                // Provider phone (like web: Phone: 9488193696)
+                provider.phone?.let { phone ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Phone: ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = WhiteTextMuted,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = phone,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = WhiteText
+                        )
                     }
                 }
             }
+            
+            // Completed bookings: Show "Leave Review" button like web
+            if (booking.status.lowercase() == "completed") {
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = { /* TODO: Implement review dialog */ },
+                    modifier = Modifier.align(Alignment.End),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(OrangePrimary)
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = OrangePrimary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Leave Review")
+                }
+            }
+            
+            // Rejected bookings: Show rejection reason
+            if (booking.status.lowercase() == "rejected") {
+                booking.rejectionReason?.let { reason ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Reason: $reason",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ErrorRed
+                    )
+                }
+            }
         }
+    }
+}
+
+/**
+ * Format booking date like web: "07 January 2026"
+ */
+private fun formatBookingDate(dateStr: String?): String {
+    if (dateStr.isNullOrEmpty()) return "Date not set"
+    
+    return try {
+        // Parse ISO format: 2026-01-07T03:30:00.000Z
+        val formatter = DateTimeFormatter.ISO_DATE_TIME
+        val dateTime = LocalDateTime.parse(dateStr.replace("Z", ""))
+        dateTime.format(DateTimeFormatter.ofPattern("dd MMMM yyyy"))
+    } catch (e: DateTimeParseException) {
+        try {
+            // Try date only format
+            val date = LocalDate.parse(dateStr.take(10))
+            date.format(DateTimeFormatter.ofPattern("dd MMMM yyyy"))
+        } catch (e2: Exception) {
+            dateStr.take(10) // Fallback: return raw date part
+        }
+    }
+}
+
+/**
+ * Format time slot like web: "Morning (Flexible)"
+ */
+private fun formatTimeSlot(timeSlot: String?): String {
+    if (timeSlot.isNullOrEmpty()) return "Time not set"
+    
+    // Capitalize first letter and add (Flexible) if it's a general slot
+    val formattedSlot = timeSlot.lowercase().replaceFirstChar { it.uppercase() }
+    
+    return when {
+        formattedSlot in listOf("Morning", "Afternoon", "Evening") -> "$formattedSlot (Flexible)"
+        else -> formattedSlot
+    }
+}
+
+/**
+ * Get location label like web
+ */
+private fun getLocationLabel(location: String?): String {
+    return when (location?.lowercase()) {
+        "customer" -> "Service at your location"
+        "provider" -> "Provider's location"
+        else -> location ?: "Location not set"
     }
 }

@@ -19,10 +19,18 @@ import com.doorstep.tn.auth.ui.PinSetupScreen
 import com.doorstep.tn.auth.ui.ForgotPinScreen
 import com.doorstep.tn.customer.ui.CustomerHomeScreen
 import com.doorstep.tn.customer.ui.products.ProductsListScreen
+import com.doorstep.tn.customer.ui.products.ProductDetailScreen
 import com.doorstep.tn.customer.ui.services.ServicesListScreen
+import com.doorstep.tn.customer.ui.services.ServiceDetailScreen
 import com.doorstep.tn.customer.ui.orders.OrdersListScreen
 import com.doorstep.tn.customer.ui.bookings.BookingsListScreen
+import com.doorstep.tn.customer.ui.bookings.BookingDetailScreen
+import com.doorstep.tn.customer.ui.bookings.BookServiceScreen
 import com.doorstep.tn.customer.ui.cart.CartScreen
+import com.doorstep.tn.customer.ui.wishlist.WishlistScreen
+import com.doorstep.tn.customer.ui.shops.ShopsListScreen
+import com.doorstep.tn.customer.ui.shops.ShopDetailScreen
+import com.doorstep.tn.customer.ui.profile.ProfileScreen
 import com.doorstep.tn.shop.ui.ShopDashboardScreen
 import com.doorstep.tn.provider.ui.ProviderDashboardScreen
 
@@ -41,7 +49,8 @@ object Routes {
     // Customer routes
     const val CUSTOMER_HOME = "customer_home"
     const val CUSTOMER_PRODUCTS = "customer_products"
-    const val CUSTOMER_PRODUCT_DETAIL = "customer_product/{productId}"
+    // Match web: /customer/shops/{shopId}/products/{productId}
+    const val CUSTOMER_PRODUCT_DETAIL = "customer_shop/{shopId}/product/{productId}"
     const val CUSTOMER_SERVICES = "customer_services"
     const val CUSTOMER_SERVICE_DETAIL = "customer_service/{serviceId}"
     const val CUSTOMER_CART = "customer_cart"
@@ -50,7 +59,11 @@ object Routes {
     const val CUSTOMER_ORDER_DETAIL = "customer_order/{orderId}"
     const val CUSTOMER_BOOKINGS = "customer_bookings"
     const val CUSTOMER_BOOKING_DETAIL = "customer_booking/{bookingId}"
+    const val CUSTOMER_SHOPS = "customer_shops"
+    const val CUSTOMER_SHOP_DETAIL = "customer_shop/{shopId}"
     const val CUSTOMER_PROFILE = "customer_profile"
+    const val CUSTOMER_WISHLIST = "customer_wishlist"
+    const val CUSTOMER_BOOK_SERVICE = "customer_book_service/{serviceId}"
     
     // Shop routes
     const val SHOP_DASHBOARD = "shop_dashboard"
@@ -74,10 +87,12 @@ object Routes {
     const val PROVIDER_PROFILE = "provider_profile"
     
     // Helper functions
-    fun productDetail(productId: Int) = "customer_product/$productId"
+    fun productDetail(shopId: Int, productId: Int) = "customer_shop/$shopId/product/$productId"
     fun serviceDetail(serviceId: Int) = "customer_service/$serviceId"
     fun orderDetail(orderId: Int) = "customer_order/$orderId"
     fun bookingDetail(bookingId: Int) = "customer_booking/$bookingId"
+    fun shopDetail(shopId: Int) = "customer_shop/$shopId"
+    fun bookService(serviceId: Int) = "customer_book_service/$serviceId"
 }
 
 /**
@@ -184,7 +199,9 @@ fun DoorStepNavHost(
             CustomerHomeScreen(
                 onNavigateToProducts = { navController.navigate(Routes.CUSTOMER_PRODUCTS) },
                 onNavigateToServices = { navController.navigate(Routes.CUSTOMER_SERVICES) },
+                onNavigateToShops = { navController.navigate(Routes.CUSTOMER_SHOPS) },
                 onNavigateToCart = { navController.navigate(Routes.CUSTOMER_CART) },
+                onNavigateToWishlist = { navController.navigate(Routes.CUSTOMER_WISHLIST) },
                 onNavigateToOrders = { navController.navigate(Routes.CUSTOMER_ORDERS) },
                 onNavigateToBookings = { navController.navigate(Routes.CUSTOMER_BOOKINGS) },
                 onNavigateToProfile = { navController.navigate(Routes.CUSTOMER_PROFILE) },
@@ -200,8 +217,8 @@ fun DoorStepNavHost(
         composable(Routes.CUSTOMER_PRODUCTS) {
             ProductsListScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToProduct = { productId -> 
-                    navController.navigate(Routes.productDetail(productId))
+                onNavigateToProduct = { shopId, productId -> 
+                    navController.navigate(Routes.productDetail(shopId, productId))
                 },
                 onNavigateToCart = { navController.navigate(Routes.CUSTOMER_CART) }
             )
@@ -219,7 +236,22 @@ fun DoorStepNavHost(
         composable(Routes.CUSTOMER_CART) {
             CartScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onCheckout = { navController.navigate(Routes.CUSTOMER_CHECKOUT) }
+                onNavigateToProducts = { navController.navigate(Routes.CUSTOMER_PRODUCTS) },
+                onOrderComplete = { 
+                    // Navigate to orders list after successful order
+                    navController.navigate(Routes.CUSTOMER_ORDERS) {
+                        popUpTo(Routes.CUSTOMER_CART) { inclusive = true }
+                    }
+                }
+            )
+        }
+        
+        composable(Routes.CUSTOMER_SHOPS) {
+            ShopsListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToShop = { shopId ->
+                    navController.navigate(Routes.shopDetail(shopId))
+                }
             )
         }
         
@@ -228,15 +260,107 @@ fun DoorStepNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToOrder = { orderId ->
                     navController.navigate(Routes.orderDetail(orderId))
-                }
+                },
+                onNavigateToShops = { navController.navigate(Routes.CUSTOMER_SHOPS) }
             )
         }
         
         composable(Routes.CUSTOMER_BOOKINGS) {
+            // Booking info shown inline like web - no navigation to detail page
             BookingsListScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        composable(
+            route = Routes.CUSTOMER_BOOKING_DETAIL,
+            arguments = listOf(navArgument("bookingId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val bookingId = backStackEntry.arguments?.getInt("bookingId") ?: 0
+            BookingDetailScreen(
+                bookingId = bookingId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        composable(Routes.CUSTOMER_PROFILE) {
+            ProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToBooking = { bookingId ->
-                    navController.navigate(Routes.bookingDetail(bookingId))
+                onLogout = {
+                    authViewModel.logout()
+                    navController.navigate(Routes.PHONE_ENTRY) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+        
+        composable(Routes.CUSTOMER_WISHLIST) {
+            WishlistScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToProduct = { shopId, productId ->
+                    navController.navigate(Routes.productDetail(shopId, productId))
+                }
+            )
+        }
+        
+        composable(
+            route = Routes.CUSTOMER_PRODUCT_DETAIL,
+            arguments = listOf(
+                navArgument("shopId") { type = NavType.IntType },
+                navArgument("productId") { type = NavType.IntType }
+            )
+        ) { backStackEntry ->
+            val shopId = backStackEntry.arguments?.getInt("shopId") ?: 0
+            val productId = backStackEntry.arguments?.getInt("productId") ?: 0
+            ProductDetailScreen(
+                shopId = shopId,
+                productId = productId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToCart = { navController.navigate(Routes.CUSTOMER_CART) }
+            )
+        }
+        
+        composable(
+            route = Routes.CUSTOMER_SERVICE_DETAIL,
+            arguments = listOf(navArgument("serviceId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val serviceId = backStackEntry.arguments?.getInt("serviceId") ?: 0
+            ServiceDetailScreen(
+                serviceId = serviceId,
+                onNavigateBack = { navController.popBackStack() },
+                onBookService = { sId -> navController.navigate(Routes.bookService(sId)) }
+            )
+        }
+        
+        composable(
+            route = Routes.CUSTOMER_SHOP_DETAIL,
+            arguments = listOf(navArgument("shopId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val shopId = backStackEntry.arguments?.getInt("shopId") ?: 0
+            ShopDetailScreen(
+                shopId = shopId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToProduct = { sId, productId ->
+                    navController.navigate(Routes.productDetail(sId, productId))
+                },
+                onNavigateToCart = { navController.navigate(Routes.CUSTOMER_CART) }
+            )
+        }
+        
+        // Book Service screen
+        composable(
+            route = Routes.CUSTOMER_BOOK_SERVICE,
+            arguments = listOf(navArgument("serviceId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val serviceId = backStackEntry.arguments?.getInt("serviceId") ?: 0
+            BookServiceScreen(
+                serviceId = serviceId,
+                onNavigateBack = { navController.popBackStack() },
+                onBookingComplete = {
+                    navController.navigate(Routes.CUSTOMER_BOOKINGS) {
+                        popUpTo(Routes.CUSTOMER_HOME)
+                    }
                 }
             )
         }

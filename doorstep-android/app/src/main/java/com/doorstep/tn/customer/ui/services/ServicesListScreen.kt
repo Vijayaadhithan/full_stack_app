@@ -49,8 +49,9 @@ fun ServicesListScreen(
         "Cleaning" to Icons.Default.CleaningServices
     )
     
-    LaunchedEffect(Unit) {
-        viewModel.loadServices()
+    // Re-fetch services when category changes - matches web: /api/services?category=plumbing
+    LaunchedEffect(selectedCategory) {
+        viewModel.loadServices(category = selectedCategory)
     }
     
     Scaffold(
@@ -217,7 +218,7 @@ private fun ServiceCard(
                 )
                 
                 Text(
-                    text = service.description,
+                    text = service.description ?: "",
                     style = MaterialTheme.typography.bodySmall,
                     color = WhiteTextMuted,
                     maxLines = 2,
@@ -237,7 +238,7 @@ private fun ServiceCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "${service.duration} mins",
+                        text = "${service.duration ?: 30} mins",
                         style = MaterialTheme.typography.bodySmall,
                         color = WhiteTextSubtle
                     )

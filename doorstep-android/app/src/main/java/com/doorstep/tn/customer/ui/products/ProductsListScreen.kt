@@ -37,7 +37,7 @@ import com.doorstep.tn.customer.ui.CustomerViewModel
 fun ProductsListScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
-    onNavigateToProduct: (Int) -> Unit,
+    onNavigateToProduct: (shopId: Int, productId: Int) -> Unit,
     onNavigateToCart: () -> Unit
 ) {
     val products by viewModel.products.collectAsState()
@@ -47,8 +47,9 @@ fun ProductsListScreen(
     
     val categories = listOf("All", "Grocery", "Electronics", "Clothing", "Home", "Beauty")
     
-    LaunchedEffect(Unit) {
-        viewModel.loadProducts()
+    // Re-fetch products when category changes (like web behavior)
+    LaunchedEffect(selectedCategory) {
+        viewModel.loadProducts(category = selectedCategory)
     }
     
     Scaffold(
@@ -185,8 +186,9 @@ fun ProductsListScreen(
                     items(products) { product ->
                         ProductCard(
                             product = product,
-                            onClick = { onNavigateToProduct(product.id) },
-                            onAddToCart = { viewModel.addToCart(product.id) }
+                            onClick = { product.shopId?.let { shopId -> onNavigateToProduct(shopId, product.id) } },
+                            onAddToCart = { viewModel.addToCart(product.id) },
+                            onAddToWishlist = { viewModel.addToWishlist(product.id) }
                         )
                     }
                 }
@@ -199,7 +201,8 @@ fun ProductsListScreen(
 private fun ProductCard(
     product: Product,
     onClick: () -> Unit,
-    onAddToCart: () -> Unit
+    onAddToCart: () -> Unit,
+    onAddToWishlist: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -232,6 +235,23 @@ private fun ProductCard(
                         modifier = Modifier
                             .size(48.dp)
                             .align(Alignment.Center)
+                    )
+                }
+                
+                // Wishlist heart button
+                IconButton(
+                    onClick = onAddToWishlist,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(32.dp)
+                        .background(SlateCard.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FavoriteBorder,
+                        contentDescription = "Add to Wishlist",
+                        tint = OrangePrimary,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -292,3 +312,4 @@ private fun ProductCard(
         }
     }
 }
+

@@ -1,9 +1,12 @@
 package com.doorstep.tn.customer.ui.cart
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -13,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -24,17 +28,37 @@ import com.doorstep.tn.customer.data.model.CartItem
 import com.doorstep.tn.customer.ui.CustomerViewModel
 
 /**
- * Cart Screen
+ * Cart Screen - Matches web app's /customer/cart page exactly
+ * 
+ * Features:
+ * 1. Cart items list with quantity controls (+/-)
+ * 2. Available Promotions section
+ * 3. Delivery Method selector (Pickup / Delivery)
+ * 4. Payment Method selector (UPI / Cash / Pay Later)
+ * 5. Order Summary (Subtotal, Total)
+ * 6. Place Order button
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CartScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
-    onCheckout: () -> Unit
+    onNavigateToProducts: () -> Unit,
+    onOrderComplete: () -> Unit
 ) {
     val cartItems by viewModel.cartItems.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    
+    // Delivery and Payment method state - matches web defaults
+    var deliveryMethod by remember { mutableStateOf("pickup") } // "pickup" or "delivery"
+    var paymentMethod by remember { mutableStateOf("upi") } // "upi", "cash", "pay_later"
+    var isPlacingOrder by remember { mutableStateOf(false) }
+    
+    // Calculate totals
+    val subtotal = cartItems.sumOf { 
+        (it.product.price.toDoubleOrNull() ?: 0.0) * it.quantity 
+    }
+    val total = subtotal // Add delivery fee if needed
     
     LaunchedEffect(Unit) {
         viewModel.loadCart()
@@ -43,7 +67,7 @@ fun CartScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Cart", color = WhiteText) },
+                title = { Text("Shopping Cart", color = WhiteText) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -56,76 +80,19 @@ fun CartScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = SlateBackground)
             )
         },
-        bottomBar = {
-            if (cartItems.isNotEmpty()) {
-                Surface(
-                    color = SlateBackground,
-                    shadowElevation = 8.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        // Summary
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "${viewModel.cartCount} items",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = WhiteTextMuted
-                            )
-                            Text(
-                                text = "₹${String.format("%.2f", viewModel.cartTotal)}",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = OrangePrimary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Button(
-                            onClick = onCheckout,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ShoppingCartCheckout,
-                                contentDescription = null
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Proceed to Checkout",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
-            }
-        },
         containerColor = SlateDarker
     ) { paddingValues ->
         if (isLoading) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(color = OrangePrimary)
             }
         } else if (cartItems.isEmpty()) {
+            // Empty Cart State
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -133,12 +100,12 @@ fun CartScreen(
                         imageVector = Icons.Default.ShoppingCart,
                         contentDescription = null,
                         tint = WhiteTextMuted,
-                        modifier = Modifier.size(80.dp)
+                        modifier = Modifier.size(64.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "Your cart is empty",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         color = WhiteText
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -149,7 +116,7 @@ fun CartScreen(
                     )
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
-                        onClick = onNavigateBack,
+                        onClick = onNavigateToProducts,
                         colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -158,24 +125,244 @@ fun CartScreen(
                 }
             }
         } else {
+            // Cart with items - matches web layout
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // ==================== Cart Items ====================
                 items(cartItems) { item ->
                     CartItemCard(
                         item = item,
-                        onRemove = { item.id?.let { viewModel.removeFromCart(it) } }
+                        onUpdateQuantity = { newQty ->
+                            viewModel.updateCartQuantity(item.productId, newQty)
+                        },
+                        onRemove = { viewModel.removeFromCart(item.productId) }
                     )
                 }
                 
-                // Add extra space for bottom bar
+                // ==================== Available Promotions Section ====================
                 item {
-                    Spacer(modifier = Modifier.height(80.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateCard)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.LocalOffer,
+                                    contentDescription = null,
+                                    tint = OrangePrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Available Promotions",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = WhiteText,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "No promotions available for this shop",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = WhiteTextMuted
+                            )
+                        }
+                    }
                 }
+                
+                // ==================== Delivery Method Section ====================
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateCard)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Delivery Method",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // Pickup Option (like web)
+                            DeliveryMethodOption(
+                                icon = Icons.Default.Store,
+                                title = "I will come take it",
+                                subtitle = "In-store pickup",
+                                isSelected = deliveryMethod == "pickup",
+                                onClick = { deliveryMethod = "pickup" }
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Delivery Option
+                            DeliveryMethodOption(
+                                icon = Icons.Default.LocalShipping,
+                                title = "Deliver to me",
+                                subtitle = "Home delivery",
+                                isSelected = deliveryMethod == "delivery",
+                                onClick = { deliveryMethod = "delivery" }
+                            )
+                        }
+                    }
+                }
+                
+                // ==================== Payment Method Section ====================
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateCard)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Payment Method",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // UPI Option
+                            PaymentMethodOption(
+                                label = "UPI",
+                                isSelected = paymentMethod == "upi",
+                                onClick = { paymentMethod = "upi" }
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Cash Option
+                            PaymentMethodOption(
+                                label = "Cash",
+                                isSelected = paymentMethod == "cash",
+                                onClick = { paymentMethod = "cash" }
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Pay Later Option
+                            PaymentMethodOption(
+                                label = "Pay Later",
+                                isSelected = paymentMethod == "pay_later",
+                                onClick = { paymentMethod = "pay_later" }
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Trusted (repeat or whitelisted) customers can request Pay Later. Orders stay pending until the shop approves the credit.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = WhiteTextMuted
+                            )
+                        }
+                    }
+                }
+                
+                // ==================== Order Summary Section ====================
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateCard)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Order Summary",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // Subtotal
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Subtotal", color = WhiteTextMuted)
+                                Text("₹${String.format("%.2f", subtotal)}", color = WhiteText)
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider(color = GlassWhite)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Total
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "Total Amount",
+                                    color = WhiteText,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "₹${String.format("%.2f", total)}",
+                                    color = OrangePrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // ==================== Place Order Button ====================
+                item {
+                    Button(
+                        onClick = {
+                            isPlacingOrder = true
+                            viewModel.placeOrder(
+                                deliveryMethod = deliveryMethod,
+                                paymentMethod = paymentMethod,
+                                subtotal = subtotal.toString(),
+                                total = total.toString(),
+                                onSuccess = {
+                                    isPlacingOrder = false
+                                    onOrderComplete()
+                                },
+                                onError = { 
+                                    isPlacingOrder = false 
+                                }
+                            )
+                        },
+                        enabled = !isPlacingOrder,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = OrangePrimary,
+                            disabledContainerColor = OrangePrimary.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        if (isPlacingOrder) {
+                            CircularProgressIndicator(
+                                color = WhiteText,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        } else {
+                            Text(
+                                text = "Place Order",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                
+                // Bottom spacing
+                item { Spacer(modifier = Modifier.height(24.dp)) }
             }
         }
     }
@@ -184,6 +371,7 @@ fun CartScreen(
 @Composable
 private fun CartItemCard(
     item: CartItem,
+    onUpdateQuantity: (Int) -> Unit,
     onRemove: () -> Unit
 ) {
     Card(
@@ -205,9 +393,9 @@ private fun CartItemCard(
                     .background(GlassWhite),
                 contentAlignment = Alignment.Center
             ) {
-                if (!item.product?.images.isNullOrEmpty()) {
+                if (!item.product.images.isNullOrEmpty()) {
                     AsyncImage(
-                        model = item.product!!.images!!.first(),
+                        model = item.product.images!!.first(),
                         contentDescription = item.product.name,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -227,7 +415,7 @@ private fun CartItemCard(
             // Product Info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.product?.name ?: "Product",
+                    text = item.product.name,
                     style = MaterialTheme.typography.titleSmall,
                     color = WhiteText,
                     fontWeight = FontWeight.Medium,
@@ -235,10 +423,69 @@ private fun CartItemCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 
-                Spacer(modifier = Modifier.height(4.dp))
-                
                 Text(
-                    text = "₹${item.product?.price ?: "0"}",
+                    text = "₹${item.product.price} × ${item.quantity}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Quantity Controls (like web: - 1 +)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    // Minus Button
+                    IconButton(
+                        onClick = { 
+                            if (item.quantity > 1) {
+                                onUpdateQuantity(item.quantity - 1)
+                            }
+                        },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(GlassWhite)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "Decrease",
+                            tint = WhiteText,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    
+                    // Quantity
+                    Text(
+                        text = "${item.quantity}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = WhiteText,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    
+                    // Plus Button
+                    IconButton(
+                        onClick = { onUpdateQuantity(item.quantity + 1) },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(GlassWhite)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Increase",
+                            tint = WhiteText,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+            
+            // Price and Delete
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "₹${String.format("%.2f", (item.product.price.toDoubleOrNull() ?: 0.0) * item.quantity)}",
                     style = MaterialTheme.typography.titleMedium,
                     color = OrangePrimary,
                     fontWeight = FontWeight.Bold
@@ -246,64 +493,97 @@ private fun CartItemCard(
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Quantity
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+                // Delete Button
+                IconButton(
+                    onClick = onRemove,
+                    modifier = Modifier.size(32.dp)
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = GlassWhite
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(4.dp)
-                        ) {
-                            IconButton(
-                                onClick = { /* TODO: Decrease quantity */ },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Remove,
-                                    contentDescription = "Decrease",
-                                    tint = WhiteText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            
-                            Text(
-                                text = "${item.quantity}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = WhiteText,
-                                modifier = Modifier.padding(horizontal = 8.dp)
-                            )
-                            
-                            IconButton(
-                                onClick = { /* TODO: Increase quantity */ },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Increase",
-                                    tint = WhiteText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Remove",
+                        tint = Color(0xFFEF4444) // Red color for delete
+                    )
                 }
             }
-            
-            // Remove button
-            IconButton(
-                onClick = onRemove,
-                colors = IconButtonDefaults.iconButtonColors(contentColor = ErrorRed)
-            ) {
+        }
+    }
+}
+
+@Composable
+private fun DeliveryMethodOption(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) OrangePrimary.copy(alpha = 0.15f) else GlassWhite,
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, OrangePrimary) else null
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isSelected) OrangePrimary else WhiteTextMuted,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = WhiteText,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted
+                )
+            }
+            if (isSelected) {
                 Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Remove",
-                    tint = ErrorRed
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = OrangePrimary
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PaymentMethodOption(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = isSelected,
+            onClick = onClick,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = OrangePrimary,
+                unselectedColor = WhiteTextMuted
+            )
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = WhiteText
+        )
     }
 }

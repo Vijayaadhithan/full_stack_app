@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">DoorStep TN</string>
+    <string name="app_name">DoorStep</string>
     
     <!-- Auth -->
     <string name="enter_phone">Enter your mobile number</string>

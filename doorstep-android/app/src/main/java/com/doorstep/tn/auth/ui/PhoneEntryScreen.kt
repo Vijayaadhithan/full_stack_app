@@ -98,21 +98,14 @@ fun PhoneEntryScreen(
                         .padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Logo placeholder (replace with actual logo)
-                    Box(
+                    // DoorStep Logo
+                    Image(
+                        painter = painterResource(id = R.drawable.doorstep_logo),
+                        contentDescription = "DoorStep Logo",
                         modifier = Modifier
                             .size(80.dp)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(OrangePrimary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "DS",
-                            color = WhiteText,
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    )
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
