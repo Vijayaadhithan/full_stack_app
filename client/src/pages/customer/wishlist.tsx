@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { ShoppingCart, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CategoryIcon } from "@/components/ui/category-icon";
+import { getProductImage } from "@shared/predefinedImages";
 
 const container = {
   hidden: { opacity: 0 },
@@ -61,10 +63,10 @@ export default function Wishlist() {
       const optimisticCart = previousCart
         ? existingItem
           ? previousCart.map((item) =>
-              item.product.id === product.id
-                ? { ...item, quantity: item.quantity + 1 }
-                : item,
-            )
+            item.product.id === product.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item,
+          )
           : [...previousCart, { product, quantity: 1 }]
         : [{ product, quantity: 1 }];
 
@@ -190,14 +192,13 @@ export default function Wishlist() {
                 <Card>
                   <CardContent className="p-6">
                     <div className="flex gap-4">
-                      <img
-                        src={
-                          product.images?.[0] ||
-                          "https://via.placeholder.com/100"
-                        }
-                        alt={product.name}
-                        className="w-24 h-24 object-cover rounded"
-                      />
+                      <div className="w-24 h-24 rounded flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted border">
+                        <CategoryIcon
+                          category={getProductImage(product.category || 'other')}
+                          size="md"
+                          showLabel={false}
+                        />
+                      </div>
                       <div className="flex-1">
                         <h3 className="font-semibold">{product.name}</h3>
                         <p className="text-sm text-muted-foreground">

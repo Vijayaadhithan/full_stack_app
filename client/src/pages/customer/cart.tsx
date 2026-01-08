@@ -9,6 +9,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { Minus, Plus, Trash2, Tag, Check, Info } from "lucide-react";
+import { CategoryIcon } from "@/components/ui/category-icon";
+import { getProductImage } from "@shared/predefinedImages";
 import { useState, useEffect } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -464,14 +466,13 @@ export default function Cart() {
                         className="py-4 first:pt-6 last:pb-6"
                       >
                         <div className="flex gap-4">
-                          <img
-                            src={
-                              item.product.images?.[0] ||
-                              "https://via.placeholder.com/100"
-                            }
-                            alt={item.product.name}
-                            className="w-24 h-24 object-cover rounded"
-                          />
+                          <div className="w-24 h-24 rounded flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted border">
+                            <CategoryIcon
+                              category={getProductImage(item.product.category || 'other')}
+                              size="md"
+                              showLabel={false}
+                            />
+                          </div>
                           <div className="flex-1">
                             <h3 className="font-semibold">{item.product.name}</h3>
                             <p className="text-sm text-muted-foreground">
