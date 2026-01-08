@@ -133,8 +133,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 };
                 const expectedPath = modeToPath[mode];
 
-                // Navigate if we're on a different role's dashboard (or root/generic pages)
-                if (currentPath === "/customer" || currentPath === "/" || currentPath === "/auth") {
+                // Navigate if we're on a different role's page (or root/auth pages)
+                // For SHOP mode, don't stay on /customer
+                // For PROVIDER mode, don't stay on /customer
+                // For CUSTOMER mode, don't stay on /shop or /provider
+                const shouldRedirect =
+                    currentPath === "/" ||
+                    currentPath === "/auth" ||
+                    (mode === "SHOP" && (currentPath === "/customer" || currentPath.startsWith("/customer/"))) ||
+                    (mode === "PROVIDER" && (currentPath === "/customer" || currentPath.startsWith("/customer/"))) ||
+                    (mode === "CUSTOMER" && (currentPath.startsWith("/shop") || currentPath.startsWith("/provider")));
+
+                if (shouldRedirect) {
                     setLocation(expectedPath);
                 }
             }
@@ -144,12 +154,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (savedMode && Object.keys(MODE_THEMES).includes(savedMode)) {
             // Validate the user can access the saved mode
             if (savedMode === "SHOP" && !profiles.hasShop) {
-                setModeAndNavigate("CUSTOMER", false);
+                setModeAndNavigate("CUSTOMER", true);
             } else if (savedMode === "PROVIDER" && !profiles.hasProvider) {
-                setModeAndNavigate("CUSTOMER", false);
+                setModeAndNavigate("CUSTOMER", true);
             } else {
-                setAppModeInternal(savedMode);
-                hasInitializedMode.current = true;
+                // Restore saved mode AND navigate if on wrong page
+                setModeAndNavigate(savedMode, true);
             }
         } else {
             // No saved mode - initialize based on user's primary role or profile
