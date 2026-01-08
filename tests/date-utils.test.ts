@@ -2,7 +2,7 @@
  * Tests for shared/date-utils.ts
  * IST (Indian Standard Time) handling functions
  */
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
     toIndianTime,
@@ -40,6 +40,25 @@ describe("date-utils", () => {
             const result = toIndianTime("invalid-date");
             assert.ok(result instanceof Date);
             assert.ok(isNaN(result.getTime())); // Should be Invalid Date
+        });
+
+        it("should handle end of day UTC", () => {
+            const result = toIndianTime(new Date("2024-06-15T23:59:59Z"));
+            assert.ok(result instanceof Date);
+            // 23:59 UTC should be 05:29 next day IST
+            assert.strictEqual(result.getDate(), 16);
+        });
+
+        it("should handle DST-unaffected timezone", () => {
+            // India doesn't observe DST
+            const winter = toIndianTime(new Date("2024-01-15T12:00:00Z"));
+            const summer = toIndianTime(new Date("2024-07-15T12:00:00Z"));
+
+            // Both should be at 17:30 IST
+            assert.strictEqual(winter.getHours(), 17);
+            assert.strictEqual(winter.getMinutes(), 30);
+            assert.strictEqual(summer.getHours(), 17);
+            assert.strictEqual(summer.getMinutes(), 30);
         });
     });
 
@@ -90,6 +109,39 @@ describe("date-utils", () => {
             const formatted = formatInIndianTime("not-a-date", "yyyy-MM-dd");
             assert.strictEqual(formatted, "Invalid Date");
         });
+
+        it("should format with various format strings", () => {
+            const date = new Date("2024-06-15T10:30:00Z");
+
+            // Test different format strings
+            const formats = [
+                "yyyy-MM-dd",
+                "HH:mm:ss",
+                "dd/MM/yyyy",
+                "EEEE, MMMM dd, yyyy",
+            ];
+
+            formats.forEach(fmt => {
+                const result = formatInIndianTime(date, fmt);
+                assert.ok(typeof result === "string");
+                assert.ok(result !== "Invalid Date");
+            });
+        });
+
+        it("should format month names correctly", () => {
+            const result = formatInIndianTime(new Date("2024-06-15T10:30:00Z"), "MMMM");
+            assert.strictEqual(result, "June");
+        });
+
+        it("should format day names correctly", () => {
+            const result = formatInIndianTime(new Date("2024-06-15T10:30:00Z"), "EEEE");
+            assert.ok(result === "Saturday");
+        });
+
+        it("should handle leap year dates", () => {
+            const result = formatInIndianTime(new Date("2024-02-29T10:00:00Z"), "yyyy-MM-dd");
+            assert.strictEqual(result, "2024-02-29");
+        });
     });
 
     describe("newIndianDate", () => {
@@ -116,6 +168,23 @@ describe("date-utils", () => {
             const result = toIndianISOString("2024-01-15T00:00:00.000Z");
             assert.ok(typeof result === "string");
             assert.ok(result.includes("2024-01-15"));
+        });
+
+        it("should include timezone offset", () => {
+            const result = toIndianISOString(new Date("2024-06-15T00:00:00Z"));
+            assert.ok(result.includes("+05:30"));
+        });
+
+        it("should format with milliseconds", () => {
+            const result = toIndianISOString(new Date("2024-06-15T10:30:45.123Z"));
+            assert.ok(result.includes("."));
+        });
+
+        it("should handle date object input", () => {
+            const date = new Date();
+            const result = toIndianISOString(date);
+            assert.ok(typeof result === "string");
+            assert.ok(result.includes("+05:30"));
         });
     });
 
@@ -144,14 +213,35 @@ describe("date-utils", () => {
             assert.ok(result.includes("AM") || result.includes("PM"));
         });
 
+        it("should handle string dates with date format", () => {
+            const result = formatIndianDisplay("2024-06-15T10:30:00Z", "date");
+            assert.ok(result.includes("15"));
+            assert.ok(result.includes("June"));
+        });
+
+        it("should handle string dates with time format", () => {
+            const result = formatIndianDisplay("2024-06-15T10:30:00Z", "time");
+            assert.ok(result.includes("PM") || result.includes("AM"));
+        });
+
+        it("should handle string dates with datetime format", () => {
+            const result = formatIndianDisplay("2024-06-15T10:30:00Z", "datetime");
+            assert.ok(result.includes("June") || result.includes("2024"));
+        });
+
         // Negative cases
         it("should return 'N/A' for undefined input", () => {
-            const result = formatIndianDisplay(undefined as any);
+            const result = formatIndianDisplay(undefined as unknown as string);
             assert.strictEqual(result, "N/A");
         });
 
         it("should return 'N/A' for null input", () => {
-            const result = formatIndianDisplay(null as any);
+            const result = formatIndianDisplay(null as unknown as string);
+            assert.strictEqual(result, "N/A");
+        });
+
+        it("should return 'N/A' for empty string input", () => {
+            const result = formatIndianDisplay("" as unknown as string);
             assert.strictEqual(result, "N/A");
         });
 

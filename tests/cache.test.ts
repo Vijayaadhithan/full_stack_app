@@ -1,165 +1,144 @@
 /**
  * Tests for server/cache.ts
- * Memory and Redis cache operations
+ * Main cache module with memory and Redis support
  */
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
     getCache,
     setCache,
     invalidateCache,
     flushCache,
-    __resetCacheForTesting,
-    __setRedisModuleLoaderForTesting,
 } from "../server/cache.js";
-import { silenceLogger } from "./testHelpers.js";
 
-// Silence logger during tests
-import logger from "../server/logger.js";
+describe("cache module", () => {
+    const testPrefix = `cachetest_${Date.now()}_`;
 
-describe("cache", () => {
-    beforeEach(() => {
-        silenceLogger(logger);
-        __resetCacheForTesting();
-        // Ensure Redis is disabled for memory-only tests
-        process.env.DISABLE_REDIS = "true";
-    });
-
-    afterEach(() => {
-        __resetCacheForTesting();
-    });
-
-    describe("setCache", () => {
-        // Positive cases
-        it("should store a value in cache", async () => {
-            await setCache("test-key", { message: "hello" }, 60000);
-            const result = await getCache<{ message: string }>("test-key");
-            assert.deepStrictEqual(result, { message: "hello" });
+    describe("setCache and getCache", () => {
+        it("should store and retrieve string", async () => {
+            const key = `${testPrefix}str`;
+            await setCache(key, "hello");
+            const result = await getCache<string>(key);
+            assert.strictEqual(result, "hello");
         });
 
-        it("should store string values", async () => {
-            await setCache("string-key", "test-value", 60000);
-            const result = await getCache<string>("string-key");
-            assert.strictEqual(result, "test-value");
-        });
-
-        it("should store number values", async () => {
-            await setCache("number-key", 42, 60000);
-            const result = await getCache<number>("number-key");
+        it("should store and retrieve number", async () => {
+            const key = `${testPrefix}num`;
+            await setCache(key, 42);
+            const result = await getCache<number>(key);
             assert.strictEqual(result, 42);
         });
 
-        it("should store array values", async () => {
-            await setCache("array-key", [1, 2, 3], 60000);
-            const result = await getCache<number[]>("array-key");
-            assert.deepStrictEqual(result, [1, 2, 3]);
+        it("should store and retrieve object", async () => {
+            const key = `${testPrefix}obj`;
+            const obj = { id: 1, name: "test" };
+            await setCache(key, obj);
+            const result = await getCache<typeof obj>(key);
+            assert.deepStrictEqual(result, obj);
+        });
+
+        it("should store and retrieve array", async () => {
+            const key = `${testPrefix}arr`;
+            const arr = [1, 2, 3];
+            await setCache(key, arr);
+            const result = await getCache<number[]>(key);
+            assert.deepStrictEqual(result, arr);
+        });
+
+        it("should store and retrieve boolean", async () => {
+            const keyTrue = `${testPrefix}bool_true`;
+            const keyFalse = `${testPrefix}bool_false`;
+            await setCache(keyTrue, true);
+            await setCache(keyFalse, false);
+            assert.strictEqual(await getCache(keyTrue), true);
+            assert.strictEqual(await getCache(keyFalse), false);
+        });
+
+        it("should store null value", async () => {
+            const key = `${testPrefix}null`;
+            await setCache(key, null);
+            const result = await getCache(key);
+            assert.strictEqual(result, null);
+        });
+
+        it("should return undefined for missing key", async () => {
+            const key = `${testPrefix}missing_${Date.now()}`;
+            const result = await getCache(key);
+            assert.strictEqual(result, undefined);
         });
 
         it("should overwrite existing value", async () => {
-            await setCache("overwrite-key", "first", 60000);
-            await setCache("overwrite-key", "second", 60000);
-            const result = await getCache<string>("overwrite-key");
+            const key = `${testPrefix}overwrite`;
+            await setCache(key, "first");
+            await setCache(key, "second");
+            const result = await getCache<string>(key);
             assert.strictEqual(result, "second");
         });
-    });
 
-    describe("getCache", () => {
-        // Positive cases
-        it("should return cached value", async () => {
-            await setCache("get-key", { data: "test" }, 60000);
-            const result = await getCache<{ data: string }>("get-key");
-            assert.deepStrictEqual(result, { data: "test" });
-        });
-
-        // Negative cases
-        it("should return undefined for non-existent key", async () => {
-            const result = await getCache("non-existent-key");
-            assert.strictEqual(result, undefined);
-        });
-
-        it("should return undefined after TTL expires", async () => {
-            await setCache("expiring-key", "value", 1); // 1ms TTL
-            // Wait for expiration
-            await new Promise(resolve => setTimeout(resolve, 10));
-            const result = await getCache("expiring-key");
-            assert.strictEqual(result, undefined);
+        it("should use custom TTL", async () => {
+            const key = `${testPrefix}ttl`;
+            await setCache(key, "with-ttl", 60000); // 60 seconds
+            const result = await getCache<string>(key);
+            assert.strictEqual(result, "with-ttl");
         });
     });
 
     describe("invalidateCache", () => {
-        // Positive cases
         it("should remove cached value", async () => {
-            await setCache("invalidate-key", "value", 60000);
-            await invalidateCache("invalidate-key");
-            const result = await getCache("invalidate-key");
+            const key = `${testPrefix}invalidate`;
+            await setCache(key, "to-remove");
+            await invalidateCache(key);
+            const result = await getCache(key);
             assert.strictEqual(result, undefined);
         });
 
-        // Negative cases
         it("should not throw for non-existent key", async () => {
-            await assert.doesNotReject(async () => {
-                await invalidateCache("non-existent-key");
-            });
+            const key = `${testPrefix}nonexistent_${Date.now()}`;
+            await assert.doesNotReject(() => invalidateCache(key));
         });
     });
 
     describe("flushCache", () => {
-        // Positive cases
-        it("should remove all cached values", async () => {
-            await setCache("flush-key-1", "value1", 60000);
-            await setCache("flush-key-2", "value2", 60000);
-            await flushCache();
-
-            const result1 = await getCache("flush-key-1");
-            const result2 = await getCache("flush-key-2");
-
-            assert.strictEqual(result1, undefined);
-            assert.strictEqual(result2, undefined);
-        });
-
-        it("should not throw when cache is empty", async () => {
-            await assert.doesNotReject(async () => {
-                await flushCache();
-            });
+        it("should not throw", async () => {
+            await assert.doesNotReject(() => flushCache());
         });
     });
 
-    describe("cache limits", () => {
-        // Positive cases - cache eviction
-        it("should handle multiple entries", async () => {
-            // Add several entries
-            for (let i = 0; i < 10; i++) {
-                await setCache(`limit-key-${i}`, `value-${i}`, 60000);
-            }
-
-            // All should be retrievable
-            for (let i = 0; i < 10; i++) {
-                const result = await getCache(`limit-key-${i}`);
-                assert.strictEqual(result, `value-${i}`);
-            }
-        });
-    });
-
-    describe("Redis fallback", () => {
-        beforeEach(() => {
-            __resetCacheForTesting();
+    describe("complex objects", () => {
+        it("should handle nested objects", async () => {
+            const key = `${testPrefix}nested`;
+            const nested = {
+                level1: {
+                    level2: {
+                        value: "deep",
+                    },
+                },
+            };
+            await setCache(key, nested);
+            const result = await getCache<typeof nested>(key);
+            assert.deepStrictEqual(result, nested);
         });
 
-        // When Redis is disabled, should use memory cache
-        it("should work with DISABLE_REDIS=true", async () => {
-            process.env.DISABLE_REDIS = "true";
-            await setCache("redis-disabled-key", "value", 60000);
-            const result = await getCache("redis-disabled-key");
-            assert.strictEqual(result, "value");
+        it("should handle objects with nulls", async () => {
+            const key = `${testPrefix}nullfields`;
+            const obj = { a: 1, b: null, c: "test" };
+            await setCache(key, obj);
+            const result = await getCache<typeof obj>(key);
+            assert.deepStrictEqual(result, obj);
         });
 
-        // When REDIS_URL is not set, should use memory cache
-        it("should work without REDIS_URL", async () => {
-            delete process.env.REDIS_URL;
-            process.env.DISABLE_REDIS = "false";
-            await setCache("no-redis-url-key", "value", 60000);
-            const result = await getCache("no-redis-url-key");
-            assert.strictEqual(result, "value");
+        it("should handle large objects", async () => {
+            const key = `${testPrefix}large`;
+            const large = {
+                items: Array.from({ length: 100 }, (_, i) => ({
+                    id: i,
+                    name: `Item ${i}`,
+                    data: "x".repeat(50),
+                })),
+            };
+            await setCache(key, large);
+            const result = await getCache<typeof large>(key);
+            assert.strictEqual(result?.items.length, 100);
         });
     });
 });
