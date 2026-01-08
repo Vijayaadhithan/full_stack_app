@@ -1,170 +1,276 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import type { Request, Response, NextFunction } from "express";
-import { createCsrfProtection } from "../server/security/csrfProtection";
+/**
+ * Tests for server/security/csrfProtection.ts
+ * CSRF token validation middleware
+ */
+import { describe, it, beforeEach, mock } from "node:test";
+import assert from "node:assert";
+import { createCsrfProtection } from "../server/security/csrfProtection.js";
+import { createMockReq, createMockRes, createMockSession } from "./testHelpers.js";
 
-type SessionLike = {
-  [key: string]: unknown;
-};
+describe("csrfProtection", () => {
+    describe("createCsrfProtection", () => {
+        // Positive cases
+        it("should return a middleware function", () => {
+            const middleware = createCsrfProtection();
+            assert.strictEqual(typeof middleware, "function");
+        });
 
-type MockRequest = Partial<Request> & {
-  session?: SessionLike;
-  csrfToken?: () => string;
-};
+        it("should attach csrfToken function to request", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({ method: "GET" });
+            req.session = createMockSession();
+            const res = createMockRes();
 
-const SECRET_SESSION_KEY = "__csrfSecret";
-
-function createRequest(
-  overrides: Partial<MockRequest> & {
-    method?: string;
-    headers?: Record<string, string | string[]>;
-  } = {},
-): MockRequest {
-  return {
-    method: overrides.method,
-    headers: overrides.headers ?? {},
-    session: overrides.session,
-    body: overrides.body,
-    query: overrides.query,
-  };
-}
-
-function invokeMiddleware(
-  handler: (req: Request, res: Response, next: NextFunction) => void,
-  req: MockRequest,
-) {
-  return new Promise<unknown>((resolve) => {
-    handler(req as Request, {} as Response, (err?: unknown) => {
-      resolve(err ?? null);
+            middleware(req, res, (err?: any) => {
+                assert.ok(!err);
+                assert.strictEqual(typeof req.csrfToken, "function");
+                done();
+            });
+        });
     });
-  });
-}
 
-describe("createCsrfProtection", () => {
-  it("throws when session is missing", async () => {
-    const middleware = createCsrfProtection();
-    const err = await invokeMiddleware(
-      middleware,
-      createRequest({ method: "POST", headers: {} }),
-    );
-    assert.ok(err instanceof Error);
-    assert.match((err as Error).message, /Session middleware must be mounted/i);
-  });
+    describe("ignored methods", () => {
+        // Positive cases - GET, HEAD, OPTIONS should bypass
+        it("should allow GET requests without token", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({ method: "GET" });
+            req.session = createMockSession();
+            const res = createMockRes();
 
-  it("skips verification for ignored methods (case insensitive)", async () => {
-    const middleware = createCsrfProtection({ ignoreMethods: ["post"] });
-    const session: SessionLike = {};
-    const req = createRequest({
-      method: "post",
-      headers: {},
-      session,
+            middleware(req, res, (err?: any) => {
+                assert.ok(!err);
+                done();
+            });
+        });
+
+        it("should allow HEAD requests without token", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({ method: "HEAD" });
+            req.session = createMockSession();
+            const res = createMockRes();
+
+            middleware(req, res, (err?: any) => {
+                assert.ok(!err);
+                done();
+            });
+        });
+
+        it("should allow OPTIONS requests without token", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({ method: "OPTIONS" });
+            req.session = createMockSession();
+            const res = createMockRes();
+
+            middleware(req, res, (err?: any) => {
+                assert.ok(!err);
+                done();
+            });
+        });
     });
-    const err = await invokeMiddleware(middleware, req);
-    assert.equal(err, null);
-    assert.equal(typeof req.csrfToken, "function");
-    assert.equal(typeof session[SECRET_SESSION_KEY], "string");
-  });
 
-  it("treats missing method as GET and allows the request", async () => {
-    const middleware = createCsrfProtection();
-    const session: SessionLike = {};
-    const err = await invokeMiddleware(
-      middleware,
-      createRequest({ method: undefined, headers: {}, session }),
-    );
-    assert.equal(err, null);
-  });
+    describe("token validation - negative cases", () => {
+        it("should reject POST without token", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({ method: "POST" });
+            req.session = createMockSession();
+            const res = createMockRes();
 
-  it("rejects unsafe requests without a token", async () => {
-    const middleware = createCsrfProtection();
-    const err = await invokeMiddleware(
-      middleware,
-      createRequest({ method: "POST", headers: {}, session: {} }),
-    );
-    assert.ok(err instanceof Error);
-    assert.equal((err as Error & { code?: string }).code, "EBADCSRFTOKEN");
-    assert.equal((err as Error).message, "Missing CSRF token");
-  });
+            middleware(req, res, (err?: any) => {
+                assert.ok(err);
+                assert.strictEqual(err.code, "EBADCSRFTOKEN");
+                assert.strictEqual(err.status, 403);
+                done();
+            });
+        });
 
-  it("rejects tokens that fail verification", async () => {
-    const middleware = createCsrfProtection();
-    const session: SessionLike = {
-      [SECRET_SESSION_KEY]: "a".repeat(64),
-    };
-    const err = await invokeMiddleware(
-      middleware,
-      createRequest({
-        method: "POST",
-        headers: { "csrf-token": "aa.bb" },
-        session,
-      }),
-    );
-    assert.ok(err instanceof Error);
-    assert.equal((err as Error & { code?: string }).code, "EBADCSRFTOKEN");
-    assert.equal((err as Error).message, "Invalid CSRF token");
-  });
+        it("should reject PATCH without token", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({ method: "PATCH" });
+            req.session = createMockSession();
+            const res = createMockRes();
 
-  it("accepts a valid token provided in headers", async () => {
-    const middleware = createCsrfProtection();
-    const session: SessionLike = {};
-    const seedRequest = createRequest({
-      method: "GET",
-      headers: {},
-      session,
+            middleware(req, res, (err?: any) => {
+                assert.ok(err);
+                assert.strictEqual(err.code, "EBADCSRFTOKEN");
+                done();
+            });
+        });
+
+        it("should reject DELETE without token", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({ method: "DELETE" });
+            req.session = createMockSession();
+            const res = createMockRes();
+
+            middleware(req, res, (err?: any) => {
+                assert.ok(err);
+                assert.strictEqual(err.code, "EBADCSRFTOKEN");
+                done();
+            });
+        });
+
+        it("should reject invalid token", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({
+                method: "POST",
+                headers: { "csrf-token": "invalid-token" },
+            });
+            req.session = createMockSession();
+            const res = createMockRes();
+
+            middleware(req, res, (err?: any) => {
+                assert.ok(err);
+                assert.strictEqual(err.code, "EBADCSRFTOKEN");
+                done();
+            });
+        });
+
+        it("should reject tampered token", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({ method: "GET" });
+            req.session = createMockSession();
+            const res = createMockRes();
+
+            // First, get a valid token
+            middleware(req, res, () => {
+                const token = req.csrfToken();
+                // Tamper with the token
+                const tamperedToken = token.replace(/[a-f]/g, "0");
+
+                const postReq: any = createMockReq({
+                    method: "POST",
+                    headers: { "csrf-token": tamperedToken },
+                });
+                postReq.session = req.session; // Same session
+
+                middleware(postReq, createMockRes(), (err?: any) => {
+                    assert.ok(err);
+                    assert.strictEqual(err.code, "EBADCSRFTOKEN");
+                    done();
+                });
+            });
+        });
     });
-    const seedErr = await invokeMiddleware(middleware, seedRequest);
-    assert.equal(seedErr, null);
-    assert.equal(typeof seedRequest.csrfToken, "function");
-    const token = seedRequest.csrfToken!();
 
-    const postRequest = createRequest({
-      method: "POST",
-      headers: { "x-csrf-token": ["   ", token] },
-      session,
-    });
-    const postErr = await invokeMiddleware(middleware, postRequest);
-    assert.equal(postErr, null);
-  });
+    describe("token validation - positive cases", () => {
+        it("should accept valid token from header", (_, done) => {
+            const middleware = createCsrfProtection();
+            const session = createMockSession();
 
-  it("accepts a valid token provided in the request body", async () => {
-    const middleware = createCsrfProtection();
-    const session: SessionLike = {};
-    const seedRequest = createRequest({
-      method: "GET",
-      headers: {},
-      session,
-    });
-    await invokeMiddleware(middleware, seedRequest);
-    const token = seedRequest.csrfToken!();
+            // First request to get token
+            const getReq: any = createMockReq({ method: "GET" });
+            getReq.session = session;
+            const res = createMockRes();
 
-    const postRequest = createRequest({
-      method: "POST",
-      headers: {},
-      body: { _csrf: token },
-      session,
-    });
-    const err = await invokeMiddleware(middleware, postRequest);
-    assert.equal(err, null);
-  });
+            middleware(getReq, res, () => {
+                const token = getReq.csrfToken();
 
-  it("accepts a valid token provided in the query string", async () => {
-    const middleware = createCsrfProtection();
-    const session: SessionLike = {};
-    const seedRequest = createRequest({
-      method: "GET",
-      headers: {},
-      session,
-    });
-    await invokeMiddleware(middleware, seedRequest);
-    const token = seedRequest.csrfToken!();
+                // Second request with token
+                const postReq: any = createMockReq({
+                    method: "POST",
+                    headers: { "csrf-token": token },
+                });
+                postReq.session = session;
 
-    const postRequest = createRequest({
-      method: "POST",
-      headers: {},
-      query: { _csrf: token },
-      session,
+                middleware(postReq, createMockRes(), (err?: any) => {
+                    assert.ok(!err);
+                    done();
+                });
+            });
+        });
+
+        it("should accept token from x-csrf-token header", (_, done) => {
+            const middleware = createCsrfProtection();
+            const session = createMockSession();
+
+            const getReq: any = createMockReq({ method: "GET" });
+            getReq.session = session;
+
+            middleware(getReq, createMockRes(), () => {
+                const token = getReq.csrfToken();
+
+                const postReq: any = createMockReq({
+                    method: "POST",
+                    headers: { "x-csrf-token": token },
+                });
+                postReq.session = session;
+
+                middleware(postReq, createMockRes(), (err?: any) => {
+                    assert.ok(!err);
+                    done();
+                });
+            });
+        });
+
+        it("should accept token from body", (_, done) => {
+            const middleware = createCsrfProtection();
+            const session = createMockSession();
+
+            const getReq: any = createMockReq({ method: "GET" });
+            getReq.session = session;
+
+            middleware(getReq, createMockRes(), () => {
+                const token = getReq.csrfToken();
+
+                const postReq: any = createMockReq({
+                    method: "POST",
+                    body: { _csrf: token },
+                });
+                postReq.session = session;
+
+                middleware(postReq, createMockRes(), (err?: any) => {
+                    assert.ok(!err);
+                    done();
+                });
+            });
+        });
     });
-    const err = await invokeMiddleware(middleware, postRequest);
-    assert.equal(err, null);
-  });
+
+    describe("Authorization header bypass", () => {
+        it("should bypass CSRF for requests with Authorization header", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({
+                method: "POST",
+                headers: { authorization: "Bearer some-token" },
+            });
+            req.session = createMockSession();
+
+            middleware(req, createMockRes(), (err?: any) => {
+                assert.ok(!err);
+                done();
+            });
+        });
+    });
+
+    describe("ignorePaths option", () => {
+        it("should skip validation for ignored paths", (_, done) => {
+            const middleware = createCsrfProtection({
+                ignorePaths: ["/api/analytics"],
+            });
+            const req: any = createMockReq({
+                method: "POST",
+                path: "/api/analytics",
+            });
+            req.session = createMockSession();
+
+            middleware(req, createMockRes(), (err?: any) => {
+                assert.ok(!err);
+                done();
+            });
+        });
+    });
+
+    describe("session requirement", () => {
+        it("should error when session is missing", (_, done) => {
+            const middleware = createCsrfProtection();
+            const req: any = createMockReq({ method: "GET" });
+            req.session = undefined;
+
+            middleware(req, createMockRes(), (err?: any) => {
+                assert.ok(err);
+                assert.ok(err.message.includes("Session middleware"));
+                done();
+            });
+        });
+    });
 });

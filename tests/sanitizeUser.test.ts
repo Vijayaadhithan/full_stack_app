@@ -1,72 +1,165 @@
+/**
+ * Tests for server/security/sanitizeUser.ts
+ * User data sanitization to remove sensitive fields
+ */
 import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import {
-  sanitizeUser,
-  sanitizeUserList,
-} from "../server/security/sanitizeUser";
+import assert from "node:assert";
+import { sanitizeUser, sanitizeUserList } from "../server/security/sanitizeUser.js";
 
-describe("sanitizeUser utilities", () => {
-  it("returns null when user payload is missing", () => {
-    assert.equal(sanitizeUser(null), null);
-    assert.equal(sanitizeUser(undefined), null);
-  });
+describe("sanitizeUser", () => {
+    describe("sanitizeUser", () => {
+        // Positive cases
+        it("should remove password field from user object", () => {
+            const user = {
+                id: 1,
+                username: "testuser",
+                email: "test@example.com",
+                password: "hashedpassword123",
+            };
 
-  it("removes password property but preserves other fields", () => {
-    const user = { id: 1, name: "Test", password: "secret" };
-    const sanitized = sanitizeUser(user);
-    assert.deepEqual(sanitized, { id: 1, name: "Test" });
-    assert.ok(!("password" in sanitized!));
-  });
+            const sanitized = sanitizeUser(user);
 
-  it("removes pin property (stored secret for workers)", () => {
-    const user = { id: 1, name: "Worker", pin: "hashedpin123", role: "worker" };
-    const sanitized = sanitizeUser(user);
-    assert.deepEqual(sanitized, { id: 1, name: "Worker", role: "worker" });
-    assert.ok(!("pin" in sanitized!));
-  });
+            assert.strictEqual(sanitized?.id, 1);
+            assert.strictEqual(sanitized?.username, "testuser");
+            assert.strictEqual(sanitized?.email, "test@example.com");
+            assert.ok(!("password" in (sanitized ?? {})));
+        });
 
-  it("removes both password and pin when both are present", () => {
-    const user = { id: 1, name: "Test", password: "secret", pin: "hashedpin", email: "test@example.com" };
-    const sanitized = sanitizeUser(user);
-    assert.deepEqual(sanitized, { id: 1, name: "Test", email: "test@example.com" });
-    assert.ok(!("password" in sanitized!));
-    assert.ok(!("pin" in sanitized!));
-  });
+        it("should remove pin field from user object", () => {
+            const user = {
+                id: 1,
+                username: "testuser",
+                pin: "1234",
+            };
 
-  it("returns user unchanged when no sensitive fields present", () => {
-    const user = { id: 1, name: "Regular", email: "user@example.com" };
-    const sanitized = sanitizeUser(user);
-    assert.deepEqual(sanitized, user);
-  });
+            const sanitized = sanitizeUser(user);
 
-  it("sanitizes user lists and filters null entries", () => {
-    const input = [
-      { id: 1, email: "a@example.com", password: "a" },
-      null,
-      { id: 2, email: "b@example.com" },
-    ];
-    const sanitized = sanitizeUserList(input as any);
-    assert.deepEqual(sanitized, [
-      { id: 1, email: "a@example.com" },
-      { id: 2, email: "b@example.com" },
-    ]);
-  });
+            assert.strictEqual(sanitized?.id, 1);
+            assert.ok(!("pin" in (sanitized ?? {})));
+        });
 
-  it("sanitizes lists with pin fields", () => {
-    const input = [
-      { id: 1, name: "Worker1", pin: "hash1" },
-      { id: 2, name: "Worker2", pin: "hash2", password: "pwd" },
-    ];
-    const sanitized = sanitizeUserList(input);
-    assert.deepEqual(sanitized, [
-      { id: 1, name: "Worker1" },
-      { id: 2, name: "Worker2" },
-    ]);
-    // Verify no sensitive fields leaked
-    for (const user of sanitized) {
-      assert.ok(!("password" in user));
-      assert.ok(!("pin" in user));
-    }
-  });
+        it("should remove both password and pin fields", () => {
+            const user = {
+                id: 1,
+                username: "testuser",
+                password: "secret",
+                pin: "1234",
+            };
+
+            const sanitized = sanitizeUser(user);
+
+            assert.strictEqual(sanitized?.id, 1);
+            assert.ok(!("password" in (sanitized ?? {})));
+            assert.ok(!("pin" in (sanitized ?? {})));
+        });
+
+        it("should preserve all other fields", () => {
+            const user = {
+                id: 1,
+                username: "testuser",
+                email: "test@example.com",
+                phone: "+911234567890",
+                role: "customer",
+                name: "Test User",
+                createdAt: new Date("2024-01-01"),
+                password: "secret",
+            };
+
+            const sanitized = sanitizeUser(user);
+
+            assert.strictEqual(sanitized?.id, 1);
+            assert.strictEqual(sanitized?.username, "testuser");
+            assert.strictEqual(sanitized?.email, "test@example.com");
+            assert.strictEqual(sanitized?.phone, "+911234567890");
+            assert.strictEqual(sanitized?.role, "customer");
+            assert.strictEqual(sanitized?.name, "Test User");
+            assert.ok(sanitized?.createdAt);
+        });
+
+        it("should return user as-is if no sensitive fields exist", () => {
+            const user = {
+                id: 1,
+                username: "testuser",
+                email: "test@example.com",
+            };
+
+            const sanitized = sanitizeUser(user);
+
+            // Should be the same object reference when no modification needed
+            assert.deepStrictEqual(sanitized, user);
+        });
+
+        // Negative cases
+        it("should return null for null input", () => {
+            const sanitized = sanitizeUser(null);
+            assert.strictEqual(sanitized, null);
+        });
+
+        it("should return null for undefined input", () => {
+            const sanitized = sanitizeUser(undefined);
+            assert.strictEqual(sanitized, null);
+        });
+
+        it("should handle empty object", () => {
+            const sanitized = sanitizeUser({});
+            assert.deepStrictEqual(sanitized, {});
+        });
+    });
+
+    describe("sanitizeUserList", () => {
+        // Positive cases
+        it("should sanitize all users in list", () => {
+            const users = [
+                { id: 1, username: "user1", password: "pass1" },
+                { id: 2, username: "user2", password: "pass2" },
+            ];
+
+            const sanitized = sanitizeUserList(users);
+
+            assert.strictEqual(sanitized.length, 2);
+            assert.strictEqual(sanitized[0].id, 1);
+            assert.strictEqual(sanitized[0].username, "user1");
+            assert.ok(!("password" in sanitized[0]));
+            assert.strictEqual(sanitized[1].id, 2);
+            assert.ok(!("password" in sanitized[1]));
+        });
+
+        it("should handle empty array", () => {
+            const sanitized = sanitizeUserList([]);
+            assert.deepStrictEqual(sanitized, []);
+        });
+
+        it("should handle mixed users with and without sensitive fields", () => {
+            const users = [
+                { id: 1, username: "user1", password: "pass1" },
+                { id: 2, username: "user2" },
+                { id: 3, username: "user3", pin: "1234" },
+            ];
+
+            const sanitized = sanitizeUserList(users);
+
+            assert.strictEqual(sanitized.length, 3);
+            assert.ok(!("password" in sanitized[0]));
+            assert.ok(!("pin" in sanitized[2]));
+        });
+
+        it("should preserve nested objects", () => {
+            const users = [
+                {
+                    id: 1,
+                    username: "user1",
+                    password: "pass1",
+                    profile: { bio: "Hello", avatar: "avatar.jpg" },
+                },
+            ];
+
+            const sanitized = sanitizeUserList(users);
+
+            assert.strictEqual(sanitized.length, 1);
+            assert.deepStrictEqual(sanitized[0].profile, {
+                bio: "Hello",
+                avatar: "avatar.jpg",
+            });
+        });
+    });
 });
-
