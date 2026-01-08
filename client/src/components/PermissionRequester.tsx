@@ -10,11 +10,7 @@ const PermissionRequester: React.FC = () => {
     `${import.meta.env.VITE_ENABLE_PERMISSION_DEBUG ?? ""}`.toLowerCase() ===
     "true";
 
-  // Only show in development mode
-  if (!showDebugUi) {
-    return null;
-  }
-
+  // Hooks MUST be called before any conditional returns
   const [locationPermission, setLocationPermission] =
     useState<string>("unknown");
   const [currentCoordinates, setCurrentCoordinates] = useState<GeolocationCoordinates | null>(null);
@@ -22,6 +18,9 @@ const PermissionRequester: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Skip effect logic if not showing debug UI
+    if (!showDebugUi) return;
+
     // Check if geolocation is supported
     if (!navigator.geolocation) {
       setLocationPermission("unsupported");
@@ -39,7 +38,12 @@ const PermissionRequester: React.FC = () => {
         setLocationPermission("unknown");
       });
     }
-  }, []);
+  }, [showDebugUi]);
+
+  // Only show in development mode - return AFTER all hooks
+  if (!showDebugUi) {
+    return null;
+  }
 
   const handleRequestLocation = async () => {
     if (!navigator.geolocation) {

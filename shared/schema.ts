@@ -769,6 +769,8 @@ export const notifications = pgTable("notifications", {
       | "booking_confirmed" // Provider confirms booking/reschedule, notify customer
       | "booking_rejected" // Provider rejects booking/reschedule, notify customer
       | "booking_cancelled_by_customer" // Customer cancels, notify provider
+      | "booking_update" // Used for "Booking Accepted/Rejected" 
+      | "booking_rescheduled_by_provider" // Provider reschedules, notify customer
     >()
     .notNull(),
   title: text("title").notNull(),

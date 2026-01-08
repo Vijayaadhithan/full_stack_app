@@ -161,6 +161,7 @@ function mountStaticAssets() {
   // Skip static file serving if explicitly disabled (for API-only deployments)
   if (process.env.DISABLE_STATIC_FILES === "true") {
     logger.info("Static file serving disabled via DISABLE_STATIC_FILES");
+    mountFallbackRootRoute();
     return;
   }
 
@@ -176,6 +177,7 @@ function mountStaticAssets() {
       },
       "Static client bundle not found; skipping static file serving",
     );
+    mountFallbackRootRoute();
     return;
   }
 
@@ -196,6 +198,21 @@ function mountStaticAssets() {
   });
 
   staticAssetsMounted = true;
+}
+
+// Fallback root route for when static files are not available (API-only mode)
+function mountFallbackRootRoute() {
+  app.get("/", (_req, res) => {
+    res.json({
+      name: "DoorstepTN API",
+      status: "ok",
+      version: "1.0.0",
+      environment: process.env.NODE_ENV || "development",
+      docs: "/api/docs",
+      health: "/api/health",
+      message: "Frontend not available. This server is running in API-only mode.",
+    });
+  });
 }
 
 function logAccessibleAddresses(port: number, scheme: "http" | "https") {

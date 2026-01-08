@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import type { User, AppMode, Shop, Provider } from "@shared/schema";
 
@@ -102,20 +103,73 @@ export function UserProvider({ children }: { children: ReactNode }) {
         };
     }, [appMode]);
 
-    // Load saved mode from localStorage
+    // Track if this is the first mode initialization (to avoid navigating on every render)
+    const hasInitializedMode = useRef(false);
+    const [, setLocation] = useLocation();
+
+    // Load saved mode from localStorage or initialize based on user's primary role
     useEffect(() => {
+        // Wait for profiles to actually load before initializing
+        // isLoadingProfiles is true when the query is in progress
+        // We need profiles data to correctly determine the user's role
+        if (!user || isLoadingProfiles) {
+            return;
+        }
+
         const savedMode = localStorage.getItem("appMode") as AppMode | null;
+
+        // Helper function to set mode and optionally navigate
+        const setModeAndNavigate = (mode: AppMode, shouldNavigate: boolean) => {
+            setAppModeInternal(mode);
+            localStorage.setItem("appMode", mode);
+
+            // Only navigate if this is the first initialization and we're on a mismatched page
+            if (shouldNavigate && !hasInitializedMode.current) {
+                const currentPath = window.location.pathname;
+                const modeToPath: Record<AppMode, string> = {
+                    "SHOP": "/shop",
+                    "PROVIDER": "/provider",
+                    "CUSTOMER": "/customer"
+                };
+                const expectedPath = modeToPath[mode];
+
+                // Navigate if we're on a different role's dashboard (or root/generic pages)
+                if (currentPath === "/customer" || currentPath === "/" || currentPath === "/auth") {
+                    setLocation(expectedPath);
+                }
+            }
+            hasInitializedMode.current = true;
+        };
+
         if (savedMode && Object.keys(MODE_THEMES).includes(savedMode)) {
-            // Validate the user can access this mode
+            // Validate the user can access the saved mode
             if (savedMode === "SHOP" && !profiles.hasShop) {
-                setAppModeInternal("CUSTOMER");
+                setModeAndNavigate("CUSTOMER", false);
             } else if (savedMode === "PROVIDER" && !profiles.hasProvider) {
-                setAppModeInternal("CUSTOMER");
+                setModeAndNavigate("CUSTOMER", false);
             } else {
                 setAppModeInternal(savedMode);
+                hasInitializedMode.current = true;
+            }
+        } else {
+            // No saved mode - initialize based on user's primary role or profile
+            // Priority: 1) User's explicit role, 2) Shop profile, 3) Provider profile, 4) Customer
+            if (user.role === "shop" || user.role === "worker") {
+                setModeAndNavigate("SHOP", true);
+            } else if (user.role === "provider") {
+                setModeAndNavigate("PROVIDER", true);
+            } else if (profiles.hasShop) {
+                // Customer with shop profile - default to shop mode
+                setModeAndNavigate("SHOP", true);
+            } else if (profiles.hasProvider) {
+                // Customer with provider profile - default to provider mode  
+                setModeAndNavigate("PROVIDER", true);
+            } else {
+                // Pure customer
+                hasInitializedMode.current = true;
             }
         }
-    }, [profiles]);
+    }, [user, profiles, isLoadingProfiles, setLocation]);
 
     const setAppMode = useCallback((mode: AppMode) => {
         // Validate mode access

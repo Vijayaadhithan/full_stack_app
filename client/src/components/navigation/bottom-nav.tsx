@@ -98,19 +98,19 @@ export function BottomNav() {
             location,
           );
           return (
-            <Link key={item.href} href={item.href}>
-              <a
-                className={cn(
-                  "flex flex-col items-center justify-center gap-1 rounded-md px-2 py-2 text-xs transition-colors",
-                  active
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                aria-current={active ? "page" : undefined}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="leading-none">{t(item.labelKey)}</span>
-              </a>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex flex-col items-center justify-center gap-1 rounded-md px-2 py-2 text-xs transition-colors",
+                active
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              aria-current={active ? "page" : undefined}
+            >
+              <Icon className="h-5 w-5" />
+              <span className="leading-none">{t(item.labelKey)}</span>
             </Link>
           );
         })}

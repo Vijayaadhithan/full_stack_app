@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { formatIndianDisplay } from "@shared/date-utils"; // Import IST utility
-import { isProviderUser, isShopUser, isWorkerUser } from "@/lib/role-access";
+import { useUserContext } from "@/contexts/UserContext";
 
 export function NotificationsCenter() {
   const [open, setOpen] = useState(false);
@@ -26,20 +26,12 @@ export function NotificationsCenter() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const lastSeenNotificationIdRef = useRef<number | null>(null);
-  // Determine the base role for navigation purposes (not for filtering)
-  const baseRole = useMemo(() => {
-    if (!user) return "customer";
-    if (isWorkerUser(user)) return "shop";
-    if (user.role === "shop") return "shop";
-    if (user.role === "provider") return "provider";
-    if (user.role === "customer") {
-      if (isShopUser(user)) return "shop";
-      if (isProviderUser(user)) return "provider";
-      return "customer";
-    }
-    return "customer";
-  }, [user]);
-  const isShopOwner = baseRole === "shop";
+
+  // Get profiles and setAppMode from UserContext - source of truth for shop/provider access
+  const { profiles, setAppMode } = useUserContext();
+
+  // Determine if user can access shop features
+  const isShopOwner = profiles.hasShop || user?.role === "shop" || user?.role === "worker";
 
   const { data: notificationsData, isFetched } = useQuery<{
     data: Notification[];
@@ -283,7 +275,8 @@ export function NotificationsCenter() {
     return undefined;
   };
 
-  // Function to navigate to the relevant page based on notification type and content
+  // Function to navigate to the relevant page based on notification type and CONTENT
+  // The key insight: check the notification TITLE to determine WHO it's for
   const navigateToRelevantPage = (notification: Notification) => {
     // Close the notification panel
     setOpen(false);
@@ -291,45 +284,141 @@ export function NotificationsCenter() {
     // Extract any IDs from the notification message if present
     const id = extractEntityId(notification);
 
-    // Navigate based on notification type and user role
-    // baseRole is already computed: shop, provider, or customer
+    // Determine user capabilities
+    const hasShopAccess = profiles.hasShop || user?.role === "shop" || user?.role === "worker";
+    const hasProviderAccess = profiles.hasProvider || user?.role === "provider";
+
+    // Get the notification title for content-based routing
+    const title = (notification.title || "").toLowerCase();
+
+    // Navigate based on notification type
     switch (notification.type) {
+      // ========== ORDER NOTIFICATIONS ==========
+      // Check title to determine if FOR shop or FOR customer
+      case "order": {
+        // Titles that indicate this notification is FOR THE SHOP
+        // Be specific to avoid matching customer titles like "Pay Later approved"
+        const isForShop =
+          title.includes("new order") ||
+          title.includes("order received") ||
+          title.includes("approval needed") ||      // "Pay Later approval needed"
+          title.includes("quick order") ||          // "New Quick Order"
+          title.includes("action required") ||
+          title.includes("payment reference") ||
+          title.includes("agreed to final bill") || // "Customer agreed to final bill"
+          title.includes("customer agreed");
+
+        if (isForShop && hasShopAccess) {
+          // This is a new order notification FOR the shop owner
+          setAppMode("SHOP");
+          navigate("/shop/orders");
+        } else {
+          // This is an order status update FOR the customer
+          setAppMode("CUSTOMER");
+          navigate(`/customer/order${id ? `/${id}` : "s"}`);
+        }
+        break;
+      }
+
+      // ========== RETURN NOTIFICATIONS ==========
+      case "return": {
+        // Titles that indicate this notification is FOR THE SHOP
+        const isForShop =
+          title.includes("new return") ||
+          (title.includes("return request") && !title.includes("received"));
+
+        if (isForShop && hasShopAccess) {
+          // New return request FOR the shop
+          setAppMode("SHOP");
+          navigate("/shop/returns");
+        } else {
+          // Return status update FOR the customer
+          setAppMode("CUSTOMER");
+          navigate(`/customer/returns${id ? `/${id}` : ""}`);
+        }
+        break;
+      }
+
+      // ========== BOOKING TYPES - EXPLICITLY FOR PROVIDERS ==========
+      case "booking_request":
+      case "booking_cancelled_by_customer":
+        if (hasProviderAccess) {
+          setAppMode("PROVIDER");
+          navigate("/provider/bookings?status=pending");
+        } else {
+          setAppMode("CUSTOMER");
+          navigate(`/customer/bookings${id ? `/${id}` : ""}`);
+        }
+        break;
+
+      // ========== BOOKING TYPES - EXPLICITLY FOR CUSTOMERS ==========
+      // booking_update is used for "Booking Accepted" and "Booking Rejected"
+      // booking_rescheduled_by_provider is when provider reschedules
+      case "booking_update":
+      case "booking_confirmed":
+      case "booking_rejected":
+      case "booking_rescheduled_request":
+      case "booking_rescheduled_by_provider":
+        // Switch to CUSTOMER mode and navigate to bookings
+        setAppMode("CUSTOMER");
+        navigate(`/customer/bookings${id ? `/${id}` : ""}`);
+        break;
+
+      // ========== GENERIC BOOKING/SERVICE NOTIFICATIONS ==========
       case "booking":
-        if (baseRole === "customer") {
-          navigate(`/customer/bookings/${id || ""}`);
-        } else if (baseRole === "provider") {
-          navigate(`/provider/bookings${id ? `/${id}` : "?status=pending"}`);
+      case "service":
+      case "service_request": {
+        // Check title to determine if FOR provider or FOR customer
+        const isForProvider =
+          title.includes("new booking") ||
+          title.includes("booking request") ||
+          title.includes("new service") ||
+          title.includes("service request");
+
+        if (isForProvider && hasProviderAccess) {
+          setAppMode("PROVIDER");
+          navigate("/provider/bookings?status=pending");
+        } else {
+          setAppMode("CUSTOMER");
+          navigate(`/customer/bookings${id ? `/${id}` : ""}`);
         }
         break;
-      case "order":
-        if (baseRole === "customer") {
-          navigate(`/customer/order/${id || ""}`);
-        } else if (baseRole === "shop") {
-          navigate(`/shop/orders${id ? `/${id}` : ""}`);
-        }
-        break;
-      case "return":
-        if (baseRole === "customer") {
-          navigate(`/customer/returns/${id || ""}`);
-        } else if (baseRole === "shop") {
-          navigate(`/shop/returns${id ? `/${id}` : ""}`);
-        }
-        break;
+      }
+
+      // ========== SHOP-SPECIFIC ==========
       case "shop":
-        if (baseRole === "shop") {
+        if (hasShopAccess) {
+          setAppMode("SHOP");
           navigate("/shop/inventory");
         } else {
-          navigate(`/${baseRole}`);
+          setAppMode("CUSTOMER");
+          navigate("/customer");
         }
         break;
-      case "service_request":
-        if (baseRole === "provider") {
-          navigate(`/provider/services${id ? `/${id}` : ""}`);
+
+      // ========== PROMOTION ==========
+      case "promotion":
+        setAppMode("CUSTOMER");
+        navigate("/customer/explore");
+        break;
+
+      // ========== SYSTEM ==========
+      case "system":
+        if (hasShopAccess) {
+          setAppMode("SHOP");
+          navigate("/shop");
+        } else if (hasProviderAccess) {
+          setAppMode("PROVIDER");
+          navigate("/provider");
+        } else {
+          setAppMode("CUSTOMER");
+          navigate("/customer");
         }
         break;
+
       default:
-        // For general notifications, navigate to the dashboard
-        navigate(`/${baseRole}`);
+        setAppMode("CUSTOMER");
+        navigate("/customer");
     }
   };
 
