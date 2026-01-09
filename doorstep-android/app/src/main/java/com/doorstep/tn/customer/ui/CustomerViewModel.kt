@@ -9,6 +9,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -84,6 +87,21 @@ class CustomerViewModel @Inject constructor(
     
     private val _selectedCategory = MutableStateFlow<String?>(null)
     val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
+    
+    // Customer Reviews
+    private val _customerReviews = MutableStateFlow<List<com.doorstep.tn.core.network.CustomerReview>>(emptyList())
+    val customerReviews: StateFlow<List<com.doorstep.tn.core.network.CustomerReview>> = _customerReviews.asStateFlow()
+    
+    private val _customerProductReviews = MutableStateFlow<List<com.doorstep.tn.core.network.CustomerProductReview>>(emptyList())
+    val customerProductReviews: StateFlow<List<com.doorstep.tn.core.network.CustomerProductReview>> = _customerProductReviews.asStateFlow()
+    
+    // Notifications
+    private val _notifications = MutableStateFlow<List<com.doorstep.tn.core.network.AppNotification>>(emptyList())
+    val notifications: StateFlow<List<com.doorstep.tn.core.network.AppNotification>> = _notifications.asStateFlow()
+    
+    val unreadNotificationCount: StateFlow<Int> = _notifications.map { list ->
+        list.count { !it.isRead }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     
     // ==================== Product Actions ====================
     
@@ -473,6 +491,218 @@ class CustomerViewModel @Inject constructor(
             }
             
             _isLoading.value = false
+        }
+    }
+    
+    // ==================== Profile Actions ====================
+    
+    // Update profile - matches web's PATCH /api/users/{id}
+    fun updateProfile(
+        userId: Int,
+        request: com.doorstep.tn.core.network.UpdateProfileRequest,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            when (val result = repository.updateProfile(userId, request)) {
+                is Result.Success -> {
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message)
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    // ==================== Booking Actions (Customer) ====================
+    
+    // Cancel booking - matches web's PATCH /api/bookings/{id} with status: "cancelled"
+    fun cancelBooking(
+        bookingId: Int,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            when (val result = repository.cancelBooking(bookingId)) {
+                is Result.Success -> {
+                    loadBookings() // Refresh bookings list
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message)
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    // Reschedule booking - matches web's PATCH /api/bookings/{id}
+    fun rescheduleBooking(
+        bookingId: Int,
+        newBookingDate: String,
+        comments: String? = null,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            when (val result = repository.rescheduleBooking(bookingId, newBookingDate, comments)) {
+                is Result.Success -> {
+                    loadBookings() // Refresh bookings list
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message)
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    // Submit service review - matches web's POST /api/reviews
+    fun submitReview(
+        serviceId: Int,
+        rating: Int,
+        review: String,
+        bookingId: Int,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            when (val result = repository.submitReview(serviceId, rating, review, bookingId)) {
+                is Result.Success -> {
+                    loadBookings() // Refresh to show review status
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message)
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    // ==================== Reviews Actions (Customer) ====================
+    
+    // Load customer's reviews - matches web's /api/reviews/customer and /api/product-reviews/customer
+    fun loadCustomerReviews() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            
+            // Load service reviews
+            when (val result = repository.getCustomerReviews()) {
+                is Result.Success -> _customerReviews.value = result.data
+                is Result.Error -> _error.value = result.message
+                is Result.Loading -> {}
+            }
+            
+            // Load product reviews
+            when (val result = repository.getCustomerProductReviews()) {
+                is Result.Success -> _customerProductReviews.value = result.data
+                is Result.Error -> {
+                    // Only show error if we don't already have one
+                    if (_error.value == null) _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    // ==================== Notification Actions ====================
+    
+    // Load user notifications - matches web GET /api/notifications
+    fun loadNotifications() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            
+            when (val result = repository.getNotifications()) {
+                is Result.Success -> _notifications.value = result.data
+                is Result.Error -> _error.value = result.message
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    // Mark single notification as read
+    fun markNotificationRead(notificationId: Int) {
+        viewModelScope.launch {
+            when (val result = repository.markNotificationRead(notificationId)) {
+                is Result.Success -> {
+                    // Update local state
+                    _notifications.value = _notifications.value.map { notification ->
+                        if (notification.id == notificationId) {
+                            notification.copy(isRead = true)
+                        } else {
+                            notification
+                        }
+                    }
+                }
+                is Result.Error -> {
+                    // Silently fail, notification is still visible
+                }
+                is Result.Loading -> {}
+            }
+        }
+    }
+    
+    // Mark all notifications as read
+    fun markAllNotificationsRead() {
+        viewModelScope.launch {
+            when (val result = repository.markAllNotificationsRead()) {
+                is Result.Success -> {
+                    // Update local state
+                    _notifications.value = _notifications.value.map { notification ->
+                        notification.copy(isRead = true)
+                    }
+                }
+                is Result.Error -> {
+                    // Silently fail
+                }
+                is Result.Loading -> {}
+            }
+        }
+    }
+    
+    // Delete notification
+    fun deleteNotification(notificationId: Int) {
+        viewModelScope.launch {
+            when (val result = repository.deleteNotification(notificationId)) {
+                is Result.Success -> {
+                    // Remove from local state
+                    _notifications.value = _notifications.value.filter { it.id != notificationId }
+                }
+                is Result.Error -> {
+                    // Silently fail
+                }
+                is Result.Loading -> {}
+            }
         }
     }
 }

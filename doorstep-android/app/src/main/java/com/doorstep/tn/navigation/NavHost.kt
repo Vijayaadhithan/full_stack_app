@@ -23,6 +23,7 @@ import com.doorstep.tn.customer.ui.products.ProductDetailScreen
 import com.doorstep.tn.customer.ui.services.ServicesListScreen
 import com.doorstep.tn.customer.ui.services.ServiceDetailScreen
 import com.doorstep.tn.customer.ui.orders.OrdersListScreen
+import com.doorstep.tn.customer.ui.orders.OrderDetailScreen
 import com.doorstep.tn.customer.ui.bookings.BookingsListScreen
 import com.doorstep.tn.customer.ui.bookings.BookingDetailScreen
 import com.doorstep.tn.customer.ui.bookings.BookServiceScreen
@@ -31,6 +32,8 @@ import com.doorstep.tn.customer.ui.wishlist.WishlistScreen
 import com.doorstep.tn.customer.ui.shops.ShopsListScreen
 import com.doorstep.tn.customer.ui.shops.ShopDetailScreen
 import com.doorstep.tn.customer.ui.profile.ProfileScreen
+import com.doorstep.tn.customer.ui.reviews.MyReviewsScreen
+import com.doorstep.tn.customer.ui.notifications.NotificationsScreen
 import com.doorstep.tn.shop.ui.ShopDashboardScreen
 import com.doorstep.tn.provider.ui.ProviderDashboardScreen
 
@@ -64,6 +67,8 @@ object Routes {
     const val CUSTOMER_PROFILE = "customer_profile"
     const val CUSTOMER_WISHLIST = "customer_wishlist"
     const val CUSTOMER_BOOK_SERVICE = "customer_book_service/{serviceId}"
+    const val CUSTOMER_REVIEWS = "customer_reviews"
+    const val CUSTOMER_NOTIFICATIONS = "customer_notifications"
     
     // Shop routes
     const val SHOP_DASHBOARD = "shop_dashboard"
@@ -265,6 +270,18 @@ fun DoorStepNavHost(
             )
         }
         
+        // Order Detail Screen
+        composable(
+            route = Routes.CUSTOMER_ORDER_DETAIL,
+            arguments = listOf(navArgument("orderId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val orderId = backStackEntry.arguments?.getInt("orderId") ?: 0
+            OrderDetailScreen(
+                orderId = orderId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
         composable(Routes.CUSTOMER_BOOKINGS) {
             // Booking info shown inline like web - no navigation to detail page
             BookingsListScreen(
@@ -300,6 +317,23 @@ fun DoorStepNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToProduct = { shopId, productId ->
                     navController.navigate(Routes.productDetail(shopId, productId))
+                }
+            )
+        }
+        
+        // My Reviews Screen
+        composable(Routes.CUSTOMER_REVIEWS) {
+            MyReviewsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        // Notifications Screen
+        composable(Routes.CUSTOMER_NOTIFICATIONS) {
+            NotificationsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToBooking = { bookingId ->
+                    navController.navigate(Routes.bookingDetail(bookingId))
                 }
             )
         }

@@ -146,6 +146,47 @@ interface DoorStepApi {
     @POST("api/bookings")
     suspend fun createBooking(@Body request: CreateBookingRequest): Response<BookingResponse>
     
+    // Customer booking actions - matches web PATCH /api/bookings/{id}
+    @PATCH("api/bookings/{id}")
+    suspend fun updateBooking(
+        @Path("id") bookingId: Int,
+        @Body request: UpdateBookingRequest
+    ): Response<Booking>
+    
+    // Submit service review - matches web POST /api/reviews
+    @POST("api/reviews")
+    suspend fun submitReview(@Body request: SubmitReviewRequest): Response<ReviewResponse>
+    
+    // Get customer's service reviews - matches web GET /api/reviews/customer
+    @GET("api/reviews/customer")
+    suspend fun getCustomerReviews(): Response<List<CustomerReview>>
+    
+    // Get customer's product reviews - matches web GET /api/product-reviews/customer
+    @GET("api/product-reviews/customer")
+    suspend fun getCustomerProductReviews(): Response<List<CustomerProductReview>>
+    
+    // ==================== NOTIFICATION ENDPOINTS ====================
+    
+    // Get user notifications - matches web GET /api/notifications
+    @GET("api/notifications")
+    suspend fun getNotifications(): Response<List<AppNotification>>
+    
+    // Get unread notification count - matches web GET /api/notifications (derived)
+    @GET("api/notifications")
+    suspend fun getUnreadNotificationCount(): Response<List<AppNotification>>
+    
+    // Mark single notification as read - matches web PATCH /api/notifications/:id/read
+    @PATCH("api/notifications/{id}/read")
+    suspend fun markNotificationRead(@Path("id") notificationId: Int): Response<Unit>
+    
+    // Mark all notifications as read - matches web POST /api/notifications/mark-all-read
+    @POST("api/notifications/mark-all-read")
+    suspend fun markAllNotificationsRead(): Response<Unit>
+    
+    // Delete notification - matches web DELETE /api/notifications/:id
+    @DELETE("api/notifications/{id}")
+    suspend fun deleteNotification(@Path("id") notificationId: Int): Response<Unit>
+    
     // ==================== SHOP ENDPOINTS ====================
     
     @GET("api/orders/shop")

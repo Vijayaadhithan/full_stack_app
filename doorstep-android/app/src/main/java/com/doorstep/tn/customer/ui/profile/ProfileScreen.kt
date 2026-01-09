@@ -1,5 +1,10 @@
 package com.doorstep.tn.customer.ui.profile
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -15,22 +20,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.customer.ui.CustomerViewModel
+import com.doorstep.tn.core.network.UpdateProfileRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.launch
 
 /**
  * Customer Profile Screen - matches web app's profile.tsx
  * Features: Full form, address fields, verification status
+ * Uses same PATCH /api/users/{id} API as web
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
+    customerViewModel: CustomerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -38,7 +52,7 @@ fun ProfileScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Form state - initialized from user
+    // Form state - initialized from user data (syncs with web)
     var name by remember(user) { mutableStateOf(user?.name ?: "") }
     var phone by remember(user) { mutableStateOf(user?.phone ?: "") }
     var email by remember(user) { mutableStateOf(user?.email ?: "") }
@@ -51,6 +65,89 @@ fun ProfileScreen(
     var addressLandmark by remember(user) { mutableStateOf(user?.addressLandmark ?: "") }
     
     var isLoading by remember { mutableStateOf(false) }
+    
+    // GPS Location state
+    val context = LocalContext.current
+    var capturedLatitude by remember(user) { mutableStateOf(user?.latitude?.toDoubleOrNull()) }
+    var capturedLongitude by remember(user) { mutableStateOf(user?.longitude?.toDoubleOrNull()) }
+    var isCapturingLocation by remember { mutableStateOf(false) }
+    
+    // Location permission launcher
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        
+        if (fineLocationGranted || coarseLocationGranted) {
+            // Permission granted, capture location
+            captureLocation(
+                context = context,
+                onSuccess = { lat, lng ->
+                    capturedLatitude = lat
+                    capturedLongitude = lng
+                    isCapturingLocation = false
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Location captured successfully!")
+                    }
+                },
+                onError = { error ->
+                    isCapturingLocation = false
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Error: $error")
+                    }
+                }
+            )
+        } else {
+            isCapturingLocation = false
+            scope.launch {
+                snackbarHostState.showSnackbar("Location permission denied")
+            }
+        }
+    }
+    
+    // Function to request location
+    fun requestLocation() {
+        isCapturingLocation = true
+        
+        // Check if permission is already granted
+        val hasFineLocation = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        
+        val hasCoarseLocation = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        
+        if (hasFineLocation || hasCoarseLocation) {
+            // Permission already granted, capture location
+            captureLocation(
+                context = context,
+                onSuccess = { lat, lng ->
+                    capturedLatitude = lat
+                    capturedLongitude = lng
+                    isCapturingLocation = false
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Location captured successfully!")
+                    }
+                },
+                onError = { error ->
+                    isCapturingLocation = false
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Error: $error")
+                    }
+                }
+            )
+        } else {
+            // Request permission
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
     
     Scaffold(
         topBar = {
@@ -324,9 +421,8 @@ fun ProfileScreen(
                         color = WhiteTextMuted
                     )
                     
-                    val userLat = user?.latitude
-                    val userLng = user?.longitude
-                    val hasLocation = userLat != null && userLng != null
+                    // Show saved or captured location
+                    val hasLocation = capturedLatitude != null && capturedLongitude != null
                     if (hasLocation) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(
@@ -338,32 +434,90 @@ fun ProfileScreen(
                         ) {
                             Icon(Icons.Default.CheckCircle, null, tint = SuccessGreen)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text("Location Saved", color = SuccessGreen, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                Text("$userLat, $userLng", color = WhiteTextMuted, style = MaterialTheme.typography.bodySmall)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Location Captured", color = SuccessGreen, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "${String.format("%.6f", capturedLatitude)}, ${String.format("%.6f", capturedLongitude)}", 
+                                    color = WhiteTextMuted, 
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            // Clear location button
+                            IconButton(onClick = { 
+                                capturedLatitude = null
+                                capturedLongitude = null
+                            }) {
+                                Icon(Icons.Default.Close, "Clear", tint = WhiteTextMuted)
                             }
                         }
                     }
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    Text(
-                        text = "Location capture requires the app to request GPS permission. This can be implemented using Android's FusedLocationProvider.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = WhiteTextMuted
-                    )
+                    // Capture Location Button
+                    Button(
+                        onClick = { requestLocation() },
+                        enabled = !isCapturingLocation,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ProviderBlue,
+                            contentColor = WhiteText
+                        )
+                    ) {
+                        if (isCapturingLocation) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = WhiteText
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Capturing...")
+                        } else {
+                            Icon(Icons.Default.MyLocation, null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (hasLocation) "Update Location" else "Capture My Location")
+                        }
+                    }
                 }
             }
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Save Button
+            // Save Button - calls PATCH /api/users/{id} like web
             Button(
                 onClick = { 
                     isLoading = true
+                    val userId = user?.id ?: return@Button
                     scope.launch {
-                        snackbarHostState.showSnackbar("Profile saved!")
-                        isLoading = false
+                        customerViewModel.updateProfile(
+                            userId = userId,
+                            request = UpdateProfileRequest(
+                                name = name.takeIf { it.isNotBlank() },
+                                phone = phone.takeIf { it.isNotBlank() },
+                                email = email.takeIf { it.isNotBlank() },
+                                upiId = upiId.takeIf { it.isNotBlank() },
+                                addressStreet = addressStreet.takeIf { it.isNotBlank() },
+                                addressCity = addressCity.takeIf { it.isNotBlank() },
+                                addressState = addressState.takeIf { it.isNotBlank() },
+                                addressPostalCode = addressPostalCode.takeIf { it.isNotBlank() },
+                                addressCountry = addressCountry.takeIf { it.isNotBlank() },
+                                addressLandmark = addressLandmark.takeIf { it.isNotBlank() },
+                                latitude = capturedLatitude,
+                                longitude = capturedLongitude
+                            ),
+                            onSuccess = {
+                                isLoading = false
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Profile updated successfully!")
+                                }
+                            },
+                            onError = { errorMessage ->
+                                isLoading = false
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Error: $errorMessage")
+                                }
+                            }
+                        )
                     }
                 },
                 enabled = !isLoading,
@@ -440,5 +594,35 @@ private fun ProfileTextField(
             ),
             shape = RoundedCornerShape(10.dp)
         )
+    }
+}
+
+/**
+ * Helper function to capture the current location using FusedLocationProviderClient
+ */
+@SuppressLint("MissingPermission")
+private fun captureLocation(
+    context: android.content.Context,
+    onSuccess: (Double, Double) -> Unit,
+    onError: (String) -> Unit
+) {
+    try {
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+        val cancellationToken = CancellationTokenSource()
+        
+        fusedLocationClient.getCurrentLocation(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            cancellationToken.token
+        ).addOnSuccessListener { location ->
+            if (location != null) {
+                onSuccess(location.latitude, location.longitude)
+            } else {
+                onError("Unable to get current location. Please try again.")
+            }
+        }.addOnFailureListener { exception ->
+            onError(exception.message ?: "Failed to get location")
+        }
+    } catch (e: Exception) {
+        onError(e.message ?: "Location capture failed")
     }
 }

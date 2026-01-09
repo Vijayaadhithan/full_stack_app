@@ -349,5 +349,155 @@ class CustomerRepository @Inject constructor(
             Result.Error(e.message ?: "Failed to create booking")
         }
     }
+    
+    // Cancel booking - matches web PATCH /api/bookings/{id} with status: "cancelled"
+    suspend fun cancelBooking(bookingId: Int): Result<Booking> {
+        return try {
+            val request = com.doorstep.tn.core.network.UpdateBookingRequest(
+                status = "cancelled"
+            )
+            val response = api.updateBooking(bookingId, request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to cancel booking")
+        }
+    }
+    
+    // Reschedule booking - matches web PATCH /api/bookings/{id}
+    suspend fun rescheduleBooking(
+        bookingId: Int,
+        newBookingDate: String,
+        comments: String? = null
+    ): Result<Booking> {
+        return try {
+            val request = com.doorstep.tn.core.network.UpdateBookingRequest(
+                bookingDate = newBookingDate,
+                comments = comments
+            )
+            val response = api.updateBooking(bookingId, request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to reschedule booking")
+        }
+    }
+    
+    // Submit service review - matches web POST /api/reviews
+    suspend fun submitReview(
+        serviceId: Int,
+        rating: Int,
+        review: String,
+        bookingId: Int
+    ): Result<com.doorstep.tn.core.network.ReviewResponse> {
+        return try {
+            val request = com.doorstep.tn.core.network.SubmitReviewRequest(
+                serviceId = serviceId,
+                rating = rating,
+                review = review,
+                bookingId = bookingId
+            )
+            val response = api.submitReview(request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to submit review")
+        }
+    }
+    
+    // Get customer's service reviews - matches web GET /api/reviews/customer
+    suspend fun getCustomerReviews(): Result<List<com.doorstep.tn.core.network.CustomerReview>> {
+        return try {
+            val response = api.getCustomerReviews()
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load reviews")
+        }
+    }
+    
+    // Get customer's product reviews - matches web GET /api/product-reviews/customer
+    suspend fun getCustomerProductReviews(): Result<List<com.doorstep.tn.core.network.CustomerProductReview>> {
+        return try {
+            val response = api.getCustomerProductReviews()
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load product reviews")
+        }
+    }
+    
+    // ==================== NOTIFICATION OPERATIONS ====================
+    
+    // Get user notifications - matches web GET /api/notifications
+    suspend fun getNotifications(): Result<List<com.doorstep.tn.core.network.AppNotification>> {
+        return try {
+            val response = api.getNotifications()
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load notifications")
+        }
+    }
+    
+    // Mark notification as read - matches web PATCH /api/notifications/:id/read
+    suspend fun markNotificationRead(notificationId: Int): Result<Unit> {
+        return try {
+            val response = api.markNotificationRead(notificationId)
+            if (response.isSuccessful) {
+                Result.Success(Unit)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to mark notification as read")
+        }
+    }
+    
+    // Mark all notifications as read - matches web POST /api/notifications/mark-all-read
+    suspend fun markAllNotificationsRead(): Result<Unit> {
+        return try {
+            val response = api.markAllNotificationsRead()
+            if (response.isSuccessful) {
+                Result.Success(Unit)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to mark all notifications as read")
+        }
+    }
+    
+    // Delete notification - matches web DELETE /api/notifications/:id
+    suspend fun deleteNotification(notificationId: Int): Result<Unit> {
+        return try {
+            val response = api.deleteNotification(notificationId)
+            if (response.isSuccessful) {
+                Result.Success(Unit)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to delete notification")
+        }
+    }
 }
 

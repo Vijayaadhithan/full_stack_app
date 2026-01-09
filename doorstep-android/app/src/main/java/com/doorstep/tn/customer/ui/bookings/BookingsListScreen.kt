@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +39,8 @@ fun BookingsListScreen(
 ) {
     val bookings by viewModel.bookings.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     
     // Time filter: Upcoming or Past (like web)
     var selectedTimeFilter by remember { mutableStateOf("Upcoming") }
@@ -97,6 +100,7 @@ fun BookingsListScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = SlateBackground)
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = SlateDarker
     ) { paddingValues ->
         Column(
@@ -191,8 +195,62 @@ fun BookingsListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(filteredBookings) { booking ->
-                        // Booking card with ALL info inline - no navigation
-                        BookingCardInline(booking = booking)
+                        // Booking card with action buttons
+                        BookingCardInline(
+                            booking = booking,
+                            onCancel = {
+                                viewModel.cancelBooking(
+                                    bookingId = booking.id,
+                                    onSuccess = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Booking cancelled successfully")
+                                        }
+                                    },
+                                    onError = { error ->
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Error: $error")
+                                        }
+                                    }
+                                )
+                            },
+                            onReschedule = { newDateTime, comments ->
+                                viewModel.rescheduleBooking(
+                                    bookingId = booking.id,
+                                    newBookingDate = newDateTime,
+                                    comments = comments,
+                                    onSuccess = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Reschedule request submitted!")
+                                        }
+                                    },
+                                    onError = { error ->
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Error: $error")
+                                        }
+                                    }
+                                )
+                            },
+                            onReview = { ratingValue, reviewText ->
+                                booking.serviceId?.let { serviceId ->
+                                    viewModel.submitReview(
+                                        serviceId = serviceId,
+                                        rating = ratingValue,
+                                        review = reviewText,
+                                        bookingId = booking.id,
+                                        onSuccess = {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("Review submitted successfully!")
+                                            }
+                                        },
+                                        onError = { error ->
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("Error: $error")
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -202,13 +260,35 @@ fun BookingsListScreen(
 
 /**
  * Booking Card - Shows all booking info inline like web app
- * No onClick navigation - matching web behavior exactly
+ * Includes action buttons: Cancel (for pending), Reschedule (for pending/accepted), Review (for completed)
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BookingCardInline(booking: Booking) {
+private fun BookingCardInline(
+    booking: Booking,
+    onCancel: () -> Unit,
+    onReschedule: (String, String?) -> Unit,
+    onReview: (Int, String) -> Unit
+) {
     val statusColor = StatusUtils.getBookingStatusColor(booking.status)
     val statusBgColor = StatusUtils.getBookingStatusBgColor(booking.status)
     val statusLabel = StatusUtils.getBookingStatusLabel(booking.status)
+    
+    // Review dialog state
+    var showReviewDialog by remember { mutableStateOf(false) }
+    var rating by remember { mutableStateOf(5) }
+    var reviewText by remember { mutableStateOf("") }
+    
+    // Cancel confirmation dialog state
+    var showCancelDialog by remember { mutableStateOf(false) }
+    
+    // Reschedule dialog state
+    var showRescheduleDialog by remember { mutableStateOf(false) }
+    var rescheduleDate by remember { mutableStateOf(LocalDate.now().plusDays(1)) }
+    var rescheduleComments by remember { mutableStateOf("") }
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = System.currentTimeMillis() + 86400000 // Tomorrow
+    )
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -340,26 +420,82 @@ private fun BookingCardInline(booking: Booking) {
                 }
             }
             
-            // Completed bookings: Show "Leave Review" button like web
-            if (booking.status.lowercase() == "completed") {
+            // Action buttons row
+            val canCancel = booking.status.lowercase() in listOf("pending", "accepted")
+            val canReschedule = booking.status.lowercase() in listOf("pending", "accepted")
+            val canReview = booking.status.lowercase() == "completed"
+            
+            if (canCancel || canReschedule || canReview) {
                 Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = { /* TODO: Implement review dialog */ },
-                    modifier = Modifier.align(Alignment.End),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        brush = androidx.compose.ui.graphics.SolidColor(OrangePrimary)
-                    ),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = OrangePrimary
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Leave Review")
+                    // Cancel button (for pending/accepted bookings)
+                    if (canCancel) {
+                        OutlinedButton(
+                            onClick = { showCancelDialog = true },
+                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                                brush = androidx.compose.ui.graphics.SolidColor(ErrorRed)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = ErrorRed
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Cancel,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Cancel")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    
+                    // Reschedule button (for pending/accepted bookings)
+                    if (canReschedule) {
+                        OutlinedButton(
+                            onClick = { showRescheduleDialog = true },
+                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                                brush = androidx.compose.ui.graphics.SolidColor(ProviderBlue)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = ProviderBlue
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Reschedule")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    
+                    // Review button (for completed bookings)
+                    if (canReview) {
+                        OutlinedButton(
+                            onClick = { showReviewDialog = true },
+                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                                brush = androidx.compose.ui.graphics.SolidColor(OrangePrimary)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = OrangePrimary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Leave Review")
+                        }
+                    }
                 }
             }
             
@@ -373,6 +509,173 @@ private fun BookingCardInline(booking: Booking) {
                         color = ErrorRed
                     )
                 }
+            }
+        }
+    }
+    
+    // Cancel confirmation dialog
+    if (showCancelDialog) {
+        AlertDialog(
+            onDismissRequest = { showCancelDialog = false },
+            containerColor = SlateCard,
+            title = { Text("Cancel Booking", color = WhiteText) },
+            text = { Text("Are you sure you want to cancel this booking?", color = WhiteTextMuted) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCancelDialog = false
+                        onCancel()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = ErrorRed)
+                ) {
+                    Text("Cancel Booking")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showCancelDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = WhiteTextMuted)
+                ) {
+                    Text("Keep Booking")
+                }
+            }
+        )
+    }
+    
+    // Review dialog
+    if (showReviewDialog) {
+        AlertDialog(
+            onDismissRequest = { showReviewDialog = false },
+            containerColor = SlateCard,
+            title = { Text("Leave a Review", color = WhiteText) },
+            text = {
+                Column {
+                    Text("Rating", color = WhiteTextMuted, style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row {
+                        (1..5).forEach { star ->
+                            IconButton(onClick = { rating = star }) {
+                                Icon(
+                                    imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = "Star $star",
+                                    tint = if (star <= rating) OrangePrimary else WhiteTextMuted,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = reviewText,
+                        onValueChange = { reviewText = it },
+                        label = { Text("Your review (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = WhiteText,
+                            unfocusedTextColor = WhiteTextMuted,
+                            focusedBorderColor = OrangePrimary,
+                            unfocusedBorderColor = GlassWhite
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showReviewDialog = false
+                        onReview(rating, reviewText)
+                        rating = 5
+                        reviewText = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
+                ) {
+                    Text("Submit Review")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showReviewDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = WhiteTextMuted)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Reschedule dialog with DatePicker
+    if (showRescheduleDialog) {
+        DatePickerDialog(
+            onDismissRequest = { showRescheduleDialog = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRescheduleDialog = false
+                        // Convert selected date millis to ISO format
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val selectedDate = java.time.Instant.ofEpochMilli(millis)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .toLocalDate()
+                            val isoDate = selectedDate.format(DateTimeFormatter.ISO_DATE)
+                            onReschedule(isoDate, rescheduleComments.takeIf { it.isNotBlank() })
+                        }
+                        rescheduleComments = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ProviderBlue)
+                ) {
+                    Text("Reschedule")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showRescheduleDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = WhiteTextMuted)
+                ) {
+                    Text("Cancel")
+                }
+            },
+            colors = DatePickerDefaults.colors(
+                containerColor = SlateCard
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Select New Date",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = WhiteText,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                DatePicker(
+                    state = datePickerState,
+                    title = null,
+                    headline = null,
+                    showModeToggle = false,
+                    colors = DatePickerDefaults.colors(
+                        containerColor = SlateCard,
+                        titleContentColor = WhiteText,
+                        headlineContentColor = WhiteText,
+                        weekdayContentColor = WhiteTextMuted,
+                        dayContentColor = WhiteText,
+                        selectedDayContainerColor = ProviderBlue,
+                        selectedDayContentColor = WhiteText,
+                        todayContentColor = OrangePrimary,
+                        todayDateBorderColor = OrangePrimary
+                    )
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = rescheduleComments,
+                    onValueChange = { rescheduleComments = it },
+                    label = { Text("Comments (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = WhiteText,
+                        unfocusedTextColor = WhiteTextMuted,
+                        focusedBorderColor = ProviderBlue,
+                        unfocusedBorderColor = GlassWhite
+                    )
+                )
             }
         }
     }

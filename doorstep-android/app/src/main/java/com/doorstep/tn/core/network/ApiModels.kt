@@ -62,3 +62,62 @@ data class BookingResponse(
     val booking: com.doorstep.tn.customer.data.model.Booking? = null
 )
 
+// Update booking - PATCH /api/bookings/{id} (for cancel, reschedule)
+data class UpdateBookingRequest(
+    val status: String? = null,            // "cancelled" to cancel
+    val bookingDate: String? = null,       // ISO date for reschedule
+    val comments: String? = null           // Optional comments for reschedule
+)
+
+// Submit review - POST /api/reviews (matches web app exactly)
+data class SubmitReviewRequest(
+    val serviceId: Int,
+    val rating: Int,
+    val review: String,
+    val bookingId: Int
+)
+
+// Review response from POST /api/reviews
+data class ReviewResponse(
+    val id: Int? = null,
+    val message: String? = null
+)
+
+// Customer service review - GET /api/reviews/customer
+data class CustomerReview(
+    val id: Int,
+    val serviceId: Int,
+    val customerId: Int,
+    val rating: Int,
+    val review: String? = null,
+    val serviceName: String? = null,
+    val createdAt: String? = null
+)
+
+// Customer product review - GET /api/product-reviews/customer
+data class CustomerProductReview(
+    val id: Int,
+    val productId: Int,
+    val customerId: Int,
+    val rating: Int,
+    val review: String? = null,
+    val productName: String? = null,
+    val createdAt: String? = null
+)
+
+// Notification - GET /api/notifications
+data class AppNotification(
+    val id: Int,
+    val userId: Int,
+    val type: String,  // "booking", "order", "promotion", "system", etc.
+    val title: String,
+    val message: String,
+    val isRead: Boolean = false,
+    val relatedBookingId: Int? = null,
+    val createdAt: String? = null
+)
+
+// Notification count response
+data class UnreadNotificationCount(
+    val count: Int
+)
