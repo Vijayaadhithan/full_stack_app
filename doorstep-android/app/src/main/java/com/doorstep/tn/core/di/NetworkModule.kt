@@ -11,10 +11,12 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
@@ -24,6 +26,8 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
+    
+    private const val HTTP_CACHE_SIZE = 10L * 1024 * 1024 // 10 MB
     
     @Provides
     @Singleton
@@ -55,11 +59,20 @@ object NetworkModule {
     
     @Provides
     @Singleton
+    fun provideHttpCache(@ApplicationContext context: Context): Cache {
+        val cacheDir = File(context.cacheDir, "http_cache")
+        return Cache(cacheDir, HTTP_CACHE_SIZE)
+    }
+    
+    @Provides
+    @Singleton
     fun provideOkHttpClient(
         loggingInterceptor: HttpLoggingInterceptor,
-        authInterceptor: AuthInterceptor
+        authInterceptor: AuthInterceptor,
+        cache: Cache
     ): OkHttpClient {
         return OkHttpClient.Builder()
+            .cache(cache)
             .addInterceptor(authInterceptor)
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)

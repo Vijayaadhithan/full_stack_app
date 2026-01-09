@@ -1,21 +1,51 @@
 package com.doorstep.tn.customer.data.repository
 
 import com.doorstep.tn.auth.data.repository.Result
+import com.doorstep.tn.core.cache.CacheRepository
+import com.doorstep.tn.core.cache.MemoryCache
 import com.doorstep.tn.core.network.DoorStepApi
 import com.doorstep.tn.customer.data.model.*
+import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Repository for customer operations
+ * Repository for customer operations with multi-layer caching:
+ * 1. In-memory cache (fastest, 5-min TTL)
+ * 2. Room database (offline support, 5-min TTL)
+ * 3. Network API (source of truth)
  */
 @Singleton
 class CustomerRepository @Inject constructor(
-    private val api: DoorStepApi
+    private val api: DoorStepApi,
+    private val cacheRepository: CacheRepository
 ) {
+    // In-memory caches with 5-minute TTL (Layer 1 - fastest)
+    private val productsCache = MemoryCache<String, List<Product>>(maxSize = 50)
+    private val servicesCache = MemoryCache<String, List<Service>>(maxSize = 50)
+    private val shopsCache = MemoryCache<String, List<Shop>>(maxSize = 50)
+    private val productDetailCache = MemoryCache<Int, Product>(maxSize = 100)
+    private val serviceDetailCache = MemoryCache<Int, Service>(maxSize = 100)
+    private val shopDetailCache = MemoryCache<Int, Shop>(maxSize = 50)
+    
+    /**
+     * Invalidate all caches - call after mutations that affect cached data
+     */
+    fun invalidateProductsCache() {
+        productsCache.clear()
+        // Note: Room cache expires via TTL, no need to explicitly clear
+    }
+    fun invalidateServicesCache() = servicesCache.clear()
+    fun invalidateShopsCache() = shopsCache.clear()
     
     // ==================== Products ====================
     
+    /**
+     * Get products with offline-first strategy:
+     * 1. Return in-memory cache if available
+     * 2. Try network, cache to Room + memory on success
+     * 3. Fall back to Room cache on network failure
+     */
     suspend fun getProducts(
         search: String? = null,
         category: String? = null,
@@ -25,24 +55,54 @@ class CustomerRepository @Inject constructor(
         page: Int = 1,
         pageSize: Int = 24
     ): Result<List<Product>> {
+        // Generate cache key from parameters
+        val cacheKey = "products_${search}_${category}_${latitude}_${longitude}_${radius}_${page}"
+        
+        // Layer 1: In-memory cache (instant)
+        productsCache.get(cacheKey)?.let { 
+            return Result.Success(it) 
+        }
+        
+        // Layer 2 + 3: Try network, fall back to Room
         return try {
             val response = api.getProducts(search, category, page, pageSize, latitude, longitude, radius)
             if (response.isSuccessful && response.body() != null) {
-                // Extract items from paginated response
-                Result.Success(response.body()!!.items)
+                val items = response.body()!!.items
+                // Cache to memory (Layer 1)
+                productsCache.put(cacheKey, items)
+                // Cache to Room database (Layer 2 - offline support)
+                cacheRepository.cacheProducts(items, cacheKey)
+                Result.Success(items)
             } else {
-                Result.Error(response.message(), response.code())
+                // Network failed, try Room cache
+                val cachedProducts = cacheRepository.getCachedProducts().firstOrNull()
+                if (!cachedProducts.isNullOrEmpty()) {
+                    Result.Success(cachedProducts)
+                } else {
+                    Result.Error(response.message(), response.code())
+                }
             }
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Failed to load products")
+            // Network error - return Room cache for offline support
+            val cachedProducts = cacheRepository.getCachedProducts().firstOrNull()
+            if (!cachedProducts.isNullOrEmpty()) {
+                Result.Success(cachedProducts)
+            } else {
+                Result.Error(e.message ?: "Failed to load products")
+            }
         }
     }
     
     suspend fun getProductById(productId: Int): Result<Product> {
+        // Check cache first
+        productDetailCache.get(productId)?.let { return Result.Success(it) }
+        
         return try {
             val response = api.getProductById(productId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                val product = response.body()!!
+                productDetailCache.put(productId, product)
+                Result.Success(product)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -53,10 +113,15 @@ class CustomerRepository @Inject constructor(
     
     // Get product with shopId - matches web app's /api/shops/{shopId}/products/{productId}
     suspend fun getShopProduct(shopId: Int, productId: Int): Result<Product> {
+        // Check cache first
+        productDetailCache.get(productId)?.let { return Result.Success(it) }
+        
         return try {
             val response = api.getShopProduct(shopId, productId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                val product = response.body()!!
+                productDetailCache.put(productId, product)
+                Result.Success(product)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -74,23 +139,46 @@ class CustomerRepository @Inject constructor(
         search: String? = null,
         radius: Int? = null
     ): Result<List<Shop>> {
+        val cacheKey = "shops_${category}_${latitude}_${longitude}_${search}_${radius}"
+        
+        // Layer 1: In-memory cache
+        shopsCache.get(cacheKey)?.let { return Result.Success(it) }
+        
+        // Layer 2 + 3: Network with Room fallback
         return try {
             val response = api.getShops(category, latitude, longitude, search, radius)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                val shops = response.body()!!
+                shopsCache.put(cacheKey, shops)
+                cacheRepository.cacheShops(shops, cacheKey)
+                Result.Success(shops)
             } else {
-                Result.Error(response.message(), response.code())
+                val cachedShops = cacheRepository.getCachedShops().firstOrNull()
+                if (!cachedShops.isNullOrEmpty()) {
+                    Result.Success(cachedShops)
+                } else {
+                    Result.Error(response.message(), response.code())
+                }
             }
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Failed to load shops")
+            val cachedShops = cacheRepository.getCachedShops().firstOrNull()
+            if (!cachedShops.isNullOrEmpty()) {
+                Result.Success(cachedShops)
+            } else {
+                Result.Error(e.message ?: "Failed to load shops")
+            }
         }
     }
     
     suspend fun getShopById(shopId: Int): Result<Shop> {
+        shopDetailCache.get(shopId)?.let { return Result.Success(it) }
+        
         return try {
             val response = api.getShopById(shopId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                val shop = response.body()!!
+                shopDetailCache.put(shopId, shop)
+                Result.Success(shop)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -120,23 +208,46 @@ class CustomerRepository @Inject constructor(
         longitude: Double? = null,
         radius: Int? = null
     ): Result<List<Service>> {
+        val cacheKey = "services_${category}_${latitude}_${longitude}_${radius}"
+        
+        // Layer 1: In-memory cache
+        servicesCache.get(cacheKey)?.let { return Result.Success(it) }
+        
+        // Layer 2 + 3: Network with Room fallback
         return try {
             val response = api.getServices(category, latitude, longitude, radius)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                val services = response.body()!!
+                servicesCache.put(cacheKey, services)
+                cacheRepository.cacheServices(services, cacheKey)
+                Result.Success(services)
             } else {
-                Result.Error(response.message(), response.code())
+                val cachedServices = cacheRepository.getCachedServices().firstOrNull()
+                if (!cachedServices.isNullOrEmpty()) {
+                    Result.Success(cachedServices)
+                } else {
+                    Result.Error(response.message(), response.code())
+                }
             }
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Failed to load services")
+            val cachedServices = cacheRepository.getCachedServices().firstOrNull()
+            if (!cachedServices.isNullOrEmpty()) {
+                Result.Success(cachedServices)
+            } else {
+                Result.Error(e.message ?: "Failed to load services")
+            }
         }
     }
     
     suspend fun getServiceById(serviceId: Int): Result<Service> {
+        serviceDetailCache.get(serviceId)?.let { return Result.Success(it) }
+        
         return try {
             val response = api.getServiceById(serviceId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                val service = response.body()!!
+                serviceDetailCache.put(serviceId, service)
+                Result.Success(service)
             } else {
                 Result.Error(response.message(), response.code())
             }
