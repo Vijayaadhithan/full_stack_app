@@ -249,7 +249,7 @@ fun CustomerHomeScreen(
                     )
                     QuickActionCard(
                         icon = Icons.Default.Store,
-                        label = if (language == "tg") "Kadai" else t.dashboard.take(6) + "s",
+                        label = if (language == "ta") "கடைகள்" else "Shops",
                         gradientColors = listOf(ShopGreen, SuccessGreen),
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToShops
@@ -277,13 +277,6 @@ fun CustomerHomeScreen(
                             "ஆடை" to Icons.Default.Checkroom,
                             "வீடு" to Icons.Default.Home,
                             "அழகு" to Icons.Default.Face
-                        )
-                        "tg" -> listOf(
-                            "Grocery" to Icons.Default.LocalGroceryStore,
-                            "Electronics" to Icons.Default.Devices,
-                            "Dress" to Icons.Default.Checkroom,
-                            "Veedu" to Icons.Default.Home,
-                            "Beauty" to Icons.Default.Face
                         )
                         else -> listOf(
                             "Grocery" to Icons.Default.LocalGroceryStore,
@@ -337,8 +330,7 @@ fun CustomerHomeScreen(
                     }
                 } else if (orders.isEmpty()) {
                     EmptyStateCard(
-                        message = if (language == "tg") "Order illa. Shopping start pannu!" 
-                                  else if (language == "ta") "ஆர்டர் இல்லை. ஷாப்பிங் தொடங்குங்கள்!" 
+                        message = if (language == "ta") "ஆர்டர் இல்லை. ஷாப்பிங் தொடங்குங்கள்!" 
                                   else "No orders yet. Start shopping!",
                         icon = Icons.Default.ShoppingBag
                     )
@@ -386,8 +378,7 @@ fun CustomerHomeScreen(
                     }
                 } else if (bookings.isEmpty()) {
                     EmptyStateCard(
-                        message = if (language == "tg") "Booking illa. Services paaru!" 
-                                  else if (language == "ta") "முன்பதிவு இல்லை. சேவைகளை பாருங்கள்!" 
+                        message = if (language == "ta") "முன்பதிவு இல்லை. சேவைகளை பாருங்கள்!" 
                                   else "No bookings yet. Browse services!",
                         icon = Icons.Default.Build
                     )
@@ -597,12 +588,6 @@ private fun OrderPreviewCard(
             "cancelled" -> "ரத்து"
             else -> order.status
         }
-        "tg" -> when (order.status.lowercase()) {
-            "pending" -> "Pending"
-            "delivered" -> "Delivered aayiduchu"
-            "cancelled" -> "Cancel aayiduchu"
-            else -> order.status
-        }
         else -> order.status
     }
     
@@ -690,12 +675,6 @@ private fun BookingPreviewCard(
             "pending" -> "நிலுவையில்"
             "confirmed" -> "உறுதி"
             "cancelled" -> "ரத்து"
-            else -> booking.status
-        }
-        "tg" -> when (booking.status.lowercase()) {
-            "pending" -> "Pending"
-            "confirmed" -> "Confirm aayiduchu"
-            "cancelled" -> "Cancel aayiduchu"
             else -> booking.status
         }
         else -> booking.status

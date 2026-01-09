@@ -2,9 +2,11 @@ package com.doorstep.tn.customer.ui.shops
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -25,11 +27,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.ui.LocationFilterDropdown
 import com.doorstep.tn.customer.data.model.Shop
 import com.doorstep.tn.customer.ui.CustomerViewModel
 
 /**
- * Shops List Screen - Browse all shops
+ * Shops List Screen - Browse all shops with location filter
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,8 +45,17 @@ fun ShopsListScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     
-    LaunchedEffect(Unit) {
-        viewModel.loadShops()
+    // Location filter state
+    var locationRadius by remember { mutableIntStateOf(45) }
+    var locationLat by remember { mutableStateOf<Double?>(null) }
+    var locationLng by remember { mutableStateOf<Double?>(null) }
+    
+    LaunchedEffect(locationLat, locationLng, locationRadius) {
+        viewModel.loadShops(
+            latitude = locationLat,
+            longitude = locationLng,
+            radius = if (locationLat != null) locationRadius else null
+        )
     }
     
     Scaffold(
@@ -69,78 +81,123 @@ fun ShopsListScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+            // ==================== Filter Row ====================
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                placeholder = { Text("Search shops...", color = WhiteTextSubtle) },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = WhiteTextMuted)
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { 
-                            searchQuery = ""
-                            viewModel.loadShops()
-                        }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = WhiteTextMuted)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Search Field (compact)
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.width(200.dp),
+                    placeholder = { Text("Search shops...", color = WhiteTextSubtle, style = MaterialTheme.typography.bodySmall) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = WhiteTextMuted, modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { 
+                                searchQuery = ""
+                                viewModel.loadShops(latitude = locationLat, longitude = locationLng, radius = if (locationLat != null) locationRadius else null)
+                            }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = WhiteTextMuted, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = { viewModel.loadShops(search = searchQuery, latitude = locationLat, longitude = locationLng, radius = if (locationLat != null) locationRadius else null) }
+                    ),
+                    singleLine = true,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ShopGreen,
+                        unfocusedBorderColor = GlassBorder,
+                        focusedContainerColor = GlassWhite,
+                        unfocusedContainerColor = GlassWhite,
+                        focusedTextColor = WhiteText,
+                        unfocusedTextColor = WhiteText
+                    ),
+                    textStyle = MaterialTheme.typography.bodySmall
+                )
+                
+                // Location Filter
+                LocationFilterDropdown(
+                    currentRadius = locationRadius,
+                    currentLat = locationLat,
+                    currentLng = locationLng,
+                    onRadiusChange = { locationRadius = it },
+                    onUseDeviceLocation = {
+                        locationLat = 10.557
+                        locationLng = 77.235
+                    },
+                    onUseSavedLocation = {
+                        locationLat = 10.557
+                        locationLng = 77.235
+                    },
+                    onClear = {
+                        locationLat = null
+                        locationLng = null
+                    }
+                )
+            }
+            
+            // Location info
+            if (locationLat != null && locationLng != null) {
+                Text(
+                    text = "Showing shops within $locationRadius km",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+            
+            HorizontalDivider(color = GlassBorder, thickness = 1.dp)
+            
+            // ==================== Shops List ====================
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = ShopGreen)
+                    }
+                }
+                shops.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Storefront,
+                                contentDescription = null,
+                                tint = WhiteTextMuted,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("No shops found", color = WhiteTextMuted)
                         }
                     }
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = { viewModel.loadShops(search = searchQuery) }
-                ),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ShopGreen,
-                    unfocusedBorderColor = GlassBorder,
-                    focusedContainerColor = GlassWhite,
-                    unfocusedContainerColor = GlassWhite,
-                    focusedTextColor = WhiteText,
-                    unfocusedTextColor = WhiteText
-                )
-            )
-            
-            // Shops List
-            if (isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = ShopGreen)
                 }
-            } else if (shops.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Storefront,
-                            contentDescription = null,
-                            tint = WhiteTextMuted,
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("No shops found", color = WhiteTextMuted)
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(shops) { shop ->
-                        ShopCard(
-                            shop = shop,
-                            onClick = { onNavigateToShop(shop.id) }
-                        )
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(shops) { shop ->
+                            ShopCard(
+                                shop = shop,
+                                onClick = { onNavigateToShop(shop.id) }
+                            )
+                        }
                     }
                 }
             }

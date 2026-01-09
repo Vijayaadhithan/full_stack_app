@@ -153,10 +153,9 @@ class AuthViewModel @Inject constructor(
     }
     
     fun toggleLanguage() {
-        // Cycle through languages: en -> ta -> tg -> en
+        // Cycle through languages: en -> ta -> en
         _language.value = when (_language.value) {
             "en" -> "ta"
-            "ta" -> "tg"
             else -> "en"
         }
         viewModelScope.launch {

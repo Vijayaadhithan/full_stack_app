@@ -2,10 +2,12 @@ package com.doorstep.tn.customer.ui.products
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,11 +28,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.ui.LocationFilterDropdown
 import com.doorstep.tn.customer.data.model.Product
 import com.doorstep.tn.customer.ui.CustomerViewModel
 
 /**
- * Products List Screen
+ * Products List Screen - with location filter matching web UI
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,11 +48,21 @@ fun ProductsListScreen(
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     
+    // Location filter state
+    var locationRadius by remember { mutableIntStateOf(45) }
+    var locationLat by remember { mutableStateOf<Double?>(null) }
+    var locationLng by remember { mutableStateOf<Double?>(null) }
+    
     val categories = listOf("All", "Grocery", "Electronics", "Clothing", "Home", "Beauty")
     
-    // Re-fetch products when category changes (like web behavior)
-    LaunchedEffect(selectedCategory) {
-        viewModel.loadProducts(category = selectedCategory)
+    // Re-fetch products when category or location changes
+    LaunchedEffect(selectedCategory, locationLat, locationLng, locationRadius) {
+        viewModel.loadProducts(
+            category = selectedCategory,
+            latitude = locationLat,
+            longitude = locationLng,
+            radius = if (locationLat != null) locationRadius else null
+        )
     }
     
     Scaffold(
@@ -86,39 +99,80 @@ fun ProductsListScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
+            // ==================== Filter Row: Search + Location ====================
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                placeholder = { Text("Search products...", color = WhiteTextSubtle) },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = WhiteTextMuted)
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = WhiteTextMuted)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Compact Search Field
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    modifier = Modifier.width(200.dp),
+                    placeholder = { 
+                        Text("Search...", color = WhiteTextSubtle, style = MaterialTheme.typography.bodySmall) 
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = WhiteTextMuted, modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = WhiteTextMuted, modifier = Modifier.size(16.dp))
+                            }
                         }
-                    }
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = { viewModel.loadProducts(search = searchQuery) }
-                ),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = OrangePrimary,
-                    unfocusedBorderColor = GlassBorder,
-                    focusedContainerColor = GlassWhite,
-                    unfocusedContainerColor = GlassWhite,
-                    focusedTextColor = WhiteText,
-                    unfocusedTextColor = WhiteText
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = { viewModel.loadProducts(search = searchQuery, latitude = locationLat, longitude = locationLng, radius = if (locationLat != null) locationRadius else null) }
+                    ),
+                    singleLine = true,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = OrangePrimary,
+                        unfocusedBorderColor = GlassBorder,
+                        focusedContainerColor = GlassWhite,
+                        unfocusedContainerColor = GlassWhite,
+                        focusedTextColor = WhiteText,
+                        unfocusedTextColor = WhiteText
+                    ),
+                    textStyle = MaterialTheme.typography.bodySmall
                 )
-            )
+                
+                // Location Filter
+                LocationFilterDropdown(
+                    currentRadius = locationRadius,
+                    currentLat = locationLat,
+                    currentLng = locationLng,
+                    onRadiusChange = { locationRadius = it },
+                    onUseDeviceLocation = {
+                        locationLat = 10.557
+                        locationLng = 77.235
+                    },
+                    onUseSavedLocation = {
+                        locationLat = 10.557
+                        locationLng = 77.235
+                    },
+                    onClear = {
+                        locationLat = null
+                        locationLng = null
+                    }
+                )
+            }
+            
+            // Location info
+            if (locationLat != null && locationLng != null) {
+                Text(
+                    text = "Showing products within $locationRadius km",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
             
             // Category Chips
             ScrollableTabRow(
@@ -151,45 +205,51 @@ fun ProductsListScreen(
                 }
             }
             
+            HorizontalDivider(color = GlassBorder, thickness = 1.dp)
+            
             // Products Grid
-            if (isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = OrangePrimary)
-                }
-            } else if (products.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Inventory2,
-                            contentDescription = null,
-                            tint = WhiteTextMuted,
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("No products found", color = WhiteTextMuted)
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = OrangePrimary)
                     }
                 }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(products) { product ->
-                        ProductCard(
-                            product = product,
-                            onClick = { product.shopId?.let { shopId -> onNavigateToProduct(shopId, product.id) } },
-                            onAddToCart = { viewModel.addToCart(product.id) },
-                            onAddToWishlist = { viewModel.addToWishlist(product.id) }
-                        )
+                products.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Inventory2,
+                                contentDescription = null,
+                                tint = WhiteTextMuted,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("No products found", color = WhiteTextMuted)
+                        }
+                    }
+                }
+                else -> {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(products) { product ->
+                            ProductCard(
+                                product = product,
+                                onClick = { product.shopId?.let { shopId -> onNavigateToProduct(shopId, product.id) } },
+                                onAddToCart = { viewModel.addToCart(product.id) },
+                                onAddToWishlist = { viewModel.addToWishlist(product.id) }
+                            )
+                        }
                     }
                 }
             }
@@ -312,4 +372,3 @@ private fun ProductCard(
         }
     }
 }
-

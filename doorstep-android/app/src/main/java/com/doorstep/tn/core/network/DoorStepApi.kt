@@ -51,7 +51,10 @@ interface DoorStepApi {
         @Query("searchTerm") search: String? = null,
         @Query("category") category: String? = null,
         @Query("page") page: Int = 1,
-        @Query("pageSize") pageSize: Int = 24
+        @Query("pageSize") pageSize: Int = 24,
+        @Query("lat") latitude: Double? = null,
+        @Query("lng") longitude: Double? = null,
+        @Query("radius") radius: Int? = null
     ): Response<ProductsResponse>
     
     @GET("api/products/{id}")
@@ -68,9 +71,9 @@ interface DoorStepApi {
     @GET("api/services")
     suspend fun getServices(
         @Query("category") category: String? = null,
-        @Query("searchTerm") searchTerm: String? = null,
         @Query("lat") latitude: Double? = null,
-        @Query("lng") longitude: Double? = null
+        @Query("lng") longitude: Double? = null,
+        @Query("radius") radius: Int? = null
     ): Response<List<Service>>
     
     @GET("api/services/{id}")
@@ -83,7 +86,8 @@ interface DoorStepApi {
         @Query("category") category: String? = null,
         @Query("lat") latitude: Double? = null,
         @Query("lng") longitude: Double? = null,
-        @Query("search") search: String? = null
+        @Query("search") search: String? = null,
+        @Query("radius") radius: Int? = null
     ): Response<List<Shop>>
     
     @GET("api/shops/{id}")

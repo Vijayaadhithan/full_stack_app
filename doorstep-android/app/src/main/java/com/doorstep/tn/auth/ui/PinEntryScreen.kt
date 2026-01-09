@@ -126,7 +126,6 @@ fun PinEntryScreen(
                     Text(
                         text = when (language) {
                             "ta" -> "வணக்கம், ${existingUserName ?: "User"}!"
-                            "tg" -> "Vanakkam, ${existingUserName ?: "User"}!"
                             else -> "Welcome back, ${existingUserName ?: "User"}!"
                         },
                         style = MaterialTheme.typography.headlineSmall,

@@ -154,12 +154,18 @@ class CustomerViewModel @Inject constructor(
     
     // ==================== Product Actions ====================
     
-    fun loadProducts(search: String? = null, category: String? = null) {
+    fun loadProducts(
+        search: String? = null, 
+        category: String? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        radius: Int? = null
+    ) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             
-            when (val result = repository.getProducts(search, category)) {
+            when (val result = repository.getProducts(search, category, latitude, longitude, radius)) {
                 is Result.Success -> _products.value = result.data
                 is Result.Error -> _error.value = result.message
                 is Result.Loading -> {}
@@ -251,12 +257,17 @@ class CustomerViewModel @Inject constructor(
     
     // ==================== Service Actions ====================
     
-    fun loadServices(category: String? = null) {
+    fun loadServices(
+        category: String? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        radius: Int? = null
+    ) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             
-            when (val result = repository.getServices(category)) {
+            when (val result = repository.getServices(category, latitude, longitude, radius)) {
                 is Result.Success -> _services.value = result.data
                 is Result.Error -> _error.value = result.message
                 is Result.Loading -> {}
@@ -294,12 +305,17 @@ class CustomerViewModel @Inject constructor(
     
     // ==================== Shop Actions ====================
     
-    fun loadShops(search: String? = null) {
+    fun loadShops(
+        search: String? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        radius: Int? = null
+    ) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             
-            when (val result = repository.getShops(search = search)) {
+            when (val result = repository.getShops(search = search, latitude = latitude, longitude = longitude, radius = radius)) {
                 is Result.Success -> _shops.value = result.data
                 is Result.Error -> _error.value = result.message
                 is Result.Loading -> {}
@@ -367,14 +383,37 @@ class CustomerViewModel @Inject constructor(
     }
     
     // Update cart quantity - uses POST /api/cart with new quantity (like web)
+    // Now with optimistic UI update for real-time feedback
     fun updateCartQuantity(productId: Int, newQuantity: Int) {
         viewModelScope.launch {
             if (newQuantity <= 0) {
-                removeFromCart(productId)
+                // Optimistically remove from cart UI immediately
+                _cartItems.value = _cartItems.value.filter { it.productId != productId }
+                // Then remove from server
+                when (val result = repository.removeFromCart(productId)) {
+                    is Result.Success -> {} // Already updated UI
+                    is Result.Error -> {
+                        _error.value = result.message
+                        loadCart() // Reload to sync with server on error
+                    }
+                    is Result.Loading -> {}
+                }
             } else {
+                // Optimistically update quantity in UI immediately
+                _cartItems.value = _cartItems.value.map { item ->
+                    if (item.productId == productId) {
+                        item.copy(quantity = newQuantity)
+                    } else {
+                        item
+                    }
+                }
+                // Then update on server
                 when (val result = repository.addToCart(productId, newQuantity)) {
-                    is Result.Success -> loadCart()
-                    is Result.Error -> _error.value = result.message
+                    is Result.Success -> {} // Already updated UI optimistically
+                    is Result.Error -> {
+                        _error.value = result.message
+                        loadCart() // Reload to sync with server on error
+                    }
                     is Result.Loading -> {}
                 }
             }

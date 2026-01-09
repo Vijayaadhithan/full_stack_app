@@ -19,11 +19,14 @@ class CustomerRepository @Inject constructor(
     suspend fun getProducts(
         search: String? = null,
         category: String? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        radius: Int? = null,
         page: Int = 1,
         pageSize: Int = 24
     ): Result<List<Product>> {
         return try {
-            val response = api.getProducts(search, category, page, pageSize)
+            val response = api.getProducts(search, category, page, pageSize, latitude, longitude, radius)
             if (response.isSuccessful && response.body() != null) {
                 // Extract items from paginated response
                 Result.Success(response.body()!!.items)
@@ -68,10 +71,11 @@ class CustomerRepository @Inject constructor(
         category: String? = null,
         latitude: Double? = null,
         longitude: Double? = null,
-        search: String? = null
+        search: String? = null,
+        radius: Int? = null
     ): Result<List<Shop>> {
         return try {
-            val response = api.getShops(category, latitude, longitude, search)
+            val response = api.getShops(category, latitude, longitude, search, radius)
             if (response.isSuccessful && response.body() != null) {
                 Result.Success(response.body()!!)
             } else {
@@ -112,12 +116,12 @@ class CustomerRepository @Inject constructor(
     
     suspend fun getServices(
         category: String? = null,
-        searchTerm: String? = null,
         latitude: Double? = null,
-        longitude: Double? = null
+        longitude: Double? = null,
+        radius: Int? = null
     ): Result<List<Service>> {
         return try {
-            val response = api.getServices(category, searchTerm, latitude, longitude)
+            val response = api.getServices(category, latitude, longitude, radius)
             if (response.isSuccessful && response.body() != null) {
                 Result.Success(response.body()!!)
             } else {

@@ -1,18 +1,14 @@
 package com.doorstep.tn.common.localization
 
 /**
- * Translations for the app - English, Tamil, and Thanglish
- * 
- * Thanglish = Tamil words written in English script
- * Popular among semi-urban and urban youth who speak Tamil but prefer English script
+ * Translations for the app - English and Tamil only
  */
 object Translations {
     
-    // Available languages
+    // Available languages - English and Tamil only
     enum class Language(val code: String, val displayName: String, val nativeName: String) {
         ENGLISH("en", "English", "English"),
-        TAMIL("ta", "Tamil", "தமிழ்"),
-        THANGLISH("tg", "Thanglish", "Tanglish")
+        TAMIL("ta", "Tamil", "தமிழ்")
     }
     
     data class Strings(
@@ -309,112 +305,12 @@ object Translations {
         trusted = "நம்பகமான"
     )
     
-    // Thanglish - Tamil words in English script (popular with urban/semi-urban youth)
-    val thanglish = Strings(
-        // Auth
-        enterPhone = "Unga mobile number",
-        phonePlaceholder = "9876543210",
-        getOtp = "Continue pannu",
-        enterOtp = "OTP enter pannu",
-        verify = "Verify pannu",
-        enterPin = "Unga PIN",
-        createPin = "4-digit PIN create pannu",
-        confirmPin = "PIN confirm pannu",
-        forgotPin = "PIN maranthuducha?",
-        login = "Login",
-        next = "Next",
-        back = "Back",
-        yourName = "Unga peru",
-        chooseRole = "Neenga yaaru?",
-        customer = "Customer",
-        customerDesc = "Services book pannu & shopping",
-        shopOwner = "Kadai Owner",
-        shopDesc = "Unga products sell pannu",
-        provider = "Service Provider",
-        providerDesc = "Unga services kodunga",
-        welcome = "Vanakkam!",
-        complete = "Setup mudikka",
-        switchLang = "தமிழ்",
-        tagline = "Unga local services, delivered",
-        
-        // Greetings
-        goodMorning = "Kaalaila Vanakkam!",
-        goodAfternoon = "Madhiyam Vanakkam!",
-        goodEvening = "Maalai Vanakkam!",
-        welcomeBack = "Welcome back!",
-        
-        // Common
-        search = "Search",
-        cancel = "Cancel pannu",
-        save = "Save pannu",
-        delete = "Delete pannu",
-        loading = "Loading...",
-        error = "Error",
-        retry = "Retry pannu",
-        noData = "Data illa",
-        selectLanguage = "Language select pannu",
-        
-        // Customer
-        browseProducts = "Products paaru",
-        browseServices = "Services paaru",
-        myCart = "En Cart",
-        myOrders = "En Orders",
-        myBookings = "En Bookings",
-        viewAll = "Ellam paaru",
-        addToCart = "Cart la add pannu",
-        bookNow = "Ippo book pannu",
-        checkout = "Checkout",
-        quickActions = "Quick Actions",
-        categories = "Categories",
-        searchPlaceholder = "Services, products search pannu...",
-        tapToSearch = "Search panna tap pannu",
-        
-        // Shop
-        dashboard = "Dashboard",
-        products = "Products",
-        orders = "Orders",
-        workers = "Workers",
-        promotions = "Offers",
-        inventory = "Stock",
-        
-        // Provider
-        services = "Services",
-        bookings = "Bookings",
-        earnings = "Sambadichadu",
-        availability = "Available time",
-        
-        // Profile
-        profile = "Profile",
-        logout = "Logout",
-        settings = "Settings",
-        
-        // Forgot PIN
-        resetPin = "PIN reset pannu",
-        enterPhoneToReset = "PIN reset panna unga phone number",
-        sendOtp = "OTP anuppu",
-        verifyOtp = "OTP verify pannu",
-        resendOtp = "OTP mella anuppu",
-        newPin = "Pudhu PIN",
-        otpSentTo = "OTP anuppiten",
-        createNewPin = "Pudhu secure PIN create pannu",
-        pinResetSuccess = "PIN reset aayiduchi!",
-        pinResetSuccessMessage = "Unga PIN successfully reset aayiduchi. Pudhu PIN use pannu.",
-        backToLogin = "Login ku back",
-        phoneNumber = "Phone Number",
-        
-        // Trust
-        secure = "Secure",
-        safe = "100% Safe",
-        trusted = "Trusted"
-    )
-    
     fun get(language: String): Strings {
         return when (language) {
             "ta" -> ta
-            "tg", "thanglish" -> thanglish
             else -> en
         }
     }
     
-    fun getLanguageList(): List<Language> = Language.values().toList()
+    fun getLanguageList(): List<Language> = Language.entries
 }

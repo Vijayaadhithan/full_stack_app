@@ -128,7 +128,6 @@ fun OtpVerifyScreen(
                     Text(
                         text = when (language) {
                             "ta" -> "+91 $phone க்கு OTP அனுப்பப்பட்டது"
-                            "tg" -> "+91 $phone ku OTP send aayiduchu"
                             else -> "OTP sent to +91 $phone"
                         },
                         style = MaterialTheme.typography.bodyMedium,
@@ -233,7 +232,6 @@ fun OtpVerifyScreen(
                         Text(
                             text = when (language) {
                                 "ta" -> "OTP மீண்டும் அனுப்பு"
-                                "tg" -> "OTP thirumba anuppu"
                                 else -> "Resend OTP"
                             },
                             color = OrangePrimary
