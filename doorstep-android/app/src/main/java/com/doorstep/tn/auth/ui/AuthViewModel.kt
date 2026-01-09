@@ -153,10 +153,27 @@ class AuthViewModel @Inject constructor(
     }
     
     fun toggleLanguage() {
-        _language.value = if (_language.value == "en") "ta" else "en"
+        // Cycle through languages: en -> ta -> tg -> en
+        _language.value = when (_language.value) {
+            "en" -> "ta"
+            "ta" -> "tg"
+            else -> "en"
+        }
         viewModelScope.launch {
             context.dataStore.edit { prefs ->
                 prefs[PreferenceKeys.LANGUAGE] = _language.value
+            }
+        }
+    }
+    
+    /**
+     * Set language directly (for dropdown selection)
+     */
+    fun setLanguage(languageCode: String) {
+        _language.value = languageCode
+        viewModelScope.launch {
+            context.dataStore.edit { prefs ->
+                prefs[PreferenceKeys.LANGUAGE] = languageCode
             }
         }
     }

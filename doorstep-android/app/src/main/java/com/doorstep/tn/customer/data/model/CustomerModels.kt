@@ -59,7 +59,10 @@ data class Service(
     @Json(name = "images") val images: List<String>? = null,
     @Json(name = "isAvailable") val isAvailable: Boolean = true,
     @Json(name = "providerId") val providerId: Int? = null,
-    @Json(name = "isAvailableNow") val isAvailableNow: Boolean = true
+    @Json(name = "isAvailableNow") val isAvailableNow: Boolean = true,
+    @Json(name = "rating") val rating: Double? = null,
+    @Json(name = "reviewCount") val reviewCount: Int = 0,
+    @Json(name = "provider") val provider: ProviderInfo? = null
 )
 
 // ==================== Shops ====================

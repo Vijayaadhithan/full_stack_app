@@ -1,14 +1,20 @@
 package com.doorstep.tn.customer.ui
 
+import android.content.Context
+import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.doorstep.tn.auth.data.repository.Result
 import com.doorstep.tn.customer.data.model.*
 import com.doorstep.tn.customer.data.repository.CustomerRepository
+import com.doorstep.tn.core.datastore.PreferenceKeys
+import com.doorstep.tn.core.datastore.dataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,8 +26,16 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class CustomerViewModel @Inject constructor(
-    private val repository: CustomerRepository
+    private val repository: CustomerRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
+    
+    // Language & User
+    private val _language = MutableStateFlow("en")
+    val language: StateFlow<String> = _language.asStateFlow()
+    
+    private val _userName = MutableStateFlow<String?>(null)
+    val userName: StateFlow<String?> = _userName.asStateFlow()
     
     // Products
     private val _products = MutableStateFlow<List<Product>>(emptyList())
@@ -117,6 +131,27 @@ class CustomerViewModel @Inject constructor(
     private val _quickOrderSuccess = MutableStateFlow<Int?>(null) // Order ID on success
     val quickOrderSuccess: StateFlow<Int?> = _quickOrderSuccess.asStateFlow()
     
+    // Initialize language from preferences
+    init {
+        viewModelScope.launch {
+            val prefs = context.dataStore.data.first()
+            _language.value = prefs[PreferenceKeys.LANGUAGE] ?: "en"
+            _userName.value = prefs[PreferenceKeys.USER_NAME]
+        }
+    }
+    
+    /**
+     * Set language and persist to DataStore
+     */
+    fun setLanguage(languageCode: String) {
+        _language.value = languageCode
+        viewModelScope.launch {
+            context.dataStore.edit { prefs ->
+                prefs[PreferenceKeys.LANGUAGE] = languageCode
+            }
+        }
+    }
+    
     // ==================== Product Actions ====================
     
     fun loadProducts(search: String? = null, category: String? = null) {
@@ -175,6 +210,24 @@ class CustomerViewModel @Inject constructor(
             _isLoading.value = true
             
             when (val result = repository.getShopProduct(shopId, productId)) {
+                is Result.Success -> _selectedProduct.value = result.data
+                is Result.Error -> {
+                    _error.value = result.message
+                    _selectedProduct.value = null
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    // Load product by ID only - for search results where shopId may not be available
+    fun loadProductById(productId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            when (val result = repository.getProductById(productId)) {
                 is Result.Success -> _selectedProduct.value = result.data
                 is Result.Error -> {
                     _error.value = result.message

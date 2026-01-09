@@ -1,5 +1,7 @@
 package com.doorstep.tn.customer.ui
 
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,17 +18,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.doorstep.tn.R
+import com.doorstep.tn.common.localization.Translations
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.ui.FestivalBanner
+import com.doorstep.tn.common.ui.GradientCard
+import com.doorstep.tn.common.ui.GradientType
+import com.doorstep.tn.common.ui.LanguageToggleButton
+import com.doorstep.tn.common.ui.TimeBasedGreeting
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.data.model.Order
 
 /**
  * Customer Home Dashboard Screen
+ * Beautiful Tamil Nadu-inspired design
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +61,10 @@ fun CustomerHomeScreen(
     val bookings by viewModel.bookings.collectAsState()
     val cartItems by viewModel.cartItems.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val language by viewModel.language.collectAsState()
+    val userName by viewModel.userName.collectAsState()
+    
+    val t = Translations.get(language)
     
     // Load data on first composition
     LaunchedEffect(Unit) {
@@ -61,22 +77,31 @@ fun CustomerHomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "DoorStep",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = OrangePrimary
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // App logo
+                        Image(
+                            painter = painterResource(id = R.drawable.doorstep_logo),
+                            contentDescription = "DoorStep",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
                         )
-                        Text(
-                            text = "Welcome back!",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = WhiteTextMuted
+                        Spacer(modifier = Modifier.width(12.dp))
+                        TimeBasedGreeting(
+                            language = language,
+                            userName = userName
                         )
                     }
                 },
                 actions = {
-                    // Wishlist icon (matching web dashboard header)
+                    // Language toggle
+                    LanguageToggleButton(
+                        currentLanguage = language,
+                        onLanguageSelected = { viewModel.setLanguage(it) }
+                    )
+                    // Wishlist
                     IconButton(onClick = onNavigateToWishlist) {
                         Icon(
                             imageVector = Icons.Default.Favorite,
@@ -84,11 +109,19 @@ fun CustomerHomeScreen(
                             tint = WhiteText
                         )
                     }
+                    // Cart with badge
                     IconButton(onClick = onNavigateToCart) {
                         BadgedBox(
                             badge = {
                                 if (cartItems.isNotEmpty()) {
-                                    Badge { Text("${cartItems.size}") }
+                                    Badge(
+                                        containerColor = TempleGold
+                                    ) { 
+                                        Text(
+                                            "${cartItems.size}",
+                                            color = SlateBackground
+                                        ) 
+                                    }
                                 }
                             }
                         ) {
@@ -99,12 +132,26 @@ fun CustomerHomeScreen(
                             )
                         }
                     }
+                    // Profile
                     IconButton(onClick = onNavigateToProfile) {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = "Profile",
-                            tint = WhiteText
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(OrangePrimary, AmberSecondary)
+                                    ),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Profile",
+                                tint = WhiteText,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -119,16 +166,18 @@ fun CustomerHomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Search Bar - Impressive clickable search field
+            // Festival Banner (shows during festivals)
             item {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onNavigateToSearch),
-                    shape = RoundedCornerShape(16.dp),
-                    color = SlateCard
+                FestivalBanner()
+            }
+            
+            // Premium Search Bar
+            item {
+                GradientCard(
+                    gradientType = GradientType.SUNSET,
+                    modifier = Modifier.clickable(onClick = onNavigateToSearch)
                 ) {
                     Row(
                         modifier = Modifier
@@ -136,34 +185,34 @@ fun CustomerHomeScreen(
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = OrangePrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Search services, products, shops...",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = WhiteTextMuted
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
                         Box(
                             modifier = Modifier
+                                .size(44.dp)
                                 .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(OrangePrimary, AmberSecondary)
-                                    ),
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                                    color = WhiteText.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = WhiteText,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
                             Text(
-                                text = "Tap to search",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = t.searchPlaceholder,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = WhiteText,
                                 fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = t.tapToSearch,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = WhiteText.copy(alpha = 0.7f)
                             )
                         }
                     }
@@ -173,7 +222,7 @@ fun CustomerHomeScreen(
             // Quick Actions
             item {
                 Text(
-                    text = "Quick Actions",
+                    text = t.quickActions,
                     style = MaterialTheme.typography.titleMedium,
                     color = WhiteText,
                     fontWeight = FontWeight.Bold
@@ -186,32 +235,32 @@ fun CustomerHomeScreen(
                 ) {
                     QuickActionCard(
                         icon = Icons.Default.ShoppingBag,
-                        label = "Products",
-                        color = OrangePrimary,
+                        label = t.products,
+                        gradientColors = listOf(OrangePrimary, SunsetOrange),
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToProducts
                     )
                     QuickActionCard(
                         icon = Icons.Default.Build,
-                        label = "Services",
-                        color = ProviderBlue,
+                        label = t.services,
+                        gradientColors = listOf(PeacockBlue, GradientPeacock),
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToServices
                     )
                     QuickActionCard(
                         icon = Icons.Default.Store,
-                        label = "Shops",
-                        color = ShopGreen,
+                        label = if (language == "tg") "Kadai" else t.dashboard.take(6) + "s",
+                        gradientColors = listOf(ShopGreen, SuccessGreen),
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToShops
                     )
                 }
             }
             
-            // Categories
+            // Categories with Tamil Nadu flavor
             item {
                 Text(
-                    text = "Categories",
+                    text = t.categories,
                     style = MaterialTheme.typography.titleMedium,
                     color = WhiteText,
                     fontWeight = FontWeight.Bold
@@ -221,13 +270,29 @@ fun CustomerHomeScreen(
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    val categories = listOf(
-                        "Grocery" to Icons.Default.LocalGroceryStore,
-                        "Electronics" to Icons.Default.Devices,
-                        "Clothing" to Icons.Default.Checkroom,
-                        "Home" to Icons.Default.Home,
-                        "Beauty" to Icons.Default.Face
-                    )
+                    val categories = when (language) {
+                        "ta" -> listOf(
+                            "மளிகை" to Icons.Default.LocalGroceryStore,
+                            "மின்சாரம்" to Icons.Default.Devices,
+                            "ஆடை" to Icons.Default.Checkroom,
+                            "வீடு" to Icons.Default.Home,
+                            "அழகு" to Icons.Default.Face
+                        )
+                        "tg" -> listOf(
+                            "Grocery" to Icons.Default.LocalGroceryStore,
+                            "Electronics" to Icons.Default.Devices,
+                            "Dress" to Icons.Default.Checkroom,
+                            "Veedu" to Icons.Default.Home,
+                            "Beauty" to Icons.Default.Face
+                        )
+                        else -> listOf(
+                            "Grocery" to Icons.Default.LocalGroceryStore,
+                            "Electronics" to Icons.Default.Devices,
+                            "Clothing" to Icons.Default.Checkroom,
+                            "Home" to Icons.Default.Home,
+                            "Beauty" to Icons.Default.Face
+                        )
+                    }
                     items(categories.size) { index ->
                         CategoryChip(
                             name = categories[index].first,
@@ -238,7 +303,7 @@ fun CustomerHomeScreen(
                 }
             }
             
-            // My Orders Section - Show real data
+            // My Orders Section
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -246,13 +311,19 @@ fun CustomerHomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "My Orders",
+                        text = t.myOrders,
                         style = MaterialTheme.typography.titleMedium,
                         color = WhiteText,
                         fontWeight = FontWeight.Bold
                     )
                     TextButton(onClick = onNavigateToOrders) {
-                        Text("View All", color = OrangePrimary)
+                        Text(t.viewAll, color = OrangePrimary)
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            tint = OrangePrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -265,28 +336,23 @@ fun CustomerHomeScreen(
                         CircularProgressIndicator(color = OrangePrimary)
                     }
                 } else if (orders.isEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = SlateCard)
-                    ) {
-                        Text(
-                            text = "No orders yet. Start shopping!",
-                            color = WhiteTextMuted,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
+                    EmptyStateCard(
+                        message = if (language == "tg") "Order illa. Shopping start pannu!" 
+                                  else if (language == "ta") "ஆர்டர் இல்லை. ஷாப்பிங் தொடங்குங்கள்!" 
+                                  else "No orders yet. Start shopping!",
+                        icon = Icons.Default.ShoppingBag
+                    )
                 } else {
-                    // Show latest order
                     val latestOrder = orders.first()
                     OrderPreviewCard(
                         order = latestOrder,
+                        language = language,
                         onClick = onNavigateToOrders
                     )
                 }
             }
             
-            // My Bookings Section - Show real data
+            // My Bookings Section
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -294,13 +360,19 @@ fun CustomerHomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "My Bookings",
+                        text = t.myBookings,
                         style = MaterialTheme.typography.titleMedium,
                         color = WhiteText,
                         fontWeight = FontWeight.Bold
                     )
                     TextButton(onClick = onNavigateToBookings) {
-                        Text("View All", color = OrangePrimary)
+                        Text(t.viewAll, color = OrangePrimary)
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            tint = OrangePrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -313,22 +385,17 @@ fun CustomerHomeScreen(
                         CircularProgressIndicator(color = OrangePrimary)
                     }
                 } else if (bookings.isEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = SlateCard)
-                    ) {
-                        Text(
-                            text = "No bookings yet. Browse services!",
-                            color = WhiteTextMuted,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
+                    EmptyStateCard(
+                        message = if (language == "tg") "Booking illa. Services paaru!" 
+                                  else if (language == "ta") "முன்பதிவு இல்லை. சேவைகளை பாருங்கள்!" 
+                                  else "No bookings yet. Browse services!",
+                        icon = Icons.Default.Build
+                    )
                 } else {
-                    // Show latest booking
                     val latestBooking = bookings.first()
                     BookingPreviewCard(
                         booking = latestBooking,
+                        language = language,
                         onClick = onNavigateToBookings
                     )
                 }
@@ -336,12 +403,18 @@ fun CustomerHomeScreen(
             
             // Logout
             item {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = onLogout,
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = ErrorRed
+                    ),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(ErrorRed.copy(alpha = 0.5f), ErrorRed.copy(alpha = 0.3f))
+                        )
                     )
                 ) {
                     Icon(
@@ -349,8 +422,12 @@ fun CustomerHomeScreen(
                         contentDescription = null
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Logout")
+                    Text(
+                        text = Translations.get(language).logout,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
@@ -360,45 +437,55 @@ fun CustomerHomeScreen(
 private fun QuickActionCard(
     icon: ImageVector,
     label: String,
-    color: androidx.compose.ui.graphics.Color,
+    gradientColors: List<Color>,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Card(
         modifier = modifier
-            .height(100.dp)
+            .height(110.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = GlassWhite)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .background(
+                    brush = Brush.linearGradient(colors = gradientColors)
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(color),
-                contentAlignment = Alignment.Center
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(12.dp)
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = WhiteText,
-                    modifier = Modifier.size(24.dp)
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            color = WhiteText.copy(alpha = 0.2f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = WhiteText,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = WhiteText,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = WhiteText,
-                fontWeight = FontWeight.Medium
-            )
         }
     }
 }
@@ -411,24 +498,80 @@ private fun CategoryChip(
 ) {
     Card(
         modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = SlateCard)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = OrangePrimary,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(OrangePrimary, AmberSecondary)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = WhiteText,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = name,
                 style = MaterialTheme.typography.bodyMedium,
-                color = WhiteText
+                color = WhiteText,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyStateCard(
+    message: String,
+    icon: ImageVector
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(
+                        color = OrangePrimary.copy(alpha = 0.15f),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = OrangePrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Text(
+                text = message,
+                color = WhiteTextMuted,
+                style = MaterialTheme.typography.bodyMedium
             )
         }
     }
@@ -437,52 +580,92 @@ private fun CategoryChip(
 @Composable
 private fun OrderPreviewCard(
     order: Order,
+    language: String,
     onClick: () -> Unit
 ) {
     val statusColor = when (order.status.lowercase()) {
         "delivered" -> SuccessGreen
-        "dispatched", "shipped" -> ProviderBlue
+        "dispatched", "shipped" -> PeacockBlue
         "cancelled" -> ErrorRed
         else -> OrangePrimary
+    }
+    
+    val statusText = when (language) {
+        "ta" -> when (order.status.lowercase()) {
+            "pending" -> "நிலுவையில்"
+            "delivered" -> "டெலிவரி ஆனது"
+            "cancelled" -> "ரத்து"
+            else -> order.status
+        }
+        "tg" -> when (order.status.lowercase()) {
+            "pending" -> "Pending"
+            "delivered" -> "Delivered aayiduchu"
+            "cancelled" -> "Cancel aayiduchu"
+            else -> order.status
+        }
+        else -> order.status
     }
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = SlateCard)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(18.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "#ORD-${order.id}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = WhiteText,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "${order.items?.size ?: 0} items • ₹${order.total}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = WhiteTextMuted
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(OrangePrimary, AmberSecondary)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Receipt,
+                        contentDescription = null,
+                        tint = WhiteText,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(14.dp))
+                Column {
+                    Text(
+                        text = "#ORD-${order.id}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${order.items?.size ?: 0} items • ₹${order.total}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WhiteTextMuted
+                    )
+                }
             }
             
             Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = statusColor.copy(alpha = 0.2f)
+                shape = RoundedCornerShape(10.dp),
+                color = statusColor.copy(alpha = 0.15f)
             ) {
                 Text(
-                    text = order.status.replaceFirstChar { it.uppercase() },
+                    text = statusText.replaceFirstChar { it.uppercase() },
                     color = statusColor,
                     style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                 )
             }
         }
@@ -492,59 +675,99 @@ private fun OrderPreviewCard(
 @Composable
 private fun BookingPreviewCard(
     booking: Booking,
+    language: String,
     onClick: () -> Unit
 ) {
     val statusColor = when (booking.status.lowercase()) {
         "confirmed", "accepted" -> SuccessGreen
         "pending" -> OrangePrimary
         "rejected", "cancelled" -> ErrorRed
-        else -> ProviderBlue
+        else -> PeacockBlue
+    }
+    
+    val statusText = when (language) {
+        "ta" -> when (booking.status.lowercase()) {
+            "pending" -> "நிலுவையில்"
+            "confirmed" -> "உறுதி"
+            "cancelled" -> "ரத்து"
+            else -> booking.status
+        }
+        "tg" -> when (booking.status.lowercase()) {
+            "pending" -> "Pending"
+            "confirmed" -> "Confirm aayiduchu"
+            "cancelled" -> "Cancel aayiduchu"
+            else -> booking.status
+        }
+        else -> booking.status
     }
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = SlateCard)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(18.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = booking.service?.name ?: "Service #${booking.serviceId}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = WhiteText,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = booking.timeSlotLabel ?: "Scheduled",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = WhiteTextMuted
-                )
-                booking.bookingDate?.let { date ->
-                    Text(
-                        text = date,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = OrangePrimary
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(PeacockBlue, GradientPeacock)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Build,
+                        contentDescription = null,
+                        tint = WhiteText,
+                        modifier = Modifier.size(24.dp)
                     )
+                }
+                Spacer(modifier = Modifier.width(14.dp))
+                Column {
+                    Text(
+                        text = booking.service?.name ?: "Service #${booking.serviceId}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = booking.timeSlotLabel ?: "Scheduled",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WhiteTextMuted
+                    )
+                    booking.bookingDate?.let { date ->
+                        Text(
+                            text = date,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OrangePrimary
+                        )
+                    }
                 }
             }
             
             Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = statusColor.copy(alpha = 0.2f)
+                shape = RoundedCornerShape(10.dp),
+                color = statusColor.copy(alpha = 0.15f)
             ) {
                 Text(
-                    text = booking.status.replaceFirstChar { it.uppercase() },
+                    text = statusText.replaceFirstChar { it.uppercase() },
                     color = statusColor,
                     style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                 )
             }
         }

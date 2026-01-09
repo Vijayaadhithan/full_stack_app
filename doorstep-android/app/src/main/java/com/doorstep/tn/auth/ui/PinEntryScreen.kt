@@ -24,7 +24,7 @@ import com.doorstep.tn.common.localization.Translations
 import com.doorstep.tn.common.theme.*
 
 /**
- * PIN Entry Screen for existing users
+ * PIN Entry Screen for existing users - Clean design
  */
 @Composable
 fun PinEntryScreen(
@@ -50,6 +50,20 @@ fun PinEntryScreen(
                 )
             )
     ) {
+        // Back Button - Top Left
+        IconButton(
+            onClick = onNavigateBack,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 44.dp, start = 8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = WhiteText
+            )
+        }
+        
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -60,64 +74,75 @@ fun PinEntryScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = GlassWhite)
+                colors = CardDefaults.cardColors(
+                    containerColor = SlateCard.copy(alpha = 0.7f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(32.dp),
+                        .padding(28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Back button
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        TextButton(onClick = onNavigateBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = WhiteTextMuted
+                    // Top accent line
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(OrangePrimary, TempleGold, AmberSecondary)
+                                )
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = t.back, color = WhiteTextMuted)
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Welcome message
-                    Text(
-                        text = if (language == "en") 
-                            "Hello, ${existingUserName ?: "User"}!" 
-                        else 
-                            "வணக்கம், ${existingUserName ?: "User"}!",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = OrangePrimary,
-                        fontWeight = FontWeight.Bold
                     )
                     
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(28.dp))
                     
-                    // PIN Label
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
+                    // Lock icon
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(OrangePrimary, AmberSecondary)
+                                ),
+                                shape = RoundedCornerShape(14.dp)
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
-                            tint = WhiteTextMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = t.enterPin,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = WhiteTextMuted
+                            tint = WhiteText,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    // Welcome message
+                    Text(
+                        text = when (language) {
+                            "ta" -> "வணக்கம், ${existingUserName ?: "User"}!"
+                            "tg" -> "Vanakkam, ${existingUserName ?: "User"}!"
+                            else -> "Welcome back, ${existingUserName ?: "User"}!"
+                        },
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = OrangePrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = t.enterPin,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = WhiteTextMuted
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
                     
                     // PIN Dots Display
                     Row(
@@ -141,7 +166,7 @@ fun PinEntryScreen(
                     // Hidden PIN Input
                     OutlinedTextField(
                         value = pin,
-                        onValueChange = { viewModel.updatePin(it) },
+                        onValueChange = { if (it.length <= 4) viewModel.updatePin(it) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(72.dp),
@@ -165,23 +190,33 @@ fun PinEntryScreen(
                             keyboardType = KeyboardType.NumberPassword
                         ),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = OrangePrimary,
                             unfocusedBorderColor = GlassBorder,
-                            focusedContainerColor = GlassWhite,
-                            unfocusedContainerColor = GlassWhite
+                            focusedContainerColor = SlateDarker.copy(alpha = 0.5f),
+                            unfocusedContainerColor = SlateDarker.copy(alpha = 0.3f)
                         )
                     )
                     
                     error?.let {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = it,
-                            color = ErrorRed,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center
-                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = ErrorRed.copy(alpha = 0.15f)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = it,
+                                color = ErrorRed,
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            )
+                        }
                     }
                     
                     Spacer(modifier = Modifier.height(24.dp))
@@ -195,9 +230,10 @@ fun PinEntryScreen(
                             .fillMaxWidth()
                             .height(56.dp),
                         enabled = pin.length == 4 && !isLoading,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = OrangePrimary
+                            containerColor = OrangePrimary,
+                            disabledContainerColor = OrangePrimary.copy(alpha = 0.4f)
                         )
                     ) {
                         if (isLoading) {
@@ -210,7 +246,8 @@ fun PinEntryScreen(
                             Text(
                                 text = t.login,
                                 fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold,
+                                color = WhiteText
                             )
                         }
                     }
@@ -223,7 +260,7 @@ fun PinEntryScreen(
                     ) {
                         Text(
                             text = t.forgotPin,
-                            color = WhiteTextMuted
+                            color = OrangePrimary
                         )
                     }
                 }

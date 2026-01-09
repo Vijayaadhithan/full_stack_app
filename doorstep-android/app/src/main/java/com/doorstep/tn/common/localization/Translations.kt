@@ -1,9 +1,19 @@
 package com.doorstep.tn.common.localization
 
 /**
- * Translations for the app - English and Tamil
+ * Translations for the app - English, Tamil, and Thanglish
+ * 
+ * Thanglish = Tamil words written in English script
+ * Popular among semi-urban and urban youth who speak Tamil but prefer English script
  */
 object Translations {
+    
+    // Available languages
+    enum class Language(val code: String, val displayName: String, val nativeName: String) {
+        ENGLISH("en", "English", "English"),
+        TAMIL("ta", "Tamil", "தமிழ்"),
+        THANGLISH("tg", "Thanglish", "Tanglish")
+    }
     
     data class Strings(
         // Auth
@@ -32,6 +42,12 @@ object Translations {
         val switchLang: String,
         val tagline: String,
         
+        // Greetings (time-based)
+        val goodMorning: String,
+        val goodAfternoon: String,
+        val goodEvening: String,
+        val welcomeBack: String,
+        
         // Common
         val search: String,
         val cancel: String,
@@ -41,6 +57,7 @@ object Translations {
         val error: String,
         val retry: String,
         val noData: String,
+        val selectLanguage: String,
         
         // Customer
         val browseProducts: String,
@@ -52,6 +69,10 @@ object Translations {
         val addToCart: String,
         val bookNow: String,
         val checkout: String,
+        val quickActions: String,
+        val categories: String,
+        val searchPlaceholder: String,
+        val tapToSearch: String,
         
         // Shop
         val dashboard: String,
@@ -84,7 +105,12 @@ object Translations {
         val pinResetSuccess: String,
         val pinResetSuccessMessage: String,
         val backToLogin: String,
-        val phoneNumber: String
+        val phoneNumber: String,
+        
+        // Trust indicators
+        val secure: String,
+        val safe: String,
+        val trusted: String
     )
     
     val en = Strings(
@@ -114,6 +140,12 @@ object Translations {
         switchLang = "தமிழ்",
         tagline = "Your local services, delivered",
         
+        // Greetings
+        goodMorning = "Good Morning!",
+        goodAfternoon = "Good Afternoon!",
+        goodEvening = "Good Evening!",
+        welcomeBack = "Welcome back!",
+        
         // Common
         search = "Search",
         cancel = "Cancel",
@@ -123,6 +155,7 @@ object Translations {
         error = "Error",
         retry = "Retry",
         noData = "No data available",
+        selectLanguage = "Select Language",
         
         // Customer
         browseProducts = "Browse Products",
@@ -134,6 +167,10 @@ object Translations {
         addToCart = "Add to Cart",
         bookNow = "Book Now",
         checkout = "Checkout",
+        quickActions = "Quick Actions",
+        categories = "Categories",
+        searchPlaceholder = "Search services, products, shops...",
+        tapToSearch = "Tap to search",
         
         // Shop
         dashboard = "Dashboard",
@@ -166,7 +203,12 @@ object Translations {
         pinResetSuccess = "PIN Reset!",
         pinResetSuccessMessage = "Your PIN has been reset successfully. You can now login with your new PIN.",
         backToLogin = "Back to Login",
-        phoneNumber = "Phone Number"
+        phoneNumber = "Phone Number",
+        
+        // Trust
+        secure = "Secure",
+        safe = "100% Safe",
+        trusted = "Trusted"
     )
     
     val ta = Strings(
@@ -196,6 +238,12 @@ object Translations {
         switchLang = "English",
         tagline = "உங்கள் உள்ளூர் சேவைகள்",
         
+        // Greetings
+        goodMorning = "காலை வணக்கம்!",
+        goodAfternoon = "மதிய வணக்கம்!",
+        goodEvening = "மாலை வணக்கம்!",
+        welcomeBack = "மீண்டும் வரவேற்கிறோம்!",
+        
         // Common
         search = "தேடு",
         cancel = "ரத்து செய்",
@@ -205,6 +253,7 @@ object Translations {
         error = "பிழை",
         retry = "மீண்டும் முயற்சி",
         noData = "தரவு இல்லை",
+        selectLanguage = "மொழி தேர்வு",
         
         // Customer
         browseProducts = "பொருட்களை பார்க்க",
@@ -216,6 +265,10 @@ object Translations {
         addToCart = "கார்ட்டில் சேர்",
         bookNow = "இப்போது புக் செய்",
         checkout = "செக்அவுட்",
+        quickActions = "விரைவு செயல்கள்",
+        categories = "பிரிவுகள்",
+        searchPlaceholder = "சேவைகள், பொருட்கள் தேடுங்கள்...",
+        tapToSearch = "தேட தட்டவும்",
         
         // Shop
         dashboard = "டாஷ்போர்டு",
@@ -248,10 +301,120 @@ object Translations {
         pinResetSuccess = "PIN மீட்டமைக்கப்பட்டது!",
         pinResetSuccessMessage = "உங்கள் PIN வெற்றிகரமாக மீட்டமைக்கப்பட்டது. புதிய PIN உடன் உள்நுழையலாம்.",
         backToLogin = "உள்நுழைவுக்கு திரும்பு",
-        phoneNumber = "மொபைல் எண்"
+        phoneNumber = "மொபைல் எண்",
+        
+        // Trust
+        secure = "பாதுகாப்பு",
+        safe = "100% பாதுகாப்பு",
+        trusted = "நம்பகமான"
+    )
+    
+    // Thanglish - Tamil words in English script (popular with urban/semi-urban youth)
+    val thanglish = Strings(
+        // Auth
+        enterPhone = "Unga mobile number",
+        phonePlaceholder = "9876543210",
+        getOtp = "Continue pannu",
+        enterOtp = "OTP enter pannu",
+        verify = "Verify pannu",
+        enterPin = "Unga PIN",
+        createPin = "4-digit PIN create pannu",
+        confirmPin = "PIN confirm pannu",
+        forgotPin = "PIN maranthuducha?",
+        login = "Login",
+        next = "Next",
+        back = "Back",
+        yourName = "Unga peru",
+        chooseRole = "Neenga yaaru?",
+        customer = "Customer",
+        customerDesc = "Services book pannu & shopping",
+        shopOwner = "Kadai Owner",
+        shopDesc = "Unga products sell pannu",
+        provider = "Service Provider",
+        providerDesc = "Unga services kodunga",
+        welcome = "Vanakkam!",
+        complete = "Setup mudikka",
+        switchLang = "தமிழ்",
+        tagline = "Unga local services, delivered",
+        
+        // Greetings
+        goodMorning = "Kaalaila Vanakkam!",
+        goodAfternoon = "Madhiyam Vanakkam!",
+        goodEvening = "Maalai Vanakkam!",
+        welcomeBack = "Welcome back!",
+        
+        // Common
+        search = "Search",
+        cancel = "Cancel pannu",
+        save = "Save pannu",
+        delete = "Delete pannu",
+        loading = "Loading...",
+        error = "Error",
+        retry = "Retry pannu",
+        noData = "Data illa",
+        selectLanguage = "Language select pannu",
+        
+        // Customer
+        browseProducts = "Products paaru",
+        browseServices = "Services paaru",
+        myCart = "En Cart",
+        myOrders = "En Orders",
+        myBookings = "En Bookings",
+        viewAll = "Ellam paaru",
+        addToCart = "Cart la add pannu",
+        bookNow = "Ippo book pannu",
+        checkout = "Checkout",
+        quickActions = "Quick Actions",
+        categories = "Categories",
+        searchPlaceholder = "Services, products search pannu...",
+        tapToSearch = "Search panna tap pannu",
+        
+        // Shop
+        dashboard = "Dashboard",
+        products = "Products",
+        orders = "Orders",
+        workers = "Workers",
+        promotions = "Offers",
+        inventory = "Stock",
+        
+        // Provider
+        services = "Services",
+        bookings = "Bookings",
+        earnings = "Sambadichadu",
+        availability = "Available time",
+        
+        // Profile
+        profile = "Profile",
+        logout = "Logout",
+        settings = "Settings",
+        
+        // Forgot PIN
+        resetPin = "PIN reset pannu",
+        enterPhoneToReset = "PIN reset panna unga phone number",
+        sendOtp = "OTP anuppu",
+        verifyOtp = "OTP verify pannu",
+        resendOtp = "OTP mella anuppu",
+        newPin = "Pudhu PIN",
+        otpSentTo = "OTP anuppiten",
+        createNewPin = "Pudhu secure PIN create pannu",
+        pinResetSuccess = "PIN reset aayiduchi!",
+        pinResetSuccessMessage = "Unga PIN successfully reset aayiduchi. Pudhu PIN use pannu.",
+        backToLogin = "Login ku back",
+        phoneNumber = "Phone Number",
+        
+        // Trust
+        secure = "Secure",
+        safe = "100% Safe",
+        trusted = "Trusted"
     )
     
     fun get(language: String): Strings {
-        return if (language == "ta") ta else en
+        return when (language) {
+            "ta" -> ta
+            "tg", "thanglish" -> thanglish
+            else -> en
+        }
     }
+    
+    fun getLanguageList(): List<Language> = Language.values().toList()
 }

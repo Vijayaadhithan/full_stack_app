@@ -1,21 +1,21 @@
 package com.doorstep.tn.auth.ui
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -26,10 +26,11 @@ import androidx.compose.ui.unit.sp
 import com.doorstep.tn.R
 import com.doorstep.tn.common.localization.Translations
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.ui.LanguageSelector
+import com.doorstep.tn.common.ui.TimeBasedGreeting
 
 /**
- * Phone Entry Screen - First step of authentication
- * Matches the web app's RuralAuthFlow design
+ * Phone Entry Screen - Clean and premium design
  */
 @Composable
 fun PhoneEntryScreen(
@@ -56,25 +57,15 @@ fun PhoneEntryScreen(
                 )
             )
     ) {
-        // Language Toggle - Top Right
-        TextButton(
-            onClick = { viewModel.toggleLanguage() },
+        // Language Selector - Top Right
+        LanguageSelector(
+            currentLanguage = language,
+            onLanguageSelected = { viewModel.setLanguage(it) },
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(16.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Language,
-                contentDescription = "Language",
-                tint = WhiteTextMuted,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = t.switchLang,
-                color = WhiteTextMuted
-            )
-        }
+                .padding(top = 48.dp, end = 16.dp),
+            compact = false
+        )
         
         // Main Content
         Column(
@@ -84,27 +75,45 @@ fun PhoneEntryScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Glass Card
+            // Premium Glass Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = GlassWhite
+                    containerColor = SlateCard.copy(alpha = 0.7f)
+                ),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 8.dp
                 )
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(32.dp),
+                        .padding(28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // DoorStep Logo
+                    // Top accent line
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(OrangePrimary, TempleGold, AmberSecondary)
+                                )
+                            )
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // Logo
                     Image(
                         painter = painterResource(id = R.drawable.doorstep_logo),
                         contentDescription = "DoorStep Logo",
                         modifier = Modifier
-                            .size(80.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(12.dp))
                     )
                     
                     Spacer(modifier = Modifier.height(16.dp))
@@ -117,10 +126,17 @@ fun PhoneEntryScreen(
                         fontWeight = FontWeight.Bold
                     )
                     
+                    // Time-based greeting
+                    TimeBasedGreeting(
+                        language = language,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    
                     Text(
                         text = t.tagline,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = WhiteTextMuted
+                        color = WhiteTextMuted,
+                        textAlign = TextAlign.Center
                     )
                     
                     Spacer(modifier = Modifier.height(32.dp))
@@ -130,23 +146,36 @@ fun PhoneEntryScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Phone,
-                            contentDescription = null,
-                            tint = WhiteTextMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(OrangePrimary, AmberSecondary)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Phone,
+                                contentDescription = null,
+                                tint = WhiteText,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = t.enterPhone,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = WhiteTextMuted
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = WhiteText,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                     
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     
-                    // Phone Input
+                    // Phone Input Field
                     OutlinedTextField(
                         value = phone,
                         onValueChange = { viewModel.updatePhone(it) },
@@ -161,41 +190,63 @@ fun PhoneEntryScreen(
                             )
                         },
                         prefix = {
-                            Text(
-                                text = "+91 ",
-                                color = WhiteTextMuted,
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = "🇮🇳", fontSize = 18.sp)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "+91",
+                                    color = WhiteTextMuted,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.dp)
+                                        .height(24.dp)
+                                        .background(GlassBorder)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
                         },
                         textStyle = LocalTextStyle.current.copy(
-                            fontSize = 20.sp,
+                            fontSize = 22.sp,
                             color = WhiteText,
-                            letterSpacing = 2.sp
+                            letterSpacing = 2.sp,
+                            fontWeight = FontWeight.Medium
                         ),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Phone
                         ),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = OrangePrimary,
                             unfocusedBorderColor = GlassBorder,
-                            focusedContainerColor = GlassWhite,
-                            unfocusedContainerColor = GlassWhite
+                            focusedContainerColor = SlateDarker.copy(alpha = 0.5f),
+                            unfocusedContainerColor = SlateDarker.copy(alpha = 0.3f)
                         )
                     )
                     
                     // Error message
                     error?.let {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = it,
-                            color = ErrorRed,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = ErrorRed.copy(alpha = 0.15f)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = it,
+                                color = ErrorRed,
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            )
+                        }
                     }
                     
                     Spacer(modifier = Modifier.height(24.dp))
@@ -210,19 +261,16 @@ fun PhoneEntryScreen(
                                     onExistingUser = onNavigateToPin,
                                     onNewUser = onNavigateToOtp
                                 )
-                            } ?: run {
-                                // Fallback if activity is null (shouldn't happen)
-                                viewModel.clearError()
                             }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
                         enabled = phone.length == 10 && !isLoading,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = OrangePrimary,
-                            disabledContainerColor = OrangePrimary.copy(alpha = 0.5f)
+                            disabledContainerColor = OrangePrimary.copy(alpha = 0.4f)
                         )
                     ) {
                         if (isLoading) {
@@ -235,44 +283,64 @@ fun PhoneEntryScreen(
                             Text(
                                 text = t.getOtp,
                                 fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold,
+                                color = WhiteText
                             )
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     
                     // Trust indicators
                     Row(
-                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = WhiteTextSubtle,
-                            modifier = Modifier.size(14.dp)
+                        TrustBadge(
+                            icon = Icons.Default.Security,
+                            text = t.secure,
+                            color = SuccessGreen
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Secure",
-                            color = WhiteTextSubtle,
-                            fontSize = 12.sp
+                        TrustBadge(
+                            icon = Icons.Default.Verified,
+                            text = t.safe,
+                            color = PeacockBlue
                         )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = "•",
-                            color = WhiteTextSubtle
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = "100% Safe",
-                            color = WhiteTextSubtle,
-                            fontSize = 12.sp
+                        TrustBadge(
+                            icon = Icons.Default.Verified,
+                            text = t.trusted,
+                            color = TempleGold
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TrustBadge(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    color: androidx.compose.ui.graphics.Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = text,
+            color = color,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }

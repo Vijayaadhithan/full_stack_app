@@ -9,6 +9,31 @@ val OrangeDark = Color(0xFFEA580C)         // orange-600
 val AmberSecondary = Color(0xFFF59E0B)     // amber-500
 val AmberLight = Color(0xFFFBBF24)         // amber-400
 
+// ==================== Tamil Nadu Inspired Colors ====================
+// Festival & Cultural Colors
+val MangoYellow = Color(0xFFFFD700)        // Mango fruit - festivals
+val TempleGold = Color(0xFFFFB900)         // Temple gopuram gold
+val Manjal = Color(0xFFFFC107)             // Turmeric - auspicious
+val SilkMaroon = Color(0xFF800020)         // Kanchipuram silk
+val PeacockBlue = Color(0xFF0077B6)        // Tamil Nadu state bird
+val JasmineWhite = Color(0xFFFFFEF7)       // Mallipoo (jasmine)
+val KolamRed = Color(0xFFE53935)           // Traditional kolam powder
+
+// Sunset Gradient (reminds of Marina Beach sunsets)
+val SunsetOrange = Color(0xFFFF6B35)
+val SunsetPink = Color(0xFFFF8E72)
+val SunsetGold = Color(0xFFFFAE42)
+
+// Pongal Festival Colors
+val PongalSaffron = Color(0xFFFF9933)
+val PongalGreen = Color(0xFF138808)        // Sugarcane green
+
+// Premium Gradients for Cards
+val GradientStartGold = Color(0xFFFFB347)
+val GradientEndAmber = Color(0xFFFFCC33)
+val GradientPeacock = Color(0xFF00A5CF)
+val GradientPeacockDark = Color(0xFF0077B6)
+
 // Background colors (dark theme matching web)
 val SlateBackground = Color(0xFF1E293B)    // slate-800
 val SlateDarker = Color(0xFF0F172A)        // slate-900

@@ -460,8 +460,8 @@ private fun SearchResultsList(
                 SearchResultCard(
                     result = result,
                     onClick = { 
-                        // For products, we need shopId - using id as fallback
-                        onProductClick(result.id, result.id) 
+                        // Pass 0 for shopId - ProductDetailScreen will use loadProductById
+                        onProductClick(0, result.id) 
                     }
                 )
             }

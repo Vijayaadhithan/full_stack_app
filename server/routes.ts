@@ -7264,6 +7264,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get a single product by ID (direct access, e.g., from search results)
+  app.get("/api/products/:id", async (req, res) => {
+    try {
+      const productId = getValidatedParam(req, "id");
+      const cacheKey = `product_direct_${productId}`;
+      const cached = await getCache<ProductDetail>(cacheKey);
+      if (cached) {
+        logger.debug("[API] /api/products/:id - cache hit");
+        return res.json(cached);
+      }
+
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Get shop modes for the product
+      const shop = product.shopId ? await storage.getUser(product.shopId) : null;
+      const modes = resolveShopModes(shop?.shopProfile ?? null);
+
+      const payload = productDetailSchema.parse({
+        ...product,
+        images: product.images ?? null,
+        specifications: product.specifications ?? null,
+        tags: product.tags ?? null,
+        weight: product.weight ?? null,
+        dimensions: product.dimensions ?? null,
+        mrp: product.mrp ?? null,
+        createdAt:
+          product.createdAt instanceof Date
+            ? product.createdAt.toISOString()
+            : product.createdAt ?? null,
+        updatedAt:
+          product.updatedAt instanceof Date
+            ? product.updatedAt.toISOString()
+            : product.updatedAt ?? null,
+        catalogModeEnabled: modes.catalogModeEnabled,
+        openOrderMode: modes.openOrderMode,
+        allowPayLater: modes.allowPayLater,
+      });
+
+      await setCache(cacheKey, payload, PRODUCT_DETAIL_CACHE_TTL_SECONDS);
+      res.json(payload);
+    } catch (error) {
+      logger.error("Error fetching product by ID:", error);
+      res.status(500).json({
+        message:
+          error instanceof Error ? error.message : "Failed to fetch product",
+      });
+    }
+  });
+
   // Get a specific product by shop ID and product ID
   app.get(
     "/api/shops/:shopId/products/:productId",

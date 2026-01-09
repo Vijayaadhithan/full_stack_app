@@ -40,9 +40,13 @@ fun ProductDetailScreen(
     val product by viewModel.selectedProduct.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     
-    // Use loadShopProduct matching web's /api/shops/{shopId}/products/{productId}
+    // Use loadShopProduct if shopId is valid, otherwise load by productId only (from search)
     LaunchedEffect(shopId, productId) {
-        viewModel.loadShopProduct(shopId, productId)
+        if (shopId > 0) {
+            viewModel.loadShopProduct(shopId, productId)
+        } else {
+            viewModel.loadProductById(productId)
+        }
     }
     
     Scaffold(

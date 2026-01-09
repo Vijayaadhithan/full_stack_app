@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -20,7 +21,7 @@ import com.doorstep.tn.common.localization.Translations
 import com.doorstep.tn.common.theme.*
 
 /**
- * OTP Verification Screen
+ * OTP Verification Screen - Clean design
  */
 @Composable
 fun OtpVerifyScreen(
@@ -45,6 +46,20 @@ fun OtpVerifyScreen(
                 )
             )
     ) {
+        // Back Button - Top Left
+        IconButton(
+            onClick = onNavigateBack,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 44.dp, start = 8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = WhiteText
+            )
+        }
+        
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -55,31 +70,51 @@ fun OtpVerifyScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = GlassWhite)
+                colors = CardDefaults.cardColors(
+                    containerColor = SlateCard.copy(alpha = 0.7f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(32.dp),
+                        .padding(28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Back button
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        TextButton(onClick = onNavigateBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = WhiteTextMuted
+                    // Top accent line
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(OrangePrimary, TempleGold, AmberSecondary)
+                                )
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = t.back, color = WhiteTextMuted)
-                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(28.dp))
+                    
+                    // OTP icon box
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(OrangePrimary, AmberSecondary)
+                                ),
+                                shape = RoundedCornerShape(14.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "🔐",
+                            fontSize = 28.sp
+                        )
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     
                     Text(
                         text = t.enterOtp,
@@ -91,10 +126,11 @@ fun OtpVerifyScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Text(
-                        text = if (language == "en") 
-                            "OTP sent to +91 $phone" 
-                        else 
-                            "+91 $phone க்கு OTP அனுப்பப்பட்டது",
+                        text = when (language) {
+                            "ta" -> "+91 $phone க்கு OTP அனுப்பப்பட்டது"
+                            "tg" -> "+91 $phone ku OTP send aayiduchu"
+                            else -> "OTP sent to +91 $phone"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = WhiteTextMuted,
                         textAlign = TextAlign.Center
@@ -105,7 +141,7 @@ fun OtpVerifyScreen(
                     // OTP Input
                     OutlinedTextField(
                         value = otp,
-                        onValueChange = { viewModel.updateOtp(it) },
+                        onValueChange = { if (it.length <= 6) viewModel.updateOtp(it) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(72.dp),
@@ -128,23 +164,33 @@ fun OtpVerifyScreen(
                             keyboardType = KeyboardType.Number
                         ),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = OrangePrimary,
                             unfocusedBorderColor = GlassBorder,
-                            focusedContainerColor = GlassWhite,
-                            unfocusedContainerColor = GlassWhite
+                            focusedContainerColor = SlateDarker.copy(alpha = 0.5f),
+                            unfocusedContainerColor = SlateDarker.copy(alpha = 0.3f)
                         )
                     )
                     
                     error?.let {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = it,
-                            color = ErrorRed,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center
-                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = ErrorRed.copy(alpha = 0.15f)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = it,
+                                color = ErrorRed,
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            )
+                        }
                     }
                     
                     Spacer(modifier = Modifier.height(24.dp))
@@ -158,9 +204,10 @@ fun OtpVerifyScreen(
                             .fillMaxWidth()
                             .height(56.dp),
                         enabled = otp.length == 6 && !isLoading,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = OrangePrimary
+                            containerColor = OrangePrimary,
+                            disabledContainerColor = OrangePrimary.copy(alpha = 0.4f)
                         )
                     ) {
                         if (isLoading) {
@@ -173,9 +220,24 @@ fun OtpVerifyScreen(
                             Text(
                                 text = t.verify,
                                 fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold,
+                                color = WhiteText
                             )
                         }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Resend OTP
+                    TextButton(onClick = { /* Resend OTP logic */ }) {
+                        Text(
+                            text = when (language) {
+                                "ta" -> "OTP மீண்டும் அனுப்பு"
+                                "tg" -> "OTP thirumba anuppu"
+                                else -> "Resend OTP"
+                            },
+                            color = OrangePrimary
+                        )
                     }
                 }
             }
