@@ -81,9 +81,9 @@ class CustomerViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     
-    // Search
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    // Product Search (for product filter)
+    private val _productSearchQuery = MutableStateFlow("")
+    val productSearchQuery: StateFlow<String> = _productSearchQuery.asStateFlow()
     
     private val _selectedCategory = MutableStateFlow<String?>(null)
     val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
@@ -102,6 +102,20 @@ class CustomerViewModel @Inject constructor(
     val unreadNotificationCount: StateFlow<Int> = _notifications.map { list ->
         list.count { !it.isRead }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    
+    // Universal Search
+    private val _searchResults = MutableStateFlow<List<com.doorstep.tn.core.network.SearchResult>>(emptyList())
+    val searchResults: StateFlow<List<com.doorstep.tn.core.network.SearchResult>> = _searchResults.asStateFlow()
+    
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
+    
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    
+    // Quick Order State
+    private val _quickOrderSuccess = MutableStateFlow<Int?>(null) // Order ID on success
+    val quickOrderSuccess: StateFlow<Int?> = _quickOrderSuccess.asStateFlow()
     
     // ==================== Product Actions ====================
     
@@ -174,7 +188,7 @@ class CustomerViewModel @Inject constructor(
     }
     
     fun updateSearchQuery(query: String) {
-        _searchQuery.value = query
+        _productSearchQuery.value = query
     }
     
     fun updateCategory(category: String?) {
@@ -632,6 +646,68 @@ class CustomerViewModel @Inject constructor(
         }
     }
     
+    // Update service review - matches web PATCH /api/reviews/{id}
+    fun updateServiceReview(
+        reviewId: Int,
+        rating: Int? = null,
+        review: String? = null,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.updateServiceReview(reviewId, rating, review)) {
+                is Result.Success -> {
+                    loadCustomerReviews() // Refresh list
+                    onSuccess()
+                }
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+    
+    // Update product review - matches web PATCH /api/product-reviews/{id}
+    fun updateProductReview(
+        reviewId: Int,
+        rating: Int? = null,
+        review: String? = null,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.updateProductReview(reviewId, rating, review)) {
+                is Result.Success -> {
+                    loadCustomerReviews() // Refresh list
+                    onSuccess()
+                }
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+    
+    // Create return request - matches web POST /api/orders/{orderId}/return
+    fun createReturnRequest(
+        orderId: Int,
+        reason: String,
+        comments: String? = null,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.createReturnRequest(orderId, reason, comments)) {
+                is Result.Success -> onSuccess()
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
     // ==================== Notification Actions ====================
     
     // Load user notifications - matches web GET /api/notifications
@@ -703,6 +779,148 @@ class CustomerViewModel @Inject constructor(
                 }
                 is Result.Loading -> {}
             }
+        }
+    }
+    
+    // ==================== Search Actions ====================
+    
+    // Perform global search - matches web GET /api/search
+    fun performSearch(query: String) {
+        if (query.length < 2) return
+        
+        viewModelScope.launch {
+            _isSearching.value = true
+            _searchQuery.value = query
+            
+            when (val result = repository.globalSearch(query)) {
+                is Result.Success -> {
+                    _searchResults.value = result.data.results
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    _searchResults.value = emptyList()
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isSearching.value = false
+        }
+    }
+    
+    // Clear search results
+    fun clearSearch() {
+        _searchResults.value = emptyList()
+        _searchQuery.value = ""
+    }
+    
+    // ==================== Quick Order Actions ====================
+    
+    // Create text/quick order - matches web POST /api/orders/text
+    fun createTextOrder(
+        shopId: Int,
+        orderText: String,
+        deliveryMethod: String = "pickup",
+        onSuccess: (orderId: Int) -> Unit,
+        onError: (message: String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            when (val result = repository.createTextOrder(shopId, orderText, deliveryMethod)) {
+                is Result.Success -> {
+                    _quickOrderSuccess.value = result.data.order.id
+                    onSuccess(result.data.order.id)
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message ?: "Failed to create quick order")
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    // Reset quick order success state
+    fun resetQuickOrderSuccess() {
+        _quickOrderSuccess.value = null
+    }
+    
+    // ==================== Quick Add Product Actions ====================
+    
+    // Quick add product - matches web POST /api/products/quick-add
+    fun quickAddProduct(
+        name: String,
+        price: String,
+        category: String,
+        onSuccess: () -> Unit,
+        onError: (message: String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            when (val result = repository.quickAddProduct(name, price, category)) {
+                is Result.Success -> {
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message ?: "Failed to add product")
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    // ==================== Order Timeline Actions ====================
+    
+    private val _orderTimeline = MutableStateFlow<List<com.doorstep.tn.core.network.OrderTimelineEntry>>(emptyList())
+    val orderTimeline: StateFlow<List<com.doorstep.tn.core.network.OrderTimelineEntry>> = _orderTimeline.asStateFlow()
+    
+    // Load order timeline - matches web GET /api/orders/:id/timeline
+    fun loadOrderTimeline(orderId: Int) {
+        viewModelScope.launch {
+            when (val result = repository.getOrderTimeline(orderId)) {
+                is Result.Success -> {
+                    _orderTimeline.value = result.data
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+        }
+    }
+    
+    // ==================== Product Review Actions ====================
+    
+    // Submit product review - matches web POST /api/product-reviews
+    fun submitProductReview(
+        productId: Int,
+        orderId: Int,
+        rating: Int,
+        review: String,
+        onSuccess: () -> Unit,
+        onError: (message: String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            when (val result = repository.submitProductReview(productId, orderId, rating, review)) {
+                is Result.Success -> {
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message ?: "Failed to submit review")
+                }
+                is Result.Loading -> {}
+            }
+            
+            _isLoading.value = false
         }
     }
 }

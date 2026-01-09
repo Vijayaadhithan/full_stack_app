@@ -121,3 +121,82 @@ data class AppNotification(
 data class UnreadNotificationCount(
     val count: Int
 )
+
+// ==================== SEARCH ====================
+
+// Universal/Global Search Result - matches web GET /api/search
+data class SearchResult(
+    val type: String,  // "service", "product", "shop"
+    val id: Int,
+    val name: String,
+    val description: String? = null,
+    val price: String? = null,
+    val category: String? = null,
+    val shopName: String? = null,
+    val providerName: String? = null,
+    val distance: Double? = null,
+    val imageUrl: String? = null
+)
+
+// Search response wrapper
+data class SearchResponse(
+    val query: String,
+    val results: List<SearchResult>
+)
+
+// ==================== QUICK ORDER ====================
+
+// Text/Quick Order Request - matches web POST /api/orders/text
+data class CreateTextOrderRequest(
+    val shopId: Int,
+    val orderText: String,
+    val deliveryMethod: String = "pickup"  // "pickup" or "delivery"
+)
+
+// Text Order Response
+data class TextOrderResponse(
+    val order: TextOrderInfo
+)
+
+data class TextOrderInfo(
+    val id: Int
+)
+
+// ==================== QUICK ADD PRODUCT ====================
+
+// Quick Add Product Request - matches web POST /api/products/quick-add
+data class QuickAddProductRequest(
+    val name: String,
+    val price: String,
+    val category: String
+)
+
+// ==================== ORDER TIMELINE ====================
+
+// Order Timeline Entry - matches web GET /api/orders/:id/timeline
+data class OrderTimelineEntry(
+    val orderId: Int,
+    val status: String,
+    val trackingInfo: String? = null,
+    val timestamp: String
+)
+
+// ==================== PRODUCT REVIEW ====================
+
+// Product Review Request - matches web POST /api/product-reviews  
+data class ProductReviewRequest(
+    val productId: Int,
+    val orderId: Int,
+    val rating: Int,
+    val review: String
+)
+
+data class UpdateReviewRequest(
+    val rating: Int? = null,
+    val review: String? = null
+)
+
+data class CreateReturnRequest(
+    val reason: String,
+    val comments: String? = null
+)

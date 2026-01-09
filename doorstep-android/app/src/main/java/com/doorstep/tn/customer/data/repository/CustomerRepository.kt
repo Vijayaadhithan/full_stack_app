@@ -441,6 +441,51 @@ class CustomerRepository @Inject constructor(
             Result.Error(e.message ?: "Failed to load product reviews")
         }
     }
+
+    // Update service review - matches web PATCH /api/reviews/{id}
+    suspend fun updateServiceReview(reviewId: Int, rating: Int? = null, review: String? = null): Result<com.doorstep.tn.core.network.CustomerReview> {
+        return try {
+            val request = com.doorstep.tn.core.network.UpdateReviewRequest(rating = rating, review = review)
+            val response = api.updateServiceReview(reviewId, request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to update service review")
+        }
+    }
+    
+    // Update product review - matches web PATCH /api/product-reviews/{id}
+    suspend fun updateProductReview(reviewId: Int, rating: Int? = null, review: String? = null): Result<com.doorstep.tn.core.network.CustomerProductReview> {
+        return try {
+            val request = com.doorstep.tn.core.network.UpdateReviewRequest(rating = rating, review = review)
+            val response = api.updateProductReview(reviewId, request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to update product review")
+        }
+    }
+    
+    // Create return request - matches web POST /api/orders/{orderId}/return
+    suspend fun createReturnRequest(orderId: Int, reason: String, comments: String? = null): Result<Unit> {
+        return try {
+            val request = com.doorstep.tn.core.network.CreateReturnRequest(reason = reason, comments = comments)
+            val response = api.createReturnRequest(orderId, request)
+            if (response.isSuccessful) {
+                Result.Success(Unit)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to create return request")
+        }
+    }
     
     // ==================== NOTIFICATION OPERATIONS ====================
     
@@ -497,6 +542,121 @@ class CustomerRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to delete notification")
+        }
+    }
+    
+    // ==================== SEARCH OPERATIONS ====================
+    
+    // Global/Universal search - matches web GET /api/search
+    suspend fun globalSearch(
+        query: String,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        radius: Int? = null,
+        limit: Int? = null
+    ): Result<com.doorstep.tn.core.network.SearchResponse> {
+        return try {
+            val response = api.globalSearch(query, latitude, longitude, radius, limit)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to perform search")
+        }
+    }
+    
+    // ==================== QUICK ORDER OPERATIONS ====================
+    
+    // Create text/quick order - matches web POST /api/orders/text
+    suspend fun createTextOrder(
+        shopId: Int,
+        orderText: String,
+        deliveryMethod: String
+    ): Result<com.doorstep.tn.core.network.TextOrderResponse> {
+        return try {
+            val request = com.doorstep.tn.core.network.CreateTextOrderRequest(
+                shopId = shopId,
+                orderText = orderText,
+                deliveryMethod = deliveryMethod
+            )
+            val response = api.createTextOrder(request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to create quick order")
+        }
+    }
+    
+    // ==================== QUICK ADD PRODUCT OPERATIONS ====================
+    
+    // Quick Add Product - matches web POST /api/products/quick-add
+    suspend fun quickAddProduct(
+        name: String,
+        price: String,
+        category: String
+    ): Result<com.doorstep.tn.customer.data.model.Product> {
+        return try {
+            val request = com.doorstep.tn.core.network.QuickAddProductRequest(
+                name = name,
+                price = price,
+                category = category
+            )
+            val response = api.quickAddProduct(request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to quick add product")
+        }
+    }
+    
+    // ==================== ORDER TIMELINE OPERATIONS ====================
+    
+    // Get order timeline - matches web GET /api/orders/:id/timeline
+    suspend fun getOrderTimeline(orderId: Int): Result<List<com.doorstep.tn.core.network.OrderTimelineEntry>> {
+        return try {
+            val response = api.getOrderTimeline(orderId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load order timeline")
+        }
+    }
+    
+    // ==================== PRODUCT REVIEW OPERATIONS ====================
+    
+    // Submit product review - matches web POST /api/product-reviews
+    suspend fun submitProductReview(
+        productId: Int,
+        orderId: Int,
+        rating: Int,
+        review: String
+    ): Result<Any> {
+        return try {
+            val request = com.doorstep.tn.core.network.ProductReviewRequest(
+                productId = productId,
+                orderId = orderId,
+                rating = rating,
+                review = review
+            )
+            val response = api.submitProductReview(request)
+            if (response.isSuccessful) {
+                Result.Success(response.body() ?: Unit)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to submit review")
         }
     }
 }

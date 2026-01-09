@@ -40,6 +40,10 @@ fun MyReviewsScreen(
     // Tab selection: 0=Services, 1=Products
     var selectedTab by remember { mutableStateOf(0) }
     
+    // Edit Review State
+    var showEditDialog by remember { mutableStateOf(false) }
+    var reviewToEdit by remember { mutableStateOf<Any?>(null) } // Can be CustomerReview or CustomerProductReview
+    
     LaunchedEffect(Unit) {
         viewModel.loadCustomerReviews()
     }
@@ -112,16 +116,66 @@ fun MyReviewsScreen(
                 }
             } else {
                 when (selectedTab) {
-                    0 -> ServiceReviewsList(reviews = serviceReviews)
-                    1 -> ProductReviewsList(reviews = productReviews)
+                    0 -> ServiceReviewsList(
+                        reviews = serviceReviews,
+                        onEditReview = { review ->
+                            reviewToEdit = review
+                            showEditDialog = true
+                        }
+                    )
+                    1 -> ProductReviewsList(
+                        reviews = productReviews,
+                        onEditReview = { review ->
+                            reviewToEdit = review
+                            showEditDialog = true
+                        }
+                    )
                 }
             }
+        }
+        
+        if (showEditDialog && reviewToEdit != null) {
+            EditReviewDialog(
+                reviewItem = reviewToEdit!!,
+                onDismiss = {
+                    showEditDialog = false
+                    reviewToEdit = null
+                },
+                onSubmit = { rating, text ->
+                    if (reviewToEdit is CustomerReview) {
+                        viewModel.updateServiceReview(
+                            reviewId = (reviewToEdit as CustomerReview).id,
+                            rating = rating,
+                            review = text,
+                            onSuccess = {
+                                showEditDialog = false
+                                reviewToEdit = null
+                            },
+                            onError = { /* ViewModel handles error state */ }
+                        )
+                    } else if (reviewToEdit is CustomerProductReview) {
+                        viewModel.updateProductReview(
+                            reviewId = (reviewToEdit as CustomerProductReview).id,
+                            rating = rating,
+                            review = text,
+                            onSuccess = {
+                                showEditDialog = false
+                                reviewToEdit = null
+                            },
+                            onError = { /* ViewModel handles error state */ }
+                        )
+                    }
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun ServiceReviewsList(reviews: List<CustomerReview>) {
+private fun ServiceReviewsList(
+    reviews: List<CustomerReview>,
+    onEditReview: (CustomerReview) -> Unit
+) {
     if (reviews.isEmpty()) {
         EmptyReviewsMessage("You haven't submitted any service reviews yet.")
     } else {
@@ -131,14 +185,17 @@ private fun ServiceReviewsList(reviews: List<CustomerReview>) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(reviews) { review ->
-                ServiceReviewCard(review = review)
+                ServiceReviewCard(review = review, onEdit = { onEditReview(review) })
             }
         }
     }
 }
 
 @Composable
-private fun ProductReviewsList(reviews: List<CustomerProductReview>) {
+private fun ProductReviewsList(
+    reviews: List<CustomerProductReview>,
+    onEditReview: (CustomerProductReview) -> Unit
+) {
     if (reviews.isEmpty()) {
         EmptyReviewsMessage("You haven't submitted any product reviews yet.")
     } else {
@@ -148,7 +205,7 @@ private fun ProductReviewsList(reviews: List<CustomerProductReview>) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(reviews) { review ->
-                ProductReviewCard(review = review)
+                ProductReviewCard(review = review, onEdit = { onEditReview(review) })
             }
         }
     }
@@ -178,7 +235,10 @@ private fun EmptyReviewsMessage(message: String) {
 }
 
 @Composable
-private fun ServiceReviewCard(review: CustomerReview) {
+private fun ServiceReviewCard(
+    review: CustomerReview,
+    onEdit: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -189,13 +249,29 @@ private fun ServiceReviewCard(review: CustomerReview) {
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Service name
-            Text(
-                text = review.serviceName ?: "Service ID: ${review.serviceId}",
-                style = MaterialTheme.typography.titleMedium,
-                color = WhiteText,
-                fontWeight = FontWeight.SemiBold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Service name
+                Text(
+                    text = review.serviceName ?: "Service ID: ${review.serviceId}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = WhiteText,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                // Edit Button
+                OutlinedButton(
+                    onClick = onEdit,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text("Edit Review", style = MaterialTheme.typography.labelSmall, color = WhiteText)
+                }
+            }
             
             Spacer(modifier = Modifier.height(8.dp))
             
@@ -224,7 +300,10 @@ private fun ServiceReviewCard(review: CustomerReview) {
 }
 
 @Composable
-private fun ProductReviewCard(review: CustomerProductReview) {
+private fun ProductReviewCard(
+    review: CustomerProductReview,
+    onEdit: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -235,13 +314,29 @@ private fun ProductReviewCard(review: CustomerProductReview) {
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Product name
-            Text(
-                text = review.productName ?: "Product ID: ${review.productId}",
-                style = MaterialTheme.typography.titleMedium,
-                color = WhiteText,
-                fontWeight = FontWeight.SemiBold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Product name
+                Text(
+                    text = review.productName ?: "Product ID: ${review.productId}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = WhiteText,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                // Edit Button
+                OutlinedButton(
+                    onClick = onEdit,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text("Edit Review", style = MaterialTheme.typography.labelSmall, color = WhiteText)
+                }
+            }
             
             Spacer(modifier = Modifier.height(8.dp))
             
@@ -281,6 +376,90 @@ private fun StarRatingDisplay(rating: Int) {
             )
         }
     }
+}
+
+@Composable
+private fun EditReviewDialog(
+    reviewItem: Any,
+    onDismiss: () -> Unit,
+    onSubmit: (Int, String) -> Unit
+) {
+    val initialRating = when (reviewItem) {
+        is CustomerReview -> reviewItem.rating
+        is CustomerProductReview -> reviewItem.rating
+        else -> 5
+    }
+    
+    val initialReview = when (reviewItem) {
+        is CustomerReview -> reviewItem.review ?: ""
+        is CustomerProductReview -> reviewItem.review ?: ""
+        else -> ""
+    }
+    
+    var rating by remember { mutableIntStateOf(initialRating) }
+    var reviewText by remember { mutableStateOf(initialReview) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SlateCard,
+        title = {
+            Text(
+                "Edit Review",
+                style = MaterialTheme.typography.titleLarge,
+                color = WhiteText
+            )
+        },
+        text = {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    (1..5).forEach { star ->
+                        IconButton(onClick = { rating = star }) {
+                            Icon(
+                                imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = "Star $star",
+                                tint = if (star <= rating) OrangePrimary else WhiteTextMuted,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                OutlinedTextField(
+                    value = reviewText,
+                    onValueChange = { reviewText = it },
+                    label = { Text("Your Review") },
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = WhiteText,
+                        unfocusedTextColor = WhiteText,
+                        cursorColor = OrangePrimary,
+                        focusedBorderColor = OrangePrimary,
+                        unfocusedBorderColor = WhiteTextMuted,
+                        focusedLabelColor = OrangePrimary,
+                        unfocusedLabelColor = WhiteTextMuted
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(rating, reviewText) },
+                colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
+            ) {
+                Text("Update Review")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = WhiteTextMuted)
+            }
+        }
+    )
 }
 
 private fun formatReviewDate(dateStr: String?): String {

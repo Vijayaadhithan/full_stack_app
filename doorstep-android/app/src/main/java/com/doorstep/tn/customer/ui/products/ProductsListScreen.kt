@@ -42,7 +42,7 @@ fun ProductsListScreen(
 ) {
     val products by viewModel.products.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
+    val searchQuery by viewModel.productSearchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     
     val categories = listOf("All", "Grocery", "Electronics", "Clothing", "Home", "Beauty")

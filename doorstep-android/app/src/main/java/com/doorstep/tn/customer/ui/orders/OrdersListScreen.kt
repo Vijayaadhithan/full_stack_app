@@ -224,7 +224,9 @@ private fun OrderCard(
     } ?: "Recently"
     
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onViewDetails() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = SlateCard)
     ) {

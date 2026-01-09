@@ -40,6 +40,8 @@ fun CustomerHomeScreen(
     onNavigateToOrders: () -> Unit,
     onNavigateToBookings: () -> Unit,
     onNavigateToProfile: () -> Unit,
+    onNavigateToSearch: () -> Unit,
+    onNavigateToNotifications: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     // Collect state from ViewModel
@@ -119,6 +121,55 @@ fun CustomerHomeScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // Search Bar - Impressive clickable search field
+            item {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onNavigateToSearch),
+                    shape = RoundedCornerShape(16.dp),
+                    color = SlateCard
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = OrangePrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Search services, products, shops...",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = WhiteTextMuted
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(OrangePrimary, AmberSecondary)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Tap to search",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+            
             // Quick Actions
             item {
                 Text(

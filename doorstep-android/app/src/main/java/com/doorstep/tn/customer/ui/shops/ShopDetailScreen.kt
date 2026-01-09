@@ -36,7 +36,8 @@ fun ShopDetailScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToProduct: (shopId: Int, productId: Int) -> Unit,
-    onNavigateToCart: () -> Unit
+    onNavigateToCart: () -> Unit,
+    onNavigateToQuickOrder: (shopId: Int, shopName: String) -> Unit = { _, _ -> }
 ) {
     val shop by viewModel.selectedShop.collectAsState()
     val products by viewModel.shopProducts.collectAsState()
@@ -198,6 +199,29 @@ fun ShopDetailScreen(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Quick Order Button - Premium feature
+                        Button(
+                            onClick = { onNavigateToQuickOrder(shopId, s.name) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = OrangePrimary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FlashOn,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Quick Order",
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }

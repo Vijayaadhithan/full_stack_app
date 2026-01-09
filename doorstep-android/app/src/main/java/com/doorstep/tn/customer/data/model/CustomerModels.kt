@@ -98,6 +98,8 @@ data class Order(
     @Json(name = "shippingAddress") val shippingAddress: String? = null,
     @Json(name = "paymentMethod") val paymentMethod: String? = null,
     @Json(name = "deliveryMethod") val deliveryMethod: String? = null,  // "pickup" or "delivery"
+    @Json(name = "orderType") val orderType: String? = null,  // "product_order" or "text_order"
+    @Json(name = "orderText") val orderText: String? = null,  // For text/quick orders
     @Json(name = "items") val items: List<OrderItem>? = null,
     @Json(name = "shop") val shop: OrderShop? = null
 )

@@ -165,6 +165,27 @@ interface DoorStepApi {
     @GET("api/product-reviews/customer")
     suspend fun getCustomerProductReviews(): Response<List<CustomerProductReview>>
     
+    // Update service review - matches web PATCH /api/reviews/{id}
+    @PATCH("api/reviews/{id}")
+    suspend fun updateServiceReview(
+        @Path("id") reviewId: Int,
+        @Body request: UpdateReviewRequest
+    ): Response<CustomerReview>
+    
+    // Update product review - matches web PATCH /api/product-reviews/{id}
+    @PATCH("api/product-reviews/{id}")
+    suspend fun updateProductReview(
+        @Path("id") reviewId: Int,
+        @Body request: UpdateReviewRequest
+    ): Response<CustomerProductReview>
+    
+    // Create return request - matches web POST /api/orders/{orderId}/return
+    @POST("api/orders/{orderId}/return")
+    suspend fun createReturnRequest(
+        @Path("orderId") orderId: Int,
+        @Body request: CreateReturnRequest
+    ): Response<Unit>
+    
     // ==================== NOTIFICATION ENDPOINTS ====================
     
     // Get user notifications - matches web GET /api/notifications
@@ -208,4 +229,40 @@ interface DoorStepApi {
         @Path("id") bookingId: Int,
         @Body statusUpdate: Map<String, String>
     ): Response<Booking>
+    
+    // ==================== SEARCH ENDPOINTS ====================
+    
+    // Universal/Global search - matches web GET /api/search
+    @GET("api/search")
+    suspend fun globalSearch(
+        @Query("q") query: String,
+        @Query("lat") latitude: Double? = null,
+        @Query("lng") longitude: Double? = null,
+        @Query("radius") radius: Int? = null,
+        @Query("limit") limit: Int? = null
+    ): Response<SearchResponse>
+    
+    // ==================== QUICK ORDER ENDPOINTS ====================
+    
+    // Create text/quick order - matches web POST /api/orders/text
+    @POST("api/orders/text")
+    suspend fun createTextOrder(@Body request: CreateTextOrderRequest): Response<TextOrderResponse>
+    
+    // ==================== QUICK ADD PRODUCT ENDPOINT ====================
+    
+    // Quick add product - matches web POST /api/products/quick-add
+    @POST("api/products/quick-add")
+    suspend fun quickAddProduct(@Body request: QuickAddProductRequest): Response<Product>
+    
+    // ==================== ORDER TIMELINE ENDPOINT ====================
+    
+    // Get order timeline - matches web GET /api/orders/:id/timeline
+    @GET("api/orders/{id}/timeline")
+    suspend fun getOrderTimeline(@Path("id") orderId: Int): Response<List<OrderTimelineEntry>>
+    
+    // ==================== PRODUCT REVIEW ENDPOINT ====================
+    
+    // Submit product review - matches web POST /api/product-reviews
+    @POST("api/product-reviews")
+    suspend fun submitProductReview(@Body request: ProductReviewRequest): Response<Any>
 }

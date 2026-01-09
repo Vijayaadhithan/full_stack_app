@@ -2,11 +2,13 @@ package com.doorstep.tn.customer.ui.orders
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,14 +18,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.core.network.OrderTimelineEntry
 import com.doorstep.tn.customer.data.model.Order
 import com.doorstep.tn.customer.data.model.OrderItem
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -35,10 +41,11 @@ import java.time.format.DateTimeFormatter
  * 
  * Features:
  * 1. Order header with status badge
- * 2. Shop/Customer contact info
- * 3. Order items list with product details
+ * 2. Shop/Customer contact info with WhatsApp sharing
+ * 3. Order items list with Leave Review button
  * 4. Order summary (subtotal, total)
- * 5. Map link for pickup orders
+ * 5. Order Timeline section
+ * 6. Map link for pickup orders
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,11 +56,20 @@ fun OrderDetailScreen(
 ) {
     val context = LocalContext.current
     val selectedOrder by viewModel.selectedOrder.collectAsState()
+    val orderTimeline by viewModel.orderTimeline.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     
-    // Load order details on first composition
+    // Dialog states
+    var showReviewDialog by remember { mutableStateOf(false) }
+    var selectedProductForReview by remember { mutableStateOf<OrderItem?>(null) }
+    
+    // Return Request State
+    var showReturnDialog by remember { mutableStateOf(false) }
+    
+    // Load order details and timeline on first composition
     LaunchedEffect(orderId) {
         viewModel.loadOrderDetails(orderId)
+        viewModel.loadOrderTimeline(orderId)
     }
     
     Scaffold(
@@ -114,24 +130,96 @@ fun OrderDetailScreen(
             val order = selectedOrder!!
             OrderDetailContent(
                 order = order,
+                timeline = orderTimeline,
                 paddingValues = paddingValues,
                 onOpenMap = { lat, lng ->
                     val gmmIntentUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng")
                     val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
                     mapIntent.setPackage("com.google.android.apps.maps")
                     context.startActivity(mapIntent)
+                },
+                onSendWhatsApp = { phone, lat, lng ->
+                    val message = "Here is the shop location: https://www.google.com/maps?q=$lat,$lng"
+                    val uri = Uri.parse("https://wa.me/$phone?text=${Uri.encode(message)}")
+                    val intent = Intent(Intent.ACTION_VIEW, uri)
+                    context.startActivity(intent)
+                },
+                onLeaveReview = { item ->
+                    selectedProductForReview = item
+                    showReviewDialog = true
+                },
+                onShowReturnDialog = {
+                    showReturnDialog = true
                 }
             )
         }
+    }
+    
+    // Review Dialog
+    if (showReviewDialog && selectedProductForReview != null) {
+        ProductReviewDialog(
+            productName = selectedProductForReview?.product?.name ?: "Product",
+            onDismiss = { 
+                showReviewDialog = false
+                selectedProductForReview = null
+            },
+            onSubmit = { rating, review ->
+                selectedProductForReview?.productId?.let { productId ->
+                    viewModel.submitProductReview(
+                        productId = productId,
+                        orderId = orderId,
+                        rating = rating,
+                        review = review,
+                        onSuccess = {
+                            Toast.makeText(context, "Review submitted!", Toast.LENGTH_SHORT).show()
+                            showReviewDialog = false
+                            selectedProductForReview = null
+                        },
+                        onError = { message ->
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        }
+                    )
+                }
+            }
+        )
+    }
+    
+    // Return Request Dialog
+    if (showReturnDialog) {
+        ReturnRequestDialog(
+            onDismiss = { showReturnDialog = false },
+            onSubmit = { reason, comments ->
+                viewModel.createReturnRequest(
+                    orderId = orderId,
+                    reason = reason,
+                    comments = comments,
+                    onSuccess = {
+                        Toast.makeText(context, "Return request submitted", Toast.LENGTH_LONG).show()
+                        showReturnDialog = false
+                    },
+                    onError = { message ->
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    }
+                )
+            }
+        )
     }
 }
 
 @Composable
 private fun OrderDetailContent(
     order: Order,
+    timeline: List<OrderTimelineEntry>,
     paddingValues: PaddingValues,
-    onOpenMap: (Double, Double) -> Unit
+    onOpenMap: (Double, Double) -> Unit,
+    onSendWhatsApp: (String, Double, Double) -> Unit,
+    onLeaveReview: (OrderItem) -> Unit,
+    onShowReturnDialog: () -> Unit
 ) {
+    // ... existing implementation remains same until LazyColumn ...
+    // Note: I'm not re-pasting the inner content as it was updated in previous step
+    // The main change here is adding onShowReturnDialog to the signature and passing it down
+    
     // Status labels matching web
     val statusLabel = when (order.status.lowercase()) {
         "pending" -> "Sent to Shop"
@@ -226,15 +314,24 @@ private fun OrderDetailContent(
                     ) {
                         Column {
                             Text("Delivery Method", color = WhiteTextMuted, style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                text = when (order.deliveryMethod) {
-                                    "pickup" -> "Pickup"
-                                    "delivery" -> "Home Delivery"
-                                    else -> order.deliveryMethod ?: "Not specified"
-                                },
-                                color = WhiteText,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (order.deliveryMethod == "pickup") Icons.Default.Store else Icons.Default.LocalShipping,
+                                    contentDescription = null,
+                                    tint = OrangePrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = when (order.deliveryMethod) {
+                                        "pickup" -> "I will come take it"
+                                        "delivery" -> "Home Delivery"
+                                        else -> order.deliveryMethod ?: "Not specified"
+                                    },
+                                    color = WhiteText,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text("Payment", color = WhiteTextMuted, style = MaterialTheme.typography.bodySmall)
@@ -254,7 +351,7 @@ private fun OrderDetailContent(
             }
         }
         
-        // ==================== Shop Contact Info (for pickup) ====================
+        // ==================== Shop Contact Info ====================
         if (order.shop != null) {
             item {
                 Card(
@@ -264,7 +361,7 @@ private fun OrderDetailContent(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = if (order.deliveryMethod == "pickup") "Shop Contact" else "Shop Info",
+                            text = "Shop Contact",
                             style = MaterialTheme.typography.titleMedium,
                             color = WhiteText,
                             fontWeight = FontWeight.Bold
@@ -272,69 +369,81 @@ private fun OrderDetailContent(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         // Shop Name
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Store, null, tint = OrangePrimary, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = order.shop.name ?: "Shop",
-                                color = WhiteText,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        ContactRow(
+                            label = "Name",
+                            value = order.shop.name ?: "Shop",
+                            icon = Icons.Default.Store
+                        )
                         
                         // Shop Phone
                         order.shop.phone?.let { phone ->
                             Spacer(modifier = Modifier.height(8.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Phone, null, tint = WhiteTextMuted, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = phone, color = WhiteTextMuted)
-                            }
+                            ContactRow(
+                                label = "Mobile",
+                                value = phone,
+                                icon = Icons.Default.Phone
+                            )
                         }
                         
                         // Shop Address
                         order.shop.address?.let { address ->
                             Spacer(modifier = Modifier.height(8.dp))
+                            ContactRow(
+                                label = "Address",
+                                value = address,
+                                icon = Icons.Default.LocationOn
+                            )
+                        }
+                        
+                        // Action Buttons Row
+                        if (order.shop.latitude != null && order.shop.longitude != null) {
+                            Spacer(modifier = Modifier.height(16.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Default.LocationOn, null, tint = WhiteTextMuted, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = address,
-                                    color = WhiteTextMuted,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                
-                                // Map Link
-                                if (order.shop.latitude != null && order.shop.longitude != null) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Surface(
-                                        modifier = Modifier.clickable { 
-                                            onOpenMap(order.shop.latitude, order.shop.longitude) 
+                                // Send Location on WhatsApp
+                                order.shop.phone?.let { phone ->
+                                    OutlinedButton(
+                                        onClick = { 
+                                            onSendWhatsApp(
+                                                phone.replace("+", "").replace(" ", ""),
+                                                order.shop.latitude,
+                                                order.shop.longitude
+                                            )
                                         },
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = OrangePrimary.copy(alpha = 0.15f)
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = SuccessGreen
+                                        )
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Map, 
-                                                null, 
-                                                tint = OrangePrimary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                "View on Map",
-                                                color = OrangePrimary,
-                                                style = MaterialTheme.typography.labelSmall
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.Chat,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("WhatsApp", style = MaterialTheme.typography.labelSmall)
                                     }
+                                }
+                                
+                                // View on Map
+                                OutlinedButton(
+                                    onClick = { 
+                                        onOpenMap(order.shop.latitude, order.shop.longitude)
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = OrangePrimary
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Map,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("View Map", style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
@@ -359,7 +468,14 @@ private fun OrderDetailContent(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    if (order.items.isNullOrEmpty()) {
+                    // Text order display
+                    if (!order.orderText.isNullOrBlank()) {
+                        Text(
+                            text = order.orderText,
+                            color = WhiteTextMuted,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else if (order.items.isNullOrEmpty()) {
                         Text(
                             text = "No items in this order",
                             color = WhiteTextMuted,
@@ -370,10 +486,14 @@ private fun OrderDetailContent(
             }
         }
         
-        // Order items list
+        // Order items list with Leave Review
         order.items?.let { items ->
             items(items) { item ->
-                OrderItemCard(item = item)
+                OrderItemCard(
+                    item = item,
+                    showReview = order.status.lowercase() == "delivered",
+                    onLeaveReview = { onLeaveReview(item) }
+                )
             }
         }
         
@@ -429,13 +549,326 @@ private fun OrderDetailContent(
             }
         }
         
+        // ==================== Order Timeline ====================
+        if (timeline.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Order Timeline",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = WhiteText,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        timeline.forEachIndexed { index, entry ->
+                            TimelineItem(
+                                entry = entry,
+                                isLast = index == timeline.lastIndex
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // ==================== Return Request (For Delivered Orders) ====================
+        if (order.status.lowercase() == "delivered") {
+             item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Return Request",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = WhiteText,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            text = "Reason for Return",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = WhiteText,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        OutlinedTextField(
+                            value = "",
+                            onValueChange = {},
+                            enabled = false, 
+                            placeholder = { Text("Please explain why you want to return this order...") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(100.dp)
+                                .clickable { onShowReturnDialog() }, // Click to open dialog
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = WhiteTextMuted,
+                                disabledBorderColor = WhiteTextMuted,
+                                disabledPlaceholderColor = WhiteTextMuted,
+                                disabledContainerColor = Color.Transparent
+                            )
+                        )
+                         
+                        Spacer(modifier = Modifier.height(16.dp))
+                         
+                        Button(
+                            onClick = onShowReturnDialog,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                             Text("Submit Return Request", color = WhiteText)
+                        }
+                    }
+                }
+            }
+        }
+        
         // Bottom spacing
         item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 }
 
+// ... helper composables like ContactRow, TimelineItem, OrderItemCard stay same ...
+
 @Composable
-private fun OrderItemCard(item: OrderItem) {
+private fun ReturnRequestDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String, String) -> Unit
+) {
+    var reason by remember { mutableStateOf("") }
+    var comments by remember { mutableStateOf("") }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = SlateCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Return Request",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = WhiteText,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Reason Input
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text("Reason for Return") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = WhiteText,
+                        unfocusedTextColor = WhiteText,
+                        cursorColor = OrangePrimary,
+                        focusedBorderColor = OrangePrimary,
+                        unfocusedBorderColor = WhiteTextMuted,
+                        focusedLabelColor = OrangePrimary,
+                        unfocusedLabelColor = WhiteTextMuted
+                    )
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Comments Input
+                OutlinedTextField(
+                    value = comments,
+                    onValueChange = { comments = it },
+                    label = { Text("Additional Comments (Optional)") },
+                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = WhiteText,
+                        unfocusedTextColor = WhiteText,
+                        cursorColor = OrangePrimary,
+                        focusedBorderColor = OrangePrimary,
+                        unfocusedBorderColor = WhiteTextMuted,
+                        focusedLabelColor = OrangePrimary,
+                        unfocusedLabelColor = WhiteTextMuted
+                    )
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel", color = WhiteTextMuted)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { 
+                            if (reason.isNotBlank()) {
+                                onSubmit(reason, comments)
+                            }
+                        },
+                        enabled = reason.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = OrangePrimary,
+                            disabledContainerColor = OrangePrimary.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Text("Submit Request")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContactRow(
+    label: String,
+    value: String,
+    icon: ImageVector
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            color = WhiteTextMuted,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.width(80.dp)
+        )
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = WhiteTextMuted,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = value,
+            color = WhiteText,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun TimelineItem(
+    entry: OrderTimelineEntry,
+    isLast: Boolean
+) {
+    val statusLabel = when (entry.status.lowercase()) {
+        "pending" -> "Sent to Shop"
+        "awaiting_customer_agreement" -> "Awaiting your approval"
+        "confirmed" -> "Confirmed"
+        "processing" -> "Processing"
+        "packed" -> "Packed"
+        "dispatched" -> "Dispatched"
+        "shipped" -> "Shipped"
+        "delivered" -> "Delivered"
+        "cancelled" -> "Cancelled"
+        else -> entry.status.replaceFirstChar { it.uppercase() }
+    }
+    
+    val statusColor = when (entry.status.lowercase()) {
+        "delivered" -> SuccessGreen
+        "confirmed", "processing", "packed", "dispatched", "shipped" -> ProviderBlue
+        "cancelled" -> ErrorRed
+        "awaiting_customer_agreement" -> WarningYellow
+        else -> OrangePrimary
+    }
+    
+    val formattedTime = try {
+        // Handle various ISO formats
+        val cleanTimestamp = entry.timestamp.substringBefore("[") // Remove zone ID like [Asia/Kolkata]
+        val inputFormatter = DateTimeFormatter.ISO_DATE_TIME
+        val outputFormatter = DateTimeFormatter.ofPattern("dd MMMM yyyy, hh:mm a")
+        
+        // Try ZonedDateTime first (handles 'Z' and offsets)
+        try {
+            java.time.ZonedDateTime.parse(cleanTimestamp, inputFormatter)
+                .toLocalDateTime()
+                .format(outputFormatter)
+        } catch (e: Exception) {
+            // Fallback to LocalDateTime (if no offset info)
+            LocalDateTime.parse(cleanTimestamp, inputFormatter).format(outputFormatter)
+        }
+    } catch (e: Exception) {
+        // If all parsing fails, try primitive string cleanup or return access
+        entry.timestamp.replace("T", " ").substringBefore(".")
+    }
+    
+    Row(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Timeline indicator
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(24.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(statusColor, CircleShape)
+            )
+            if (!isLast) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(48.dp)
+                        .background(GlassWhite)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.width(12.dp))
+        
+        // Content
+        Column(
+            modifier = Modifier.padding(bottom = if (isLast) 0.dp else 16.dp)
+        ) {
+            Text(
+                text = statusLabel,
+                color = WhiteText,
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            entry.trackingInfo?.let { info ->
+                Text(
+                    text = info,
+                    color = WhiteTextMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Text(
+                text = formattedTime,
+                color = WhiteTextMuted,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun OrderItemCard(
+    item: OrderItem,
+    showReview: Boolean,
+    onLeaveReview: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -492,12 +925,116 @@ private fun OrderItemCard(item: OrderItem) {
                 )
             }
             
-            // Item Total
-            Text(
-                text = "₹${item.total}",
-                color = OrangePrimary,
-                fontWeight = FontWeight.Bold
-            )
+            // Leave Review or Total
+            if (showReview && item.productId != null) {
+                OutlinedButton(
+                    onClick = onLeaveReview,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = OrangePrimary
+                    )
+                ) {
+                    Text("Leave Review", style = MaterialTheme.typography.labelSmall)
+                }
+            } else {
+                Text(
+                    text = "₹${item.total}",
+                    color = OrangePrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProductReviewDialog(
+    productName: String,
+    onDismiss: () -> Unit,
+    onSubmit: (Int, String) -> Unit
+) {
+    var rating by remember { mutableIntStateOf(5) }
+    var reviewText by remember { mutableStateOf("") }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = SlateCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Review $productName",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = WhiteText,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Star Rating
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    (1..5).forEach { star ->
+                        IconButton(
+                            onClick = { rating = star },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = "Star $star",
+                                tint = if (star <= rating) AmberSecondary else WhiteTextMuted,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Review Text
+                OutlinedTextField(
+                    value = reviewText,
+                    onValueChange = { reviewText = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    placeholder = { Text("Write your review...", color = WhiteTextMuted) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = WhiteText,
+                        unfocusedTextColor = WhiteText,
+                        focusedBorderColor = OrangePrimary,
+                        unfocusedBorderColor = GlassBorder,
+                        cursorColor = OrangePrimary
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = { onSubmit(rating, reviewText) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
+                    ) {
+                        Text("Submit")
+                    }
+                }
+            }
         }
     }
 }

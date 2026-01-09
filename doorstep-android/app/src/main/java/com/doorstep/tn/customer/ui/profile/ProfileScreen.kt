@@ -46,6 +46,7 @@ fun ProfileScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
     customerViewModel: CustomerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
+    onNavigateToReviews: () -> Unit,
     onLogout: () -> Unit
 ) {
     val user by authViewModel.user.collectAsState()
@@ -534,6 +535,21 @@ fun ProfileScreen(
                 } else {
                     Text("Save Changes", fontWeight = FontWeight.Bold)
                 }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // My Reviews Button
+            OutlinedButton(
+                onClick = onNavigateToReviews,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary),
+                border = BorderStroke(1.dp, OrangePrimary)
+            ) {
+                Icon(Icons.Default.RateReview, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("My Reviews")
             }
             
             Spacer(modifier = Modifier.height(16.dp))

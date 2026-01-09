@@ -34,6 +34,8 @@ import com.doorstep.tn.customer.ui.shops.ShopDetailScreen
 import com.doorstep.tn.customer.ui.profile.ProfileScreen
 import com.doorstep.tn.customer.ui.reviews.MyReviewsScreen
 import com.doorstep.tn.customer.ui.notifications.NotificationsScreen
+import com.doorstep.tn.customer.ui.search.UniversalSearchScreen
+import com.doorstep.tn.customer.ui.quickorder.QuickOrderScreen
 import com.doorstep.tn.shop.ui.ShopDashboardScreen
 import com.doorstep.tn.provider.ui.ProviderDashboardScreen
 
@@ -69,6 +71,12 @@ object Routes {
     const val CUSTOMER_BOOK_SERVICE = "customer_book_service/{serviceId}"
     const val CUSTOMER_REVIEWS = "customer_reviews"
     const val CUSTOMER_NOTIFICATIONS = "customer_notifications"
+    const val CUSTOMER_SEARCH = "customer_search"
+    const val CUSTOMER_QUICK_ORDER = "customer_quick_order/{shopId}/{shopName}"
+    
+    // Route builders with parameters
+    fun quickOrder(shopId: Int, shopName: String): String = 
+        "customer_quick_order/$shopId/${java.net.URLEncoder.encode(shopName, "UTF-8")}"
     
     // Shop routes
     const val SHOP_DASHBOARD = "shop_dashboard"
@@ -210,6 +218,8 @@ fun DoorStepNavHost(
                 onNavigateToOrders = { navController.navigate(Routes.CUSTOMER_ORDERS) },
                 onNavigateToBookings = { navController.navigate(Routes.CUSTOMER_BOOKINGS) },
                 onNavigateToProfile = { navController.navigate(Routes.CUSTOMER_PROFILE) },
+                onNavigateToSearch = { navController.navigate(Routes.CUSTOMER_SEARCH) },
+                onNavigateToNotifications = { navController.navigate(Routes.CUSTOMER_NOTIFICATIONS) },
                 onLogout = {
                     authViewModel.logout()
                     navController.navigate(Routes.PHONE_ENTRY) {
@@ -303,12 +313,19 @@ fun DoorStepNavHost(
         composable(Routes.CUSTOMER_PROFILE) {
             ProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
+                onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
                 onLogout = {
                     authViewModel.logout()
                     navController.navigate(Routes.PHONE_ENTRY) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            )
+        }
+        
+        composable(Routes.CUSTOMER_REVIEWS) {
+            MyReviewsScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         
@@ -334,6 +351,45 @@ fun DoorStepNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToBooking = { bookingId ->
                     navController.navigate(Routes.bookingDetail(bookingId))
+                }
+            )
+        }
+        
+        // Universal Search Screen
+        composable(Routes.CUSTOMER_SEARCH) {
+            UniversalSearchScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToService = { serviceId ->
+                    navController.navigate(Routes.serviceDetail(serviceId))
+                },
+                onNavigateToProduct = { shopId, productId ->
+                    navController.navigate(Routes.productDetail(shopId, productId))
+                },
+                onNavigateToShop = { shopId ->
+                    navController.navigate(Routes.shopDetail(shopId))
+                }
+            )
+        }
+        
+        // Quick Order Screen
+        composable(
+            route = Routes.CUSTOMER_QUICK_ORDER,
+            arguments = listOf(
+                navArgument("shopId") { type = NavType.IntType },
+                navArgument("shopName") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val shopId = backStackEntry.arguments?.getInt("shopId") ?: 0
+            val shopName = java.net.URLDecoder.decode(
+                backStackEntry.arguments?.getString("shopName") ?: "Shop",
+                "UTF-8"
+            )
+            QuickOrderScreen(
+                shopId = shopId,
+                shopName = shopName,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToOrder = { orderId ->
+                    navController.navigate(Routes.orderDetail(orderId))
                 }
             )
         }
@@ -378,7 +434,10 @@ fun DoorStepNavHost(
                 onNavigateToProduct = { sId, productId ->
                     navController.navigate(Routes.productDetail(sId, productId))
                 },
-                onNavigateToCart = { navController.navigate(Routes.CUSTOMER_CART) }
+                onNavigateToCart = { navController.navigate(Routes.CUSTOMER_CART) },
+                onNavigateToQuickOrder = { sId, shopName ->
+                    navController.navigate(Routes.quickOrder(sId, shopName))
+                }
             )
         }
         
