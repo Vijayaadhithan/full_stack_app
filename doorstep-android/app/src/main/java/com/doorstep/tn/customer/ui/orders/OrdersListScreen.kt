@@ -233,12 +233,17 @@ private fun OrderCard(
     order: Order,
     onClick: () -> Unit
 ) {
-    // Format date
+    // Format date with IST timezone conversion
     val formattedDate = order.orderDate?.let {
         try {
-            val inputFormatter = DateTimeFormatter.ISO_DATE_TIME
+            val cleanDate = it.substringBefore("[").trim()
+            val instant = java.time.Instant.parse(
+                if (cleanDate.endsWith("Z")) cleanDate else "${cleanDate}Z"
+            )
+            val istZone = java.time.ZoneId.of("Asia/Kolkata")
+            val localDateTime = instant.atZone(istZone).toLocalDateTime()
             val outputFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a")
-            LocalDateTime.parse(it.substringBefore("["), inputFormatter).format(outputFormatter)
+            localDateTime.format(outputFormatter)
         } catch (e: Exception) { it }
     } ?: "Recently"
     

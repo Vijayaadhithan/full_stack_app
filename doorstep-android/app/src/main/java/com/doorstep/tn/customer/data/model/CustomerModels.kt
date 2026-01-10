@@ -103,6 +103,7 @@ data class Order(
     @Json(name = "orderDate") val orderDate: String? = null,
     @Json(name = "shippingAddress") val shippingAddress: String? = null,
     @Json(name = "paymentMethod") val paymentMethod: String? = null,
+    @Json(name = "paymentStatus") val paymentStatus: String? = null,  // "pending", "verifying", "paid"
     @Json(name = "deliveryMethod") val deliveryMethod: String? = null,  // "pickup" or "delivery"
     @Json(name = "orderType") val orderType: String? = null,  // "product_order" or "text_order"
     @Json(name = "orderText") val orderText: String? = null,  // For text/quick orders
@@ -118,7 +119,8 @@ data class OrderShop(
     @Json(name = "email") val email: String? = null,
     @Json(name = "latitude") val latitude: Double? = null,
     @Json(name = "longitude") val longitude: Double? = null,
-    @Json(name = "address") val address: String? = null
+    @Json(name = "address") val address: String? = null,
+    @Json(name = "upiId") val upiId: String? = null  // For UPI payments
 )
 
 @JsonClass(generateAdapter = true)

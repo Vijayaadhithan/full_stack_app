@@ -466,10 +466,14 @@ private fun formatReviewDate(dateStr: String?): String {
     if (dateStr.isNullOrEmpty()) return "Date unavailable"
     
     return try {
-        val formatter = DateTimeFormatter.ISO_DATE_TIME
-        val dateTime = LocalDateTime.parse(dateStr.replace("Z", ""))
-        dateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
-    } catch (e: DateTimeParseException) {
+        val cleanDate = dateStr.substringBefore("[").trim()
+        val instant = java.time.Instant.parse(
+            if (cleanDate.endsWith("Z")) cleanDate else "${cleanDate}Z"
+        )
+        val istZone = java.time.ZoneId.of("Asia/Kolkata")
+        val localDateTime = instant.atZone(istZone).toLocalDateTime()
+        localDateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+    } catch (e: Exception) {
         dateStr.take(10)
     }
 }

@@ -763,17 +763,21 @@ private fun BookingCardInline(
 }
 
 /**
- * Format booking date like web: "07 January 2026"
+ * Format booking date like web: "07 January 2026" (in IST)
  */
 private fun formatBookingDate(dateStr: String?): String {
     if (dateStr.isNullOrEmpty()) return "Date not set"
     
     return try {
-        // Parse ISO format: 2026-01-07T03:30:00.000Z
-        val formatter = DateTimeFormatter.ISO_DATE_TIME
-        val dateTime = LocalDateTime.parse(dateStr.replace("Z", ""))
-        dateTime.format(DateTimeFormatter.ofPattern("dd MMMM yyyy"))
-    } catch (e: DateTimeParseException) {
+        // Parse ISO format and convert to IST
+        val cleanDate = dateStr.substringBefore("[").trim()
+        val instant = java.time.Instant.parse(
+            if (cleanDate.endsWith("Z")) cleanDate else "${cleanDate}Z"
+        )
+        val istZone = java.time.ZoneId.of("Asia/Kolkata")
+        val localDateTime = instant.atZone(istZone).toLocalDateTime()
+        localDateTime.format(DateTimeFormatter.ofPattern("dd MMMM yyyy"))
+    } catch (e: Exception) {
         try {
             // Try date only format
             val date = LocalDate.parse(dateStr.take(10))
@@ -793,9 +797,10 @@ private fun formatTimeSlot(timeSlot: String?, bookingDate: String?): String {
     if (!bookingDate.isNullOrEmpty()) {
         try {
             // Parse ISO format: 2026-01-07T00:00:00.000Z (UTC)
-            // Convert to local timezone (e.g., IST +5:30)
+            // Convert to IST timezone
             val instant = java.time.Instant.parse(bookingDate)
-            val localDateTime = instant.atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+            val istZone = java.time.ZoneId.of("Asia/Kolkata")
+            val localDateTime = instant.atZone(istZone).toLocalDateTime()
             val timeString = localDateTime.format(DateTimeFormatter.ofPattern("hh:mm a"))
             
             // If we have a slot label, include it

@@ -319,10 +319,15 @@ private fun formatNotificationDate(dateStr: String?): String {
     if (dateStr.isNullOrEmpty()) return ""
     
     return try {
-        val dateTime = LocalDateTime.parse(dateStr.replace("Z", ""))
-        val outputFormatter = DateTimeFormatter.ofPattern("dd MMMM yyyy, hh:mm a")
-        dateTime.format(outputFormatter)
-    } catch (e: DateTimeParseException) {
+        val cleanDate = dateStr.substringBefore("[").trim()
+        val instant = java.time.Instant.parse(
+            if (cleanDate.endsWith("Z")) cleanDate else "${cleanDate}Z"
+        )
+        val istZone = java.time.ZoneId.of("Asia/Kolkata")
+        val localDateTime = instant.atZone(istZone).toLocalDateTime()
+        val outputFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm a")
+        localDateTime.format(outputFormatter)
+    } catch (e: Exception) {
         dateStr.take(16).replace("T", " ")
     }
 }

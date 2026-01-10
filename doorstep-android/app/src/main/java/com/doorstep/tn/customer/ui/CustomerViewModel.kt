@@ -486,8 +486,9 @@ class CustomerViewModel @Inject constructor(
                 paymentMethod = paymentMethod
             )) {
                 is Result.Success -> {
-                    // Clear cart and refresh orders
-                    loadCart()
+                    // Clear cart immediately for instant UI update
+                    // Server clears cart on order creation, so no need to reload
+                    _cartItems.value = emptyList()
                     loadOrders()
                     onSuccess()
                 }
@@ -601,6 +602,47 @@ class CustomerViewModel @Inject constructor(
             }
             
             _isLoading.value = false
+        }
+    }
+    
+    // ==================== Order Payment Actions ====================
+    
+    fun agreeFinalBill(orderId: Int, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            when (val result = repository.agreeFinalBill(orderId)) {
+                is Result.Success -> {
+                    _selectedOrder.value = result.data
+                    onSuccess()
+                }
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
+        }
+    }
+    
+    fun submitPaymentReference(orderId: Int, reference: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            when (val result = repository.submitPaymentReference(orderId, reference)) {
+                is Result.Success -> {
+                    _selectedOrder.value = result.data
+                    onSuccess()
+                }
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
+        }
+    }
+    
+    fun updatePaymentMethod(orderId: Int, paymentMethod: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            when (val result = repository.updatePaymentMethod(orderId, paymentMethod)) {
+                is Result.Success -> {
+                    _selectedOrder.value = result.data
+                    onSuccess()
+                }
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
         }
     }
     

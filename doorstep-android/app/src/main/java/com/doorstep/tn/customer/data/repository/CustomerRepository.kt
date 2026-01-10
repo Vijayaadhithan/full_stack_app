@@ -402,13 +402,54 @@ class CustomerRepository @Inject constructor(
                 paymentMethod = paymentMethod
             )
             val response = api.createOrder(request)
+            if (response.isSuccessful && response.body()?.order != null) {
+                Result.Success(response.body()!!.order!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to create order")
+        }
+    }
+    
+    // ==================== Order Payment Actions ====================
+    
+    suspend fun agreeFinalBill(orderId: Int): Result<Order> {
+        return try {
+            val response = api.agreeFinalBill(orderId)
             if (response.isSuccessful && response.body() != null) {
                 Result.Success(response.body()!!)
             } else {
                 Result.Error(response.message(), response.code())
             }
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Failed to create order")
+            Result.Error(e.message ?: "Failed to agree to final bill")
+        }
+    }
+    
+    suspend fun submitPaymentReference(orderId: Int, reference: String): Result<Order> {
+        return try {
+            val response = api.submitPaymentReference(orderId, mapOf("paymentReference" to reference))
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to submit payment reference")
+        }
+    }
+    
+    suspend fun updatePaymentMethod(orderId: Int, paymentMethod: String): Result<Order> {
+        return try {
+            val response = api.updatePaymentMethod(orderId, mapOf("paymentMethod" to paymentMethod))
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to update payment method")
         }
     }
     

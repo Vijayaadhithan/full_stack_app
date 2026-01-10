@@ -130,8 +130,10 @@ fun OrderDetailScreen(
             val order = selectedOrder!!
             OrderDetailContent(
                 order = order,
+                orderId = orderId,
                 timeline = orderTimeline,
                 paddingValues = paddingValues,
+                viewModel = viewModel,
                 onOpenMap = { lat, lng ->
                     val gmmIntentUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng")
                     val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
@@ -150,6 +152,9 @@ fun OrderDetailScreen(
                 },
                 onShowReturnDialog = {
                     showReturnDialog = true
+                },
+                onShowToast = { message ->
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 }
             )
         }
@@ -209,13 +214,31 @@ fun OrderDetailScreen(
 @Composable
 private fun OrderDetailContent(
     order: Order,
+    orderId: Int,
     timeline: List<OrderTimelineEntry>,
     paddingValues: PaddingValues,
+    viewModel: CustomerViewModel,
     onOpenMap: (Double, Double) -> Unit,
     onSendWhatsApp: (String, Double, Double) -> Unit,
     onLeaveReview: (OrderItem) -> Unit,
-    onShowReturnDialog: () -> Unit
+    onShowReturnDialog: () -> Unit,
+    onShowToast: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    
+    // Payment action states
+    var transactionId by remember { mutableStateOf("") }
+    var isSubmitting by remember { mutableStateOf(false) }
+    
+    // Helper to copy UPI ID to clipboard
+    val copyUpiToClipboard: () -> Unit = {
+        order.shop?.upiId?.let { upiId ->
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("UPI ID", upiId)
+            clipboard.setPrimaryClip(clip)
+            onShowToast("UPI ID copied!")
+        }
+    }
     // ... existing implementation remains same until LazyColumn ...
     // Note: I'm not re-pasting the inner content as it was updated in previous step
     // The main change here is adding onShowReturnDialog to the signature and passing it down
@@ -243,12 +266,17 @@ private fun OrderDetailContent(
         else -> OrangePrimary
     }
     
-    // Format date
+    // Format date with IST timezone conversion
     val formattedDate = order.orderDate?.let {
         try {
-            val inputFormatter = DateTimeFormatter.ISO_DATE_TIME
+            val cleanDate = it.substringBefore("[").trim()
+            val instant = java.time.Instant.parse(
+                if (cleanDate.endsWith("Z")) cleanDate else "${cleanDate}Z"
+            )
+            val istZone = java.time.ZoneId.of("Asia/Kolkata")
+            val localDateTime = instant.atZone(istZone).toLocalDateTime()
             val outputFormatter = DateTimeFormatter.ofPattern("dd MMMM yyyy, hh:mm a")
-            LocalDateTime.parse(it.substringBefore("["), inputFormatter).format(outputFormatter)
+            localDateTime.format(outputFormatter)
         } catch (e: Exception) {
             it
         }
@@ -350,6 +378,233 @@ private fun OrderDetailContent(
                 }
             }
         }
+        
+        // ==================== Payment Action Section ====================
+        // Show when: awaiting_customer_agreement (Agree), confirmed + payment pending (Complete Payment)
+        val isAwaitingAgreement = order.status.lowercase() == "awaiting_customer_agreement"
+        val canCompletePayment = order.status.lowercase() == "confirmed" && order.paymentStatus == "pending"
+        val isPaymentVerifying = order.paymentStatus == "verifying"
+        
+        if (isAwaitingAgreement || canCompletePayment || isPaymentVerifying) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        when {
+                            isAwaitingAgreement -> {
+                                // Agree to Final Bill Section
+                                Text(
+                                    text = "Agree to Final Bill",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = WhiteText,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Final bill shared. Agree to continue.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = WhiteTextMuted
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                
+                                // Final Bill Amount
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = GlassWhite
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = "FINAL BILL",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = WhiteTextMuted
+                                            )
+                                            Text(
+                                                text = "₹${order.total}",
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                color = WhiteText,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Button(
+                                            onClick = {
+                                                isSubmitting = true
+                                                viewModel.agreeFinalBill(
+                                                    orderId = orderId,
+                                                    onSuccess = {
+                                                        isSubmitting = false
+                                                        onShowToast("Final bill confirmed. Now choose a payment method.")
+                                                    },
+                                                    onError = { error ->
+                                                        isSubmitting = false
+                                                        onShowToast(error)
+                                                    }
+                                                )
+                                            },
+                                            enabled = !isSubmitting,
+                                            colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            if (isSubmitting) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(20.dp),
+                                                    color = WhiteText,
+                                                    strokeWidth = 2.dp
+                                                )
+                                            } else {
+                                                Text("Agree", fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "After agreeing, choose Cash, UPI, or Pay Later.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = WhiteTextMuted
+                                )
+                            }
+                            
+                            canCompletePayment -> {
+                                // Complete Payment Section (UPI)
+                                Text(
+                                    text = "Complete Payment",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = WhiteText,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                if (order.paymentMethod == "upi" && !order.shop?.upiId.isNullOrBlank()) {
+                                    // UPI Payment Flow
+                                    Text(
+                                        text = "Step 1: Pay ₹${order.total} to ${order.shop?.upiId}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteText,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    OutlinedButton(
+                                        onClick = copyUpiToClipboard,
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Copy UPI ID")
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
+                                    // Transaction ID Input
+                                    OutlinedTextField(
+                                        value = transactionId,
+                                        onValueChange = { transactionId = it },
+                                        placeholder = { Text("Transaction ID") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = WhiteText,
+                                            unfocusedTextColor = WhiteText,
+                                            cursorColor = OrangePrimary,
+                                            focusedBorderColor = OrangePrimary,
+                                            unfocusedBorderColor = WhiteTextMuted,
+                                            focusedPlaceholderColor = WhiteTextMuted,
+                                            unfocusedPlaceholderColor = WhiteTextMuted
+                                        )
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    
+                                    Button(
+                                        onClick = {
+                                            if (transactionId.isNotBlank()) {
+                                                isSubmitting = true
+                                                viewModel.submitPaymentReference(
+                                                    orderId = orderId,
+                                                    reference = transactionId,
+                                                    onSuccess = {
+                                                        isSubmitting = false
+                                                        transactionId = ""
+                                                        onShowToast("Payment reference submitted")
+                                                    },
+                                                    onError = { error ->
+                                                        isSubmitting = false
+                                                        onShowToast(error)
+                                                    }
+                                                )
+                                            }
+                                        },
+                                        enabled = transactionId.isNotBlank() && !isSubmitting,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = OrangePrimary,
+                                            disabledContainerColor = OrangePrimary.copy(alpha = 0.5f)
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        if (isSubmitting) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                color = WhiteText,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Text("Submit Confirmation", fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                } else if (order.paymentMethod == "cash") {
+                                    // Cash Payment
+                                    Text(
+                                        text = "Pay ₹${order.total} in cash " +
+                                            if (order.deliveryMethod == "delivery") "on delivery" else "on pickup",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteText,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                } else if (order.paymentMethod == "pay_later") {
+                                    // Pay Later
+                                    Text(
+                                        text = "Pay Later order is pending shop approval.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteTextMuted
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Payment pending. Contact shop for details.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteTextMuted
+                                    )
+                                }
+                            }
+                            
+                            isPaymentVerifying -> {
+                                // Payment Verification in Progress
+                                Text(
+                                    text = "Payment verification in progress. Shop will confirm soon.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = WhiteTextMuted
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         
         // ==================== Shop Contact Info ====================
         if (order.shop != null) {
@@ -793,20 +1048,15 @@ private fun TimelineItem(
     }
     
     val formattedTime = try {
-        // Handle various ISO formats
-        val cleanTimestamp = entry.timestamp.substringBefore("[") // Remove zone ID like [Asia/Kolkata]
-        val inputFormatter = DateTimeFormatter.ISO_DATE_TIME
+        // Handle various ISO formats and convert to IST
+        val cleanTimestamp = entry.timestamp.substringBefore("[").trim()
+        val instant = java.time.Instant.parse(
+            if (cleanTimestamp.endsWith("Z")) cleanTimestamp else "${cleanTimestamp}Z"
+        )
+        val istZone = java.time.ZoneId.of("Asia/Kolkata")
+        val localDateTime = instant.atZone(istZone).toLocalDateTime()
         val outputFormatter = DateTimeFormatter.ofPattern("dd MMMM yyyy, hh:mm a")
-        
-        // Try ZonedDateTime first (handles 'Z' and offsets)
-        try {
-            java.time.ZonedDateTime.parse(cleanTimestamp, inputFormatter)
-                .toLocalDateTime()
-                .format(outputFormatter)
-        } catch (e: Exception) {
-            // Fallback to LocalDateTime (if no offset info)
-            LocalDateTime.parse(cleanTimestamp, inputFormatter).format(outputFormatter)
-        }
+        localDateTime.format(outputFormatter)
     } catch (e: Exception) {
         // If all parsing fails, try primitive string cleanup or return access
         entry.timestamp.replace("T", " ").substringBefore(".")

@@ -137,7 +137,7 @@ interface DoorStepApi {
     suspend fun getOrderById(@Path("id") orderId: Int): Response<Order>
     
     @POST("api/orders")
-    suspend fun createOrder(@Body request: CreateOrderRequest): Response<Order>
+    suspend fun createOrder(@Body request: CreateOrderRequest): Response<CreateOrderResponse>
     
     // ==================== BOOKINGS ENDPOINTS ====================
     
@@ -206,13 +206,33 @@ interface DoorStepApi {
     @PATCH("api/notifications/{id}/read")
     suspend fun markNotificationRead(@Path("id") notificationId: Int): Response<Unit>
     
-    // Mark all notifications as read - matches web POST /api/notifications/mark-all-read
-    @POST("api/notifications/mark-all-read")
+    // Mark all notifications as read - matches web PATCH /api/notifications/mark-all-read
+    @PATCH("api/notifications/mark-all-read")
     suspend fun markAllNotificationsRead(): Response<Unit>
     
     // Delete notification - matches web DELETE /api/notifications/:id
     @DELETE("api/notifications/{id}")
     suspend fun deleteNotification(@Path("id") notificationId: Int): Response<Unit>
+    
+    // ==================== ORDER PAYMENT ACTIONS ====================
+    
+    // Agree to final bill - POST /api/orders/:id/agree-final-bill
+    @POST("api/orders/{id}/agree-final-bill")
+    suspend fun agreeFinalBill(@Path("id") orderId: Int): Response<Order>
+    
+    // Submit payment reference - POST /api/orders/:id/submit-payment-reference
+    @POST("api/orders/{id}/submit-payment-reference")
+    suspend fun submitPaymentReference(
+        @Path("id") orderId: Int,
+        @Body body: Map<String, String>
+    ): Response<Order>
+    
+    // Update payment method - POST /api/orders/:id/payment-method
+    @POST("api/orders/{id}/payment-method")
+    suspend fun updatePaymentMethod(
+        @Path("id") orderId: Int,
+        @Body body: Map<String, String>
+    ): Response<Order>
     
     // ==================== SHOP ENDPOINTS ====================
     

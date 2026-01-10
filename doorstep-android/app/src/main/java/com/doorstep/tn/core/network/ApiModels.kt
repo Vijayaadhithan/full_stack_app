@@ -48,6 +48,11 @@ data class OrderItemRequest(
     val price: String
 )
 
+// Response wrapper for POST /api/orders - server returns { order: Order }
+data class CreateOrderResponse(
+    val order: com.doorstep.tn.customer.data.model.Order? = null
+)
+
 // Booking - POST /api/bookings (matches web app exactly)
 data class CreateBookingRequest(
     val serviceId: Int,
