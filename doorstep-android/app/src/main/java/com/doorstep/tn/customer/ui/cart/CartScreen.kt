@@ -48,6 +48,7 @@ fun CartScreen(
 ) {
     val cartItems by viewModel.cartItems.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val userId by viewModel.userId.collectAsState()
     
     // Shop info state - fetched to check delivery options
     var shopInfo by remember { mutableStateOf<com.doorstep.tn.customer.data.model.Shop?>(null) }
@@ -296,18 +297,22 @@ fun CartScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             
                             // Pay Later Option
-                            PaymentMethodOption(
-                                label = "Pay Later",
-                                isSelected = paymentMethod == "pay_later",
-                                onClick = { paymentMethod = "pay_later" }
-                            )
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Trusted (repeat or whitelisted) customers can request Pay Later. Orders stay pending until the shop approves the credit.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = WhiteTextMuted
-                            )
+                            val isPayLaterAllowed = shopInfo?.allowPayLater == true && 
+                                (shopInfo?.payLaterWhitelist?.contains(userId) == true)
+                                
+                            if (isPayLaterAllowed) {
+                                PaymentMethodOption(
+                                    label = "Pay Later",
+                                    isSelected = paymentMethod == "pay_later",
+                                    onClick = { paymentMethod = "pay_later" }
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Trusted (repeat or whitelisted) customers can request Pay Later. Orders stay pending until the shop approves the credit.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = WhiteTextMuted
+                                )
+                            }
                         }
                     }
                 }

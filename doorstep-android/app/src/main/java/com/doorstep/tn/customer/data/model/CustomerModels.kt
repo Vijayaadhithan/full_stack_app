@@ -87,7 +87,9 @@ data class Shop(
     @Json(name = "reviewCount") val reviewCount: Int = 0,
     // Delivery options - matches web's shopInfo
     @Json(name = "pickupAvailable") val pickupAvailable: Boolean = true,
-    @Json(name = "deliveryAvailable") val deliveryAvailable: Boolean = false
+    @Json(name = "deliveryAvailable") val deliveryAvailable: Boolean = false,
+    @Json(name = "allowPayLater") val allowPayLater: Boolean = false,
+    @Json(name = "payLaterWhitelist") val payLaterWhitelist: List<Int>? = null
 )
 
 // ==================== Orders ====================

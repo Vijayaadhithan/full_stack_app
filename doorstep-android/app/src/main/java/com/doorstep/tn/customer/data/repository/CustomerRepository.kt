@@ -271,12 +271,12 @@ class CustomerRepository @Inject constructor(
         }
     }
     
-    suspend fun addToCart(productId: Int, quantity: Int = 1): Result<CartItem> {
+    suspend fun addToCart(productId: Int, quantity: Int = 1): Result<Unit> {
         return try {
             val request = com.doorstep.tn.core.network.AddToCartRequest(productId, quantity)
             val response = api.addToCart(request)
-            if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+            if (response.isSuccessful) {
+                Result.Success(Unit)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -817,4 +817,3 @@ class CustomerRepository @Inject constructor(
         }
     }
 }
-

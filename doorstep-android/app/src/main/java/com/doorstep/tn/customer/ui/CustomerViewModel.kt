@@ -41,6 +41,13 @@ class CustomerViewModel @Inject constructor(
     
     private val _userName = MutableStateFlow<String?>(null)
     val userName: StateFlow<String?> = _userName.asStateFlow()
+
+    private val _userId = MutableStateFlow<Int?>(null)
+    val userId: StateFlow<Int?> = _userId.asStateFlow()
+
+    // UI Events (One-time events like Toasts)
+    private val _toastEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val toastEvent = _toastEvent
     
     // Products
     private val _products = MutableStateFlow<List<Product>>(emptyList())
@@ -149,6 +156,7 @@ class CustomerViewModel @Inject constructor(
             val prefs = context.dataStore.data.first()
             _language.value = prefs[PreferenceKeys.LANGUAGE] ?: "en"
             _userName.value = prefs[PreferenceKeys.USER_NAME]
+            _userId.value = prefs[PreferenceKeys.USER_ID]?.toIntOrNull()
         }
         
         // Setup debounced search - waits 500ms after last keystroke before making API call
@@ -400,8 +408,14 @@ class CustomerViewModel @Inject constructor(
             _isLoading.value = true
             
             when (val result = repository.addToCart(productId, quantity)) {
-                is Result.Success -> loadCart() // Refresh cart
-                is Result.Error -> _error.value = result.message
+                is Result.Success -> {
+                    loadCart() // Refresh cart
+                    _toastEvent.emit("Added to cart")
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    _toastEvent.emit(result.message ?: "Failed to add to cart")
+                }
                 is Result.Loading -> {}
             }
             
@@ -536,12 +550,16 @@ class CustomerViewModel @Inject constructor(
             product?.let { _wishlistItems.value = _wishlistItems.value + it }
             
             when (val result = repository.addToWishlist(productId)) {
-                is Result.Success -> { /* Already updated optimistically */ }
+                is Result.Success -> { 
+                    /* Already updated optimistically */ 
+                    _toastEvent.emit("Added to wishlist")
+                }
                 is Result.Error -> {
                     // Rollback on error
                     _wishlistProductIds.value = _wishlistProductIds.value - productId
                     _wishlistItems.value = _wishlistItems.value.filter { it.id != productId }
                     _error.value = result.message
+                    _toastEvent.emit(result.message ?: "Failed to add to wishlist")
                 }
                 is Result.Loading -> {}
             }
@@ -559,12 +577,16 @@ class CustomerViewModel @Inject constructor(
             _wishlistItems.value = _wishlistItems.value.filter { it.id != productId }
             
             when (val result = repository.removeFromWishlist(productId)) {
-                is Result.Success -> { /* Already updated optimistically */ }
+                is Result.Success -> { 
+                    /* Already updated optimistically */ 
+                    _toastEvent.emit("Removed from wishlist")
+                }
                 is Result.Error -> {
                     // Rollback on error
                     _wishlistProductIds.value = _wishlistProductIds.value + productId
                     removedProduct?.let { _wishlistItems.value = _wishlistItems.value + it }
                     _error.value = result.message
+                    _toastEvent.emit(result.message ?: "Failed to remove from wishlist")
                 }
                 is Result.Loading -> {}
             }

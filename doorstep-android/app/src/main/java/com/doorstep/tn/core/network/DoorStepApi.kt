@@ -103,7 +103,7 @@ interface DoorStepApi {
     
     // POST /api/cart with {productId, quantity} - matches web app
     @POST("api/cart")
-    suspend fun addToCart(@Body request: AddToCartRequest): Response<CartItem>
+    suspend fun addToCart(@Body request: AddToCartRequest): Response<Unit>
     
     // DELETE /api/cart/{productId} - uses productId as in web app
     @DELETE("api/cart/{productId}")

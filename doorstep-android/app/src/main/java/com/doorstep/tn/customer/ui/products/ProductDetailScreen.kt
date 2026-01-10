@@ -17,9 +17,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
@@ -39,6 +41,17 @@ fun ProductDetailScreen(
 ) {
     val product by viewModel.selectedProduct.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val cartCount by viewModel.cartItems.collectAsState().let { state ->
+        derivedStateOf { state.value.sumOf { it.quantity } }
+    }
+    
+    // Toast events
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.toastEvent.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
     
     // Use loadShopProduct if shopId is valid, otherwise load by productId only (from search)
     LaunchedEffect(shopId, productId) {
@@ -64,11 +77,19 @@ fun ProductDetailScreen(
                 },
                 actions = {
                     IconButton(onClick = onNavigateToCart) {
-                        Icon(
-                            imageVector = Icons.Default.ShoppingCart,
-                            contentDescription = "Cart",
-                            tint = WhiteText
-                        )
+                        BadgedBox(
+                            badge = {
+                                if (cartCount > 0) {
+                                    Badge { Text(cartCount.toString()) }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ShoppingCart,
+                                contentDescription = "Cart",
+                                tint = WhiteText
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = SlateBackground)
@@ -212,17 +233,48 @@ fun ProductDetailScreen(
                     
                     Spacer(modifier = Modifier.height(32.dp))
                     
-                    // Add to Cart Button
-                    Button(
-                        onClick = { viewModel.addToCart(productId) },
+                    // Add to Cart and Wishlist Buttons
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
-                        enabled = p.isAvailable
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Icon(Icons.Default.AddShoppingCart, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add to Cart", style = MaterialTheme.typography.titleMedium)
+                        Button(
+                            onClick = { viewModel.addToCart(productId) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
+                            enabled = p.isAvailable
+                        ) {
+                            Icon(Icons.Default.AddShoppingCart, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Add to Cart", style = MaterialTheme.typography.titleMedium)
+                        }
+
+                        // Wishlist Button
+                        val isInWishlist = viewModel.isInWishlist(productId)
+                        OutlinedButton(
+                            onClick = { 
+                                if (isInWishlist) {
+                                    viewModel.removeFromWishlist(productId)
+                                } else {
+                                    viewModel.addToWishlist(productId)
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (isInWishlist) ErrorRed else WhiteText
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp, 
+                                if (isInWishlist) ErrorRed else WhiteTextMuted
+                            )
+                        ) {
+                            Icon(
+                                imageVector = if (isInWishlist) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = "Wishlist",
+                                tint = if (isInWishlist) ErrorRed else WhiteText
+                            )
+                        }
                     }
                 }
             }

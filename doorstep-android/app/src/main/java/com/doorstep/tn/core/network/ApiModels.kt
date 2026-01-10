@@ -1,64 +1,74 @@
 package com.doorstep.tn.core.network
 
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
+
 /**
  * Request models for API calls - matches web app's request bodies exactly
  */
 
 // Cart - POST /api/cart
+@JsonClass(generateAdapter = true)
 data class AddToCartRequest(
-    val productId: Int,
-    val quantity: Int = 1
+    @Json(name = "productId") val productId: Int,
+    @Json(name = "quantity") val quantity: Int = 1
 )
 
 // Wishlist - POST /api/wishlist
+@JsonClass(generateAdapter = true)
 data class AddToWishlistRequest(
-    val productId: Int
+    @Json(name = "productId") val productId: Int
 )
 
 // Profile - PATCH /api/users/{id}
+@JsonClass(generateAdapter = true)
 data class UpdateProfileRequest(
-    val name: String? = null,
-    val phone: String? = null,
-    val email: String? = null,
-    val upiId: String? = null,
-    val addressLandmark: String? = null,
-    val addressStreet: String? = null,
-    val addressCity: String? = null,
-    val addressState: String? = null,
-    val addressPostalCode: String? = null,
-    val addressCountry: String? = null,
-    val latitude: Double? = null,
-    val longitude: Double? = null
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "phone") val phone: String? = null,
+    @Json(name = "email") val email: String? = null,
+    @Json(name = "upiId") val upiId: String? = null,
+    @Json(name = "addressLandmark") val addressLandmark: String? = null,
+    @Json(name = "addressStreet") val addressStreet: String? = null,
+    @Json(name = "addressCity") val addressCity: String? = null,
+    @Json(name = "addressState") val addressState: String? = null,
+    @Json(name = "addressPostalCode") val addressPostalCode: String? = null,
+    @Json(name = "addressCountry") val addressCountry: String? = null,
+    @Json(name = "latitude") val latitude: Double? = null,
+    @Json(name = "longitude") val longitude: Double? = null
 )
 
 // Order - POST /api/orders
+@JsonClass(generateAdapter = true)
 data class CreateOrderRequest(
-    val items: List<OrderItemRequest>,
-    val total: String,
-    val subtotal: String,
-    val discount: String = "0",
-    val promotionId: Int? = null,
-    val deliveryMethod: String = "pickup",  // "pickup" or "delivery"
-    val paymentMethod: String = "cash"       // "cash", "upi", "pay_later"
+    @Json(name = "items") val items: List<OrderItemRequest>,
+    @Json(name = "total") val total: String,
+    @Json(name = "subtotal") val subtotal: String,
+    @Json(name = "discount") val discount: String = "0",
+    @Json(name = "promotionId") val promotionId: Int? = null,
+    @Json(name = "deliveryMethod") val deliveryMethod: String = "pickup",
+    @Json(name = "paymentMethod") val paymentMethod: String = "cash"
 )
 
+@JsonClass(generateAdapter = true)
 data class OrderItemRequest(
-    val productId: Int,
-    val quantity: Int,
-    val price: String
+    @Json(name = "productId") val productId: Int,
+    @Json(name = "quantity") val quantity: Int,
+    @Json(name = "price") val price: String
 )
 
 // Response wrapper for POST /api/orders - server returns { order: Order }
+@JsonClass(generateAdapter = true)
 data class CreateOrderResponse(
-    val order: com.doorstep.tn.customer.data.model.Order? = null
+    @Json(name = "order") val order: com.doorstep.tn.customer.data.model.Order? = null
 )
 
 // Booking - POST /api/bookings (matches web app exactly)
+@JsonClass(generateAdapter = true)
 data class CreateBookingRequest(
-    val serviceId: Int,
-    val bookingDate: String,           // "YYYY-MM-DD" ISO date
-    val serviceLocation: String,        // "customer" or "provider"
-    val timeSlotLabel: String? = null   // "morning", "afternoon", "evening", or null for emergency
+    @Json(name = "serviceId") val serviceId: Int,
+    @Json(name = "bookingDate") val bookingDate: String,
+    @Json(name = "serviceLocation") val serviceLocation: String,
+    @Json(name = "timeSlotLabel") val timeSlotLabel: String? = null
 )
 
 // Booking response from POST /api/bookings
@@ -68,147 +78,166 @@ data class BookingResponse(
 )
 
 // Update booking - PATCH /api/bookings/{id} (for cancel, reschedule)
+// Update booking - PATCH /api/bookings/{id} (for cancel, reschedule)
+@JsonClass(generateAdapter = true)
 data class UpdateBookingRequest(
-    val status: String? = null,            // "cancelled" to cancel
-    val bookingDate: String? = null,       // ISO date for reschedule
-    val comments: String? = null           // Optional comments for reschedule
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "bookingDate") val bookingDate: String? = null,
+    @Json(name = "comments") val comments: String? = null
 )
 
 // Submit review - POST /api/reviews (matches web app exactly)
+@JsonClass(generateAdapter = true)
 data class SubmitReviewRequest(
-    val serviceId: Int,
-    val rating: Int,
-    val review: String,
-    val bookingId: Int
+    @Json(name = "serviceId") val serviceId: Int,
+    @Json(name = "rating") val rating: Int,
+    @Json(name = "review") val review: String,
+    @Json(name = "bookingId") val bookingId: Int
 )
 
 // Review response from POST /api/reviews
+@JsonClass(generateAdapter = true)
 data class ReviewResponse(
-    val id: Int? = null,
-    val message: String? = null
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "message") val message: String? = null
 )
 
 // Customer service review - GET /api/reviews/customer
+@JsonClass(generateAdapter = true)
 data class CustomerReview(
-    val id: Int,
-    val serviceId: Int,
-    val customerId: Int,
-    val rating: Int,
-    val review: String? = null,
-    val serviceName: String? = null,
-    val createdAt: String? = null
+    @Json(name = "id") val id: Int,
+    @Json(name = "serviceId") val serviceId: Int,
+    @Json(name = "customerId") val customerId: Int,
+    @Json(name = "rating") val rating: Int,
+    @Json(name = "review") val review: String? = null,
+    @Json(name = "serviceName") val serviceName: String? = null,
+    @Json(name = "createdAt") val createdAt: String? = null
 )
 
 // Customer product review - GET /api/product-reviews/customer
+@JsonClass(generateAdapter = true)
 data class CustomerProductReview(
-    val id: Int,
-    val productId: Int,
-    val customerId: Int,
-    val rating: Int,
-    val review: String? = null,
-    val productName: String? = null,
-    val createdAt: String? = null
+    @Json(name = "id") val id: Int,
+    @Json(name = "productId") val productId: Int,
+    @Json(name = "customerId") val customerId: Int,
+    @Json(name = "rating") val rating: Int,
+    @Json(name = "review") val review: String? = null,
+    @Json(name = "productName") val productName: String? = null,
+    @Json(name = "createdAt") val createdAt: String? = null
 )
 
 // Notification - GET /api/notifications
+@JsonClass(generateAdapter = true)
 data class AppNotification(
-    val id: Int,
-    val userId: Int,
-    val type: String,  // "booking", "order", "promotion", "system", etc.
-    val title: String,
-    val message: String,
-    val isRead: Boolean = false,
-    val relatedBookingId: Int? = null,
-    val createdAt: String? = null
+    @Json(name = "id") val id: Int,
+    @Json(name = "userId") val userId: Int,
+    @Json(name = "type") val type: String,  // "booking", "order", "promotion", "system", etc.
+    @Json(name = "title") val title: String,
+    @Json(name = "message") val message: String,
+    @Json(name = "isRead") val isRead: Boolean = false,
+    @Json(name = "relatedBookingId") val relatedBookingId: Int? = null,
+    @Json(name = "createdAt") val createdAt: String? = null
 )
 
 // Notifications response wrapper - server returns { data: [...], total, totalPages }
+@JsonClass(generateAdapter = true)
 data class NotificationsResponse(
-    val data: List<AppNotification> = emptyList(),
-    val total: Int = 0,
-    val totalPages: Int = 1
+    @Json(name = "data") val data: List<AppNotification> = emptyList(),
+    @Json(name = "total") val total: Int = 0,
+    @Json(name = "totalPages") val totalPages: Int = 1
 )
 
 // Notification count response
+@JsonClass(generateAdapter = true)
 data class UnreadNotificationCount(
-    val count: Int
+    @Json(name = "count") val count: Int
 )
 
 // ==================== SEARCH ====================
 
 // Universal/Global Search Result - matches web GET /api/search
+@JsonClass(generateAdapter = true)
 data class SearchResult(
-    val type: String,  // "service", "product", "shop"
-    val id: Int,
-    val name: String,
-    val description: String? = null,
-    val price: String? = null,
-    val category: String? = null,
-    val shopName: String? = null,
-    val providerName: String? = null,
-    val distance: Double? = null,
-    val imageUrl: String? = null
+    @Json(name = "type") val type: String,  // "service", "product", "shop"
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String,
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "price") val price: String? = null,
+    @Json(name = "category") val category: String? = null,
+    @Json(name = "shopName") val shopName: String? = null,
+    @Json(name = "providerName") val providerName: String? = null,
+    @Json(name = "distance") val distance: Double? = null,
+    @Json(name = "imageUrl") val imageUrl: String? = null
 )
 
 // Search response wrapper
+@JsonClass(generateAdapter = true)
 data class SearchResponse(
-    val query: String,
-    val results: List<SearchResult>
+    @Json(name = "query") val query: String,
+    @Json(name = "results") val results: List<SearchResult>
 )
 
 // ==================== QUICK ORDER ====================
 
 // Text/Quick Order Request - matches web POST /api/orders/text
+@JsonClass(generateAdapter = true)
 data class CreateTextOrderRequest(
-    val shopId: Int,
-    val orderText: String,
-    val deliveryMethod: String = "pickup"  // "pickup" or "delivery"
+    @Json(name = "shopId") val shopId: Int,
+    @Json(name = "orderText") val orderText: String,
+    @Json(name = "deliveryMethod") val deliveryMethod: String = "pickup"
 )
 
 // Text Order Response
+@JsonClass(generateAdapter = true)
 data class TextOrderResponse(
-    val order: TextOrderInfo
+    @Json(name = "order") val order: TextOrderInfo
 )
 
+@JsonClass(generateAdapter = true)
 data class TextOrderInfo(
-    val id: Int
+    @Json(name = "id") val id: Int
 )
 
 // ==================== QUICK ADD PRODUCT ====================
 
 // Quick Add Product Request - matches web POST /api/products/quick-add
+@JsonClass(generateAdapter = true)
 data class QuickAddProductRequest(
-    val name: String,
-    val price: String,
-    val category: String
+    @Json(name = "name") val name: String,
+    @Json(name = "price") val price: String,
+    @Json(name = "category") val category: String
 )
 
 // ==================== ORDER TIMELINE ====================
 
 // Order Timeline Entry - matches web GET /api/orders/:id/timeline
+@JsonClass(generateAdapter = true)
 data class OrderTimelineEntry(
-    val orderId: Int,
-    val status: String,
-    val trackingInfo: String? = null,
-    val timestamp: String
+    @Json(name = "orderId") val orderId: Int,
+    @Json(name = "status") val status: String,
+    @Json(name = "trackingInfo") val trackingInfo: String? = null,
+    @Json(name = "timestamp") val timestamp: String
 )
 
 // ==================== PRODUCT REVIEW ====================
 
 // Product Review Request - matches web POST /api/product-reviews  
+@JsonClass(generateAdapter = true)
 data class ProductReviewRequest(
-    val productId: Int,
-    val orderId: Int,
-    val rating: Int,
-    val review: String
+    @Json(name = "productId") val productId: Int,
+    @Json(name = "orderId") val orderId: Int,
+    @Json(name = "rating") val rating: Int,
+    @Json(name = "review") val review: String
 )
 
+@JsonClass(generateAdapter = true)
 data class UpdateReviewRequest(
-    val rating: Int? = null,
-    val review: String? = null
+    @Json(name = "rating") val rating: Int? = null,
+    @Json(name = "review") val review: String? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class CreateReturnRequest(
-    val reason: String,
-    val comments: String? = null
+    @Json(name = "reason") val reason: String,
+    @Json(name = "comments") val comments: String? = null
 )

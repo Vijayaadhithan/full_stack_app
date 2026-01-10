@@ -48,6 +48,22 @@ fun ProductsListScreen(
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     
+    // Reactive Cart Count
+    val cartCount by viewModel.cartItems.collectAsState().let { state ->
+        derivedStateOf { state.value.sumOf { it.quantity } }
+    }
+    
+    // Wishlist IDs for checking status
+    val wishlistIds by viewModel.wishlistProductIds.collectAsState()
+    
+    // Toast events
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.toastEvent.collect { message ->
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    
     // Location filter state
     var locationRadius by remember { mutableIntStateOf(45) }
     var locationLat by remember { mutableStateOf<Double?>(null) }
@@ -80,7 +96,13 @@ fun ProductsListScreen(
                 },
                 actions = {
                     IconButton(onClick = onNavigateToCart) {
-                        BadgedBox(badge = { Badge { Text("${viewModel.cartCount}") } }) {
+                        BadgedBox(
+                            badge = {
+                                if (cartCount > 0) {
+                                    Badge { Text(cartCount.toString()) }
+                                }
+                            }
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.ShoppingCart,
                                 contentDescription = "Cart",
@@ -245,9 +267,16 @@ fun ProductsListScreen(
                         items(products) { product ->
                             ProductCard(
                                 product = product,
+                                isInWishlist = wishlistIds.contains(product.id),
                                 onClick = { product.shopId?.let { shopId -> onNavigateToProduct(shopId, product.id) } },
                                 onAddToCart = { viewModel.addToCart(product.id) },
-                                onAddToWishlist = { viewModel.addToWishlist(product.id) }
+                                onToggleWishlist = { 
+                                    if (wishlistIds.contains(product.id)) {
+                                        viewModel.removeFromWishlist(product.id)
+                                    } else {
+                                        viewModel.addToWishlist(product.id)
+                                    }
+                                }
                             )
                         }
                     }
@@ -260,9 +289,10 @@ fun ProductsListScreen(
 @Composable
 private fun ProductCard(
     product: Product,
+    isInWishlist: Boolean,
     onClick: () -> Unit,
     onAddToCart: () -> Unit,
-    onAddToWishlist: () -> Unit = {}
+    onToggleWishlist: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -300,7 +330,7 @@ private fun ProductCard(
                 
                 // Wishlist heart button
                 IconButton(
-                    onClick = onAddToWishlist,
+                    onClick = onToggleWishlist,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(4.dp)
@@ -308,9 +338,9 @@ private fun ProductCard(
                         .background(SlateCard.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
                 ) {
                     Icon(
-                        imageVector = Icons.Default.FavoriteBorder,
-                        contentDescription = "Add to Wishlist",
-                        tint = OrangePrimary,
+                        imageVector = if (isInWishlist) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = if (isInWishlist) "Remove from Wishlist" else "Add to Wishlist",
+                        tint = if (isInWishlist) ErrorRed else OrangePrimary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
