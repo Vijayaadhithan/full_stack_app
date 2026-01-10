@@ -372,6 +372,17 @@ class CustomerViewModel @Inject constructor(
         }
     }
     
+    // Get shop by ID with callback - for CartScreen to check delivery options
+    fun getShopById(shopId: Int, onResult: (Shop?) -> Unit) {
+        viewModelScope.launch {
+            when (val result = repository.getShopById(shopId)) {
+                is Result.Success -> onResult(result.data)
+                is Result.Error -> onResult(null)
+                is Result.Loading -> {}
+            }
+        }
+    }
+    
     // ==================== Cart Actions ====================
     
     fun loadCart() {

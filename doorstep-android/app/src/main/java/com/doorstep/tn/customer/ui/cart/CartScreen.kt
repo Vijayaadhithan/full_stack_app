@@ -49,6 +49,10 @@ fun CartScreen(
     val cartItems by viewModel.cartItems.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     
+    // Shop info state - fetched to check delivery options
+    var shopInfo by remember { mutableStateOf<com.doorstep.tn.customer.data.model.Shop?>(null) }
+    var isLoadingShop by remember { mutableStateOf(false) }
+    
     // Delivery and Payment method state - matches web defaults
     var deliveryMethod by remember { mutableStateOf("pickup") } // "pickup" or "delivery"
     var paymentMethod by remember { mutableStateOf("upi") } // "upi", "cash", "pay_later"
@@ -60,8 +64,31 @@ fun CartScreen(
     }
     val total = subtotal // Add delivery fee if needed
     
+    // Load cart on first composition
     LaunchedEffect(Unit) {
         viewModel.loadCart()
+    }
+    
+    // Fetch shop info when cart items are loaded
+    LaunchedEffect(cartItems) {
+        if (cartItems.isNotEmpty()) {
+            val shopId = cartItems.firstOrNull()?.product?.shopId
+            if (shopId != null && shopInfo?.id != shopId) {
+                isLoadingShop = true
+                viewModel.getShopById(shopId) { shop ->
+                    shopInfo = shop
+                    isLoadingShop = false
+                    // Reset delivery method based on shop availability (like web)
+                    if (shop != null) {
+                        if (shop.pickupAvailable && !shop.deliveryAvailable) {
+                            deliveryMethod = "pickup"
+                        } else if (!shop.pickupAvailable && shop.deliveryAvailable) {
+                            deliveryMethod = "delivery"
+                        }
+                    }
+                }
+            }
+        }
     }
     
     Scaffold(
@@ -193,25 +220,43 @@ fun CartScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             
-                            // Pickup Option (like web)
-                            DeliveryMethodOption(
-                                icon = Icons.Default.Store,
-                                title = "I will come take it",
-                                subtitle = "In-store pickup",
-                                isSelected = deliveryMethod == "pickup",
-                                onClick = { deliveryMethod = "pickup" }
-                            )
+                            // Check shop delivery availability (like web)
+                            val pickupAvailable = shopInfo?.pickupAvailable ?: true
+                            val deliveryAvailable = shopInfo?.deliveryAvailable ?: false
                             
-                            Spacer(modifier = Modifier.height(8.dp))
+                            // Pickup Option - always show if available (like web)
+                            if (pickupAvailable) {
+                                DeliveryMethodOption(
+                                    icon = Icons.Default.Store,
+                                    title = "I will come take it",
+                                    subtitle = "In-store pickup",
+                                    isSelected = deliveryMethod == "pickup",
+                                    onClick = { deliveryMethod = "pickup" }
+                                )
+                            }
                             
-                            // Delivery Option
-                            DeliveryMethodOption(
-                                icon = Icons.Default.LocalShipping,
-                                title = "Deliver to me",
-                                subtitle = "Home delivery",
-                                isSelected = deliveryMethod == "delivery",
-                                onClick = { deliveryMethod = "delivery" }
-                            )
+                            // Delivery Option - only show if shop enables home delivery (like web)
+                            if (deliveryAvailable) {
+                                if (pickupAvailable) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                                DeliveryMethodOption(
+                                    icon = Icons.Default.LocalShipping,
+                                    title = "Deliver to me",
+                                    subtitle = "Home delivery",
+                                    isSelected = deliveryMethod == "delivery",
+                                    onClick = { deliveryMethod = "delivery" }
+                                )
+                            }
+                            
+                            // If neither is available, show a message
+                            if (!pickupAvailable && !deliveryAvailable) {
+                                Text(
+                                    text = "Loading delivery options...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = WhiteTextMuted
+                                )
+                            }
                         }
                     }
                 }

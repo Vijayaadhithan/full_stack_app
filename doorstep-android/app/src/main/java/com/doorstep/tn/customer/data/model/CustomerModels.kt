@@ -84,7 +84,10 @@ data class Shop(
     @Json(name = "openingHours") val openingHours: String? = null,
     @Json(name = "isOpen") val isOpen: Boolean = true,
     @Json(name = "rating") val rating: Double? = null,
-    @Json(name = "reviewCount") val reviewCount: Int = 0
+    @Json(name = "reviewCount") val reviewCount: Int = 0,
+    // Delivery options - matches web's shopInfo
+    @Json(name = "pickupAvailable") val pickupAvailable: Boolean = true,
+    @Json(name = "deliveryAvailable") val deliveryAvailable: Boolean = false
 )
 
 // ==================== Orders ====================
