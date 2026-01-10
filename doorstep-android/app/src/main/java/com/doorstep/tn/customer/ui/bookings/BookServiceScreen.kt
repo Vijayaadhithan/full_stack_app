@@ -372,10 +372,19 @@ fun BookServiceScreen(
                                 "tomorrow" -> today.plusDays(1).toString()
                                 else -> today.toString()
                             }
-                            // Calculate time slot label based on urgency
-                            val timeSlotLabel = when (selectedUrgency) {
-                                "now" -> "emergency"
-                                else -> "morning" // Default to morning for flexible times
+                            // For emergency "now" bookings, send null as timeSlotLabel (server accepts nullable)
+                            // For "today"/"tomorrow", use current time of day to pick appropriate slot
+                            val timeSlotLabel: String? = when (selectedUrgency) {
+                                "now" -> null  // Emergency: no specific slot, provider responds ASAP
+                                else -> {
+                                    // Pick slot based on current hour
+                                    val hour = java.time.LocalTime.now().hour
+                                    when {
+                                        hour < 12 -> "morning"
+                                        hour < 17 -> "afternoon"
+                                        else -> "evening"
+                                    }
+                                }
                             }
                             viewModel.createBooking(
                                 serviceId = serviceId,

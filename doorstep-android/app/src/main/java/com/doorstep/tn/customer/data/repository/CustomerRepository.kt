@@ -444,7 +444,7 @@ class CustomerRepository @Inject constructor(
     suspend fun createBooking(
         serviceId: Int,
         bookingDate: String,
-        timeSlotLabel: String,
+        timeSlotLabel: String?,  // Nullable - null for emergency "now" bookings
         serviceLocation: String
     ): Result<com.doorstep.tn.core.network.BookingResponse> {
         return try {
@@ -609,7 +609,8 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getNotifications()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                // Extract notifications list from wrapper object (server returns {data: [...], total, totalPages})
+                Result.Success(response.body()!!.data)
             } else {
                 Result.Error(response.message(), response.code())
             }

@@ -63,6 +63,7 @@ fun CustomerHomeScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val language by viewModel.language.collectAsState()
     val userName by viewModel.userName.collectAsState()
+    val unreadNotificationCount by viewModel.unreadNotificationCount.collectAsState()
     
     val t = Translations.get(language)
     
@@ -71,6 +72,7 @@ fun CustomerHomeScreen(
         viewModel.loadOrders()
         viewModel.loadBookings()
         viewModel.loadCart()
+        viewModel.loadNotifications()
     }
     
     Scaffold(
@@ -101,6 +103,29 @@ fun CustomerHomeScreen(
                         currentLanguage = language,
                         onLanguageSelected = { viewModel.setLanguage(it) }
                     )
+                    // Notifications with badge
+                    IconButton(onClick = onNavigateToNotifications) {
+                        BadgedBox(
+                            badge = {
+                                if (unreadNotificationCount > 0) {
+                                    Badge(
+                                        containerColor = ErrorRed
+                                    ) { 
+                                        Text(
+                                            if (unreadNotificationCount > 99) "99+" else "$unreadNotificationCount",
+                                            color = WhiteText
+                                        ) 
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = WhiteText
+                            )
+                        }
+                    }
                     // Wishlist
                     IconButton(onClick = onNavigateToWishlist) {
                         Icon(
@@ -219,10 +244,10 @@ fun CustomerHomeScreen(
                 }
             }
             
-            // Quick Actions
+            // Tap to start - Premium Action Cards (matches web design)
             item {
                 Text(
-                    text = t.quickActions,
+                    text = if (language == "ta") "தொடங்க தட்டவும்" else "Tap to start",
                     style = MaterialTheme.typography.titleMedium,
                     color = WhiteText,
                     fontWeight = FontWeight.Bold
@@ -233,23 +258,29 @@ fun CustomerHomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    QuickActionCard(
-                        icon = Icons.Default.ShoppingBag,
-                        label = t.products,
-                        gradientColors = listOf(OrangePrimary, SunsetOrange),
-                        modifier = Modifier.weight(1f),
-                        onClick = onNavigateToProducts
-                    )
-                    QuickActionCard(
+                    // Service Card
+                    PremiumActionCard(
                         icon = Icons.Default.Build,
-                        label = t.services,
+                        title = if (language == "ta") "சேவை" else "Service",
+                        subtitle = if (language == "ta") "இப்போது முன்பதிவு செய்யுங்கள்" else "Book Now",
                         gradientColors = listOf(PeacockBlue, GradientPeacock),
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToServices
                     )
-                    QuickActionCard(
+                    // Buy/Products Card
+                    PremiumActionCard(
+                        icon = Icons.Default.ShoppingBag,
+                        title = if (language == "ta") "வாங்கு" else "Buy",
+                        subtitle = if (language == "ta") "கடை" else "Shop",
+                        gradientColors = listOf(OrangePrimary, SunsetOrange),
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateToProducts
+                    )
+                    // Shops Card (restored - was incorrectly changed to My Bookings)
+                    PremiumActionCard(
                         icon = Icons.Default.Store,
-                        label = if (language == "ta") "கடைகள்" else "Shops",
+                        title = if (language == "ta") "கடைகள்" else "Shops",
+                        subtitle = if (language == "ta") "அருகிலுள்ள கடைகளை பாருங்கள்" else "Browse nearby",
                         gradientColors = listOf(ShopGreen, SuccessGreen),
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToShops
@@ -257,7 +288,7 @@ fun CustomerHomeScreen(
                 }
             }
             
-            // Categories with Tamil Nadu flavor
+            // Browse by category
             item {
                 Text(
                     text = t.categories,
@@ -481,6 +512,85 @@ private fun QuickActionCard(
     }
 }
 
+/**
+ * Premium Action Card matching web's "Tap to start" design
+ * Larger cards with TAP label, icon, title, and subtitle
+ */
+@Composable
+private fun PremiumActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    gradientColors: List<Color>,
+    modifier: Modifier = Modifier,
+    showBorder: Boolean = false,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier
+            .height(140.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = if (showBorder) androidx.compose.foundation.BorderStroke(1.dp, WhiteTextMuted.copy(alpha = 0.3f)) else null,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.linearGradient(colors = gradientColors)
+                )
+        ) {
+            // TAP label in top right
+            Text(
+                text = "TAP",
+                style = MaterialTheme.typography.labelSmall,
+                color = WhiteText.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+            )
+            
+            // Main content
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomStart)
+                    .padding(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(
+                            color = WhiteText.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(10.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = WhiteText,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = WhiteText,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteText.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
 @Composable
 private fun CategoryChip(
     name: String,

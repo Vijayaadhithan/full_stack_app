@@ -351,6 +351,15 @@ fun DoorStepNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToBooking = { bookingId ->
                     navController.navigate(Routes.bookingDetail(bookingId))
+                },
+                onNavigateToBookings = {
+                    navController.navigate(Routes.CUSTOMER_BOOKINGS)
+                },
+                onNavigateToOrders = {
+                    navController.navigate(Routes.CUSTOMER_ORDERS)
+                },
+                onNavigateToOrder = { orderId ->
+                    navController.navigate(Routes.orderDetail(orderId))
                 }
             )
         }

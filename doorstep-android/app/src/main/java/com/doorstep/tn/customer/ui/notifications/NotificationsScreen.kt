@@ -29,13 +29,17 @@ import java.time.format.DateTimeParseException
 /**
  * Notifications Screen - matches web app's notifications functionality
  * Shows user notifications with read/unread status
+ * Clicking a notification navigates to the relevant page based on notification type
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
-    onNavigateToBooking: (Int) -> Unit = {}
+    onNavigateToBooking: (Int) -> Unit = {},
+    onNavigateToBookings: () -> Unit = {},
+    onNavigateToOrders: () -> Unit = {},
+    onNavigateToOrder: (Int) -> Unit = {}
 ) {
     val notifications by viewModel.notifications.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -45,6 +49,14 @@ fun NotificationsScreen(
     
     LaunchedEffect(Unit) {
         viewModel.loadNotifications()
+    }
+    
+    // Sort notifications: unread first, then by date (newest first) - matches web
+    val sortedNotifications = remember(notifications) {
+        notifications.sortedWith(
+            compareBy<AppNotification> { it.isRead }
+                .thenByDescending { it.createdAt ?: "" }
+        )
     }
     
     Scaffold(
@@ -145,7 +157,7 @@ fun NotificationsScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(notifications) { notification ->
+                    items(sortedNotifications) { notification ->
                         NotificationCard(
                             notification = notification,
                             onClick = {
@@ -153,9 +165,36 @@ fun NotificationsScreen(
                                 if (!notification.isRead) {
                                     viewModel.markNotificationRead(notification.id)
                                 }
-                                // Navigate to related booking if applicable
-                                notification.relatedBookingId?.let { bookingId ->
-                                    onNavigateToBooking(bookingId)
+                                
+                                // Navigate based on notification type - matches web's navigateToRelevantPage
+                                when (notification.type) {
+                                    // Booking-related types - navigate to specific booking or bookings list
+                                    "booking", "booking_request", "booking_update", 
+                                    "booking_confirmed", "booking_rejected", "booking_cancelled_by_customer",
+                                    "booking_rescheduled_request", "booking_rescheduled_by_provider",
+                                    "service", "service_request" -> {
+                                        notification.relatedBookingId?.let { bookingId ->
+                                            onNavigateToBooking(bookingId)
+                                        } ?: onNavigateToBookings()
+                                    }
+                                    // Order-related types - navigate to orders
+                                    "order", "shop" -> {
+                                        onNavigateToOrders()
+                                    }
+                                    // Return types - navigate to orders (returns are under orders)
+                                    "return" -> {
+                                        onNavigateToOrders()
+                                    }
+                                    // Promotion and system - no specific navigation
+                                    "promotion", "system" -> {
+                                        // Just mark as read, no navigation
+                                    }
+                                    // Default fallback - try booking if ID available
+                                    else -> {
+                                        notification.relatedBookingId?.let { bookingId ->
+                                            onNavigateToBooking(bookingId)
+                                        }
+                                    }
                                 }
                             },
                             onDelete = {
@@ -175,13 +214,16 @@ private fun NotificationCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val icon = when (notification.type) {
-        "booking", "booking_request", "booking_update", "booking_confirmed", "booking_rejected" -> Icons.Default.CalendarMonth
-        "order", "shop" -> Icons.Default.ShoppingBag
-        "promotion" -> Icons.Default.LocalOffer
-        "system" -> Icons.Default.Info
-        "return" -> Icons.Default.Undo
-        else -> Icons.Default.Notifications
+    // Emoji icon matching web's getNotificationIcon function
+    val emoji = when (notification.type) {
+        "booking", "booking_request", "booking_update", "booking_confirmed", "booking_rescheduled_request" -> "📅"
+        "order", "shop" -> "📦"
+        "return" -> "↩️"
+        "service", "service_request" -> "🛠️"
+        "promotion" -> "🎁"
+        "system" -> "ℹ️"
+        "booking_rejected", "booking_cancelled_by_customer" -> "❌"
+        else -> "📬"
     }
     
     val iconColor = when (notification.type) {
@@ -218,7 +260,7 @@ private fun NotificationCard(
                 Spacer(modifier = Modifier.width(8.dp))
             }
             
-            // Icon
+            // Emoji icon (matching web design)
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -226,11 +268,9 @@ private fun NotificationCard(
                     .background(iconColor.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconColor,
-                    modifier = Modifier.size(24.dp)
+                Text(
+                    text = emoji,
+                    style = MaterialTheme.typography.titleLarge
                 )
             }
             
@@ -279,19 +319,10 @@ private fun formatNotificationDate(dateStr: String?): String {
     if (dateStr.isNullOrEmpty()) return ""
     
     return try {
-        val formatter = DateTimeFormatter.ISO_DATE_TIME
         val dateTime = LocalDateTime.parse(dateStr.replace("Z", ""))
-        val now = LocalDateTime.now()
-        
-        val daysDiff = java.time.temporal.ChronoUnit.DAYS.between(dateTime.toLocalDate(), now.toLocalDate())
-        
-        when {
-            daysDiff == 0L -> "Today at ${dateTime.format(DateTimeFormatter.ofPattern("hh:mm a"))}"
-            daysDiff == 1L -> "Yesterday"
-            daysDiff < 7 -> "${daysDiff} days ago"
-            else -> dateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
-        }
+        val outputFormatter = DateTimeFormatter.ofPattern("dd MMMM yyyy, hh:mm a")
+        dateTime.format(outputFormatter)
     } catch (e: DateTimeParseException) {
-        dateStr.take(10)
+        dateStr.take(16).replace("T", " ")
     }
 }

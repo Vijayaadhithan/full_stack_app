@@ -136,7 +136,7 @@ fun AnimatedKolam(
 }
 
 /**
- * Time-based greeting component
+ * Time-based greeting component - compact version for TopAppBar
  */
 @Composable
 fun TimeBasedGreeting(
@@ -157,15 +157,18 @@ fun TimeBasedGreeting(
     Column(modifier = modifier) {
         Text(
             text = greeting,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = OrangePrimary
+            color = OrangePrimary,
+            maxLines = 1
         )
         userName?.let { name ->
             Text(
                 text = name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = WhiteTextMuted
+                style = MaterialTheme.typography.bodySmall,
+                color = WhiteTextMuted,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }
     }

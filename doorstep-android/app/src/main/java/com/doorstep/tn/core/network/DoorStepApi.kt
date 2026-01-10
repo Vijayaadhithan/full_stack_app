@@ -141,7 +141,9 @@ interface DoorStepApi {
     
     // ==================== BOOKINGS ENDPOINTS ====================
     
-    @GET("api/bookings/customer")
+    // Use /api/bookings instead of /api/bookings/customer to get enriched data
+    // /api/bookings returns service and provider info, /api/bookings/customer returns basic data only
+    @GET("api/bookings")
     suspend fun getCustomerBookings(): Response<List<Booking>>
     
     @GET("api/bookings/{id}")
@@ -194,11 +196,11 @@ interface DoorStepApi {
     
     // Get user notifications - matches web GET /api/notifications
     @GET("api/notifications")
-    suspend fun getNotifications(): Response<List<AppNotification>>
+    suspend fun getNotifications(): Response<NotificationsResponse>
     
     // Get unread notification count - matches web GET /api/notifications (derived)
     @GET("api/notifications")
-    suspend fun getUnreadNotificationCount(): Response<List<AppNotification>>
+    suspend fun getUnreadNotificationCount(): Response<NotificationsResponse>
     
     // Mark single notification as read - matches web PATCH /api/notifications/:id/read
     @PATCH("api/notifications/{id}/read")

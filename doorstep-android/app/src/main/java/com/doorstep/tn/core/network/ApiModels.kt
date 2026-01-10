@@ -53,7 +53,7 @@ data class CreateBookingRequest(
     val serviceId: Int,
     val bookingDate: String,           // "YYYY-MM-DD" ISO date
     val serviceLocation: String,        // "customer" or "provider"
-    val timeSlotLabel: String           // "morning", "afternoon", "evening", "emergency"
+    val timeSlotLabel: String? = null   // "morning", "afternoon", "evening", or null for emergency
 )
 
 // Booking response from POST /api/bookings
@@ -115,6 +115,13 @@ data class AppNotification(
     val isRead: Boolean = false,
     val relatedBookingId: Int? = null,
     val createdAt: String? = null
+)
+
+// Notifications response wrapper - server returns { data: [...], total, totalPages }
+data class NotificationsResponse(
+    val data: List<AppNotification> = emptyList(),
+    val total: Int = 0,
+    val totalPages: Int = 1
 )
 
 // Notification count response

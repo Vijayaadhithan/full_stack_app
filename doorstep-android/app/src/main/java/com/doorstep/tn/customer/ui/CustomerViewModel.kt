@@ -636,7 +636,7 @@ class CustomerViewModel @Inject constructor(
     fun createBooking(
         serviceId: Int,
         bookingDate: String,
-        timeSlotLabel: String,
+        timeSlotLabel: String?,  // Nullable - null for emergency "now" bookings
         serviceLocation: String,
         onSuccess: () -> Unit,
         onError: (String) -> Unit

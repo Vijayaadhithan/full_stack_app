@@ -1,9 +1,12 @@
 package com.doorstep.tn.customer.ui.bookings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -130,27 +133,30 @@ fun BookingsListScreen(
                 }
             }
             
-            // Status Filter Row (like web's STATUS section)
-            SingleChoiceSegmentedButtonRow(
+            // Status Filter Row (like web's STATUS section) - Scrollable to prevent truncation
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .height(40.dp)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                statusFilters.forEachIndexed { index, filter ->
-                    SegmentedButton(
+                statusFilters.forEach { filter ->
+                    FilterChip(
                         selected = selectedStatusFilter == filter,
                         onClick = { selectedStatusFilter = filter },
-                        shape = SegmentedButtonDefaults.itemShape(index, statusFilters.size),
-                        colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = OrangePrimary,
-                            activeContentColor = WhiteText,
-                            inactiveContainerColor = SlateCard,
-                            inactiveContentColor = WhiteTextMuted
+                        label = { Text(filter) },
+                        leadingIcon = if (selectedStatusFilter == filter) {
+                            { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = OrangePrimary,
+                            selectedLabelColor = WhiteText,
+                            selectedLeadingIconColor = WhiteText,
+                            containerColor = SlateCard,
+                            labelColor = WhiteTextMuted
                         )
-                    ) {
-                        Text(filter, style = MaterialTheme.typography.labelSmall)
-                    }
+                    )
                 }
             }
             
@@ -356,7 +362,7 @@ private fun BookingCardInline(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = formatTimeSlot(booking.timeSlotLabel),
+                    text = formatTimeSlot(booking.timeSlotLabel, booking.bookingDate),
                     style = MaterialTheme.typography.bodyMedium,
                     color = WhiteTextMuted
                 )
@@ -415,6 +421,81 @@ private fun BookingCardInline(
                             text = phone,
                             style = MaterialTheme.typography.bodyMedium,
                             color = WhiteText
+                        )
+                    }
+                }
+                
+                // Provider address (like web shows: Provider location: 7/152 Akarattur...)
+                val providerAddress = buildProviderAddress(provider)
+                if (providerAddress.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = WhiteTextMuted,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Provider location: $providerAddress",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = WhiteTextMuted,
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                
+                // View on Map link (like web)
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val hasLocation = provider.latitude != null && provider.longitude != null
+                val hasAddress = providerAddress.isNotEmpty()
+                
+                if (hasLocation || hasAddress) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable {
+                            // Open Google Maps
+                            val mapsUri = if (hasLocation) {
+                                // Use lat/lng if available
+                                android.net.Uri.parse("geo:${provider.latitude},${provider.longitude}?q=${provider.latitude},${provider.longitude}(Provider)")
+                            } else {
+                                // Use address if no coordinates
+                                android.net.Uri.parse("geo:0,0?q=${android.net.Uri.encode(providerAddress)}")
+                            }
+                            val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, mapsUri)
+                            mapIntent.setPackage("com.google.android.apps.maps")
+                            try {
+                                context.startActivity(mapIntent)
+                            } catch (e: Exception) {
+                                // If Google Maps not installed, open in browser
+                                val browserUri = if (hasLocation) {
+                                    android.net.Uri.parse("https://maps.google.com/?q=${provider.latitude},${provider.longitude}")
+                                } else {
+                                    android.net.Uri.parse("https://maps.google.com/?q=${android.net.Uri.encode(providerAddress)}")
+                                }
+                                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, browserUri))
+                            }
+                        }
+                    ) {
+                        Text(
+                            text = "(View on Map)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ProviderBlue
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "🗺️",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = "View on Map",
+                            tint = ProviderBlue,
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
@@ -704,10 +785,32 @@ private fun formatBookingDate(dateStr: String?): String {
 }
 
 /**
- * Format time slot like web: "Morning (Flexible)"
+ * Format time slot like web - shows actual time (e.g., "05:30 AM") from bookingDate
+ * Server sends time in UTC (ends with Z), need to convert to local timezone
  */
-private fun formatTimeSlot(timeSlot: String?): String {
-    if (timeSlot.isNullOrEmpty()) return "Time not set"
+private fun formatTimeSlot(timeSlot: String?, bookingDate: String?): String {
+    // First try to extract time from bookingDate (like web shows "05:30 AM")
+    if (!bookingDate.isNullOrEmpty()) {
+        try {
+            // Parse ISO format: 2026-01-07T00:00:00.000Z (UTC)
+            // Convert to local timezone (e.g., IST +5:30)
+            val instant = java.time.Instant.parse(bookingDate)
+            val localDateTime = instant.atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+            val timeString = localDateTime.format(DateTimeFormatter.ofPattern("hh:mm a"))
+            
+            // If we have a slot label, include it
+            if (!timeSlot.isNullOrEmpty()) {
+                val formattedSlot = timeSlot.lowercase().replaceFirstChar { it.uppercase() }
+                return "$timeString ($formattedSlot)"
+            }
+            return timeString
+        } catch (e: Exception) {
+            // Fall through to slot-based logic
+        }
+    }
+    
+    // Fallback to time slot label if no time in bookingDate
+    if (timeSlot.isNullOrEmpty()) return "Flexible time"
     
     // Capitalize first letter and add (Flexible) if it's a general slot
     val formattedSlot = timeSlot.lowercase().replaceFirstChar { it.uppercase() }
@@ -727,4 +830,14 @@ private fun getLocationLabel(location: String?): String {
         "provider" -> "Provider's location"
         else -> location ?: "Location not set"
     }
+}
+
+/**
+ * Build provider address from ProviderInfo fields
+ */
+private fun buildProviderAddress(provider: com.doorstep.tn.customer.data.model.ProviderInfo): String {
+    val parts = mutableListOf<String>()
+    provider.addressStreet?.let { if (it.isNotBlank()) parts.add(it) }
+    provider.addressCity?.let { if (it.isNotBlank()) parts.add(it) }
+    return parts.joinToString(", ")
 }
