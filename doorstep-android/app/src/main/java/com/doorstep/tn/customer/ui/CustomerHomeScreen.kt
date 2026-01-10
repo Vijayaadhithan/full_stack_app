@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -343,7 +344,7 @@ fun CustomerHomeScreen(
                     TextButton(onClick = onNavigateToOrders) {
                         Text(t.viewAll, color = OrangePrimary)
                         Icon(
-                            imageVector = Icons.Default.ArrowForward,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
                             tint = OrangePrimary,
                             modifier = Modifier.size(16.dp)
@@ -391,7 +392,7 @@ fun CustomerHomeScreen(
                     TextButton(onClick = onNavigateToBookings) {
                         Text(t.viewAll, color = OrangePrimary)
                         Icon(
-                            imageVector = Icons.Default.ArrowForward,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
                             tint = OrangePrimary,
                             modifier = Modifier.size(16.dp)
@@ -433,7 +434,7 @@ fun CustomerHomeScreen(
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = ErrorRed
                     ),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                    border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                         brush = Brush.horizontalGradient(
                             colors = listOf(ErrorRed.copy(alpha = 0.5f), ErrorRed.copy(alpha = 0.3f))
                         )

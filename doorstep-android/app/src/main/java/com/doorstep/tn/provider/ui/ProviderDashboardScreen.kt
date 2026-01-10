@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -178,7 +179,7 @@ fun ProviderDashboardScreen(
                         onClick = onNavigateToServices
                     )
                     ProviderActionCard(
-                        icon = Icons.Default.EventNote,
+                        icon = Icons.AutoMirrored.Filled.EventNote,
                         label = "Bookings",
                         color = OrangePrimary,
                         badge = "2",

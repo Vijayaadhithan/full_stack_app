@@ -66,10 +66,10 @@ fun KolamCorner(
         // Draw connecting curves (simplified kolam pattern)
         val path = Path().apply {
             moveTo(positions[1].x, positions[1].y)
-            quadraticBezierTo(centerX, centerY - radius, positions[2].x, positions[2].y)
-            quadraticBezierTo(centerX + radius, centerY, positions[4].x, positions[4].y)
-            quadraticBezierTo(centerX, centerY + radius, positions[3].x, positions[3].y)
-            quadraticBezierTo(centerX - radius, centerY, positions[1].x, positions[1].y)
+            quadraticTo(centerX, centerY - radius, positions[2].x, positions[2].y)
+            quadraticTo(centerX + radius, centerY, positions[4].x, positions[4].y)
+            quadraticTo(centerX, centerY + radius, positions[3].x, positions[3].y)
+            quadraticTo(centerX - radius, centerY, positions[1].x, positions[1].y)
         }
         
         drawPath(
@@ -327,7 +327,7 @@ fun TamilNaduDivider(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Divider(
+        HorizontalDivider(
             modifier = Modifier.weight(1f),
             color = color,
             thickness = 1.dp
@@ -346,7 +346,7 @@ fun TamilNaduDivider(
             drawPath(path = path, color = color)
         }
         
-        Divider(
+        HorizontalDivider(
             modifier = Modifier.weight(1f),
             color = color,
             thickness = 1.dp

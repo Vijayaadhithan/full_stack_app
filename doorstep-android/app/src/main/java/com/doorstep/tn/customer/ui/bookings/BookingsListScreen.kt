@@ -517,7 +517,7 @@ private fun BookingCardInline(
                     if (canCancel) {
                         OutlinedButton(
                             onClick = { showCancelDialog = true },
-                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                                 brush = androidx.compose.ui.graphics.SolidColor(ErrorRed)
                             ),
                             colors = ButtonDefaults.outlinedButtonColors(
@@ -539,7 +539,7 @@ private fun BookingCardInline(
                     if (canReschedule) {
                         OutlinedButton(
                             onClick = { showRescheduleDialog = true },
-                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                                 brush = androidx.compose.ui.graphics.SolidColor(ProviderBlue)
                             ),
                             colors = ButtonDefaults.outlinedButtonColors(
@@ -561,7 +561,7 @@ private fun BookingCardInline(
                     if (canReview) {
                         OutlinedButton(
                             onClick = { showReviewDialog = true },
-                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                                 brush = androidx.compose.ui.graphics.SolidColor(OrangePrimary)
                             ),
                             colors = ButtonDefaults.outlinedButtonColors(
