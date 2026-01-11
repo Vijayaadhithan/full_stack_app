@@ -187,6 +187,12 @@ interface DoorStepApi {
     // Submit service review - matches web POST /api/reviews
     @POST("api/reviews")
     suspend fun submitReview(@Body request: SubmitReviewRequest): Response<ReviewResponse>
+
+    // Get service reviews - matches web GET /api/reviews/service/:id
+    @GET("api/reviews/service/{id}")
+    suspend fun getServiceReviews(
+        @Path("id") serviceId: Int
+    ): Response<List<ServiceReview>>
     
     // Get customer's service reviews - matches web GET /api/reviews/customer
     @GET("api/reviews/customer")

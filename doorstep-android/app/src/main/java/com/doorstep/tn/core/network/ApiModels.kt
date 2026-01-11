@@ -129,6 +129,19 @@ data class ReviewResponse(
     @Json(name = "message") val message: String? = null
 )
 
+// Service review - GET /api/reviews/service/:id
+@JsonClass(generateAdapter = true)
+data class ServiceReview(
+    @Json(name = "id") val id: Int,
+    @Json(name = "serviceId") val serviceId: Int? = null,
+    @Json(name = "bookingId") val bookingId: Int? = null,
+    @Json(name = "customerId") val customerId: Int? = null,
+    @Json(name = "rating") val rating: Int,
+    @Json(name = "review") val review: String? = null,
+    @Json(name = "providerReply") val providerReply: String? = null,
+    @Json(name = "createdAt") val createdAt: String? = null
+)
+
 // Customer service review - GET /api/reviews/customer
 @JsonClass(generateAdapter = true)
 data class CustomerReview(

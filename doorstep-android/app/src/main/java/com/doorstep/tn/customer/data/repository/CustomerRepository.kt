@@ -647,6 +647,22 @@ class CustomerRepository @Inject constructor(
             Result.Error(e.message ?: "Failed to submit review")
         }
     }
+
+    // Get service reviews - matches web GET /api/reviews/service/:id
+    suspend fun getServiceReviews(
+        serviceId: Int
+    ): Result<List<com.doorstep.tn.core.network.ServiceReview>> {
+        return try {
+            val response = api.getServiceReviews(serviceId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load service reviews")
+        }
+    }
     
     // Get customer's service reviews - matches web GET /api/reviews/customer
     suspend fun getCustomerReviews(): Result<List<com.doorstep.tn.core.network.CustomerReview>> {

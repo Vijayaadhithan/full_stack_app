@@ -27,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.util.StatusUtils
+import com.doorstep.tn.core.network.ServiceReview
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import kotlinx.coroutines.launch
@@ -60,39 +61,71 @@ fun BookingsListScreen(
     
     val timeFilters = listOf("Upcoming", "Past")
     val statusFilters = listOf("All", "Pending", "Accepted", "Rejected", "Completed")
+    val reviewByBookingId = remember { mutableStateMapOf<Int, ServiceReview?>() }
+    val reviewLoadingByBookingId = remember { mutableStateMapOf<Int, Boolean>() }
+    val indiaZoneId = remember { ZoneId.of("Asia/Kolkata") }
     
     LaunchedEffect(Unit) {
         viewModel.loadBookings()
     }
     
     // Filter bookings by time and status (matching web logic)
-    val today = LocalDate.now()
+    val today = LocalDate.now(indiaZoneId)
     val filteredBookings = bookings.filter { booking ->
-        val bookingDate = try {
-            // Parse ISO date format
-            LocalDate.parse(booking.bookingDate?.take(10) ?: "")
-        } catch (e: Exception) {
-            today
-        }
-        
+        val normalizedStatus = normalizeBookingStatus(booking.status)
+        val bookingDate = parseBookingLocalDate(booking.bookingDate, indiaZoneId)
+        val isArchived = isArchivedBookingStatus(normalizedStatus)
+
         val timeMatch = when (selectedTimeFilter) {
-            "Upcoming" -> !bookingDate.isBefore(today) && 
-                         booking.status.lowercase() !in listOf("completed", "cancelled", "rejected")
-            "Past" -> bookingDate.isBefore(today) || 
-                     booking.status.lowercase() in listOf("completed", "cancelled", "rejected")
+            "Upcoming" -> bookingDate != null && !bookingDate.isBefore(today) && !isArchived
+            "Past" -> isArchived || (bookingDate != null && bookingDate.isBefore(today))
             else -> true
         }
-        
+
         val statusMatch = when (selectedStatusFilter) {
             "All" -> true
-            "Pending" -> booking.status.lowercase() == "pending"
-            "Accepted" -> booking.status.lowercase() in listOf("accepted", "en_route")
-            "Rejected" -> booking.status.lowercase() == "rejected"
-            "Completed" -> booking.status.lowercase() == "completed"
+            "Pending" -> normalizedStatus == "pending"
+            "Accepted" -> normalizedStatus == "accepted"
+            "Rejected" -> normalizedStatus == "rejected"
+            "Completed" -> normalizedStatus == "completed"
             else -> true
         }
-        
+
         timeMatch && statusMatch
+    }
+
+    fun loadReviewForBooking(booking: Booking, force: Boolean = false) {
+        val bookingId = booking.id
+        val serviceId = booking.serviceId
+        if (serviceId == null) {
+            scope.launch {
+                snackbarHostState.showSnackbar("Service not found for this booking")
+            }
+            return
+        }
+
+        if (!force && reviewByBookingId.containsKey(bookingId)) {
+            return
+        }
+        if (reviewLoadingByBookingId[bookingId] == true) {
+            return
+        }
+
+        reviewLoadingByBookingId[bookingId] = true
+        viewModel.loadServiceReviewForBooking(
+            serviceId = serviceId,
+            bookingId = bookingId,
+            onSuccess = { review ->
+                reviewByBookingId[bookingId] = review
+                reviewLoadingByBookingId[bookingId] = false
+            },
+            onError = { error ->
+                reviewLoadingByBookingId[bookingId] = false
+                scope.launch {
+                    snackbarHostState.showSnackbar("Error: $error")
+                }
+            }
+        )
     }
     
     Scaffold(
@@ -209,9 +242,15 @@ fun BookingsListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(filteredBookings) { booking ->
+                        val existingReview = reviewByBookingId[booking.id]
+                        val isReviewLoading = reviewLoadingByBookingId[booking.id] == true
+
                         // Booking card with action buttons
                         BookingCardInline(
                             booking = booking,
+                            existingReview = existingReview,
+                            isReviewLoading = isReviewLoading,
+                            onLoadExistingReview = { loadReviewForBooking(booking) },
                             onCancel = {
                                 viewModel.cancelBooking(
                                     bookingId = booking.id,
@@ -244,17 +283,18 @@ fun BookingsListScreen(
                                     }
                                 )
                             },
-                            onReview = { ratingValue, reviewText ->
+                            onSubmitReview = { ratingValue, reviewText ->
                                 booking.serviceId?.let { serviceId ->
                                     viewModel.submitReview(
                                         serviceId = serviceId,
                                         rating = ratingValue,
-                                        review = reviewText,
+                                        review = reviewText.trim(),
                                         bookingId = booking.id,
                                         onSuccess = {
                                             scope.launch {
                                                 snackbarHostState.showSnackbar("Review submitted successfully!")
                                             }
+                                            loadReviewForBooking(booking, force = true)
                                         },
                                         onError = { error ->
                                             scope.launch {
@@ -263,6 +303,24 @@ fun BookingsListScreen(
                                         }
                                     )
                                 }
+                            },
+                            onUpdateReview = { reviewId, ratingValue, reviewText ->
+                                viewModel.updateServiceReview(
+                                    reviewId = reviewId,
+                                    rating = ratingValue,
+                                    review = reviewText.trim(),
+                                    onSuccess = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Review updated successfully!")
+                                        }
+                                        loadReviewForBooking(booking, force = true)
+                                    },
+                                    onError = { error ->
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Error: $error")
+                                        }
+                                    }
+                                )
                             },
                             onSubmitPayment = { paymentReference ->
                                 viewModel.submitBookingPayment(
@@ -331,9 +389,13 @@ fun BookingsListScreen(
 @Composable
 private fun BookingCardInline(
     booking: Booking,
+    existingReview: ServiceReview?,
+    isReviewLoading: Boolean,
+    onLoadExistingReview: () -> Unit,
     onCancel: () -> Unit,
     onReschedule: (String, String?) -> Unit,
-    onReview: (Int, String) -> Unit,
+    onSubmitReview: (Int, String) -> Unit,
+    onUpdateReview: (Int, Int, String) -> Unit,
     onSubmitPayment: (String) -> Unit,
     onUpdateReference: (String) -> Unit,
     onReportDispute: (String) -> Unit,
@@ -348,6 +410,20 @@ private fun BookingCardInline(
     var showReviewDialog by remember { mutableStateOf(false) }
     var rating by remember { mutableStateOf(5) }
     var reviewText by remember { mutableStateOf("") }
+
+    LaunchedEffect(showReviewDialog) {
+        if (showReviewDialog) {
+            rating = existingReview?.rating ?: 5
+            reviewText = existingReview?.review ?: ""
+        }
+    }
+
+    LaunchedEffect(existingReview?.id, isReviewLoading) {
+        if (showReviewDialog && existingReview != null && !isReviewLoading) {
+            rating = existingReview.rating
+            reviewText = existingReview.review ?: ""
+        }
+    }
     
     // Cancel confirmation dialog state
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -583,7 +659,7 @@ private fun BookingCardInline(
                 }
             }
             
-            val status = booking.status.lowercase()
+            val status = normalizeBookingStatus(booking.status)
             val canCancel = status == "pending"
             val canReschedule = status == "pending"
             val canReview = status == "completed"
@@ -699,7 +775,14 @@ private fun BookingCardInline(
 
                     if (canReview) {
                         OutlinedButton(
-                            onClick = { showReviewDialog = true },
+                            onClick = {
+                                if (booking.serviceId == null) {
+                                    onShowMessage("Service not found for this booking")
+                                    return@OutlinedButton
+                                }
+                                onLoadExistingReview()
+                                showReviewDialog = true
+                            },
                             border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                                 brush = androidx.compose.ui.graphics.SolidColor(OrangePrimary)
                             ),
@@ -711,14 +794,14 @@ private fun BookingCardInline(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Leave Review")
+                            Text(if (existingReview != null) "Edit Review" else "Leave Review")
                         }
                     }
                 }
             }
             
             // Rejected bookings: Show rejection reason
-            if (booking.status.lowercase() == "rejected") {
+            if (normalizeBookingStatus(booking.status) == "rejected") {
                 booking.rejectionReason?.let { reason ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -765,14 +848,34 @@ private fun BookingCardInline(
         AlertDialog(
             onDismissRequest = { showReviewDialog = false },
             containerColor = SlateCard,
-            title = { Text("Leave a Review", color = WhiteText) },
+            title = {
+                Text(
+                    text = if (existingReview != null) "Update Review" else "Leave a Review",
+                    color = WhiteText
+                )
+            },
             text = {
                 Column {
+                    if (isReviewLoading) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = OrangePrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Loading review...", color = WhiteTextMuted)
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
                     Text("Rating", color = WhiteTextMuted, style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(8.dp))
                     Row {
                         (1..5).forEach { star ->
-                            IconButton(onClick = { rating = star }) {
+                            IconButton(
+                                onClick = { rating = star },
+                                enabled = !isReviewLoading
+                            ) {
                                 Icon(
                                     imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
                                     contentDescription = "Star $star",
@@ -786,9 +889,10 @@ private fun BookingCardInline(
                     OutlinedTextField(
                         value = reviewText,
                         onValueChange = { reviewText = it },
-                        label = { Text("Your review (optional)") },
+                        label = { Text("Your review") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3,
+                        enabled = !isReviewLoading,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = WhiteText,
                             unfocusedTextColor = WhiteTextMuted,
@@ -801,14 +905,24 @@ private fun BookingCardInline(
             confirmButton = {
                 Button(
                     onClick = {
+                        val trimmedReview = reviewText.trim()
+                        if (trimmedReview.isEmpty()) {
+                            onShowMessage("Please enter a review")
+                            return@Button
+                        }
                         showReviewDialog = false
-                        onReview(rating, reviewText)
+                        if (existingReview != null) {
+                            onUpdateReview(existingReview.id, rating, trimmedReview)
+                        } else {
+                            onSubmitReview(rating, trimmedReview)
+                        }
                         rating = 5
                         reviewText = ""
                     },
+                    enabled = !isReviewLoading && reviewText.trim().isNotEmpty(),
                     colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
                 ) {
-                    Text("Submit Review")
+                    Text(if (existingReview != null) "Update Review" else "Submit Review")
                 }
             },
             dismissButton = {
@@ -1228,4 +1342,31 @@ private fun buildProviderAddress(provider: com.doorstep.tn.customer.data.model.P
     provider.addressPostalCode?.let { if (it.isNotBlank()) parts.add(it) }
     provider.addressCountry?.let { if (it.isNotBlank()) parts.add(it) }
     return parts.joinToString(", ")
+}
+
+private fun normalizeBookingStatus(status: String?): String {
+    return status?.lowercase()?.replace(" ", "_") ?: ""
+}
+
+private fun isArchivedBookingStatus(status: String): Boolean {
+    return status in listOf("completed", "cancelled", "rejected", "expired")
+}
+
+private fun parseBookingLocalDate(dateStr: String?, zoneId: ZoneId): LocalDate? {
+    if (dateStr.isNullOrBlank()) return null
+
+    val trimmed = dateStr.substringBefore("[").trim()
+    val timePart = trimmed.substringAfter("T", "")
+    val hasZoneOffset = timePart.contains("Z") ||
+        timePart.contains("z") ||
+        timePart.contains("+") ||
+        timePart.contains("-")
+    val normalized = if (timePart.isNotEmpty() && !hasZoneOffset) "${trimmed}Z" else trimmed
+
+    val instant = runCatching { Instant.parse(normalized) }.getOrNull()
+    if (instant != null) {
+        return instant.atZone(zoneId).toLocalDate()
+    }
+
+    return runCatching { LocalDate.parse(trimmed.take(10)) }.getOrNull()
 }

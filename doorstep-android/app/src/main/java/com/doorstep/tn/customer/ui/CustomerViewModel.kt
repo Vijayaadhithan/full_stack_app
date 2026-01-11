@@ -979,6 +979,24 @@ class CustomerViewModel @Inject constructor(
             _isLoading.value = false
         }
     }
+
+    fun loadServiceReviewForBooking(
+        serviceId: Int,
+        bookingId: Int,
+        onSuccess: (com.doorstep.tn.core.network.ServiceReview?) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            when (val result = repository.getServiceReviews(serviceId)) {
+                is Result.Success -> {
+                    val match = result.data.firstOrNull { it.bookingId == bookingId }
+                    onSuccess(match)
+                }
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
+        }
+    }
     
     // ==================== Reviews Actions (Customer) ====================
     
