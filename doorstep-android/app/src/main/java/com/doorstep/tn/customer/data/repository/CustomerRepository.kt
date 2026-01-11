@@ -4,6 +4,7 @@ import com.doorstep.tn.auth.data.repository.Result
 import com.doorstep.tn.core.cache.CacheRepository
 import com.doorstep.tn.core.cache.MemoryCache
 import com.doorstep.tn.core.network.DoorStepApi
+import com.doorstep.tn.core.network.ServiceBookingSlot
 import com.doorstep.tn.customer.data.model.*
 import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
@@ -493,6 +494,19 @@ class CustomerRepository @Inject constructor(
             Result.Error(e.message ?: "Failed to load booking")
         }
     }
+
+    suspend fun getServiceBookingSlots(serviceId: Int, date: String): Result<List<ServiceBookingSlot>> {
+        return try {
+            val response = api.getServiceBookingSlots(serviceId, date)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load booking slots")
+        }
+    }
     
     // Create booking - matches web POST /api/bookings
     suspend fun createBooking(
@@ -555,6 +569,57 @@ class CustomerRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to reschedule booking")
+        }
+    }
+
+    suspend fun submitBookingPayment(bookingId: Int, paymentReference: String): Result<Booking> {
+        return try {
+            val response = api.submitBookingPayment(
+                bookingId,
+                com.doorstep.tn.core.network.PaymentReferenceRequest(paymentReference)
+            )
+            val booking = response.body()?.booking
+            if (response.isSuccessful && booking != null) {
+                Result.Success(booking)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to submit payment reference")
+        }
+    }
+
+    suspend fun updateBookingReference(bookingId: Int, paymentReference: String): Result<Booking> {
+        return try {
+            val response = api.updateBookingReference(
+                bookingId,
+                com.doorstep.tn.core.network.PaymentReferenceRequest(paymentReference)
+            )
+            val booking = response.body()?.booking
+            if (response.isSuccessful && booking != null) {
+                Result.Success(booking)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to update payment reference")
+        }
+    }
+
+    suspend fun reportBookingDispute(bookingId: Int, reason: String): Result<Booking> {
+        return try {
+            val response = api.reportBookingDispute(
+                bookingId,
+                com.doorstep.tn.core.network.BookingDisputeRequest(reason)
+            )
+            val booking = response.body()?.booking
+            if (response.isSuccessful && booking != null) {
+                Result.Success(booking)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to report dispute")
         }
     }
     

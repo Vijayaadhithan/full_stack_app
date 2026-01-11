@@ -60,6 +60,9 @@ data class Service(
     @Json(name = "isAvailable") val isAvailable: Boolean = true,
     @Json(name = "providerId") val providerId: Int? = null,
     @Json(name = "isAvailableNow") val isAvailableNow: Boolean = true,
+    @Json(name = "availabilityNote") val availabilityNote: String? = null,
+    @Json(name = "maxDailyBookings") val maxDailyBookings: Int? = null,
+    @Json(name = "allowedSlots") val allowedSlots: List<String>? = null,
     @Json(name = "rating") val rating: Double? = null,
     @Json(name = "reviewCount") val reviewCount: Int = 0,
     @Json(name = "provider") val provider: ProviderInfo? = null
@@ -148,7 +151,14 @@ data class Booking(
     @Json(name = "service") val service: Service? = null,
     @Json(name = "provider") val provider: ProviderInfo? = null,
     @Json(name = "serviceLocation") val serviceLocation: String? = null,
-    @Json(name = "rejectionReason") val rejectionReason: String? = null
+    @Json(name = "rejectionReason") val rejectionReason: String? = null,
+    @Json(name = "paymentStatus") val paymentStatus: String? = null,
+    @Json(name = "paymentReference") val paymentReference: String? = null,
+    @Json(name = "disputeReason") val disputeReason: String? = null,
+    @Json(name = "comments") val comments: String? = null,
+    @Json(name = "rescheduleDate") val rescheduleDate: String? = null,
+    @Json(name = "providerAddress") val providerAddress: String? = null,
+    @Json(name = "expiresAt") val expiresAt: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -158,8 +168,13 @@ data class ProviderInfo(
     @Json(name = "phone") val phone: String? = null,
     @Json(name = "addressStreet") val addressStreet: String? = null,
     @Json(name = "addressCity") val addressCity: String? = null,
+    @Json(name = "addressState") val addressState: String? = null,
+    @Json(name = "addressPostalCode") val addressPostalCode: String? = null,
+    @Json(name = "addressCountry") val addressCountry: String? = null,
     @Json(name = "latitude") val latitude: Double? = null,
-    @Json(name = "longitude") val longitude: Double? = null
+    @Json(name = "longitude") val longitude: Double? = null,
+    @Json(name = "upiId") val upiId: String? = null,
+    @Json(name = "upiQrCodeUrl") val upiQrCodeUrl: String? = null
 )
 
 // ==================== Cart ====================
@@ -174,4 +189,3 @@ data class CartItem(
     // Derive productId from product.id (server doesn't return separate productId)
     val productId: Int get() = product.id
 }
-

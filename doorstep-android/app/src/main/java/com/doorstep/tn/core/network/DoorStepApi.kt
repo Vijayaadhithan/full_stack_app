@@ -148,7 +148,13 @@ interface DoorStepApi {
     
     @GET("api/bookings/{id}")
     suspend fun getBookingById(@Path("id") bookingId: Int): Response<Booking>
-    
+
+    @GET("api/bookings/service/{id}")
+    suspend fun getServiceBookingSlots(
+        @Path("id") serviceId: Int,
+        @Query("date") date: String
+    ): Response<List<ServiceBookingSlot>>
+
     @POST("api/bookings")
     suspend fun createBooking(@Body request: CreateBookingRequest): Response<BookingResponse>
     
@@ -158,6 +164,25 @@ interface DoorStepApi {
         @Path("id") bookingId: Int,
         @Body request: UpdateBookingRequest
     ): Response<Booking>
+
+    // Customer booking payment and dispute actions
+    @PATCH("api/bookings/{id}/customer-complete")
+    suspend fun submitBookingPayment(
+        @Path("id") bookingId: Int,
+        @Body request: PaymentReferenceRequest
+    ): Response<BookingActionResponse>
+
+    @PATCH("api/bookings/{id}/update-reference")
+    suspend fun updateBookingReference(
+        @Path("id") bookingId: Int,
+        @Body request: PaymentReferenceRequest
+    ): Response<BookingActionResponse>
+
+    @POST("api/bookings/{id}/report-dispute")
+    suspend fun reportBookingDispute(
+        @Path("id") bookingId: Int,
+        @Body request: BookingDisputeRequest
+    ): Response<BookingActionResponse>
     
     // Submit service review - matches web POST /api/reviews
     @POST("api/reviews")

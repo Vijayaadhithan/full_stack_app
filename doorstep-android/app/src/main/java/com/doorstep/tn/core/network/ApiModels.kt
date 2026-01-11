@@ -71,10 +71,37 @@ data class CreateBookingRequest(
     @Json(name = "timeSlotLabel") val timeSlotLabel: String? = null
 )
 
+// Booking slots response - GET /api/bookings/service/:id
+@JsonClass(generateAdapter = true)
+data class ServiceBookingSlot(
+    @Json(name = "timeSlotLabel") val timeSlotLabel: String? = null,
+    @Json(name = "start") val start: String? = null,
+    @Json(name = "end") val end: String? = null
+)
+
 // Booking response from POST /api/bookings
 data class BookingResponse(
     val message: String? = null,
     val booking: com.doorstep.tn.customer.data.model.Booking? = null
+)
+
+// Booking action response (payment, update reference, dispute)
+@JsonClass(generateAdapter = true)
+data class BookingActionResponse(
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "booking") val booking: com.doorstep.tn.customer.data.model.Booking? = null
+)
+
+// Payment reference - PATCH /api/bookings/:id/customer-complete, /update-reference
+@JsonClass(generateAdapter = true)
+data class PaymentReferenceRequest(
+    @Json(name = "paymentReference") val paymentReference: String
+)
+
+// Booking dispute - POST /api/bookings/:id/report-dispute
+@JsonClass(generateAdapter = true)
+data class BookingDisputeRequest(
+    @Json(name = "reason") val reason: String
 )
 
 // Update booking - PATCH /api/bookings/{id} (for cancel, reschedule)

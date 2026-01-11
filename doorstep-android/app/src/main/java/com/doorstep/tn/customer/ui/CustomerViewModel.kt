@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.doorstep.tn.auth.data.repository.Result
+import com.doorstep.tn.core.network.ServiceBookingSlot
 import com.doorstep.tn.customer.data.model.*
 import com.doorstep.tn.customer.data.repository.CustomerRepository
 import com.doorstep.tn.core.datastore.PreferenceKeys
@@ -103,6 +104,12 @@ class CustomerViewModel @Inject constructor(
     
     private val _selectedBooking = MutableStateFlow<Booking?>(null)
     val selectedBooking: StateFlow<Booking?> = _selectedBooking.asStateFlow()
+
+    private val _bookingSlots = MutableStateFlow<List<ServiceBookingSlot>>(emptyList())
+    val bookingSlots: StateFlow<List<ServiceBookingSlot>> = _bookingSlots.asStateFlow()
+
+    private val _bookingSlotsLoading = MutableStateFlow(false)
+    val bookingSlotsLoading: StateFlow<Boolean> = _bookingSlotsLoading.asStateFlow()
     
     // Loading & Error
     private val _isLoading = MutableStateFlow(false)
@@ -746,6 +753,20 @@ class CustomerViewModel @Inject constructor(
     fun selectBooking(booking: Booking) {
         _selectedBooking.value = booking
     }
+
+    fun loadServiceBookingSlots(serviceId: Int, date: String) {
+        viewModelScope.launch {
+            _bookingSlotsLoading.value = true
+
+            when (val result = repository.getServiceBookingSlots(serviceId, date)) {
+                is Result.Success -> _bookingSlots.value = result.data
+                is Result.Error -> _error.value = result.message
+                is Result.Loading -> {}
+            }
+
+            _bookingSlotsLoading.value = false
+        }
+    }
     
     // Create booking matching web's POST /api/bookings
     fun createBooking(
@@ -753,7 +774,7 @@ class CustomerViewModel @Inject constructor(
         bookingDate: String,
         timeSlotLabel: String?,  // Nullable - null for emergency "now" bookings
         serviceLocation: String,
-        onSuccess: () -> Unit,
+        onSuccess: (com.doorstep.tn.core.network.BookingResponse) -> Unit,
         onError: (String) -> Unit
     ) {
         viewModelScope.launch {
@@ -762,7 +783,7 @@ class CustomerViewModel @Inject constructor(
             when (val result = repository.createBooking(serviceId, bookingDate, timeSlotLabel, serviceLocation)) {
                 is Result.Success -> {
                     loadBookings() // Refresh bookings list
-                    onSuccess()
+                    onSuccess(result.data)
                 }
                 is Result.Error -> {
                     _error.value = result.message
@@ -852,6 +873,81 @@ class CustomerViewModel @Inject constructor(
                 is Result.Loading -> {}
             }
             
+            _isLoading.value = false
+        }
+    }
+
+    fun submitBookingPayment(
+        bookingId: Int,
+        paymentReference: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+
+            when (val result = repository.submitBookingPayment(bookingId, paymentReference)) {
+                is Result.Success -> {
+                    loadBookings()
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message)
+                }
+                is Result.Loading -> {}
+            }
+
+            _isLoading.value = false
+        }
+    }
+
+    fun updateBookingReference(
+        bookingId: Int,
+        paymentReference: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+
+            when (val result = repository.updateBookingReference(bookingId, paymentReference)) {
+                is Result.Success -> {
+                    loadBookings()
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message)
+                }
+                is Result.Loading -> {}
+            }
+
+            _isLoading.value = false
+        }
+    }
+
+    fun reportBookingDispute(
+        bookingId: Int,
+        reason: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+
+            when (val result = repository.reportBookingDispute(bookingId, reason)) {
+                is Result.Success -> {
+                    loadBookings()
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message)
+                }
+                is Result.Loading -> {}
+            }
+
             _isLoading.value = false
         }
     }

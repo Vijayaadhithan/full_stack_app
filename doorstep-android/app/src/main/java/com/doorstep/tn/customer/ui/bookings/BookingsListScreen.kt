@@ -1,5 +1,8 @@
 package com.doorstep.tn.customer.ui.bookings
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -14,21 +17,26 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.util.StatusUtils
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.ui.CustomerViewModel
+import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 /**
  * My Bookings Screen - Matches web app's /customer/bookings page exactly
@@ -255,6 +263,57 @@ fun BookingsListScreen(
                                         }
                                     )
                                 }
+                            },
+                            onSubmitPayment = { paymentReference ->
+                                viewModel.submitBookingPayment(
+                                    bookingId = booking.id,
+                                    paymentReference = paymentReference,
+                                    onSuccess = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Payment submitted successfully")
+                                        }
+                                    },
+                                    onError = { error ->
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Error: $error")
+                                        }
+                                    }
+                                )
+                            },
+                            onUpdateReference = { paymentReference ->
+                                viewModel.updateBookingReference(
+                                    bookingId = booking.id,
+                                    paymentReference = paymentReference,
+                                    onSuccess = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Payment reference updated")
+                                        }
+                                    },
+                                    onError = { error ->
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Error: $error")
+                                        }
+                                    }
+                                )
+                            },
+                            onReportDispute = { reason ->
+                                viewModel.reportBookingDispute(
+                                    bookingId = booking.id,
+                                    reason = reason,
+                                    onSuccess = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Issue reported successfully")
+                                        }
+                                    },
+                                    onError = { error ->
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Error: $error")
+                                        }
+                                    }
+                                )
+                            },
+                            onShowMessage = { message ->
+                                scope.launch { snackbarHostState.showSnackbar(message) }
                             }
                         )
                     }
@@ -266,7 +325,7 @@ fun BookingsListScreen(
 
 /**
  * Booking Card - Shows all booking info inline like web app
- * Includes action buttons: Cancel (for pending), Reschedule (for pending/accepted), Review (for completed)
+ * Includes actions for payment, reschedule, cancel, review, and dispute flows
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -274,11 +333,16 @@ private fun BookingCardInline(
     booking: Booking,
     onCancel: () -> Unit,
     onReschedule: (String, String?) -> Unit,
-    onReview: (Int, String) -> Unit
+    onReview: (Int, String) -> Unit,
+    onSubmitPayment: (String) -> Unit,
+    onUpdateReference: (String) -> Unit,
+    onReportDispute: (String) -> Unit,
+    onShowMessage: (String) -> Unit
 ) {
     val statusColor = StatusUtils.getBookingStatusColor(booking.status)
     val statusBgColor = StatusUtils.getBookingStatusBgColor(booking.status)
     val statusLabel = StatusUtils.getBookingStatusLabel(booking.status)
+    val context = LocalContext.current
     
     // Review dialog state
     var showReviewDialog by remember { mutableStateOf(false) }
@@ -290,11 +354,29 @@ private fun BookingCardInline(
     
     // Reschedule dialog state
     var showRescheduleDialog by remember { mutableStateOf(false) }
-    var rescheduleDate by remember { mutableStateOf(LocalDate.now().plusDays(1)) }
     var rescheduleComments by remember { mutableStateOf("") }
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = System.currentTimeMillis() + 86400000 // Tomorrow
     )
+    val timePickerState = rememberTimePickerState(
+        initialHour = 10,
+        initialMinute = 0,
+        is24Hour = false
+    )
+
+    // Payment dialog state
+    var showPaymentDialog by remember { mutableStateOf(false) }
+    var paymentMethod by remember { mutableStateOf("upi") }
+    var paymentReference by remember(booking.id) {
+        mutableStateOf(booking.paymentReference ?: "")
+    }
+
+    // Update reference dialog state
+    var showUpdateReferenceDialog by remember { mutableStateOf(false) }
+
+    // Dispute dialog state
+    var showDisputeDialog by remember { mutableStateOf(false) }
+    var disputeReason by remember { mutableStateOf("") }
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -501,50 +583,91 @@ private fun BookingCardInline(
                 }
             }
             
-            // Action buttons row
-            val canCancel = booking.status.lowercase() in listOf("pending", "accepted")
-            val canReschedule = booking.status.lowercase() in listOf("pending", "accepted")
-            val canReview = booking.status.lowercase() == "completed"
-            
-            if (canCancel || canReschedule || canReview) {
+            val status = booking.status.lowercase()
+            val canCancel = status == "pending"
+            val canReschedule = status == "pending"
+            val canReview = status == "completed"
+            val canCompletePayment = status == "accepted" || status == "en_route"
+            val canManagePayment = status == "awaiting_payment"
+
+            if (status == "awaiting_payment" && !booking.paymentReference.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Payment reference: ${booking.paymentReference}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted
+                )
+            }
+
+            if (status == "disputed" && !booking.disputeReason.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Dispute: ${booking.disputeReason}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ErrorRed
+                )
+            }
+
+            if (canCompletePayment || canManagePayment || canCancel || canReschedule || canReview) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Cancel button (for pending/accepted bookings)
-                    if (canCancel) {
-                        OutlinedButton(
-                            onClick = { showCancelDialog = true },
-                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
-                                brush = androidx.compose.ui.graphics.SolidColor(ErrorRed)
-                            ),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = ErrorRed
-                            )
+                    if (canCompletePayment) {
+                        Button(
+                            onClick = {
+                                paymentMethod = "upi"
+                                paymentReference = ""
+                                showPaymentDialog = true
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ProviderBlue)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Cancel,
+                                imageVector = Icons.Default.Payments,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Cancel")
+                            Text("Mark Complete & Pay")
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
                     }
-                    
-                    // Reschedule button (for pending/accepted bookings)
+
+                    if (canManagePayment) {
+                        OutlinedButton(
+                            onClick = {
+                                paymentReference = booking.paymentReference ?: ""
+                                showUpdateReferenceDialog = true
+                            },
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                brush = androidx.compose.ui.graphics.SolidColor(ProviderBlue)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ProviderBlue)
+                        ) {
+                            Text("Update Reference")
+                        }
+
+                        OutlinedButton(
+                            onClick = { showDisputeDialog = true },
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                brush = androidx.compose.ui.graphics.SolidColor(ErrorRed)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
+                        ) {
+                            Text("Report Issue")
+                        }
+                    }
+
                     if (canReschedule) {
                         OutlinedButton(
                             onClick = { showRescheduleDialog = true },
                             border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                                 brush = androidx.compose.ui.graphics.SolidColor(ProviderBlue)
                             ),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = ProviderBlue
-                            )
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ProviderBlue)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Schedule,
@@ -554,19 +677,33 @@ private fun BookingCardInline(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Reschedule")
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
                     }
-                    
-                    // Review button (for completed bookings)
+
+                    if (canCancel) {
+                        OutlinedButton(
+                            onClick = { showCancelDialog = true },
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                brush = androidx.compose.ui.graphics.SolidColor(ErrorRed)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Cancel,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Cancel")
+                        }
+                    }
+
                     if (canReview) {
                         OutlinedButton(
                             onClick = { showReviewDialog = true },
                             border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                                 brush = androidx.compose.ui.graphics.SolidColor(OrangePrimary)
                             ),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = OrangePrimary
-                            )
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Star,
@@ -684,6 +821,224 @@ private fun BookingCardInline(
             }
         )
     }
+
+    // Payment dialog for accepted/en_route bookings
+    if (showPaymentDialog) {
+        AlertDialog(
+            onDismissRequest = { showPaymentDialog = false },
+            containerColor = SlateCard,
+            title = { Text("Complete Payment", color = WhiteText) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Payment method", color = WhiteTextMuted)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = paymentMethod == "upi",
+                            onClick = { paymentMethod = "upi" },
+                            label = { Text("UPI") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = OrangePrimary,
+                                selectedLabelColor = WhiteText
+                            )
+                        )
+                        FilterChip(
+                            selected = paymentMethod == "cash",
+                            onClick = { paymentMethod = "cash" },
+                            label = { Text("Cash") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = OrangePrimary,
+                                selectedLabelColor = WhiteText
+                            )
+                        )
+                    }
+
+                    if (paymentMethod == "upi") {
+                        val upiId = booking.provider?.upiId
+                        if (!upiId.isNullOrBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Pay to UPI: $upiId",
+                                    color = WhiteTextMuted,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("UPI ID", upiId))
+                                        onShowMessage("UPI ID copied")
+                                    }
+                                ) {
+                                    Text("Copy")
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "UPI ID not available",
+                                color = ErrorRed
+                            )
+                        }
+
+                        booking.provider?.upiQrCodeUrl?.takeIf { it.isNotBlank() }?.let { qrUrl ->
+                            AsyncImage(
+                                model = qrUrl,
+                                contentDescription = "UPI QR Code",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = paymentReference,
+                            onValueChange = { paymentReference = it },
+                            label = { Text("Transaction reference") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = WhiteText,
+                                unfocusedTextColor = WhiteTextMuted,
+                                focusedBorderColor = OrangePrimary,
+                                unfocusedBorderColor = GlassWhite
+                            )
+                        )
+                    } else {
+                        Text(
+                            text = "Cash payment will be confirmed by the provider.",
+                            color = WhiteTextMuted
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val reference = if (paymentMethod == "cash") {
+                            "CASH"
+                        } else {
+                            paymentReference.trim()
+                        }
+
+                        if (paymentMethod == "upi" && reference.isEmpty()) {
+                            onShowMessage("Enter a transaction reference")
+                            return@Button
+                        }
+
+                        showPaymentDialog = false
+                        onSubmitPayment(reference)
+                        paymentReference = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ProviderBlue)
+                ) {
+                    Text("Submit Payment")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showPaymentDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = WhiteTextMuted)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Update payment reference dialog
+    if (showUpdateReferenceDialog) {
+        AlertDialog(
+            onDismissRequest = { showUpdateReferenceDialog = false },
+            containerColor = SlateCard,
+            title = { Text("Update Reference", color = WhiteText) },
+            text = {
+                OutlinedTextField(
+                    value = paymentReference,
+                    onValueChange = { paymentReference = it },
+                    label = { Text("Transaction reference") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = WhiteText,
+                        unfocusedTextColor = WhiteTextMuted,
+                        focusedBorderColor = ProviderBlue,
+                        unfocusedBorderColor = GlassWhite
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val reference = paymentReference.trim()
+                        if (reference.isEmpty()) {
+                            onShowMessage("Enter a transaction reference")
+                            return@Button
+                        }
+                        showUpdateReferenceDialog = false
+                        onUpdateReference(reference)
+                        paymentReference = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ProviderBlue)
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showUpdateReferenceDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = WhiteTextMuted)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Report dispute dialog
+    if (showDisputeDialog) {
+        AlertDialog(
+            onDismissRequest = { showDisputeDialog = false },
+            containerColor = SlateCard,
+            title = { Text("Report Issue", color = WhiteText) },
+            text = {
+                OutlinedTextField(
+                    value = disputeReason,
+                    onValueChange = { disputeReason = it },
+                    label = { Text("Describe the issue") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = WhiteText,
+                        unfocusedTextColor = WhiteTextMuted,
+                        focusedBorderColor = ErrorRed,
+                        unfocusedBorderColor = GlassWhite
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val reason = disputeReason.trim()
+                        if (reason.length < 5) {
+                            onShowMessage("Please enter at least 5 characters")
+                            return@Button
+                        }
+                        showDisputeDialog = false
+                        onReportDispute(reason)
+                        disputeReason = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+                ) {
+                    Text("Submit")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDisputeDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = WhiteTextMuted)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
     
     // Reschedule dialog with DatePicker
     if (showRescheduleDialog) {
@@ -692,15 +1047,32 @@ private fun BookingCardInline(
             confirmButton = {
                 Button(
                     onClick = {
-                        showRescheduleDialog = false
-                        // Convert selected date millis to ISO format
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val selectedDate = java.time.Instant.ofEpochMilli(millis)
-                                .atZone(java.time.ZoneId.systemDefault())
-                                .toLocalDate()
-                            val isoDate = selectedDate.format(DateTimeFormatter.ISO_DATE)
-                            onReschedule(isoDate, rescheduleComments.takeIf { it.isNotBlank() })
+                        val selectedMillis = datePickerState.selectedDateMillis
+                        if (selectedMillis == null) {
+                            onShowMessage("Please select a date")
+                            return@Button
                         }
+
+                        val zoneId = ZoneId.systemDefault()
+                        val selectedDate = Instant.ofEpochMilli(selectedMillis)
+                            .atZone(zoneId)
+                            .toLocalDate()
+                        val selectedTime = LocalTime.of(
+                            timePickerState.hour,
+                            timePickerState.minute
+                        )
+                        val selectedDateTime = ZonedDateTime.of(selectedDate, selectedTime, zoneId)
+
+                        if (selectedDateTime.toInstant().isBefore(Instant.now())) {
+                            onShowMessage("Please select a future time")
+                            return@Button
+                        }
+
+                        showRescheduleDialog = false
+                        onReschedule(
+                            selectedDateTime.toInstant().toString(),
+                            rescheduleComments.takeIf { it.isNotBlank() }
+                        )
                         rescheduleComments = ""
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ProviderBlue)
@@ -744,6 +1116,14 @@ private fun BookingCardInline(
                         todayDateBorderColor = OrangePrimary
                     )
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Select Time",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = WhiteText
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TimePicker(state = timePickerState)
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = rescheduleComments,
@@ -844,5 +1224,8 @@ private fun buildProviderAddress(provider: com.doorstep.tn.customer.data.model.P
     val parts = mutableListOf<String>()
     provider.addressStreet?.let { if (it.isNotBlank()) parts.add(it) }
     provider.addressCity?.let { if (it.isNotBlank()) parts.add(it) }
+    provider.addressState?.let { if (it.isNotBlank()) parts.add(it) }
+    provider.addressPostalCode?.let { if (it.isNotBlank()) parts.add(it) }
+    provider.addressCountry?.let { if (it.isNotBlank()) parts.add(it) }
     return parts.joinToString(", ")
 }
