@@ -667,6 +667,46 @@ class CustomerViewModel @Inject constructor(
             }
         }
     }
+
+    fun cancelOrder(orderId: Int, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            when (val result = repository.cancelOrder(orderId)) {
+                is Result.Success -> {
+                    _selectedOrder.value = result.data
+                    loadOrderTimeline(orderId)
+                    onSuccess()
+                }
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
+        }
+    }
+
+    fun reorderItems(order: Order, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            val items = order.items
+                ?.filter { it.productId != null && it.quantity > 0 }
+                ?: emptyList()
+            if (items.isEmpty()) {
+                onError("No items to reorder")
+                return@launch
+            }
+
+            for (item in items) {
+                val productId = item.productId ?: continue
+                when (val result = repository.addToCart(productId, item.quantity)) {
+                    is Result.Success -> {}
+                    is Result.Error -> {
+                        onError(result.message)
+                        return@launch
+                    }
+                    is Result.Loading -> {}
+                }
+            }
+            loadCart()
+            onSuccess()
+        }
+    }
     
     // ==================== Booking Actions ====================
     

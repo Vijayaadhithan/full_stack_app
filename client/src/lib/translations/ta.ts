@@ -295,6 +295,16 @@ const ta = {
   dispatched: "அனுப்பப்பட்டது",
   delivered: "சேர்ந்தது",
   cancelled: "ரத்து செய்யப்பட்டது",
+  cancel_order: "ஆர்டரை ரத்து செய்",
+  cancel_order_confirm:
+    "இந்த ஆர்டரை ரத்து செய்ய விரும்புகிறீர்களா? இது மீட்க முடியாது.",
+  cancel_order_success: "ஆர்டர் வெற்றிகரமாக ரத்து செய்யப்பட்டது.",
+  cancel_order_failed: "ஆர்டர் ரத்து செய்ய முடியவில்லை.",
+  reorder: "மீண்டும் ஆர்டர்",
+  reorder_no_items: "மீண்டும் ஆர்டர் செய்ய எந்த பொருட்களும் இல்லை.",
+  reorder_failed: "பொருட்களை மீண்டும் ஆர்டர் செய்ய முடியவில்லை.",
+  reorder_success_title: "பொருட்கள் கார்டில் சேர்க்கப்பட்டன",
+  reorder_success_description: "ஆர்டர் செய்ய உங்கள் கார்டை பாருங்கள்.",
 
   // Returns & Refunds
   return_request: "திரும்பப் பெறுதல் கோரிக்கை",

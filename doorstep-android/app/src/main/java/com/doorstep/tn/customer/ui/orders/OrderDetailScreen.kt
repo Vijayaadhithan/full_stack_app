@@ -53,7 +53,8 @@ import java.time.format.DateTimeFormatter
 fun OrderDetailScreen(
     orderId: Int,
     viewModel: CustomerViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToCart: () -> Unit
 ) {
     val context = LocalContext.current
     val selectedOrder by viewModel.selectedOrder.collectAsState()
@@ -66,6 +67,7 @@ fun OrderDetailScreen(
     
     // Return Request State
     var showReturnDialog by remember { mutableStateOf(false) }
+    var showCancelDialog by remember { mutableStateOf(false) }
     
     // Load order details and timeline on first composition
     LaunchedEffect(orderId) {
@@ -154,9 +156,13 @@ fun OrderDetailScreen(
                 onShowReturnDialog = {
                     showReturnDialog = true
                 },
+                onShowCancelDialog = {
+                    showCancelDialog = true
+                },
                 onShowToast = { message ->
                     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                }
+                },
+                onNavigateToCart = onNavigateToCart
             )
         }
     }
@@ -210,6 +216,37 @@ fun OrderDetailScreen(
             }
         )
     }
+
+    if (showCancelDialog && selectedOrder != null) {
+        AlertDialog(
+            onDismissRequest = { showCancelDialog = false },
+            title = { Text("Cancel order?") },
+            text = { Text("You can cancel this order before payment. This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCancelDialog = false
+                        viewModel.cancelOrder(
+                            orderId = orderId,
+                            onSuccess = {
+                                Toast.makeText(context, "Order cancelled", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { message ->
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            }
+                        )
+                    }
+                ) {
+                    Text("Cancel Order")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCancelDialog = false }) {
+                    Text("Keep Order")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -223,13 +260,16 @@ private fun OrderDetailContent(
     onSendWhatsApp: (String, Double, Double) -> Unit,
     onLeaveReview: (OrderItem) -> Unit,
     onShowReturnDialog: () -> Unit,
-    onShowToast: (String) -> Unit
+    onShowCancelDialog: () -> Unit,
+    onShowToast: (String) -> Unit,
+    onNavigateToCart: () -> Unit
 ) {
     val context = LocalContext.current
     
     // Payment action states
     var transactionId by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
+    var isReordering by remember { mutableStateOf(false) }
     
     // Helper to copy UPI ID to clipboard
     val copyUpiToClipboard: () -> Unit = {
@@ -266,6 +306,13 @@ private fun OrderDetailContent(
         "awaiting_customer_agreement" -> WarningYellow
         else -> OrangePrimary
     }
+
+    val reorderItems = order.items
+        ?.filter { it.productId != null && it.quantity > 0 }
+        ?: emptyList()
+    val canReorder = order.orderType != "text_order" && reorderItems.isNotEmpty()
+    val canCancel = order.paymentStatus == "pending" &&
+        order.status.lowercase() !in listOf("cancelled", "dispatched", "shipped", "delivered", "returned")
     
     // Format date with IST timezone conversion
     val formattedDate = order.orderDate?.let {
@@ -599,6 +646,73 @@ private fun OrderDetailContent(
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = WhiteTextMuted
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (canReorder || canCancel) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Order Actions",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = WhiteText,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (canReorder) {
+                                OutlinedButton(
+                                    onClick = {
+                                        isReordering = true
+                                        viewModel.reorderItems(
+                                            order = order,
+                                            onSuccess = {
+                                                isReordering = false
+                                                onShowToast("Items added to cart")
+                                                onNavigateToCart()
+                                            },
+                                            onError = { message ->
+                                                isReordering = false
+                                                onShowToast(message)
+                                            }
+                                        )
+                                    },
+                                    enabled = !isReordering,
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    if (isReordering) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            color = OrangePrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Text("Reorder", fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+
+                            if (canCancel) {
+                                Button(
+                                    onClick = onShowCancelDialog,
+                                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Cancel Order", fontWeight = FontWeight.SemiBold)
+                                }
                             }
                         }
                     }

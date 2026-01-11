@@ -288,7 +288,8 @@ fun DoorStepNavHost(
             val orderId = backStackEntry.arguments?.getInt("orderId") ?: 0
             OrderDetailScreen(
                 orderId = orderId,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToCart = { navController.navigate(Routes.CUSTOMER_CART) }
             )
         }
         

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { useParams } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -69,6 +69,7 @@ type ShopInfoForPayment = {
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { t } = useLanguage();
   const numericId = id ? Number(id) : NaN;
@@ -315,6 +316,81 @@ export default function OrderDetails() {
     },
   });
 
+  const cancelOrderMutation = useMutation({
+    mutationFn: async () => {
+      if (!Number.isFinite(numericId)) {
+        throw new Error(t("cancel_order_failed"));
+      }
+      const res = await apiRequest("POST", `/api/orders/${numericId}/cancel`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message =
+          data && typeof data === "object" && "message" in data
+            ? String((data as any).message)
+            : t("cancel_order_failed");
+        throw new Error(message);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${id}/timeline`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/customer"] });
+      toast({ title: t("cancel_order_success") });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: t("error"),
+        description: e.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: async () => {
+      if (!order) {
+        throw new Error(t("reorder_no_items"));
+      }
+      const items = order.items.filter(
+        (item) => item.productId != null && item.quantity > 0,
+      );
+      if (items.length === 0) {
+        throw new Error(t("reorder_no_items"));
+      }
+      for (const item of items) {
+        const res = await apiRequest("POST", "/api/cart", {
+          productId: item.productId,
+          quantity: item.quantity,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const message =
+            data && typeof data === "object" && "message" in data
+              ? String((data as any).message)
+              : t("reorder_failed");
+          throw new Error(message);
+        }
+      }
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      toast({
+        title: t("reorder_success_title"),
+        description: t("reorder_success_description"),
+      });
+      setLocation("/customer/cart");
+    },
+    onError: (e: Error) => {
+      toast({
+        title: t("error"),
+        description: e.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   if (orderLoading) {
     return (
       <DashboardLayout>
@@ -378,6 +454,17 @@ export default function OrderDetails() {
     : payLaterEligibility && !payLaterEligibility.eligible
       ? t("pay_later_limited")
       : undefined;
+  const reorderableItems =
+    order?.orderType === "product_order"
+      ? order.items.filter(
+          (item) => item.productId != null && item.quantity > 0,
+        )
+      : [];
+  const canReorder = reorderableItems.length > 0;
+  const canCancelOrder =
+    order?.paymentStatus === "pending" &&
+    order.status !== "cancelled" &&
+    !["dispatched", "shipped", "delivered", "returned"].includes(order.status);
 
   const whatsappHref = (() => {
     if (!order) return null;
@@ -810,6 +897,42 @@ export default function OrderDetails() {
             )}
           </CardContent>
         </Card>
+
+        {(canReorder || canCancelOrder) && (
+          <Card>
+            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+              {canReorder && (
+                <Button
+                  variant="outline"
+                  onClick={() => reorderMutation.mutate()}
+                  disabled={reorderMutation.isPending}
+                >
+                  {reorderMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {t("reorder")}
+                </Button>
+              )}
+              {canCancelOrder && (
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    if (window.confirm(t("cancel_order_confirm"))) {
+                      cancelOrderMutation.mutate();
+                    }
+                  }}
+                  disabled={cancelOrderMutation.isPending}
+                >
+                  {cancelOrderMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {t("cancel_order")}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>{t("order_timeline_title")}</CardTitle>

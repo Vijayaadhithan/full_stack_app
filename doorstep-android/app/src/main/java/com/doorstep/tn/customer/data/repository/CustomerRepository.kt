@@ -452,6 +452,19 @@ class CustomerRepository @Inject constructor(
             Result.Error(e.message ?: "Failed to update payment method")
         }
     }
+
+    suspend fun cancelOrder(orderId: Int): Result<Order> {
+        return try {
+            val response = api.cancelOrder(orderId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to cancel order")
+        }
+    }
     
     // ==================== Bookings ====================
     

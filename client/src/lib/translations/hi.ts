@@ -144,6 +144,16 @@ const hi = {
     dispatched: "प्रेषित",
     delivered: "डिलीवर किया गया",
     cancelled: "रद्द किया गया",
+    cancel_order: "ऑर्डर रद्द करें",
+    cancel_order_confirm:
+      "क्या आप वाकई इस ऑर्डर को रद्द करना चाहते हैं? यह कार्रवाई वापस नहीं होगी।",
+    cancel_order_success: "ऑर्डर सफलतापूर्वक रद्द किया गया।",
+    cancel_order_failed: "ऑर्डर रद्द नहीं हो सका।",
+    reorder: "फिर से ऑर्डर करें",
+    reorder_no_items: "फिर से ऑर्डर करने के लिए कोई आइटम नहीं है।",
+    reorder_failed: "आइटम फिर से ऑर्डर नहीं हो पाए।",
+    reorder_success_title: "आइटम कार्ट में जोड़ दिए गए",
+    reorder_success_description: "ऑर्डर देने के लिए अपना कार्ट देखें।",
     pay_later_approvals_title: "खाता / बाद में भुगतान अनुमोदन",
     pay_later_approvals_description:
       "विश्वसनीय ग्राहकों को व्हाइटलिस्ट करें ताकि वे बिना पहले ऑर्डर के Pay Later मांग सकें। हर Pay Later ऑर्डर तब तक लंबित रहेगा जब तक आप उधार मंज़ूर नहीं करते।",

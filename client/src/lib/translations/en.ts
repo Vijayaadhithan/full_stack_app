@@ -270,6 +270,16 @@ const en = {
   dispatched: "Dispatched",
   delivered: "Delivered",
   cancelled: "Cancelled",
+  cancel_order: "Cancel order",
+  cancel_order_confirm:
+    "Are you sure you want to cancel this order? This action cannot be undone.",
+  cancel_order_success: "Order cancelled successfully.",
+  cancel_order_failed: "Failed to cancel order.",
+  reorder: "Reorder",
+  reorder_no_items: "No items available to reorder.",
+  reorder_failed: "Failed to reorder items.",
+  reorder_success_title: "Items added to cart",
+  reorder_success_description: "Review your cart to place the order.",
 
   // Returns & Refunds
   return_request: "Return Request",

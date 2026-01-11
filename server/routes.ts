@@ -1079,7 +1079,14 @@ const orderStatusUpdateSchema = z
       "delivered",
       "returned",
     ]),
+    comments: z.string().trim().max(500).optional(),
     trackingInfo: z.string().trim().max(500).optional(),
+  })
+  .strict();
+
+const orderCancelSchema = z
+  .object({
+    reason: z.string().trim().max(500).optional(),
   })
   .strict();
 
@@ -6635,6 +6642,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   app.post(
+    "/api/orders/:id/cancel",
+    requireAuth,
+    requireRole(["customer"]),
+    async (req, res) => {
+      const orderId = getValidatedParam(req, "id");
+      const parsedBody = orderCancelSchema.safeParse(req.body ?? {});
+      if (!parsedBody.success) {
+        return res.status(400).json(formatValidationError(parsedBody.error));
+      }
+      const reason = parsedBody.data.reason?.trim();
+
+      try {
+        const order = await storage.getOrder(orderId);
+        if (!order) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+        if (order.customerId !== req.user!.id) {
+          return res.status(403).json({ message: "Not authorized" });
+        }
+        if (order.status === "cancelled") {
+          return res.status(400).json({ message: "Order is already cancelled." });
+        }
+        if (order.paymentStatus !== "pending") {
+          return res.status(400).json({
+            message: "Order payment has already started. Unable to cancel.",
+          });
+        }
+
+        const blockedStatuses: Order["status"][] = [
+          "dispatched",
+          "shipped",
+          "delivered",
+          "returned",
+        ];
+        if (blockedStatuses.includes(order.status)) {
+          return res.status(400).json({
+            message: "Order can no longer be cancelled at this stage.",
+          });
+        }
+
+        const updated = await storage.updateOrderStatus(
+          orderId,
+          "cancelled",
+          reason,
+        );
+
+        if (order.shopId) {
+          await storage.createNotification({
+            userId: order.shopId,
+            type: "order",
+            title: "Order cancelled",
+            message: `Order #${orderId} was cancelled by the customer.${reason ? ` Reason: ${reason}` : ""}`,
+          });
+        }
+
+        return res.json(updated);
+      } catch (error) {
+        logger.error("Error cancelling order:", error);
+        return res.status(500).json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to cancel order",
+        });
+      }
+    },
+  );
+
+  app.post(
     "/api/orders/:id/confirm-payment",
     requireAuth,
     requireShopOrWorkerPermission(["orders:update"]),
@@ -6913,7 +6989,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!parsedBody.success) {
           return res.status(400).json(formatValidationError(parsedBody.error));
         }
-        const { status, trackingInfo } = parsedBody.data;
+        const { status, trackingInfo, comments } = parsedBody.data;
+        const nextTrackingInfo =
+          status === "cancelled" && comments?.trim()
+            ? comments.trim()
+            : trackingInfo?.trim();
         const orderId = getValidatedParam(req, "id");
         const order = await storage.getOrder(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
@@ -6936,7 +7016,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updated = await storage.updateOrderStatus(
           orderId,
           status,
-          trackingInfo,
+          nextTrackingInfo,
         );
 
         // Create notification for status update
@@ -6944,7 +7024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: updated.customerId,
           type: "order",
           title: `Order ${status}`,
-          message: `Your order #${updated.id} has been ${status}. ${trackingInfo || ""}`,
+          message: `Your order #${updated.id} has been ${status}.${nextTrackingInfo ? ` ${nextTrackingInfo}` : ""}`,
         });
 
         // Send SMS notification for important status updates
@@ -6956,7 +7036,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (customer) {
             await storage.sendSMSNotification(
               customer.phone,
-              `Your order #${updated.id} has been ${status}. ${trackingInfo || ""}`,
+              `Your order #${updated.id} has been ${status}.${nextTrackingInfo ? ` ${nextTrackingInfo}` : ""}`,
             );
           }
         }

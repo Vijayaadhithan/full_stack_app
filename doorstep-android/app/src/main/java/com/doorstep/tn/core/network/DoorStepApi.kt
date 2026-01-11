@@ -233,6 +233,10 @@ interface DoorStepApi {
         @Path("id") orderId: Int,
         @Body body: Map<String, String>
     ): Response<Order>
+
+    // Cancel order - POST /api/orders/:id/cancel
+    @POST("api/orders/{id}/cancel")
+    suspend fun cancelOrder(@Path("id") orderId: Int): Response<Order>
     
     // ==================== SHOP ENDPOINTS ====================
     
