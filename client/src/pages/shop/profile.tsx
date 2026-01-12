@@ -22,6 +22,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Edit, Save, Trash2 } from "lucide-react";
 import type { Shop } from "@shared/schema";
 import { z } from "zod";
+import { COUNTRY_OPTIONS, INDIA_STATES } from "@/lib/location-options";
+import { getUpiSuggestions } from "@/lib/upi";
 import {
   Select,
   SelectContent,
@@ -31,7 +33,7 @@ import {
 } from "@/components/ui/select";
 // import { TimePicker } from "@/components/ui/time-picker"; // Removed unused import
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -147,13 +149,18 @@ export default function ShopProfile() {
     addressState: shop?.shopAddressState ?? user?.addressState ?? "",
     addressPostalCode:
       shop?.shopAddressPincode ?? user?.addressPostalCode ?? "",
-    addressCountry: user?.addressCountry ?? "",
+    addressCountry: user?.addressCountry ?? "India",
   }), [user]);
 
   const form = useForm<ShopProfileFormData>({
     resolver: zodResolver(shopProfileSchema),
     defaultValues: getFormDefaults(currentShop),
   });
+  const upiIdValue = form.watch("upiId") || "";
+  const upiSuggestions = useMemo(
+    () => getUpiSuggestions(upiIdValue),
+    [upiIdValue],
+  );
 
   // Update form and profile data when user data changes
   useEffect(() => {
@@ -507,9 +514,24 @@ export default function ShopProfile() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>State</FormLabel>
-                          <FormControl>
-                            <Input {...field} disabled={!editMode} />
-                          </FormControl>
+                          <Select
+                            value={field.value || ""}
+                            onValueChange={field.onChange}
+                            disabled={!editMode}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select state" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {INDIA_STATES.map((state) => (
+                                <SelectItem key={state} value={state}>
+                                  {state}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -535,9 +557,24 @@ export default function ShopProfile() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Country</FormLabel>
-                          <FormControl>
-                            <Input {...field} disabled={!editMode} />
-                          </FormControl>
+                          <Select
+                            value={field.value || ""}
+                            onValueChange={field.onChange}
+                            disabled={!editMode}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select country" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {COUNTRY_OPTIONS.map((country) => (
+                                <SelectItem key={country} value={country}>
+                                  {country}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -561,6 +598,31 @@ export default function ShopProfile() {
                         </FormItem>
                       )}
                     />
+                    {editMode && upiSuggestions.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                          Suggested UPI IDs
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {upiSuggestions.map((suggestion) => (
+                            <Button
+                              key={suggestion}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                form.setValue("upiId", suggestion, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                })
+                              }
+                            >
+                              {suggestion}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <FormField
                       control={form.control}
                       name="pickupAvailable"

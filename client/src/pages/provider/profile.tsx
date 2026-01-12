@@ -22,6 +22,13 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/hooks/use-auth";
@@ -29,6 +36,8 @@ import { useLanguage } from "@/contexts/language-context";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { COUNTRY_OPTIONS, INDIA_STATES } from "@/lib/location-options";
+import { getUpiSuggestions } from "@/lib/upi";
 import { Loader2, Edit, Save, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { useState, useEffect, useMemo } from "react";
@@ -81,7 +90,7 @@ export default function ProviderProfile() {
       addressCity: user?.addressCity || "",
       addressState: user?.addressState || "",
       addressPostalCode: user?.addressPostalCode || "",
-      addressCountry: user?.addressCountry || "",
+      addressCountry: user?.addressCountry || "India",
       bio: user?.bio || "",
       qualifications: user?.qualifications || "",
       experience: user?.experience || "",
@@ -90,6 +99,11 @@ export default function ProviderProfile() {
       upiId: user?.upiId || "",
     },
   });
+  const upiIdValue = form.watch("upiId") || "";
+  const upiSuggestions = useMemo(
+    () => getUpiSuggestions(upiIdValue),
+    [upiIdValue],
+  );
 
   useEffect(() => {
     if (user) {
@@ -101,7 +115,7 @@ export default function ProviderProfile() {
         addressCity: user.addressCity || "",
         addressState: user.addressState || "",
         addressPostalCode: user.addressPostalCode || "",
-        addressCountry: user.addressCountry || "",
+        addressCountry: user.addressCountry || "India",
         bio: user.bio || "",
         qualifications: user.qualifications || "",
         experience: user.experience || "",
@@ -442,9 +456,24 @@ export default function ProviderProfile() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>{t("address_state")}</FormLabel>
-                          <FormControl>
-                            <Input {...field} disabled={!editMode} />
-                          </FormControl>
+                          <Select
+                            value={field.value || ""}
+                            onValueChange={field.onChange}
+                            disabled={!editMode}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder={t("select_state")} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {INDIA_STATES.map((state) => (
+                                <SelectItem key={state} value={state}>
+                                  {state}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -468,9 +497,24 @@ export default function ProviderProfile() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>{t("address_country")}</FormLabel>
-                          <FormControl>
-                            <Input {...field} disabled={!editMode} />
-                          </FormControl>
+                          <Select
+                            value={field.value || ""}
+                            onValueChange={field.onChange}
+                            disabled={!editMode}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder={t("select_country")} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {COUNTRY_OPTIONS.map((country) => (
+                                <SelectItem key={country} value={country}>
+                                  {country}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -576,6 +620,31 @@ export default function ProviderProfile() {
                       </FormItem>
                     )}
                   />
+                  {editMode && upiSuggestions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        {t("upi_suggestions")}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {upiSuggestions.map((suggestion) => (
+                          <Button
+                            key={suggestion}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              form.setValue("upiId", suggestion, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              })
+                            }
+                          >
+                            {suggestion}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </form>
             </Form>

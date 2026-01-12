@@ -207,8 +207,10 @@ const ta = {
   address_street: "வீதி முகவரி",
   address_city: "நகரம்",
   address_state: "மாநிலம்",
+  select_state: "மாநிலத்தை தேர்வு செய்யவும்",
   address_postal_code: "அஞ்சல் குறியீடு",
   address_country: "நாடு",
+  select_country: "நாட்டை தேர்வு செய்யவும்",
   about_provider: "உங்கள் சேவைகள் பற்றி",
   bio: "சுயவிவரம்",
   bio_placeholder: "உங்களைப் பற்றி மற்றும் உங்கள் சேவைகள் பற்றி எழுதுங்கள்",
@@ -220,6 +222,7 @@ const ta = {
   working_hours_placeholder: "உதா: திங்கள்-வெள்ளி: காலை 9 - மாலை 6",
   payment_details_title: "கட்டணம் விவரங்கள்",
   upi_id: "யுபிஐ ஐடி",
+  upi_suggestions: "பரிந்துரைக்கப்பட்ட UPI ஐடிகள்",
   upi_qr_code: "யுபிஐ QR குறியீடு",
   profile_updated_successfully:
     "உங்கள் சுயவிவரம் வெற்றிகரமாக புதுப்பிக்கப்பட்டது.",

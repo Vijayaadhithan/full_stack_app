@@ -7,13 +7,22 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Form } from "@/components/ui/form";
-import { useForm } from "react-hook-form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { User } from "@shared/schema";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { COUNTRY_OPTIONS, INDIA_STATES } from "@/lib/location-options";
+import { getUpiSuggestions } from "@/lib/upi";
 import {
   Loader2,
   Phone,
@@ -69,6 +78,7 @@ export default function CustomerProfile() {
       addressCountry: user?.addressCountry || "India",
     },
   });
+  const upiSuggestions = getUpiSuggestions(form.watch("upiId") || "");
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: Partial<User>) => {
@@ -215,6 +225,31 @@ export default function CustomerProfile() {
                         </span>
                       </Label>
                       <Input {...form.register("upiId")} placeholder="yourname@upi" />
+                      {upiSuggestions.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">
+                            Suggested UPI IDs
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {upiSuggestions.map((suggestion) => (
+                              <Button
+                                key={suggestion}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  form.setValue("upiId", suggestion, {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  })
+                                }
+                              >
+                                {suggestion}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Address Section */}
@@ -234,7 +269,27 @@ export default function CustomerProfile() {
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="addressState">State</Label>
-                          <Input {...form.register("addressState")} placeholder="Tamil Nadu" />
+                          <Controller
+                            control={form.control}
+                            name="addressState"
+                            render={({ field }) => (
+                              <Select
+                                value={field.value || ""}
+                                onValueChange={field.onChange}
+                              >
+                                <SelectTrigger id="addressState">
+                                  <SelectValue placeholder="Select state" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {INDIA_STATES.map((state) => (
+                                    <SelectItem key={state} value={state}>
+                                      {state}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="addressPostalCode">Postal Code</Label>
@@ -242,7 +297,27 @@ export default function CustomerProfile() {
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="addressCountry">Country</Label>
-                          <Input {...form.register("addressCountry")} placeholder="India" />
+                          <Controller
+                            control={form.control}
+                            name="addressCountry"
+                            render={({ field }) => (
+                              <Select
+                                value={field.value || ""}
+                                onValueChange={field.onChange}
+                              >
+                                <SelectTrigger id="addressCountry">
+                                  <SelectValue placeholder="Select country" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {COUNTRY_OPTIONS.map((country) => (
+                                    <SelectItem key={country} value={country}>
+                                      {country}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          />
                         </div>
                       </div>
                     </div>

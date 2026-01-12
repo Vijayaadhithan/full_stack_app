@@ -64,6 +64,8 @@ fun ProfileScreen(
     var addressPostalCode by remember(user) { mutableStateOf(user?.addressPostalCode ?: "") }
     var addressCountry by remember(user) { mutableStateOf(user?.addressCountry ?: "India") }
     var addressLandmark by remember(user) { mutableStateOf(user?.addressLandmark ?: "") }
+
+    val upiSuggestions = remember(upiId) { buildUpiSuggestions(upiId) }
     
     var isLoading by remember { mutableStateOf(false) }
     
@@ -316,6 +318,33 @@ fun ProfileScreen(
                         icon = Icons.Default.Payment,
                         placeholder = "yourname@upi"
                     )
+                    if (upiSuggestions.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Suggested UPI IDs",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = WhiteTextMuted
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            upiSuggestions.forEach { suggestion ->
+                                AssistChip(
+                                    onClick = { upiId = suggestion },
+                                    label = { Text(suggestion) },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = SlateBackground,
+                                        labelColor = WhiteText
+                                    ),
+                                    border = BorderStroke(1.dp, GlassBorder)
+                                )
+                            }
+                        }
+                    }
                 }
             }
             
@@ -355,10 +384,12 @@ fun ProfileScreen(
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        ProfileTextField(
+                        ProfileDropdownField(
                             label = "State",
                             value = addressState,
                             onValueChange = { addressState = it },
+                            options = indiaStates,
+                            placeholder = "Select state",
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -372,10 +403,12 @@ fun ProfileScreen(
                             keyboardType = KeyboardType.Number
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        ProfileTextField(
+                        ProfileDropdownField(
                             label = "Country",
                             value = addressCountry,
                             onValueChange = { addressCountry = it },
+                            options = countryOptions,
+                            placeholder = "Select country",
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -611,6 +644,143 @@ private fun ProfileTextField(
             shape = RoundedCornerShape(10.dp)
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileDropdownField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    options: List<String>,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier.padding(vertical = 6.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = WhiteTextMuted
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded }
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = {},
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                readOnly = true,
+                placeholder = placeholder?.let {
+                    { Text(it, color = WhiteTextMuted.copy(alpha = 0.5f)) }
+                },
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = WhiteText,
+                    unfocusedTextColor = WhiteText,
+                    focusedBorderColor = OrangePrimary,
+                    unfocusedBorderColor = GlassWhite,
+                    focusedContainerColor = SlateBackground,
+                    unfocusedContainerColor = SlateBackground
+                ),
+                shape = RoundedCornerShape(10.dp)
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.background(SlateCard)
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                color = if (option == value) OrangePrimary else WhiteText
+                            )
+                        },
+                        onClick = {
+                            onValueChange(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val indiaStates = listOf(
+    "Andhra Pradesh",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chhattisgarh",
+    "Goa",
+    "Gujarat",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Odisha",
+    "Punjab",
+    "Rajasthan",
+    "Sikkim",
+    "Tamil Nadu",
+    "Telangana",
+    "Tripura",
+    "Uttar Pradesh",
+    "Uttarakhand",
+    "West Bengal",
+    "Andaman and Nicobar Islands",
+    "Chandigarh",
+    "Dadra and Nagar Haveli and Daman and Diu",
+    "Delhi",
+    "Jammu and Kashmir",
+    "Ladakh",
+    "Lakshadweep",
+    "Puducherry"
+)
+
+private val countryOptions = listOf("India")
+
+private val upiHandles = listOf(
+    "@upi",
+    "@ybl",
+    "@ibl",
+    "@okicici",
+    "@okhdfcbank",
+    "@oksbi",
+    "@axl",
+    "@paytm",
+    "@apl"
+)
+
+private fun buildUpiSuggestions(input: String): List<String> {
+    val trimmed = input.trim()
+    if (trimmed.isEmpty() || trimmed.contains("@")) {
+        return emptyList()
+    }
+
+    val digits = trimmed.filter { it.isDigit() }
+    if (digits.length != 10) {
+        return emptyList()
+    }
+
+    return upiHandles.map { handle -> "$digits$handle" }
 }
 
 /**
