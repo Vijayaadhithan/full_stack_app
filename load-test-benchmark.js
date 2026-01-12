@@ -671,7 +671,10 @@ export default function main(data) {
                 vuAuthState.set(__VU, loggedIn);
 
                 // If login failed, we can't do authenticated actions
-                if (!loggedIn) return;
+                if (!loggedIn) {
+                    sleep(1);
+                    return;
+                }
             }
 
             browseCatalog(data.baseUrl, data.product.category, session);
