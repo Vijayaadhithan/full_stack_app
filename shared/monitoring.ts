@@ -51,6 +51,7 @@ export const resourceSnapshotSchema = z.object({
     rssBytes: z.number(),
     heapUsedBytes: z.number(),
     heapTotalBytes: z.number(),
+    heapLimitBytes: z.number(),
     externalBytes: z.number(),
   }),
   cpu: z.object({

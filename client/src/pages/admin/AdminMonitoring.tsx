@@ -75,6 +75,16 @@ function formatBytes(value: number | null | undefined) {
   return `${formatter.format(current)} ${units[index]}`;
 }
 
+function getHeapUsageRatio(memory: MonitoringSnapshot["resources"]["memory"] | undefined) {
+  if (!memory) return null;
+  const limit =
+    Number.isFinite(memory.heapLimitBytes) && memory.heapLimitBytes > 0
+      ? memory.heapLimitBytes
+      : memory.heapTotalBytes;
+  if (!limit) return null;
+  return memory.heapUsedBytes / limit;
+}
+
 function toNumber(value: number | string | null | undefined) {
   if (value === null || value === undefined) return 0;
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -313,9 +323,8 @@ function OperationalAlertsSection({ snapshot }: { snapshot: MonitoringSnapshot |
 
     const errorCount = requests.statusBuckets.clientError + requests.statusBuckets.serverError;
     const errorRate = requests.total ? errorCount / requests.total : 0;
-    const heapPercent = resources.memory.heapTotalBytes
-      ? (resources.memory.heapUsedBytes / resources.memory.heapTotalBytes) * 100
-      : null;
+    const heapUsageRatio = getHeapUsageRatio(resources.memory);
+    const heapPercent = heapUsageRatio !== null ? heapUsageRatio * 100 : null;
     const eventLoopP95 = resources.eventLoopDelayMs?.p95 ?? null;
 
     const items: AlertItem[] = [];
@@ -365,13 +374,13 @@ function OperationalAlertsSection({ snapshot }: { snapshot: MonitoringSnapshot |
     if (heapPercent !== null && heapPercent >= ALERT_LIMITS.heapCritical) {
       items.push({
         title: "Memory pressure",
-        description: `Heap usage at ${formatPercent(heapPercent)}.`,
+        description: `Heap usage at ${formatPercent(heapPercent)} of limit.`,
         severity: "critical",
       });
     } else if (heapPercent !== null && heapPercent >= ALERT_LIMITS.heapWarning) {
       items.push({
         title: "Heap utilization high",
-        description: `Heap usage at ${formatPercent(heapPercent)}.`,
+        description: `Heap usage at ${formatPercent(heapPercent)} of limit.`,
         severity: "warning",
       });
     }
@@ -423,9 +432,7 @@ function OperationalAlertsSection({ snapshot }: { snapshot: MonitoringSnapshot |
   const latencyTarget = ALERT_LIMITS.p95LatencyMsWarning;
   const latencyScore = p95Latency ? Math.min((latencyTarget / p95Latency) * 100, 100) : 0;
   const cpu = snapshot?.resources.cpu.percent ?? null;
-  const heapUsedRatio = snapshot?.resources.memory.heapTotalBytes
-    ? snapshot.resources.memory.heapUsedBytes / snapshot.resources.memory.heapTotalBytes
-    : null;
+  const heapUsedRatio = getHeapUsageRatio(snapshot?.resources.memory);
   const uptimeHours = snapshot ? Math.round(snapshot.resources.uptimeSeconds / 3600) : null;
 
   const alertVariant = (severity: AlertSeverity) => {
@@ -494,7 +501,7 @@ function OperationalAlertsSection({ snapshot }: { snapshot: MonitoringSnapshot |
           <div className="space-y-1 text-xs text-muted-foreground">
             Uptime {uptimeHours !== null ? `${uptimeHours}h` : "—"}
             {heapUsedRatio !== null &&
-              ` · Heap ${(heapUsedRatio * 100).toFixed(0)}%`}
+              ` · Heap ${(heapUsedRatio * 100).toFixed(0)}% of limit`}
           </div>
         </CardContent>
       </Card>
@@ -665,9 +672,8 @@ function ErrorRateSection({ snapshot, isFetching }: SectionProps) {
 function ResourceUsageSection({ snapshot, isFetching }: SectionProps) {
   const resources = snapshot?.resources;
   const uptime = resources ? Math.round(resources.uptimeSeconds / 3600) : null;
-  const heapPercent = resources?.memory.heapTotalBytes
-    ? (resources.memory.heapUsedBytes / resources.memory.heapTotalBytes) * 100
-    : null;
+  const heapUsageRatio = getHeapUsageRatio(resources?.memory);
+  const heapPercent = heapUsageRatio !== null ? heapUsageRatio * 100 : null;
   const cpuPercent = resources?.cpu.percent ?? null;
 
   return (
@@ -697,7 +703,7 @@ function ResourceUsageSection({ snapshot, isFetching }: SectionProps) {
                 {formatBytes(resources?.memory.heapUsedBytes ?? null)}
               </div>
               <div className="text-xs text-muted-foreground">
-                Heap {formatBytes(resources?.memory.heapTotalBytes ?? null)} · RSS {formatBytes(resources?.memory.rssBytes ?? null)}
+                Heap {formatBytes(resources?.memory.heapTotalBytes ?? null)} · Limit {formatBytes(resources?.memory.heapLimitBytes ?? null)} · RSS {formatBytes(resources?.memory.rssBytes ?? null)}
               </div>
               {heapPercent !== null && <Progress value={heapPercent} className="mt-2 h-2" />}
             </div>

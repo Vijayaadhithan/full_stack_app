@@ -1,5 +1,6 @@
 import os from "node:os";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
+import { getHeapStatistics } from "node:v8";
 import type {
   ErrorSummary,
   FrontendSummary,
@@ -107,6 +108,8 @@ let inFlightRequests = 0;
 
 const loopDelayHistogram = monitorEventLoopDelay({ resolution: 20 });
 loopDelayHistogram.enable();
+
+const HEAP_LIMIT_BYTES = getHeapStatistics().heap_size_limit;
 
 let lastCpuUsage = process.cpuUsage();
 let lastCpuTimestamp = performance.now();
@@ -368,6 +371,10 @@ function buildErrorSummary(now: number): ErrorSummary {
 
 function buildResourceSnapshot(now: number): ResourceSnapshot {
   const memoryUsage = process.memoryUsage();
+  const heapLimitBytes =
+    Number.isFinite(HEAP_LIMIT_BYTES) && HEAP_LIMIT_BYTES > 0
+      ? HEAP_LIMIT_BYTES
+      : memoryUsage.heapTotal;
   const cpu = collectCpuUsage(now);
   const loadAverageTuple: [number, number, number] = os.platform() === "win32"
     ? [0, 0, 0]
@@ -379,6 +386,7 @@ function buildResourceSnapshot(now: number): ResourceSnapshot {
       rssBytes: memoryUsage.rss,
       heapUsedBytes: memoryUsage.heapUsed,
       heapTotalBytes: memoryUsage.heapTotal,
+      heapLimitBytes,
       externalBytes: memoryUsage.external,
     },
     cpu,
@@ -468,4 +476,3 @@ export function getMonitoringSnapshot(): MonitoringSnapshot {
 
   return cachedSnapshot;
 }
-
