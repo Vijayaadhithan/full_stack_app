@@ -41,6 +41,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.max
 
@@ -135,8 +136,8 @@ fun BookServiceScreen(
                     viewModel.updateProfile(
                         userId = userId,
                         request = UpdateProfileRequest(
-                            latitude = location.latitude,
-                            longitude = location.longitude
+                            latitude = String.format(Locale.US, "%.7f", location.latitude),
+                            longitude = String.format(Locale.US, "%.7f", location.longitude)
                         ),
                         onSuccess = {
                             isCapturingLocation = false

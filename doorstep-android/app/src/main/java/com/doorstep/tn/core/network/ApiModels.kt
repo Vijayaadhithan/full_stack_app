@@ -33,8 +33,8 @@ data class UpdateProfileRequest(
     @Json(name = "addressState") val addressState: String? = null,
     @Json(name = "addressPostalCode") val addressPostalCode: String? = null,
     @Json(name = "addressCountry") val addressCountry: String? = null,
-    @Json(name = "latitude") val latitude: Double? = null,
-    @Json(name = "longitude") val longitude: Double? = null
+    @Json(name = "latitude") val latitude: String? = null,
+    @Json(name = "longitude") val longitude: String? = null
 )
 
 // Order - POST /api/orders

@@ -34,6 +34,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * Customer Profile Screen - matches web app's profile.tsx
@@ -536,8 +537,8 @@ fun ProfileScreen(
                                 addressPostalCode = addressPostalCode.takeIf { it.isNotBlank() },
                                 addressCountry = addressCountry.takeIf { it.isNotBlank() },
                                 addressLandmark = addressLandmark.takeIf { it.isNotBlank() },
-                                latitude = capturedLatitude,
-                                longitude = capturedLongitude
+                                latitude = capturedLatitude?.let { String.format(Locale.US, "%.7f", it) },
+                                longitude = capturedLongitude?.let { String.format(Locale.US, "%.7f", it) }
                             ),
                             onSuccess = {
                                 isLoading = false
