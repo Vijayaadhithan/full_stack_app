@@ -14,7 +14,7 @@ import { ProductReview } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useParams, Link } from "wouter";
-import { ShoppingCart, Heart, ArrowLeft, Store, Star } from "lucide-react";
+import { ShoppingCart, Heart, ArrowLeft, Store, Star, Minus, Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import Meta from "@/components/meta";
 import { ProductDetail } from "@shared/api-contract";
@@ -70,6 +70,25 @@ export default function ProductDetails() {
   const openOrderAllowed = Boolean(
     product?.openOrderMode || product?.catalogModeEnabled,
   );
+  const [quantity, setQuantity] = React.useState(1);
+  const minQuantity = Math.max(1, product?.minOrderQuantity ?? 1);
+  const maxQuantity = (() => {
+    const maxByProduct =
+      typeof product?.maxOrderQuantity === "number"
+        ? product.maxOrderQuantity
+        : undefined;
+    const stockCap =
+      !openOrderAllowed &&
+      typeof product?.stock === "number" &&
+      product.stock > 0
+        ? product.stock
+        : undefined;
+    if (typeof maxByProduct === "number" && typeof stockCap === "number") {
+      return Math.min(maxByProduct, stockCap);
+    }
+    return maxByProduct ?? stockCap;
+  })();
+  const loadedProductId = product?.id;
 
   type CartItem = {
     product: ProductDetail;
@@ -79,14 +98,14 @@ export default function ProductDetails() {
   const addToCartMutation = useMutation<
     unknown,
     Error,
-    ProductDetail,
+    { product: ProductDetail; quantity: number },
     { previousCart?: CartItem[] }
   >({
-    mutationFn: async (product) => {
+    mutationFn: async ({ product, quantity }) => {
       const productId = product.id;
       const res = await apiRequest("POST", "/api/cart", {
         productId,
-        quantity: 1,
+        quantity,
       });
       if (!res.ok) {
         const error = await res.text();
@@ -94,7 +113,7 @@ export default function ProductDetails() {
       }
       return res.json();
     },
-    onMutate: async (product) => {
+    onMutate: async ({ product, quantity }) => {
       await queryClient.cancelQueries({ queryKey: ["/api/cart"] });
       const previousCart = queryClient.getQueryData<CartItem[]>(["/api/cart"]);
 
@@ -106,11 +125,11 @@ export default function ProductDetails() {
         ? existingItem
           ? previousCart.map((item) =>
             item.product.id === product.id
-              ? { ...item, quantity: item.quantity + 1 }
+              ? { ...item, quantity }
               : item,
           )
-          : [...previousCart, { product, quantity: 1 }]
-        : [{ product, quantity: 1 }];
+          : [...previousCart, { product, quantity }]
+        : [{ product, quantity }];
 
       queryClient.setQueryData(["/api/cart"], optimisticCart);
       return { previousCart };
@@ -195,6 +214,15 @@ export default function ProductDetails() {
     },
   });
 
+  React.useEffect(() => {
+    if (!loadedProductId) return;
+    let next = minQuantity;
+    if (typeof maxQuantity === "number") {
+      next = Math.min(next, maxQuantity);
+    }
+    setQuantity(next);
+  }, [loadedProductId, minQuantity, maxQuantity]);
+
   if (isLoadingProduct || isLoadingShop) {
     return (
       <DashboardLayout>
@@ -268,10 +296,24 @@ export default function ProductDetails() {
       : openOrderAllowed
         ? "Available on request — shop will confirm availability"
         : "Out of Stock";
+  const quantityOutOfRange =
+    quantity < minQuantity ||
+    (typeof maxQuantity === "number" && quantity > maxQuantity);
   const disableAddToCart =
     !isAvailable ||
     (!openOrderAllowed && stockCount <= 0) ||
+    quantityOutOfRange ||
     addToCartMutation.isPending;
+  const canDecrease = quantity > minQuantity;
+  const canIncrease =
+    typeof maxQuantity === "number" ? quantity < maxQuantity : true;
+  const clampQuantity = (value: number) => {
+    const next = Math.max(minQuantity, Math.floor(value));
+    if (typeof maxQuantity === "number") {
+      return Math.min(next, maxQuantity);
+    }
+    return next;
+  };
 
   return (
     <DashboardLayout>
@@ -370,23 +412,64 @@ export default function ProductDetails() {
                 </div>
               )}
               {/* Add more product details here if needed, e.g., specifications */}
-              <div className="flex gap-3 pt-4">
-                <Button
-                  size="lg"
-                  onClick={() => addToCartMutation.mutate(product)}
-                  disabled={disableAddToCart}
-                  className="flex-1"
-                >
-                  <ShoppingCart className="mr-2 h-5 w-5" /> Add to Cart
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  onClick={() => addToWishlistMutation.mutate(product)}
-                  disabled={addToWishlistMutation.isPending}
-                >
-                  <Heart className="h-5 w-5" />
-                </Button>
+              <div className="space-y-3 pt-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium">Quantity</span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={() =>
+                        setQuantity((value) => clampQuantity(value - 1))
+                      }
+                      disabled={!canDecrease}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <span className="w-10 text-center font-semibold">
+                      {quantity}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={() =>
+                        setQuantity((value) => clampQuantity(value + 1))
+                      }
+                      disabled={!canIncrease}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                {(minQuantity > 1 || typeof maxQuantity === "number") && (
+                  <p className="text-xs text-muted-foreground">
+                    {minQuantity > 1 ? `Min ${minQuantity}` : ""}
+                    {minQuantity > 1 &&
+                      typeof maxQuantity === "number" &&
+                      " / "}
+                    {typeof maxQuantity === "number" ? `Max ${maxQuantity}` : ""}
+                  </p>
+                )}
+                <div className="flex gap-3">
+                  <Button
+                    size="lg"
+                    onClick={() =>
+                      addToCartMutation.mutate({ product, quantity })
+                    }
+                    disabled={disableAddToCart}
+                    className="flex-1"
+                  >
+                    <ShoppingCart className="mr-2 h-5 w-5" /> Add to Cart
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => addToWishlistMutation.mutate(product)}
+                    disabled={addToWishlistMutation.isPending}
+                  >
+                    <Heart className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>

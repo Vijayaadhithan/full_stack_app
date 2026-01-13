@@ -44,6 +44,7 @@ fun ProductDetailScreen(
     val cartCount by viewModel.cartItems.collectAsState().let { state ->
         derivedStateOf { state.value.sumOf { it.quantity } }
     }
+    var quantity by remember(productId) { mutableStateOf(1) }
     
     // Toast events
     val context = LocalContext.current
@@ -108,6 +109,10 @@ fun ProductDetailScreen(
             }
         } else if (product != null) {
             val p = product!!
+            val openOrderAllowed = (p.openOrderMode == true || p.catalogModeEnabled == true)
+            val maxQuantity = if (!openOrderAllowed) p.stock?.takeIf { it > 0 } else null
+            val canDecrease = quantity > 1
+            val canIncrease = maxQuantity?.let { quantity < it } ?: true
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -213,6 +218,70 @@ fun ProductDetailScreen(
                         )
                     }
                     
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    Text(
+                        text = "Quantity",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        IconButton(
+                            onClick = { if (canDecrease) quantity -= 1 },
+                            enabled = canDecrease,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GlassWhite)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Remove,
+                                contentDescription = "Decrease",
+                                tint = WhiteText,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        
+                        Text(
+                            text = "$quantity",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = WhiteText,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        
+                        IconButton(
+                            onClick = { if (canIncrease) quantity += 1 },
+                            enabled = canIncrease,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GlassWhite)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Increase",
+                                tint = WhiteText,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        
+                        maxQuantity?.let { max ->
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Max $max",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WhiteTextMuted
+                            )
+                        }
+                    }
+                    
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     // Description
@@ -239,7 +308,7 @@ fun ProductDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Button(
-                            onClick = { viewModel.addToCart(productId) },
+                            onClick = { viewModel.addToCart(productId, quantity) },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
