@@ -18,7 +18,6 @@ import { useClientPerformanceMetrics } from "@/hooks/use-client-performance-metr
 import { useRealtimeUpdates } from "@/hooks/use-realtime-updates";
 
 // Import all pages...
-// import HomePage from "@/pages/home-page"; // Removed import for HomePage as it's not used and file doesn't exist
 const AuthPage = lazy(() => import("@/pages/auth-page"));
 const CustomerDashboard = lazy(() => import("@/pages/customer/dashboard"));
 const BrowseServices = lazy(() => import("@/pages/customer/browse-services"));
@@ -69,7 +68,10 @@ const AdminBookingsPage = lazy(() => import("@/pages/admin/AdminBookings"));
 const AdminHealth = lazy(() => import("@/pages/admin/AdminHealth"));
 const AdminMonitoring = lazy(() => import("@/pages/admin/AdminMonitoring"));
 
+const HomePage = lazy(() => import("@/pages/home-page"));
 const NotFound = lazy(() => import("@/pages/not-found"));
+const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
+const TermsOfService = lazy(() => import("@/pages/terms-of-service"));
 // Email-based pages removed (verify-email, reset-password) - using phone OTP instead
 const WorkerLoginPage = lazy(() => import("@/pages/auth/WorkerLoginPage"));
 
@@ -193,8 +195,11 @@ function Router() {
       <ProtectedRoute path="/shop/promotions" component={ShopPromotions} roles={["shop", "worker"]} />
       <ProtectedRoute path="/shop/reviews" component={ShopReviews} roles={["shop", "worker"]} />
       <ProtectedRoute path="/shop/workers" component={ShopWorkers} roles={["shop"]} />
+      {/* Legal Pages */}
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms-of-service" component={TermsOfService} />
       {/* Email-based routes removed (reset-password, verify-email) - using phone OTP instead */}
-      <Route path="/" component={AuthPage} />
+      <Route path="/" component={HomePage} />
       <Route component={NotFound} />
     </Switch>
   );
