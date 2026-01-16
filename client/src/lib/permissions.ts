@@ -6,6 +6,12 @@
  * This file is for the web frontend only.
  */
 
+import {
+  registerPushNotifications as registerFcmPushNotifications,
+  isPushNotificationSupported,
+  setupForegroundMessageHandler
+} from "./push-notifications";
+
 // --- Geolocation Permissions ---
 
 export const checkLocationPermission = async (): Promise<string> => {
@@ -121,25 +127,42 @@ export const checkStoragePermission = async (): Promise<boolean> => {
   }
 };
 
-// --- Push Notifications (Web) ---
-// For service worker based push notifications
+// --- Push Notifications (Web with FCM) ---
+// For Firebase Cloud Messaging based push notifications
 
 export const registerPushNotifications = async (): Promise<boolean> => {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-    console.log("Push notifications not supported");
+  if (!isPushNotificationSupported()) {
+    console.log("Push notifications not supported in this browser");
     return false;
   }
 
   try {
-    const permission = await requestNotificationPermission();
-    if (permission !== "granted") {
-      console.warn("Notification permission denied");
-      return false;
+    // Check if permission already granted
+    if (Notification.permission !== "granted") {
+      const permission = await requestNotificationPermission();
+      if (permission !== "granted") {
+        console.warn("Notification permission denied");
+        return false;
+      }
     }
 
-    // Service worker registration would go here
-    console.log("Push notification registration ready");
-    return true;
+    // Register with FCM and backend
+    const success = await registerFcmPushNotifications();
+    if (success) {
+      console.log("FCM push notifications registered successfully");
+
+      // Set up foreground message handler to show toasts
+      setupForegroundMessageHandler((payload) => {
+        // Show a browser notification for foreground messages
+        if (Notification.permission === "granted" && payload.title) {
+          new Notification(payload.title, {
+            body: payload.body || "",
+            icon: "/icon-192.png",
+          });
+        }
+      });
+    }
+    return success;
   } catch (e) {
     console.error("Error registering push notifications:", e);
     return false;
@@ -147,10 +170,14 @@ export const registerPushNotifications = async (): Promise<boolean> => {
 };
 
 export const initializePushNotifications = async (): Promise<void> => {
-  const registered = await registerPushNotifications();
-  if (registered) {
-    console.log("Push notifications initialized");
-  }
+  // Delay push notification registration to avoid blocking initial load
+  // Also wait a bit to ensure user is authenticated
+  setTimeout(async () => {
+    const registered = await registerPushNotifications();
+    if (registered) {
+      console.log("Push notifications initialized with FCM");
+    }
+  }, 3000); // Wait 3 seconds after page load
 };
 
 // --- Placeholder functions for compatibility ---

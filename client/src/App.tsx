@@ -13,6 +13,7 @@ import {
   initializePushNotifications,
 } from "@/lib/permissions"; // Added imports
 import PermissionRequester from "@/components/PermissionRequester"; // Import the new component
+import { PushNotificationManager } from "@/components/PushNotificationManager";
 import React, { useEffect, Suspense, lazy } from "react";
 import { useClientPerformanceMetrics } from "@/hooks/use-client-performance-metrics";
 import { useRealtimeUpdates } from "@/hooks/use-realtime-updates";
@@ -232,6 +233,7 @@ function App() {
             <ClientPerformanceMetricsTracker />
             <RealtimeBridge />
             <PermissionRequester />
+            <PushNotificationManager />
             <AdminProvider>
               <ErrorBoundary>
                 <Suspense

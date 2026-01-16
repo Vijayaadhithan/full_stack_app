@@ -784,6 +784,23 @@ export const notifications = pgTable("notifications", {
   userCreatedAtIdx: index("idx_notifications_user_created").on(table.userId, table.createdAt),
 }));
 
+// FCM (Firebase Cloud Messaging) tokens for push notifications
+export const fcmTokens = pgTable("fcm_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  token: text("token").notNull().unique(),
+  platform: text("platform").$type<"android" | "web">().notNull(),
+  deviceInfo: text("device_info"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  userIdIdx: index("fcm_tokens_user_id_idx").on(table.userId),
+  tokenIdx: index("fcm_tokens_token_idx").on(table.token),
+}));
+
+export type FcmToken = typeof fcmTokens.$inferSelect;
+export type InsertFcmToken = typeof fcmTokens.$inferInsert;
+
 export const blockedTimeSlots = pgTable("blocked_time_slots", {
   id: serial("id").primaryKey(),
   serviceId: integer("service_id").references(() => services.id),

@@ -5179,6 +5179,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── FCM Token Registration for Push Notifications ─────────────────
+  const fcmTokenSchema = z.object({
+    token: z.string().min(10, "Invalid FCM token"),
+    platform: z.enum(["android", "web"]),
+    deviceInfo: z.string().optional(),
+  }).strict();
+
+  /**
+   * Register FCM token for push notifications
+   * Called after login or when token refreshes
+   */
+  app.post("/api/fcm/register", requireAuth, async (req, res) => {
+    const parsed = fcmTokenSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(formatValidationError(parsed.error));
+    }
+
+    try {
+      const { token, platform, deviceInfo } = parsed.data;
+      await storage.createOrUpdateFcmToken({
+        userId: req.user!.id,
+        token,
+        platform,
+        deviceInfo: deviceInfo || null,
+      });
+
+      logger.info(
+        { userId: req.user!.id, platform },
+        "FCM token registered"
+      );
+
+      res.json({ success: true });
+    } catch (error) {
+      logger.error("Error registering FCM token:", error);
+      res.status(500).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to register push notification token",
+      });
+    }
+  });
+
+  /**
+   * Unregister FCM token (on logout)
+   */
+  app.delete("/api/fcm/unregister", requireAuth, async (req, res) => {
+    const tokenSchema = z.object({
+      token: z.string().min(10, "Invalid FCM token"),
+    }).strict();
+
+    const parsed = tokenSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(formatValidationError(parsed.error));
+    }
+
+    try {
+      await storage.deleteFcmToken(parsed.data.token);
+      logger.info({ userId: req.user!.id }, "FCM token unregistered");
+      res.json({ success: true });
+    } catch (error) {
+      logger.error("Error unregistering FCM token:", error);
+      res.status(500).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to unregister push notification token",
+      });
+    }
+  });
+
   // Order Management
   app.post(
     "/api/orders",

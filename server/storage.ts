@@ -25,6 +25,8 @@ import {
   Promotion,
   InsertPromotion,
   TimeSlotLabel,
+  FcmToken,
+  InsertFcmToken,
 } from "@shared/schema";
 
 export type OrderStatus =
@@ -272,6 +274,12 @@ export interface IStorage {
   markNotificationAsRead(id: number): Promise<void>;
   markAllNotificationsAsRead(userId: number): Promise<void>;
   deleteNotification(id: number): Promise<void>;
+
+  // FCM Token operations for push notifications
+  createOrUpdateFcmToken(token: InsertFcmToken): Promise<FcmToken>;
+  getFcmTokensByUserId(userId: number): Promise<FcmToken[]>;
+  deleteFcmToken(token: string): Promise<void>;
+  deleteFcmTokensByUserId(userId: number): Promise<void>;
 
   // Promotion operations
   createPromotion(promotion: InsertPromotion): Promise<Promotion>;

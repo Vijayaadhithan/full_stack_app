@@ -62,7 +62,7 @@ if (isFirebaseConfigured) {
     }
 }
 
-export { auth };
+export { app, auth };
 
 // Store confirmation result globally
 let confirmationResult: ConfirmationResult | null = null;

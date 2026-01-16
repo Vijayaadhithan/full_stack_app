@@ -281,3 +281,19 @@ data class CreateReturnRequest(
     @Json(name = "reason") val reason: String,
     @Json(name = "comments") val comments: String? = null
 )
+
+// ==================== FCM PUSH NOTIFICATIONS ====================
+
+// FCM Token Registration - POST /api/fcm/register
+@JsonClass(generateAdapter = true)
+data class FcmTokenRequest(
+    @Json(name = "token") val token: String,
+    @Json(name = "platform") val platform: String,  // "android" or "web"
+    @Json(name = "deviceInfo") val deviceInfo: String? = null
+)
+
+// FCM Token Unregister - DELETE /api/fcm/unregister
+@JsonClass(generateAdapter = true)
+data class FcmTokenUnregisterRequest(
+    @Json(name = "token") val token: String
+)

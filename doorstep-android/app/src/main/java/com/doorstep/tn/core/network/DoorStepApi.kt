@@ -326,4 +326,14 @@ interface DoorStepApi {
     // Submit product review - matches web POST /api/product-reviews
     @POST("api/product-reviews")
     suspend fun submitProductReview(@Body request: ProductReviewRequest): Response<Any>
+    
+    // ==================== FCM PUSH NOTIFICATION ENDPOINTS ====================
+    
+    // Register FCM token for push notifications - POST /api/fcm/register
+    @POST("api/fcm/register")
+    suspend fun registerFcmToken(@Body request: FcmTokenRequest): Response<Unit>
+    
+    // Unregister FCM token (on logout) - DELETE /api/fcm/unregister
+    @HTTP(method = "DELETE", path = "api/fcm/unregister", hasBody = true)
+    suspend fun unregisterFcmToken(@Body request: FcmTokenUnregisterRequest): Response<Unit>
 }

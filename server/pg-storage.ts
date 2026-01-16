@@ -59,6 +59,9 @@ import {
   TimeSlotLabel,
   shops,
   Shop,
+  fcmTokens,
+  FcmToken,
+  InsertFcmToken,
 } from "@shared/schema";
 import {
   IStorage,
@@ -2918,8 +2921,61 @@ export class PostgresStorage implements IStorage {
 
     notifyNotificationChange(newNotification?.userId);
 
-    // Define critical notification types that should trigger an email
+    // Send push notification via FCM if user has registered tokens
+    if (newNotification?.userId) {
+      this.sendPushNotificationAsync(
+        newNotification.userId,
+        newNotification.title,
+        newNotification.message,
+        newNotification.type,
+        newNotification.relatedBookingId,
+      );
+    }
+
     return newNotification;
+  }
+
+  /**
+   * Send push notification asynchronously (fire-and-forget)
+   * This runs in background and doesn't block the main notification flow
+   */
+  private async sendPushNotificationAsync(
+    userId: number,
+    title: string,
+    body: string,
+    type: string,
+    relatedId?: number | null,
+  ): Promise<void> {
+    try {
+      // Dynamic import to avoid circular dependencies
+      const { sendPushToTokens, createPushData } = await import("./services/push-notification");
+
+      const fcmTokenRecords = await this.getFcmTokensByUserId(userId);
+      if (fcmTokenRecords.length === 0) {
+        return; // No FCM tokens registered for this user
+      }
+
+      const tokens = fcmTokenRecords.map(t => t.token);
+      const result = await sendPushToTokens(tokens, {
+        title,
+        body,
+        data: createPushData(type, relatedId),
+      });
+
+      // Clean up invalid tokens
+      if (result.invalidTokens.length > 0) {
+        for (const invalidToken of result.invalidTokens) {
+          await this.deleteFcmToken(invalidToken);
+        }
+        logger.info(
+          { count: result.invalidTokens.length, userId },
+          "Cleaned up invalid FCM tokens"
+        );
+      }
+    } catch (error) {
+      // Log but don't throw - push notification failure shouldn't break app flow
+      logger.error({ err: error, userId }, "Failed to send push notification");
+    }
   }
 
   async getNotificationsByUser(
@@ -2995,6 +3051,47 @@ export class PostgresStorage implements IStorage {
     if (deleted[0]) {
       notifyNotificationChange(deleted[0].userId);
     }
+  }
+
+  // ─── FCM TOKEN OPERATIONS (for Push Notifications) ─────────────────
+  async createOrUpdateFcmToken(tokenData: InsertFcmToken): Promise<FcmToken> {
+    // Use upsert to handle both new tokens and updates
+    const result = await db.primary
+      .insert(fcmTokens)
+      .values({
+        ...tokenData,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: fcmTokens.token,
+        set: {
+          userId: tokenData.userId,
+          platform: tokenData.platform,
+          deviceInfo: tokenData.deviceInfo,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result[0];
+  }
+
+  async getFcmTokensByUserId(userId: number): Promise<FcmToken[]> {
+    return await db.primary
+      .select()
+      .from(fcmTokens)
+      .where(eq(fcmTokens.userId, userId));
+  }
+
+  async deleteFcmToken(token: string): Promise<void> {
+    await db.primary
+      .delete(fcmTokens)
+      .where(eq(fcmTokens.token, token));
+  }
+
+  async deleteFcmTokensByUserId(userId: number): Promise<void> {
+    await db.primary
+      .delete(fcmTokens)
+      .where(eq(fcmTokens.userId, userId));
   }
 
   // ─── ADDITIONAL / ENHANCED OPERATIONS ─────────────────────────────

@@ -103,6 +103,7 @@ dependencies {
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth.ktx)
+    implementation(libs.firebase.messaging.ktx)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
