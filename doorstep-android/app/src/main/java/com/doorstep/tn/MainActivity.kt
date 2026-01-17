@@ -3,6 +3,7 @@ package com.doorstep.tn
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -107,19 +108,23 @@ class MainActivity : ComponentActivity() {
      * Convert web click URL to Android navigation route
      */
     private fun convertClickUrlToRoute(clickUrl: String, type: String?, relatedId: String?): String {
+        val resolvedRelatedId = relatedId?.takeIf { it.isNotBlank() }
+        val bookingId = resolvedRelatedId ?: extractIdFromClickUrl(clickUrl, "bookingId")
+        val orderId = resolvedRelatedId ?: extractIdFromClickUrl(clickUrl, "orderId")
+
         // Parse the clickUrl and convert to Android route
         return when {
             clickUrl.contains("/provider/bookings") -> {
-                if (relatedId != null) "provider_booking/$relatedId" else "provider_bookings"
+                if (bookingId != null) "provider_booking/$bookingId" else "provider_bookings"
             }
             clickUrl.contains("/customer/bookings") -> {
-                if (relatedId != null) "customer_booking/$relatedId" else "customer_bookings"
+                if (bookingId != null) "customer_booking/$bookingId" else "customer_bookings"
             }
             clickUrl.contains("/shop/orders") -> {
-                if (relatedId != null) "shop_order/$relatedId" else "shop_orders"
+                if (orderId != null) "shop_order/$orderId" else "shop_orders"
             }
-            clickUrl.contains("/customer/orders") -> {
-                if (relatedId != null) "customer_order/$relatedId" else "customer_orders"
+            clickUrl.contains("/customer/orders") || clickUrl.contains("/customer/order") -> {
+                if (orderId != null) "customer_order/$orderId" else "customer_orders"
             }
             clickUrl.contains("/notifications") -> {
                 when {
@@ -129,6 +134,25 @@ class MainActivity : ComponentActivity() {
                 }
             }
             else -> "customer_notifications"
+        }
+    }
+
+    private fun extractIdFromClickUrl(clickUrl: String, queryKey: String): String? {
+        return try {
+            val uri = Uri.parse(clickUrl)
+            val queryValue = uri.getQueryParameter(queryKey)
+            if (!queryValue.isNullOrBlank()) {
+                queryValue
+            } else {
+                val lastSegment = uri.pathSegments.lastOrNull()
+                if (!lastSegment.isNullOrBlank() && lastSegment.all { it.isDigit() }) {
+                    lastSegment
+                } else {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            null
         }
     }
     

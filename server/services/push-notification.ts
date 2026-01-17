@@ -39,6 +39,7 @@ export async function sendPushToToken(
     }
 
     try {
+        const clickUrl = payload.data?.clickUrl || "/notifications";
         const message: admin.messaging.Message = {
             token,
             notification: {
@@ -61,9 +62,10 @@ export async function sendPushToToken(
                     icon: "/icon-192.png",
                     badge: "/icon-192.png",
                     requireInteraction: true,
+                    data: payload.data || {},
                 },
                 fcmOptions: {
-                    link: "/notifications",
+                    link: clickUrl,
                 },
             },
         };
@@ -111,6 +113,7 @@ export async function sendPushToTokens(
         };
     }
 
+    const clickUrl = payload.data?.clickUrl || "/notifications";
     const message: admin.messaging.MulticastMessage = {
         tokens,
         notification: {
@@ -133,9 +136,10 @@ export async function sendPushToTokens(
                 icon: "/icon-192.png",
                 badge: "/icon-192.png",
                 requireInteraction: true,
+                data: payload.data || {},
             },
             fcmOptions: {
-                link: "/notifications",
+                link: clickUrl,
             },
         },
     };

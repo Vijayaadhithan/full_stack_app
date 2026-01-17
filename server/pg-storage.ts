@@ -2962,14 +2962,15 @@ export class PostgresStorage implements IStorage {
 
       logger.info({ userId, tokenCount: fcmTokenRecords.length, userRole }, "Sending push notification to FCM tokens");
 
+      const resolvedRelatedId = relatedId ?? this.extractRelatedIdFromText(type, title, body);
       // Generate role-specific click URL
-      const clickUrl = this.getClickUrlForNotification(type, relatedId, userRole);
+      const clickUrl = this.getClickUrlForNotification(type, resolvedRelatedId, userRole);
 
       const tokens = fcmTokenRecords.map(t => t.token);
       const result = await sendPushToTokens(tokens, {
         title,
         body,
-        data: createPushData(type, relatedId, clickUrl),
+        data: createPushData(type, resolvedRelatedId, clickUrl),
       });
 
       logger.info(
@@ -2994,6 +2995,63 @@ export class PostgresStorage implements IStorage {
   }
 
   /**
+   * Extract a related entity ID from notification text for deep linking.
+   */
+  private extractRelatedIdFromText(
+    notificationType: string,
+    title: string,
+    body: string,
+  ): number | null {
+    const normalizedType = notificationType.toLowerCase();
+    const isOrder = normalizedType.includes("order");
+    const isBooking = normalizedType.includes("booking") || normalizedType.includes("service");
+
+    if (!isOrder && !isBooking) {
+      return null;
+    }
+
+    const haystack = `${title} ${body}`.trim();
+
+    if (isOrder) {
+      const orderMatch = haystack.match(/\border\s*#?\s*(\d+)/i);
+      if (orderMatch?.[1]) {
+        const parsed = Number(orderMatch[1]);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+
+    if (isBooking) {
+      const bookingMatch = haystack.match(/\bbooking\s*#?\s*(\d+)/i);
+      if (bookingMatch?.[1]) {
+        const parsed = Number(bookingMatch[1]);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+
+    const idMatch = haystack.match(/\bID:\s*(\d+)/i);
+    if (idMatch?.[1]) {
+      const parsed = Number(idMatch[1]);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    const hashMatch = haystack.match(/#\s*(\d+)/);
+    if (hashMatch?.[1]) {
+      const parsed = Number(hashMatch[1]);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Generate role-specific click URL for notification navigation
    */
   private getClickUrlForNotification(
@@ -3001,7 +3059,8 @@ export class PostgresStorage implements IStorage {
     relatedId?: number | null,
     userRole?: string
   ): string {
-    const rolePrefix = userRole === "provider" ? "/provider" : userRole === "shop_owner" ? "/shop" : "/customer";
+    const isShopRole = userRole === "shop" || userRole === "shop_owner" || userRole === "worker";
+    const rolePrefix = userRole === "provider" ? "/provider" : isShopRole ? "/shop" : "/customer";
 
     switch (notificationType) {
       // Booking-related notifications
@@ -3025,8 +3084,11 @@ export class PostgresStorage implements IStorage {
       case "new_order":
       case "order_shipped":
       case "order_delivered":
-        if (userRole === "shop_owner") {
+        if (isShopRole) {
           return relatedId ? `${rolePrefix}/orders?orderId=${relatedId}` : `${rolePrefix}/orders`;
+        }
+        if (rolePrefix === "/customer") {
+          return relatedId ? `${rolePrefix}/order/${relatedId}` : `${rolePrefix}/orders`;
         }
         return relatedId ? `${rolePrefix}/orders/${relatedId}` : `${rolePrefix}/orders`;
 
