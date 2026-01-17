@@ -2952,15 +2952,30 @@ export class PostgresStorage implements IStorage {
 
       const fcmTokenRecords = await this.getFcmTokensByUserId(userId);
       if (fcmTokenRecords.length === 0) {
-        return; // No FCM tokens registered for this user
+        logger.debug({ userId }, "No FCM tokens registered for user, skipping push notification");
+        return;
       }
+
+      // Get user role to generate correct click URL
+      const user = await this.getUser(userId);
+      const userRole = user?.role || "customer";
+
+      logger.info({ userId, tokenCount: fcmTokenRecords.length, userRole }, "Sending push notification to FCM tokens");
+
+      // Generate role-specific click URL
+      const clickUrl = this.getClickUrlForNotification(type, relatedId, userRole);
 
       const tokens = fcmTokenRecords.map(t => t.token);
       const result = await sendPushToTokens(tokens, {
         title,
         body,
-        data: createPushData(type, relatedId),
+        data: createPushData(type, relatedId, clickUrl),
       });
+
+      logger.info(
+        { userId, successCount: result.successCount, failureCount: result.failureCount },
+        "Push notification send complete"
+      );
 
       // Clean up invalid tokens
       if (result.invalidTokens.length > 0) {
@@ -2975,6 +2990,48 @@ export class PostgresStorage implements IStorage {
     } catch (error) {
       // Log but don't throw - push notification failure shouldn't break app flow
       logger.error({ err: error, userId }, "Failed to send push notification");
+    }
+  }
+
+  /**
+   * Generate role-specific click URL for notification navigation
+   */
+  private getClickUrlForNotification(
+    notificationType: string,
+    relatedId?: number | null,
+    userRole?: string
+  ): string {
+    const rolePrefix = userRole === "provider" ? "/provider" : userRole === "shop_owner" ? "/shop" : "/customer";
+
+    switch (notificationType) {
+      // Booking-related notifications
+      case "booking":
+      case "booking_request":
+      case "service":
+      case "new_booking":
+      case "booking_accepted":
+      case "booking_completed":
+      case "payment_submitted":
+      case "payment_confirmed":
+        if (userRole === "provider") {
+          // Provider should see their bookings with the specific booking info
+          return relatedId ? `${rolePrefix}/bookings?bookingId=${relatedId}` : `${rolePrefix}/bookings`;
+        }
+        // Customer also uses query param since there's no /customer/bookings/:id route
+        return relatedId ? `${rolePrefix}/bookings?bookingId=${relatedId}` : `${rolePrefix}/bookings`;
+
+      // Order-related notifications  
+      case "order":
+      case "new_order":
+      case "order_shipped":
+      case "order_delivered":
+        if (userRole === "shop_owner") {
+          return relatedId ? `${rolePrefix}/orders?orderId=${relatedId}` : `${rolePrefix}/orders`;
+        }
+        return relatedId ? `${rolePrefix}/orders/${relatedId}` : `${rolePrefix}/orders`;
+
+      default:
+        return `${rolePrefix}/notifications`;
     }
   }
 

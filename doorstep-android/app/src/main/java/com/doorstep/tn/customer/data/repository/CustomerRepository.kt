@@ -1,5 +1,6 @@
 package com.doorstep.tn.customer.data.repository
 
+import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.auth.data.repository.Result
 import com.doorstep.tn.core.cache.CacheRepository
 import com.doorstep.tn.core.cache.MemoryCache
@@ -353,6 +354,19 @@ class CustomerRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to update profile")
+        }
+    }
+
+    suspend fun getUserById(userId: Int): Result<UserResponse> {
+        return try {
+            val response = api.getUserById(userId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load user")
         }
     }
     

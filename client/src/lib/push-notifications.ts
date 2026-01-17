@@ -52,6 +52,9 @@ export async function initializeMessaging(): Promise<Messaging | null> {
         const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
         console.log("Service worker registered:", registration.scope);
 
+        // Set up service worker message handler for notification clicks
+        setupServiceWorkerMessageHandler();
+
         if (!app) {
             console.warn("Firebase app not initialized");
             return null;
@@ -62,6 +65,35 @@ export async function initializeMessaging(): Promise<Messaging | null> {
     } catch (error) {
         console.error("Failed to initialize Firebase Messaging:", error);
         return null;
+    }
+}
+
+/**
+ * Set up handler for messages from service worker (e.g., notification clicks)
+ */
+function setupServiceWorkerMessageHandler(): void {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
+                const url = event.data.url;
+                console.log('Received notification click from service worker:', url);
+
+                // Navigate to the URL
+                if (url && typeof window !== 'undefined') {
+                    // Extract path from absolute URL if needed
+                    let path = url;
+                    try {
+                        const urlObj = new URL(url);
+                        path = urlObj.pathname + urlObj.search;
+                    } catch {
+                        // URL is already a path
+                    }
+
+                    // Navigate using window.location
+                    window.location.href = path;
+                }
+            }
+        });
     }
 }
 

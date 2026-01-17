@@ -397,6 +397,16 @@ class CustomerViewModel @Inject constructor(
             }
         }
     }
+
+    fun getShopUpiId(shopId: Int, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            when (val result = repository.getUserById(shopId)) {
+                is Result.Success -> onResult(result.data.upiId)
+                is Result.Error -> onResult(null)
+                is Result.Loading -> {}
+            }
+        }
+    }
     
     // ==================== Cart Actions ====================
     

@@ -259,6 +259,10 @@ export function NotificationsCenter() {
   };
 
   const extractEntityId = (notification: Notification) => {
+    if (notification.relatedBookingId != null) {
+      return String(notification.relatedBookingId);
+    }
+
     const haystack = `${notification.title ?? ""} ${notification.message ?? ""}`;
     const byExplicitId = haystack.match(/ID:\s*(\d+)/i);
     if (byExplicitId?.[1]) return byExplicitId[1];
@@ -273,6 +277,16 @@ export function NotificationsCenter() {
     if (byHash?.[1]) return byHash[1];
 
     return undefined;
+  };
+
+  const buildCustomerBookingsUrl = (bookingId?: string) => {
+    if (!bookingId) return "/customer/bookings";
+    return `/customer/bookings?bookingId=${encodeURIComponent(bookingId)}`;
+  };
+
+  const buildProviderBookingsUrl = (status?: string) => {
+    if (!status) return "/provider/bookings";
+    return `/provider/bookings?status=${encodeURIComponent(status)}`;
   };
 
   // Function to navigate to the relevant page based on notification type and CONTENT
@@ -290,6 +304,7 @@ export function NotificationsCenter() {
 
     // Get the notification title for content-based routing
     const title = (notification.title || "").toLowerCase();
+    const message = (notification.message || "").toLowerCase();
 
     // Navigate based on notification type
     switch (notification.type) {
@@ -347,21 +362,46 @@ export function NotificationsCenter() {
           navigate("/provider/bookings?status=pending");
         } else {
           setAppMode("CUSTOMER");
-          navigate(`/customer/bookings${id ? `/${id}` : ""}`);
+          navigate(buildCustomerBookingsUrl(id));
         }
         break;
 
       // ========== BOOKING TYPES - EXPLICITLY FOR CUSTOMERS ==========
       // booking_update is used for "Booking Accepted" and "Booking Rejected"
       // booking_rescheduled_by_provider is when provider reschedules
-      case "booking_update":
+      case "booking_update": {
+        const isProviderPaymentUpdate =
+          hasProviderAccess &&
+          (title.includes("payment submitted") ||
+            message.includes("payment reference") ||
+            message.includes("submitted payment"));
+
+        if (isProviderPaymentUpdate) {
+          setAppMode("PROVIDER");
+          navigate(buildProviderBookingsUrl("awaiting_payment"));
+        } else {
+          setAppMode("CUSTOMER");
+          navigate(buildCustomerBookingsUrl(id));
+        }
+        break;
+      }
+
+      case "booking_rescheduled_request":
+        if (hasProviderAccess) {
+          setAppMode("PROVIDER");
+          navigate(buildProviderBookingsUrl("rescheduled_pending_provider_approval"));
+        } else {
+          setAppMode("CUSTOMER");
+          navigate(buildCustomerBookingsUrl(id));
+        }
+        break;
+
       case "booking_confirmed":
       case "booking_rejected":
-      case "booking_rescheduled_request":
       case "booking_rescheduled_by_provider":
         // Switch to CUSTOMER mode and navigate to bookings
         setAppMode("CUSTOMER");
-        navigate(`/customer/bookings${id ? `/${id}` : ""}`);
+        navigate(buildCustomerBookingsUrl(id));
         break;
 
       // ========== GENERIC BOOKING/SERVICE NOTIFICATIONS ==========
@@ -380,7 +420,7 @@ export function NotificationsCenter() {
           navigate("/provider/bookings?status=pending");
         } else {
           setAppMode("CUSTOMER");
-          navigate(`/customer/bookings${id ? `/${id}` : ""}`);
+          navigate(buildCustomerBookingsUrl(id));
         }
         break;
       }

@@ -7,6 +7,7 @@ import com.doorstep.tn.auth.data.model.ResetPinRequest
 import com.doorstep.tn.auth.data.model.RuralRegisterRequest
 import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.core.network.DoorStepApi
+import com.doorstep.tn.core.network.FcmTokenRequest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -141,6 +142,32 @@ class AuthRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to reset PIN")
+        }
+    }
+    
+    /**
+     * Register FCM token for push notifications
+     */
+    suspend fun registerFcmToken(
+        token: String,
+        platform: String,
+        deviceInfo: String
+    ): Result<Unit> {
+        return try {
+            val response = api.registerFcmToken(
+                FcmTokenRequest(
+                    token = token,
+                    platform = platform,
+                    deviceInfo = deviceInfo
+                )
+            )
+            if (response.isSuccessful) {
+                Result.Success(Unit)
+            } else {
+                Result.Error("Failed to register FCM token", response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to register FCM token")
         }
     }
 }

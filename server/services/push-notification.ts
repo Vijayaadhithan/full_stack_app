@@ -184,10 +184,14 @@ export async function sendPushToTokens(
 
 /**
  * Helper to create notification data from notification type
+ * @param notificationType - The type of notification (booking, order, etc.)
+ * @param relatedId - The related booking/order ID
+ * @param clickUrl - Optional URL to navigate to when notification is clicked
  */
 export function createPushData(
     notificationType: string,
-    relatedId?: number | null
+    relatedId?: number | null,
+    clickUrl?: string
 ): Record<string, string> {
     const data: Record<string, string> = {
         type: notificationType,
@@ -198,5 +202,40 @@ export function createPushData(
         data.relatedId = relatedId.toString();
     }
 
+    // Add click URL for proper navigation
+    if (clickUrl) {
+        data.clickUrl = clickUrl;
+    } else {
+        // Generate default click URL based on type
+        data.clickUrl = getDefaultClickUrl(notificationType, relatedId);
+    }
+
     return data;
+}
+
+/**
+ * Get default click URL based on notification type
+ * Note: The frontend will determine the correct prefix (customer/provider) based on user role
+ */
+function getDefaultClickUrl(notificationType: string, relatedId?: number | null): string {
+    // For now, just return the path without role prefix
+    // The frontend will add the correct prefix based on user role
+    switch (notificationType) {
+        case 'booking':
+        case 'booking_request':
+        case 'service':
+        case 'new_booking':
+        case 'booking_accepted':
+        case 'booking_completed':
+        case 'payment_submitted':
+        case 'payment_confirmed':
+            return relatedId ? `/bookings/${relatedId}` : '/bookings';
+        case 'order':
+        case 'new_order':
+        case 'order_shipped':
+        case 'order_delivered':
+            return relatedId ? `/orders/${relatedId}` : '/orders';
+        default:
+            return '/notifications';
+    }
 }

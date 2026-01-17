@@ -53,25 +53,16 @@ self.addEventListener('notificationclick', (event) => {
 
     // Get the notification data
     const data = event.notification.data || {};
-    const type = data.type;
-    const relatedId = data.relatedId;
 
-    // Determine which URL to open based on notification type
-    let urlToOpen = '/notifications';
+    // Use clickUrl from data, or fallback to notifications page
+    let urlToOpen = data.clickUrl || '/notifications';
 
-    if (type === 'booking' || type === 'booking_request' || type === 'service') {
-        if (relatedId) {
-            urlToOpen = `/bookings/${relatedId}`;
-        } else {
-            urlToOpen = '/bookings';
-        }
-    } else if (type === 'order') {
-        if (relatedId) {
-            urlToOpen = `/orders/${relatedId}`;
-        } else {
-            urlToOpen = '/orders';
-        }
+    // Make sure URL is absolute
+    if (urlToOpen.startsWith('/')) {
+        urlToOpen = self.registration.scope.replace(/\/$/, '') + urlToOpen;
     }
+
+    console.log('[firebase-messaging-sw.js] Opening URL:', urlToOpen);
 
     // Open the appropriate URL
     event.waitUntil(
@@ -79,8 +70,20 @@ self.addEventListener('notificationclick', (event) => {
             .then((clientList) => {
                 // Check if there's already a window open
                 for (const client of clientList) {
-                    if ('focus' in client) {
-                        return client.focus().then(() => client.navigate(urlToOpen));
+                    // Check if the client URL is the same origin
+                    if (client.url.startsWith(self.registration.scope) && 'focus' in client) {
+                        return client.focus().then((focusedClient) => {
+                            // Navigate to the notification URL
+                            if (focusedClient.navigate) {
+                                return focusedClient.navigate(urlToOpen);
+                            }
+                            // Fallback: post message to client to navigate
+                            focusedClient.postMessage({
+                                type: 'NOTIFICATION_CLICK',
+                                url: urlToOpen
+                            });
+                            return focusedClient;
+                        });
                     }
                 }
                 // If no window is open, open a new one

@@ -1,6 +1,7 @@
 package com.doorstep.tn.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -10,6 +11,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.doorstep.tn.MainActivity
 import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.auth.ui.PhoneEntryScreen
 import com.doorstep.tn.auth.ui.OtpVerifyScreen
@@ -128,6 +130,24 @@ fun DoorStepNavHost(
         }
     } else {
         Routes.PHONE_ENTRY
+    }
+    
+    // Handle pending notification navigation after login
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn) {
+            MainActivity.pendingNotificationRoute?.let { route ->
+                android.util.Log.d("NavHost", "Navigating to pending notification route: $route")
+                try {
+                    navController.navigate(route) {
+                        // Don't pop the start destination
+                        launchSingleTop = true
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("NavHost", "Failed to navigate to notification route: $route", e)
+                }
+                MainActivity.clearPendingNotificationRoute()
+            }
+        }
     }
     
     NavHost(

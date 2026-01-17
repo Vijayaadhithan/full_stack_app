@@ -127,6 +127,10 @@ interface DoorStepApi {
         @Path("id") userId: Int,
         @Body data: UpdateProfileRequest
     ): Response<UserResponse>
+
+    // Get user by ID - matches web GET /api/users/{id}
+    @GET("api/users/{id}")
+    suspend fun getUserById(@Path("id") userId: Int): Response<UserResponse>
     
     // ==================== ORDERS ENDPOINTS ====================
     

@@ -270,14 +270,52 @@ private fun OrderDetailContent(
     var transactionId by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
     var isReordering by remember { mutableStateOf(false) }
+    var isUpdatingPaymentMethod by remember { mutableStateOf(false) }
+    val normalizedPaymentMethod = order.paymentMethod?.lowercase()
+    val isTextOrder = order.orderType == "text_order"
+    var resolvedUpiId by remember(order.shop?.upiId, order.shopId) {
+        mutableStateOf(order.shop?.upiId)
+    }
+
+    LaunchedEffect(order.shopId, order.shop?.upiId) {
+        val currentUpiId = order.shop?.upiId
+        resolvedUpiId = currentUpiId
+        if (currentUpiId.isNullOrBlank()) {
+            order.shopId?.let { shopId ->
+                viewModel.getShopUpiId(shopId) { fetchedUpiId ->
+                    if (!fetchedUpiId.isNullOrBlank()) {
+                        resolvedUpiId = fetchedUpiId
+                    }
+                }
+            }
+        }
+    }
+    val upiIdToUse = resolvedUpiId?.takeIf { it.isNotBlank() }
     
     // Helper to copy UPI ID to clipboard
     val copyUpiToClipboard: () -> Unit = {
-        order.shop?.upiId?.let { upiId ->
+        upiIdToUse?.let { upiId ->
             val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             val clip = android.content.ClipData.newPlainText("UPI ID", upiId)
             clipboard.setPrimaryClip(clip)
             onShowToast("UPI ID copied!")
+        }
+    }
+    val updatePaymentMethod: (String) -> Unit = { method ->
+        if (!isUpdatingPaymentMethod && normalizedPaymentMethod != method) {
+            isUpdatingPaymentMethod = true
+            viewModel.updatePaymentMethod(
+                orderId = orderId,
+                paymentMethod = method,
+                onSuccess = {
+                    isUpdatingPaymentMethod = false
+                    onShowToast("Payment method updated")
+                },
+                onError = { error ->
+                    isUpdatingPaymentMethod = false
+                    onShowToast(error)
+                }
+            )
         }
     }
     // ... existing implementation remains same until LazyColumn ...
@@ -305,6 +343,12 @@ private fun OrderDetailContent(
         "cancelled", "returned" -> ErrorRed
         "awaiting_customer_agreement" -> WarningYellow
         else -> OrangePrimary
+    }
+    val paymentMethodLabel = when (normalizedPaymentMethod) {
+        "upi" -> "UPI"
+        "cash" -> "Cash"
+        "pay_later" -> "Pay Later"
+        else -> order.paymentMethod ?: "Not specified"
     }
 
     val reorderItems = order.items
@@ -412,12 +456,7 @@ private fun OrderDetailContent(
                         Column(horizontalAlignment = Alignment.End) {
                             Text("Payment", color = WhiteTextMuted, style = MaterialTheme.typography.bodySmall)
                             Text(
-                                text = when (order.paymentMethod) {
-                                    "upi" -> "UPI"
-                                    "cash" -> "Cash"
-                                    "pay_later" -> "Pay Later"
-                                    else -> order.paymentMethod ?: "Not specified"
-                                },
+                                text = paymentMethodLabel,
                                 color = WhiteText,
                                 fontWeight = FontWeight.Medium
                             )
@@ -517,14 +556,14 @@ private fun OrderDetailContent(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "After agreeing, choose Cash, UPI, or Pay Later.",
+                                    text = "After agreeing, choose a payment method.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = WhiteTextMuted
                                 )
                             }
                             
                             canCompletePayment -> {
-                                // Complete Payment Section (UPI)
+                                // Complete Payment Section
                                 Text(
                                     text = "Complete Payment",
                                     style = MaterialTheme.typography.titleMedium,
@@ -533,109 +572,155 @@ private fun OrderDetailContent(
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 
-                                if (order.paymentMethod == "upi" && !order.shop?.upiId.isNullOrBlank()) {
-                                    // UPI Payment Flow
+                                if (isTextOrder) {
                                     Text(
-                                        text = "Step 1: Pay ₹${order.total} to ${order.shop?.upiId}",
+                                        text = "Choose Payment Method",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = WhiteText,
                                         fontWeight = FontWeight.Medium
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    
-                                    OutlinedButton(
-                                        onClick = copyUpiToClipboard,
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.ContentCopy,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Copy UPI ID")
-                                    }
-                                    
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    
-                                    // Transaction ID Input
-                                    OutlinedTextField(
-                                        value = transactionId,
-                                        onValueChange = { transactionId = it },
-                                        placeholder = { Text("Transaction ID") },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedTextColor = WhiteText,
-                                            unfocusedTextColor = WhiteText,
-                                            cursorColor = OrangePrimary,
-                                            focusedBorderColor = OrangePrimary,
-                                            unfocusedBorderColor = WhiteTextMuted,
-                                            focusedPlaceholderColor = WhiteTextMuted,
-                                            unfocusedPlaceholderColor = WhiteTextMuted
-                                        )
+                                    OrderPaymentMethodOption(
+                                        label = "UPI",
+                                        isSelected = normalizedPaymentMethod == "upi",
+                                        enabled = !isUpdatingPaymentMethod,
+                                        onClick = { updatePaymentMethod("upi") }
                                     )
-                                    
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    
-                                    Button(
-                                        onClick = {
-                                            if (transactionId.isNotBlank()) {
-                                                isSubmitting = true
-                                                viewModel.submitPaymentReference(
-                                                    orderId = orderId,
-                                                    reference = transactionId,
-                                                    onSuccess = {
-                                                        isSubmitting = false
-                                                        transactionId = ""
-                                                        onShowToast("Payment reference submitted")
-                                                    },
-                                                    onError = { error ->
-                                                        isSubmitting = false
-                                                        onShowToast(error)
-                                                    }
-                                                )
-                                            }
-                                        },
-                                        enabled = transactionId.isNotBlank() && !isSubmitting,
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = OrangePrimary,
-                                            disabledContainerColor = OrangePrimary.copy(alpha = 0.5f)
-                                        ),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        if (isSubmitting) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(20.dp),
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OrderPaymentMethodOption(
+                                        label = "Cash",
+                                        isSelected = normalizedPaymentMethod == "cash",
+                                        enabled = !isUpdatingPaymentMethod,
+                                        onClick = { updatePaymentMethod("cash") }
+                                    )
+                                    if (normalizedPaymentMethod == "pay_later") {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        OrderPaymentMethodOption(
+                                            label = "Pay Later",
+                                            isSelected = true,
+                                            enabled = !isUpdatingPaymentMethod,
+                                            onClick = { updatePaymentMethod("pay_later") }
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                }
+                                
+                                when (normalizedPaymentMethod) {
+                                    "upi" -> {
+                                        if (!upiIdToUse.isNullOrBlank()) {
+                                            // UPI Payment Flow
+                                            Text(
+                                                text = "Step 1: Pay ₹${order.total} to $upiIdToUse",
+                                                style = MaterialTheme.typography.bodyMedium,
                                                 color = WhiteText,
-                                                strokeWidth = 2.dp
+                                                fontWeight = FontWeight.Medium
                                             )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            
+                                            OutlinedButton(
+                                                onClick = copyUpiToClipboard,
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ContentCopy,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Copy UPI ID")
+                                            }
+                                            
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            
+                                            // Transaction ID Input
+                                            OutlinedTextField(
+                                                value = transactionId,
+                                                onValueChange = { transactionId = it },
+                                                placeholder = { Text("Transaction ID") },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                singleLine = true,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedTextColor = WhiteText,
+                                                    unfocusedTextColor = WhiteText,
+                                                    cursorColor = OrangePrimary,
+                                                    focusedBorderColor = OrangePrimary,
+                                                    unfocusedBorderColor = WhiteTextMuted,
+                                                    focusedPlaceholderColor = WhiteTextMuted,
+                                                    unfocusedPlaceholderColor = WhiteTextMuted
+                                                )
+                                            )
+                                            
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            
+                                            Button(
+                                                onClick = {
+                                                    if (transactionId.isNotBlank()) {
+                                                        isSubmitting = true
+                                                        viewModel.submitPaymentReference(
+                                                            orderId = orderId,
+                                                            reference = transactionId,
+                                                            onSuccess = {
+                                                                isSubmitting = false
+                                                                transactionId = ""
+                                                                onShowToast("Payment reference submitted")
+                                                            },
+                                                            onError = { error ->
+                                                                isSubmitting = false
+                                                                onShowToast(error)
+                                                            }
+                                                        )
+                                                    }
+                                                },
+                                                enabled = transactionId.isNotBlank() && !isSubmitting,
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = OrangePrimary,
+                                                    disabledContainerColor = OrangePrimary.copy(alpha = 0.5f)
+                                                ),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                if (isSubmitting) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(20.dp),
+                                                        color = WhiteText,
+                                                        strokeWidth = 2.dp
+                                                    )
+                                                } else {
+                                                    Text("Submit Confirmation", fontWeight = FontWeight.Bold)
+                                                }
+                                            }
                                         } else {
-                                            Text("Submit Confirmation", fontWeight = FontWeight.Bold)
+                                            Text(
+                                                text = "UPI is not configured for this shop.",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = WhiteTextMuted
+                                            )
                                         }
                                     }
-                                } else if (order.paymentMethod == "cash") {
-                                    // Cash Payment
-                                    Text(
-                                        text = "Pay ₹${order.total} in cash " +
-                                            if (order.deliveryMethod == "delivery") "on delivery" else "on pickup",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = WhiteText,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                } else if (order.paymentMethod == "pay_later") {
-                                    // Pay Later
-                                    Text(
-                                        text = "Pay Later order is pending shop approval.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = WhiteTextMuted
-                                    )
-                                } else {
-                                    Text(
-                                        text = "Payment pending. Contact shop for details.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = WhiteTextMuted
-                                    )
+                                    "cash" -> {
+                                        // Cash Payment
+                                        Text(
+                                            text = "Pay ₹${order.total} in cash " +
+                                                if (order.deliveryMethod == "delivery") "on delivery" else "on pickup",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = WhiteText,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                    "pay_later" -> {
+                                        // Pay Later
+                                        Text(
+                                            text = "Pay Later order is pending shop approval.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = WhiteTextMuted
+                                        )
+                                    }
+                                    else -> {
+                                        Text(
+                                            text = "Payment pending. Contact shop for details.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = WhiteTextMuted
+                                        )
+                                    }
                                 }
                             }
                             
@@ -1309,6 +1394,36 @@ private fun OrderItemCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun OrderPaymentMethodOption(
+    label: String,
+    isSelected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = isSelected,
+            onClick = onClick,
+            enabled = enabled,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = OrangePrimary,
+                unselectedColor = WhiteTextMuted
+            )
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (enabled) WhiteText else WhiteTextMuted
+        )
     }
 }
 

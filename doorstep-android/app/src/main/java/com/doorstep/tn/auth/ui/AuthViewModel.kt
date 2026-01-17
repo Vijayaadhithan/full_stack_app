@@ -486,5 +486,42 @@ class AuthViewModel @Inject constructor(
         _userRole.value = user.role
         _userName.value = user.name
         _currentUser.value = user
+        
+        // Register FCM token with backend after successful login
+        syncFcmToken()
+    }
+    
+    /**
+     * Sync FCM token with backend after login
+     * This ensures push notifications work for the logged-in user
+     */
+    private fun syncFcmToken() {
+        viewModelScope.launch {
+            try {
+                // Get stored FCM token from SharedPreferences
+                val fcmPrefs = context.getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
+                val storedToken = fcmPrefs.getString("fcm_token", null)
+                
+                if (storedToken != null) {
+                    // Register with backend
+                    val response = authRepository.registerFcmToken(
+                        token = storedToken,
+                        platform = "android",
+                        deviceInfo = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+                    )
+                    if (response is Result.Success) {
+                        android.util.Log.d("AuthViewModel", "FCM token synced successfully")
+                        fcmPrefs.edit().putBoolean("token_needs_sync", false).apply()
+                    } else {
+                        android.util.Log.w("AuthViewModel", "Failed to sync FCM token")
+                    }
+                } else {
+                    // No token yet, it will be registered when onNewToken() is called
+                    android.util.Log.d("AuthViewModel", "No FCM token stored yet, will sync when available")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AuthViewModel", "Error syncing FCM token", e)
+            }
+        }
     }
 }

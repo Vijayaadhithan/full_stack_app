@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import MapLink from "@/components/location/MapLink";
 import { Card, CardContent } from "@/components/ui/card";
@@ -79,9 +80,8 @@ const BOOKING_STATUS_BADGE_CLASSES: Partial<
 };
 
 const getBookingStatusBadgeClass = (status: CustomerBookingStatus) =>
-  `border ${
-    BOOKING_STATUS_BADGE_CLASSES[status] ||
-    "bg-slate-100 text-slate-700 border-slate-200"
+  `border ${BOOKING_STATUS_BADGE_CLASSES[status] ||
+  "bg-slate-100 text-slate-700 border-slate-200"
   }`;
 
 function hasWrappedBookings(
@@ -98,6 +98,7 @@ function hasWrappedBookings(
 export default function Bookings() {
   const { toast } = useToast();
   const { t } = useLanguage();
+  const [location] = useLocation();
   const [selectedBooking, setSelectedBooking] = useState<BookingWithService>();
   // const [rescheduleDate, setRescheduleDate] = useState<Date>();
   // const [rescheduleTime, setRescheduleTime] = useState<string>("");
@@ -114,16 +115,42 @@ export default function Bookings() {
   const [statusFilter, setStatusFilter] = useState<BookingStatusFilter>("all");
   const [timeFilter, setTimeFilter] = useState<"upcoming" | "past">("upcoming");
 
+  // Parse bookingId from query params (for notification click navigation)
+  const [highlightedBookingId, setHighlightedBookingId] = useState<number | null>(null);
+  const bookingRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  useEffect(() => {
+    // Parse bookingId from URL query params like ?bookingId=20
+    const searchParams = new URLSearchParams(window.location.search);
+    const bookingIdParam = searchParams.get("bookingId");
+    if (bookingIdParam) {
+      const id = parseInt(bookingIdParam, 10);
+      if (!isNaN(id)) {
+        setHighlightedBookingId(id);
+        // Clear the highlight after 5 seconds
+        setTimeout(() => setHighlightedBookingId(null), 5000);
+      }
+    }
+  }, [location]);
+
+  // Scroll to highlighted booking when data is loaded
+  useEffect(() => {
+    if (highlightedBookingId && bookingRefs.current.has(highlightedBookingId)) {
+      const element = bookingRefs.current.get(highlightedBookingId);
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightedBookingId]);
+
   const bookingStatusFilterOptions: {
     value: BookingStatusFilter;
     label: string;
   }[] = [
-    { value: "all", label: t("all") },
-    { value: "pending", label: t("pending") },
-    { value: "accepted", label: t("accepted") },
-    { value: "rejected", label: t("rejected") },
-    { value: "completed", label: t("completed") },
-  ];
+      { value: "all", label: t("all") },
+      { value: "pending", label: t("pending") },
+      { value: "accepted", label: t("accepted") },
+      { value: "rejected", label: t("rejected") },
+      { value: "completed", label: t("completed") },
+    ];
 
   const bookingStatusLabels: Record<CustomerBookingStatus, string> = {
     pending: t("pending"),
@@ -610,8 +637,8 @@ export default function Bookings() {
   const bookingsData = Array.isArray(bookings)
     ? bookings
     : hasWrappedBookings(bookings)
-    ? bookings.bookings
-    : [];
+      ? bookings.bookings
+      : [];
 
   const INDIAN_DAY_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
   const getIndianDayKey = (date: Date | string | null | undefined) => {
@@ -726,6 +753,9 @@ export default function Bookings() {
                   return (
                     <motion.div
                       key={booking.id}
+                      ref={(el) => {
+                        if (el) bookingRefs.current.set(booking.id, el);
+                      }}
                       variants={{
                         hidden: { opacity: 0, y: 20 },
                         show: { opacity: 1, y: 0 },
@@ -733,7 +763,7 @@ export default function Bookings() {
                       whileHover={{ y: -2 }}
                       transition={{ duration: 0.2, ease: "easeOut" }}
                     >
-                      <Card className="transition-shadow duration-200 ease-out hover:shadow-md">
+                      <Card className={`transition-shadow duration-200 ease-out hover:shadow-md ${highlightedBookingId === booking.id ? "ring-2 ring-primary ring-offset-2" : ""}`}>
                         <CardContent className="pt-6">
                           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                             <div className="space-y-2">
@@ -826,7 +856,7 @@ export default function Bookings() {
                                         <>
                                           <div className="flex items-center gap-2">
                                             <p>
-                                            {t("send_payment_to_upi")}{" "}
+                                              {t("send_payment_to_upi")}{" "}
                                               <strong>
                                                 {booking.provider?.upiId}
                                               </strong>
@@ -1212,7 +1242,7 @@ export default function Bookings() {
                                         <>
                                           <div className="flex items-center gap-2">
                                             <p>
-                                            {t("send_payment_to_upi")}{" "}
+                                              {t("send_payment_to_upi")}{" "}
                                               <strong>
                                                 {booking.provider?.upiId}
                                               </strong>
