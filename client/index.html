@@ -3,10 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DoorStep</title>
+    <meta name="description" content="DoorStepTN - Tamil Nadu's trusted rural marketplace. Connect with verified local service providers and shops for home repairs, daily essentials, and more." />
+    <meta name="theme-color" content="#0f172a" />
+    
+    <!-- Preconnect to external origins for faster resource loading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Preload critical font for faster LCP -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Baloo+Thambi+2:wght@400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+Thambi+2:wght@400;500;600;700&display=swap" /></noscript>
+    
+    <!-- DNS prefetch for API endpoints -->
+    <link rel="dns-prefetch" href="https://doorsteptn.in" />
+    
+    <title>DoorStepTN - Rural Marketplace</title>
+    
+    <!-- Inline critical CSS for above-the-fold content -->
+    <style>
+      /* Critical CSS for initial render */
+      body { margin: 0; font-family: 'Baloo Thambi 2', system-ui, sans-serif; background: #0f172a; color: #fff; }
+      #root { min-height: 100vh; }
+      .loading-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0f172a; }
+      .loading-spinner { width: 40px; height: 40px; border: 3px solid #1e293b; border-top-color: #f97316; border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Show loading state while JS loads -->
+      <div class="loading-screen">
+        <div class="loading-spinner"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

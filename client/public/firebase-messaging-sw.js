@@ -22,9 +22,19 @@ firebase.initializeApp({
 // Get messaging instance
 const messaging = firebase.messaging();
 
+const isDebug = /^(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)$/.test(
+    self.location.hostname,
+);
+
+const debugLog = (...args) => {
+    if (isDebug) {
+        console.log(...args);
+    }
+};
+
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
-    console.log('[firebase-messaging-sw.js] Received background message:', payload);
+    debugLog("[firebase-messaging-sw.js] Received background message:", payload);
 
     const notificationTitle = payload.notification?.title || 'DoorStep';
     const notificationOptions = {
@@ -47,7 +57,7 @@ messaging.onBackgroundMessage((payload) => {
 
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {
-    console.log('[firebase-messaging-sw.js] Notification clicked:', event);
+    debugLog("[firebase-messaging-sw.js] Notification clicked:", event);
 
     event.notification.close();
 
@@ -62,7 +72,7 @@ self.addEventListener('notificationclick', (event) => {
         urlToOpen = self.registration.scope.replace(/\/$/, '') + urlToOpen;
     }
 
-    console.log('[firebase-messaging-sw.js] Opening URL:', urlToOpen);
+    debugLog("[firebase-messaging-sw.js] Opening URL:", urlToOpen);
 
     // Open the appropriate URL
     event.waitUntil(

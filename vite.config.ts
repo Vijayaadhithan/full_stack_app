@@ -91,5 +91,31 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: (id: string) => {
+          // Split large libraries into separate chunks for better caching
+          if (id.includes('node_modules')) {
+            // Firebase - keep together due to interdependencies
+            if (id.includes('firebase')) {
+              return 'vendor-firebase';
+            }
+            // Charts
+            if (id.includes('recharts') || id.includes('d3-')) {
+              return 'vendor-charts';
+            }
+            // Maps
+            if (id.includes('leaflet') || id.includes('react-leaflet')) {
+              return 'vendor-maps';
+            }
+            // Radix UI components
+            if (id.includes('@radix-ui')) {
+              return 'vendor-ui';
+            }
+          }
+          return undefined;
+        },
+      },
+    },
   },
 });

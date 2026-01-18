@@ -8,6 +8,7 @@
 import { getMessaging, getToken, onMessage, Messaging } from "firebase/messaging";
 import { app } from "./firebase";
 import { apiRequest } from "./queryClient";
+import { debugLog, debugWarn } from "./debug";
 
 let messaging: Messaging | null = null;
 
@@ -39,7 +40,7 @@ export function getNotificationPermission(): NotificationPermission | "unsupport
  */
 export async function initializeMessaging(): Promise<Messaging | null> {
     if (!isPushNotificationSupported()) {
-        console.warn("Push notifications not supported in this browser");
+        debugWarn("Push notifications not supported in this browser");
         return null;
     }
 
@@ -50,13 +51,13 @@ export async function initializeMessaging(): Promise<Messaging | null> {
     try {
         // Register the service worker first
         const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-        console.log("Service worker registered:", registration.scope);
+        debugLog("Service worker registered:", registration.scope);
 
         // Set up service worker message handler for notification clicks
         setupServiceWorkerMessageHandler();
 
         if (!app) {
-            console.warn("Firebase app not initialized");
+            debugWarn("Firebase app not initialized");
             return null;
         }
 
@@ -76,7 +77,7 @@ function setupServiceWorkerMessageHandler(): void {
         navigator.serviceWorker.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
                 const url = event.data.url;
-                console.log('Received notification click from service worker:', url);
+                debugLog("Received notification click from service worker:", url);
 
                 // Navigate to the URL
                 if (url && typeof window !== 'undefined') {
@@ -103,13 +104,13 @@ function setupServiceWorkerMessageHandler(): void {
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
     if (!isPushNotificationSupported()) {
-        console.warn("Push notifications not supported");
+        debugWarn("Push notifications not supported");
         return "denied";
     }
 
     try {
         const permission = await Notification.requestPermission();
-        console.log("Notification permission:", permission);
+        debugLog("Notification permission:", permission);
         return permission;
     } catch (error) {
         console.error("Error requesting notification permission:", error);
@@ -129,7 +130,7 @@ export async function getFcmToken(vapidKey?: string): Promise<string | null> {
 
     const permission = Notification.permission;
     if (permission !== "granted") {
-        console.warn("Notification permission not granted");
+        debugWarn("Notification permission not granted");
         return null;
     }
 
@@ -145,7 +146,7 @@ export async function getFcmToken(vapidKey?: string): Promise<string | null> {
             serviceWorkerRegistration: registration,
         });
 
-        console.log("FCM token obtained");
+        debugLog("FCM token obtained");
         return token;
     } catch (error) {
         console.error("Error getting FCM token:", error);
@@ -165,7 +166,7 @@ export async function registerPushToken(token: string): Promise<boolean> {
         });
 
         if (response.ok) {
-            console.log("FCM token registered with backend");
+            debugLog("FCM token registered with backend");
             // Store token locally
             localStorage.setItem("fcm_token", token);
             return true;
@@ -192,7 +193,7 @@ export async function unregisterPushToken(): Promise<boolean> {
         const response = await apiRequest("DELETE", "/api/fcm/unregister", { token });
 
         if (response.ok) {
-            console.log("FCM token unregistered from backend");
+            debugLog("FCM token unregistered from backend");
             localStorage.removeItem("fcm_token");
             return true;
         }
@@ -211,12 +212,12 @@ export function setupForegroundMessageHandler(
     callback: (payload: { title?: string; body?: string; data?: Record<string, string> }) => void
 ): (() => void) | null {
     if (!messaging) {
-        console.warn("Messaging not initialized");
+        debugWarn("Messaging not initialized");
         return null;
     }
 
     const unsubscribe = onMessage(messaging, (payload) => {
-        console.log("Foreground message received:", payload);
+        debugLog("Foreground message received:", payload);
         callback({
             title: payload.notification?.title,
             body: payload.notification?.body,
@@ -236,7 +237,7 @@ export function setupForegroundMessageHandler(
  */
 export async function registerPushNotifications(): Promise<boolean> {
     if (!isPushNotificationSupported()) {
-        console.log("Push notifications not supported");
+        debugLog("Push notifications not supported");
         return false;
     }
 
@@ -244,7 +245,7 @@ export async function registerPushNotifications(): Promise<boolean> {
         // Request permission
         const permission = await requestNotificationPermission();
         if (permission !== "granted") {
-            console.log("Notification permission denied");
+            debugLog("Notification permission denied");
             return false;
         }
 

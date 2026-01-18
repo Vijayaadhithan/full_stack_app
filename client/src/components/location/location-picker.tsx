@@ -15,6 +15,7 @@ import L, {
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
+import "leaflet/dist/leaflet.css"; // Import leaflet CSS here - lazy loaded with this component
 import { cn } from "@/lib/utils";
 
 const DEFAULT_COORDINATES = {
@@ -128,14 +129,14 @@ export function LocationPicker({
             disabled
               ? undefined
               : {
-                  dragend: (event: LeafletEvent) => {
-                    const coords = (event.target as L.Marker).getLatLng();
-                    onChange({
-                      latitude: Number(coords.lat.toFixed(7)),
-                      longitude: Number(coords.lng.toFixed(7)),
-                    });
-                  },
-                }
+                dragend: (event: LeafletEvent) => {
+                  const coords = (event.target as L.Marker).getLatLng();
+                  onChange({
+                    latitude: Number(coords.lat.toFixed(7)),
+                    longitude: Number(coords.lng.toFixed(7)),
+                  });
+                },
+              }
           }
           position={[position.latitude, position.longitude] as LatLngTuple}
         />

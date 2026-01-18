@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import { setLogLevel } from "firebase/app";
 import {
     getAuth,
     RecaptchaVerifier,
@@ -18,6 +19,12 @@ const firebaseConfig = {
 };
 
 const isDev = import.meta.env.DEV;
+
+// Suppress Firebase internal logging in production
+// This prevents FCM message payloads from being logged to the console
+if (!isDev) {
+    setLogLevel('silent');
+}
 
 // Debug: Log Firebase configuration status (only in development)
 if (isDev) {
@@ -105,16 +112,16 @@ export async function initRecaptcha(buttonId: string): Promise<RecaptchaVerifier
         recaptchaVerifierInstance = new RecaptchaVerifier(auth, buttonId, {
             size: "invisible",
             callback: () => {
-                console.log("reCAPTCHA verified");
+                if (isDev) console.log("reCAPTCHA verified");
             },
             "expired-callback": () => {
-                console.log("reCAPTCHA expired - user needs to re-verify");
+                if (isDev) console.log("reCAPTCHA expired - user needs to re-verify");
             }
         });
 
         // Render the reCAPTCHA widget - this is important!
         await recaptchaVerifierInstance.render();
-        console.log("reCAPTCHA initialized successfully");
+        if (isDev) console.log("reCAPTCHA initialized successfully");
 
         return recaptchaVerifierInstance;
     } catch (error) {
@@ -143,7 +150,7 @@ export async function sendOTP(
         : `+91${phoneNumber.replace(/\D/g, "")}`;
 
     try {
-        console.log("Sending OTP to:", formattedPhone);
+        if (isDev) console.log("Sending OTP to:", formattedPhone);
 
         confirmationResult = await signInWithPhoneNumber(
             auth,
@@ -151,7 +158,7 @@ export async function sendOTP(
             recaptchaVerifier
         );
 
-        console.log("OTP sent successfully");
+        if (isDev) console.log("OTP sent successfully");
         return true;
     } catch (error: any) {
         console.error("Error sending OTP:", error);
@@ -190,13 +197,13 @@ export async function sendOTP(
  * Setup mock authentication result
  */
 function setupMockAuth(phoneNumber: string): boolean {
-    console.log(`[MOCK AUTH] OTP sent to ${phoneNumber}. Use code 123456 to verify.`);
+    if (isDev) console.log(`[MOCK AUTH] OTP sent to ${phoneNumber}. Use code 123456 to verify.`);
 
     // Create a mock ConfirmationResult that matches the Firebase interface
     const mockResult: any = {
         verificationId: "mock-verification-id-" + Date.now(),
         confirm: async (verificationCode: string) => {
-            console.log(`[MOCK AUTH] Verifying code: ${verificationCode}`);
+            if (isDev) console.log(`[MOCK AUTH] Verifying code: ${verificationCode}`);
             if (verificationCode === "123456") {
                 return {
                     user: {
@@ -227,7 +234,7 @@ export async function verifyOTP(otpCode: string): Promise<string | null> {
 
     try {
         const result = await confirmationResult.confirm(otpCode);
-        console.log("OTP verified successfully for:", result.user.phoneNumber);
+        if (isDev) console.log("OTP verified successfully for:", result.user.phoneNumber);
 
         // Get Firebase ID token (optional - for backend verification)
         const idToken = await result.user.getIdToken();
@@ -271,14 +278,14 @@ export function cleanupRecaptcha(): void {
 export const mockOtp = {
     // Simulates sending OTP (always succeeds)
     async sendOTP(phoneNumber: string): Promise<boolean> {
-        console.log("[MOCK] Sending OTP to:", phoneNumber);
+        if (isDev) console.log("[MOCK] Sending OTP to:", phoneNumber);
         await new Promise(resolve => setTimeout(resolve, 1000));
         return true;
     },
 
     // Simulates verifying OTP (accepts "123456" as valid code)
     async verifyOTP(otpCode: string): Promise<boolean> {
-        console.log("[MOCK] Verifying OTP:", otpCode);
+        if (isDev) console.log("[MOCK] Verifying OTP:", otpCode);
         await new Promise(resolve => setTimeout(resolve, 500));
 
         // For development, accept "123456" as valid OTP

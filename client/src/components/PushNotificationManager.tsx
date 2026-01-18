@@ -5,6 +5,7 @@ import {
     isPushNotificationSupported,
     unregisterPushToken,
 } from "@/lib/push-notifications";
+import { debugLog, debugWarn } from "@/lib/debug";
 
 /**
  * PushNotificationManager component
@@ -28,18 +29,18 @@ export function PushNotificationManager() {
 
         // Check if push notifications are supported
         if (!isPushNotificationSupported()) {
-            console.log("Push notifications not supported in this browser");
+            debugWarn("Push notifications not supported in this browser");
             return;
         }
 
         const handleAuthChange = async () => {
             // User just logged in
             if (user && !hasRegistered.current) {
-                console.log("User authenticated, registering push notifications...");
+                debugLog("User authenticated, registering push notifications...");
                 try {
                     const success = await registerFcmPushNotifications();
                     if (success) {
-                        console.log("Push notifications registered for user:", user.id);
+                        debugLog("Push notifications registered for user:", user.id);
                         hasRegistered.current = true;
                         previousUserId.current = user.id;
                     }
@@ -50,7 +51,7 @@ export function PushNotificationManager() {
 
             // User just logged out (was logged in before)
             if (!user && previousUserId.current) {
-                console.log("User logged out, unregistering push token...");
+                debugLog("User logged out, unregistering push token...");
                 try {
                     await unregisterPushToken();
                     hasRegistered.current = false;

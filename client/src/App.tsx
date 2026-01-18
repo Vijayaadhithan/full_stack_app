@@ -207,22 +207,19 @@ function Router() {
 }
 
 function App() {
-  // Initialize Push Notifications early
+  // Initialize Push Notifications when browser is idle (deferred to improve TTI)
   useEffect(() => {
-    initializePushNotifications();
+    // Use requestIdleCallback to defer non-critical initialization
+    const initPush = () => {
+      initializePushNotifications();
+    };
 
-    // Example usage (you would typically call these based on user actions):
-    // const testPermissions = async () => {
-    //   console.log('Attempting to get current position...');
-    //   await getCurrentPosition();
-    //   console.log('Attempting to write a test file...');
-    //   await writeFileToStorage('test.txt', 'Hello Capacitor!');
-    //   console.log('Attempting to schedule a local notification...');
-    //   await scheduleLocalNotification();
-    // };
-
-    // Call testPermissions for demonstration if needed, or integrate into UI
-    // testPermissions();
+    if ('requestIdleCallback' in window) {
+      (window as Window & typeof globalThis).requestIdleCallback(initPush, { timeout: 3000 });
+    } else {
+      // Fallback for Safari and older browsers
+      setTimeout(initPush, 1000);
+    }
   }, []);
 
   return (

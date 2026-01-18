@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Baloo+Thambi+2:wght@400;500;600;700&display=swap');
+/* Font loaded asynchronously from index.html for better performance */
 
 @tailwind base;
 @tailwind components;
@@ -81,9 +81,11 @@
 .mode-pill-customer {
   @apply bg-orange-500 text-white;
 }
+
 .mode-pill-shop {
   @apply bg-green-500 text-white;
 }
+
 .mode-pill-provider {
   @apply bg-blue-500 text-white;
 }
@@ -120,3 +122,177 @@ body::before {
   background-size: 60vmin;
 }
 
+/* ==========================================
+   PERFORMANCE-OPTIMIZED ANIMATIONS
+   GPU-accelerated, respects prefers-reduced-motion
+   ========================================== */
+
+/* Fade in animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Floating animation for hero cards */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes float-delayed {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(10px);
+  }
+}
+
+/* Slow pulse for background elements */
+@keyframes pulse-slow {
+
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.15;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes pulse-slower {
+
+  0%,
+  100% {
+    opacity: 0.08;
+    transform: scale(1.05);
+  }
+
+  50% {
+    opacity: 0.12;
+    transform: scale(1);
+  }
+}
+
+/* Slow spin for icons */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Animation utility classes */
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out forwards;
+}
+
+.animate-fade-in-delayed {
+  animation: fade-in 0.6s ease-out 0.2s forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out forwards;
+}
+
+.animate-fade-in-down {
+  animation: fade-in-down 0.5s ease-out forwards;
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 4s ease-in-out infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 8s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+.animate-pulse-slower {
+  animation: pulse-slower 10s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+
+  .animate-fade-in,
+  .animate-fade-in-delayed,
+  .animate-fade-in-up,
+  .animate-fade-in-down,
+  .animate-float,
+  .animate-float-delayed,
+  .animate-pulse-slow,
+  .animate-pulse-slower,
+  .animate-spin-slow {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Disable animations on mobile for performance */
+@media (max-width: 767px) {
+
+  .animate-float,
+  .animate-float-delayed,
+  .animate-pulse-slow,
+  .animate-pulse-slower,
+  .animate-spin-slow {
+    animation: none !important;
+  }
+}

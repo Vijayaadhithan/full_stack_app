@@ -11,6 +11,7 @@ import {
   isPushNotificationSupported,
   setupForegroundMessageHandler
 } from "./push-notifications";
+import { debugLog, debugWarn } from "./debug";
 
 // --- Geolocation Permissions ---
 
@@ -24,7 +25,7 @@ export const checkLocationPermission = async (): Promise<string> => {
       const result = await navigator.permissions.query({ name: "geolocation" });
       return result.state; // "granted", "denied", or "prompt"
     } catch (e) {
-      console.warn("Error checking location permission:", e);
+      debugWarn("Error checking location permission:", e);
       return "unknown";
     }
   }
@@ -54,14 +55,14 @@ export const requestLocationPermission = async (): Promise<string> => {
 
 export const getCurrentPosition = async (): Promise<GeolocationPosition | null> => {
   if (!navigator.geolocation) {
-    console.warn("Geolocation not supported");
+    debugWarn("Geolocation not supported");
     return null;
   }
 
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        console.log("Current position:", position);
+        debugLog("Current position:", position);
         resolve(position);
       },
       (error) => {
@@ -102,14 +103,14 @@ export const requestNotificationPermission = async (): Promise<string> => {
 
 export const showNotification = (title: string, options?: NotificationOptions): void => {
   if (!("Notification" in window)) {
-    console.warn("Notifications not supported");
+    debugWarn("Notifications not supported");
     return;
   }
 
   if (Notification.permission === "granted") {
     new Notification(title, options);
   } else {
-    console.warn("Notification permission not granted");
+    debugWarn("Notification permission not granted");
   }
 };
 
@@ -122,7 +123,7 @@ export const checkStoragePermission = async (): Promise<boolean> => {
     localStorage.removeItem("__test__");
     return true;
   } catch (e) {
-    console.warn("Storage access restricted:", e);
+    debugWarn("Storage access restricted:", e);
     return false;
   }
 };
@@ -132,7 +133,7 @@ export const checkStoragePermission = async (): Promise<boolean> => {
 
 export const registerPushNotifications = async (): Promise<boolean> => {
   if (!isPushNotificationSupported()) {
-    console.log("Push notifications not supported in this browser");
+    debugWarn("Push notifications not supported in this browser");
     return false;
   }
 
@@ -141,7 +142,7 @@ export const registerPushNotifications = async (): Promise<boolean> => {
     if (Notification.permission !== "granted") {
       const permission = await requestNotificationPermission();
       if (permission !== "granted") {
-        console.warn("Notification permission denied");
+        debugWarn("Notification permission denied");
         return false;
       }
     }
@@ -149,7 +150,7 @@ export const registerPushNotifications = async (): Promise<boolean> => {
     // Register with FCM and backend
     const success = await registerFcmPushNotifications();
     if (success) {
-      console.log("FCM push notifications registered successfully");
+      debugLog("FCM push notifications registered successfully");
 
       // Set up foreground message handler to show toasts
       setupForegroundMessageHandler((payload) => {
@@ -175,7 +176,7 @@ export const initializePushNotifications = async (): Promise<void> => {
   setTimeout(async () => {
     const registered = await registerPushNotifications();
     if (registered) {
-      console.log("Push notifications initialized with FCM");
+      debugLog("Push notifications initialized with FCM");
     }
   }, 3000); // Wait 3 seconds after page load
 };
@@ -201,7 +202,7 @@ export const writeFileToStorage = async (
   _fileName: string,
   _data: string
 ): Promise<boolean> => {
-  console.warn("File storage is handled differently on web");
+  debugWarn("File storage is handled differently on web");
   return false;
 };
 
