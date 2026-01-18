@@ -78,7 +78,6 @@ type CartItem = {
 
 export default function ShopDetails() {
   const { id } = useParams<{ id: string }>();
-  console.log("ShopDetails component - Shop ID from params:", id);
   const { toast } = useToast();
   const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
@@ -99,8 +98,6 @@ export default function ShopDetails() {
   const {
     data: shop,
     isLoading: shopLoading,
-    isError: isShopError,
-    error: shopError,
   } = useQuery<PublicShop, Error>({
     queryKey: [`/api/shops/${id}`],
     queryFn: async () => {
@@ -112,23 +109,16 @@ export default function ShopDetails() {
         throw new Error("Failed to fetch shop details");
       }
       const data = await res.json();
-      console.log("Successfully fetched shop data:", data);
       return data;
     },
     enabled: !!id,
   });
 
-  if (isShopError) {
-    console.error("Error fetching shop:", shopError);
-    console.error("Query key:", [`/api/shops/${id}`]);
-    // Optionally show a toast or specific error message here
-  }
+
 
   const {
     data: productsResponse,
     isLoading: productsLoading,
-    isError: isProductsError,
-    error: productsError,
   } = useQuery<ShopProductListResponse, Error>({
     queryKey: ["/api/products", shop?.id],
     queryFn: async () => {
@@ -136,7 +126,7 @@ export default function ShopDetails() {
         throw new Error("Missing shop id");
       }
       const params = new URLSearchParams({
-        shopId: String(shop.id), // Use shop.id (owner's user ID) for product lookup
+        shopId: String(shop.id),
         pageSize: "100",
       });
       const res = await apiRequest(
@@ -147,16 +137,12 @@ export default function ShopDetails() {
         throw new Error("Failed to fetch shop products");
       }
       const data = await res.json();
-      console.log("Successfully fetched shop products:", data);
       return data;
     },
-    enabled: !!shop?.id, // Only fetch when shop data is available
+    enabled: !!shop?.id,
   });
 
-  if (isProductsError) {
-    console.error("Error fetching shop products:", productsError);
-    // Optionally show a toast or specific error message here
-  }
+
 
   const addToCartMutation = useMutation<
     unknown,

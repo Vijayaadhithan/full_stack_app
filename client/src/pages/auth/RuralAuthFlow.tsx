@@ -131,7 +131,6 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
                     if (!cancelled && verifier) {
                         recaptchaRef.current = verifier;
                         setRecaptchaReady(true);
-                        console.log("reCAPTCHA ready for registration");
                     }
                 } catch (error) {
                     console.error("Failed to initialize reCAPTCHA:", error);

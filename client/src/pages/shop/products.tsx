@@ -359,13 +359,6 @@ export default function ShopProducts() {
         lowStockThreshold: data.lowStockThreshold,
       };
 
-      console.log(
-        "Sending update request for product ID:",
-        id,
-        "with data:",
-        formattedData,
-      );
-
       const res = await apiRequest(
         "PATCH",
         `/api/products/${id}`,
@@ -398,24 +391,13 @@ export default function ShopProducts() {
 
   const deleteProductMutation = useMutation({
     mutationFn: async (productId: number) => {
-      try {
-        console.log(`Attempting to delete product with ID: ${productId}`);
-        const res = await apiRequest("DELETE", `/api/products/${productId}`);
-        console.log(`Delete product response status: ${res.status}`);
+      const res = await apiRequest("DELETE", `/api/products/${productId}`);
 
-        try {
-          const data = await res.json();
-          console.log("Response data:", data);
-          return data;
-        } catch (parseError) {
-          console.log(
-            "Response cannot be parsed as JSON, returning default success message",
-          );
-          return { message: "Product deleted successfully" };
-        }
-      } catch (error) {
-        console.error("Delete product error:", error);
-        throw error;
+      try {
+        const data = await res.json();
+        return data;
+      } catch {
+        return { message: "Product deleted successfully" };
       }
     },
     onSuccess: () => {
@@ -426,7 +408,6 @@ export default function ShopProducts() {
       });
     },
     onError: (error: Error) => {
-      console.error("Delete product mutation error:", error);
       toast({
         title: t("error"),
         description: error.message,
@@ -459,7 +440,6 @@ export default function ShopProducts() {
     };
 
     if (editingProduct) {
-      console.log("Updating product with ID:", editingProduct.id);
       updateProductMutation.mutate({ id: editingProduct.id, data: payload });
     } else {
       createProductMutation.mutate(payload);

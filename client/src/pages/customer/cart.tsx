@@ -137,7 +137,7 @@ export default function Cart() {
     }
   }, [payLaterAvailable, paymentMethod]);
 
-  console.log("Cart items:", cartItems); // Debug log
+
 
   const updateCartMutation = useMutation<
     unknown,
@@ -332,7 +332,6 @@ export default function Cart() {
       return res.json();
     },
     onSuccess: async (data) => {
-      console.log("Order created:", data);
 
       if (selectedPromotion) {
         try {

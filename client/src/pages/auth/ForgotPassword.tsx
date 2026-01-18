@@ -104,7 +104,6 @@ export default function ForgotPassword({
           if (!cancelled && verifier) {
             recaptchaRef.current = verifier;
             setRecaptchaReady(true);
-            console.log("reCAPTCHA ready for use");
           }
         } catch (error) {
           console.error("Failed to initialize reCAPTCHA:", error);

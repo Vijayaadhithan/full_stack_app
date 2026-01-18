@@ -206,13 +206,11 @@ export default function ShopProfile() {
         deliveryAvailable,
       };
 
-      console.log("Updating user profile with data:", updatePayload);
       const res = await apiRequest(
         "PATCH",
         `/api/users/${user.id}`,
         updatePayload,
       );
-      console.log("Shop profile update response:", res);
 
       if (!res.ok) {
         const error = await res.json();
@@ -242,8 +240,6 @@ export default function ShopProfile() {
   });
 
   const onSubmit = (data: ShopProfileFormData) => {
-    // Log form data before sending to server for debugging
-    console.log("[ShopProfile] submitting", data);
     updateProfileMutation.mutate(data);
   };
 
