@@ -186,16 +186,7 @@ export default function BookService() {
     enabled: !!id,
   });
 
-  // Log service data when it changes
-  useEffect(() => {
-    if (service) {
-      console.log("Service data loaded:", {
-        id: service.id,
-        name: service.name,
-        isAvailableNow: (service as any)?.isAvailableNow,
-      });
-    }
-  }, [service]);
+
 
   type BookedSlot = {
     timeSlotLabel: BroadSlotLabel | null;

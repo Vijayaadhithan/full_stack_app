@@ -2,249 +2,595 @@
 
 This document provides a detailed overview of the DoorStep project, including backend services, frontend architecture, database schema, storage, and operational tooling. It reflects the current codebase behavior and configuration.
 
+---
+
 ## 1. Project Overview
 
 DoorStep is a marketplace platform designed to connect service providers and shops with customers in India. It supports service bookings, product ordering, shop management, worker accounts, and an admin console with monitoring and audit capabilities.
 
-Core capabilities:
+### Core Capabilities
 
-- Public catalog browsing for services, products, and shops
-- Auth flows for customers, shop owners, providers, and workers
-- Admin console with role/permission controls and live monitoring
-- Real-time UI updates via SSE + Redis Pub/Sub
-- Background jobs using BullMQ (booking expiration, payment reminders, low stock digest)
+- **Product Marketplace**: Browse and order products from verified local shops
+- **Service Booking**: Book services from verified providers with availability management
+- **Shop Management**: Product inventory, orders, workers, promotions, returns
+- **Multi-Role Support**: Customer, Shop Owner, Service Provider, Worker, Admin
+- **Real-Time Updates**: SSE + Redis Pub/Sub for live notifications
+- **Push Notifications**: Firebase Cloud Messaging (FCM) for mobile and web
+- **Background Jobs**: BullMQ for booking expiration, payment reminders, low stock alerts
+- **Native Android App**: Kotlin + Jetpack Compose for mobile experience
 
-## 2. Setup and Installation
+### Key Features
 
-### 2.1 Prerequisites
+| Feature | Description |
+|---------|-------------|
+| Rural-First Auth | Phone + 4-digit PIN with optional Firebase OTP |
+| Multi-Language | English (en) and Tamil (ta) support |
+| Pay-Later | Credit for trusted customers |
+| Text Orders | Open order mode for shops |
+| Worker Accounts | Scoped permissions for shop staff |
+| E-Receipts | Generated for completed transactions |
+| Reviews | For both products and services |
+| Promotions | Discount codes with usage limits |
+| Returns | Customer return request workflow |
 
-- Node.js (v20 or later)
+---
+
+## 2. Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Client Layer                              │
+├──────────────────────┬──────────────────────────────────────────┤
+│   React Web App      │   Native Android App                     │
+│   (Vite + TanStack)  │   (Kotlin + Jetpack Compose)             │
+└──────────────────────┴──────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        API Layer                                 │
+│   Express.js + TypeScript                                       │
+│   - REST Endpoints                                               │
+│   - SSE Realtime                                                │
+│   - Swagger/OpenAPI                                             │
+│   - CSRF + Rate Limiting                                        │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌────────────────────────┬────────────────────────────────────────┐
+│     PostgreSQL         │            Redis                       │
+│   - Primary DB         │   - Session Store                      │
+│   - Drizzle ORM        │   - Caching                            │
+│   - Read Replica       │   - Job Queues (BullMQ)                │
+│                        │   - Pub/Sub (Realtime)                 │
+└────────────────────────┴────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Background Services                           │
+│   - Booking Expiration Job                                      │
+│   - Payment Reminder Job                                         │
+│   - Low Stock Digest Job                                        │
+│   - Push Notification Service                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. Setup and Installation
+
+### 3.1 Prerequisites
+
+- Node.js v20 or later
 - npm (bundled with Node.js)
-- PostgreSQL (v14+ recommended)
-- Redis (optional for local dev; required in production for caching, rate limiting, job queues, and realtime)
+- PostgreSQL v14+ recommended
+- Redis v6+ (optional for local dev; required in production)
 - Git
+- Android Studio (for native mobile development)
 
-### 2.2 PostgreSQL Setup
+### 3.2 PostgreSQL Setup
 
-1. Install PostgreSQL:
-   - macOS (Homebrew): `brew install postgresql`
-   - Ubuntu/Debian: `sudo apt update && sudo apt install postgresql postgresql-contrib`
-   - Windows: Download the installer from the [official PostgreSQL website](https://www.postgresql.org/download/windows/).
+```bash
+# macOS (Homebrew)
+brew install postgresql
 
-2. Create a database and user:
+# Ubuntu/Debian
+sudo apt update && sudo apt install postgresql postgresql-contrib
+```
 
+Create database and user:
 ```sql
-CREATE USER indianbudget_user WITH PASSWORD 'your_password';
-CREATE DATABASE indianbudget_db OWNER indianbudget_user;
-GRANT ALL PRIVILEGES ON DATABASE indianbudget_db TO indianbudget_user;
+CREATE USER doorstep_user WITH PASSWORD 'your_password';
+CREATE DATABASE doorstep_db OWNER doorstep_user;
+GRANT ALL PRIVILEGES ON DATABASE doorstep_db TO doorstep_user;
 ```
 
-### 2.3 Project Setup
-
-1. Clone the repository:
+### 3.3 Project Setup
 
 ```bash
+# Clone repository
 git clone <repository_url>
-cd <project-directory>
-```
+cd full_stack_app
 
-2. Install dependencies:
-
-```bash
+# Install dependencies
 npm install
-```
 
-3. Configure environment variables:
-   - Copy `.env_example` to `.env` and update values for your environment.
-   - Minimum required: `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `VITE_API_URL`.
+# Configure environment
+cp .env_example .env
+# Edit .env with your configuration
 
-4. Run migrations:
-
-```bash
+# Run migrations
 npm run db:migrate
+
+# Start development servers
+npm run dev:server  # Backend on :5000
+npm run dev:client  # Frontend on :5173
 ```
 
-If your database already has the production schema, baseline migrations once:
+**Optional**: Set `USE_IN_MEMORY_DB=true` to run with in-memory storage (demos/tests only).
 
-```bash
-npm run db:migrate:baseline
-```
+---
 
-5. Start the application:
-
-```bash
-npm run dev:server
-# in another terminal
-npm run dev:client
-```
-
-Optional: set `USE_IN_MEMORY_DB=true` to run the API with in-memory storage (useful for demos/tests, not production).
-
-## 3. Backend
-
-### 3.1 Technology Stack
-
-- Node.js + Express (TypeScript)
-- PostgreSQL + Drizzle ORM
-- Authentication: Passport Local + express-session
-- Caching/queues: Redis, BullMQ
-- Observability: Pino logs, metrics capture, Swagger
-
-### 3.2 Project Structure (`/server`)
-
-- `index.ts`: Express bootstrap, CORS, CSRF, Swagger, static assets, scheduled jobs, error handling
-- `routes.ts`: Primary API routes (auth, services, bookings, products, orders, reviews, notifications, admin integrations)
-- `routes/`: Modular routers (admin, promotions, workers, orders, bookings)
-- `auth.ts`: Standard login/register plus rural PIN auth, worker login, OTP-based PIN reset
-- `workerAuth.ts`: Shop/worker permission enforcement and shop context resolution
-- `realtime.ts`: SSE stream + Redis Pub/Sub fan-out
-- `jobQueue.ts` + `jobs/*`: BullMQ job registry (booking expiration, payment reminders, low stock digest)
-- `monitoring/*`: Request/CPU/latency metrics aggregation
-- `security/*`: CSRF protection, secret validation, rate limiting
-- `services/*`: Caching, session store, job locking helpers
-- `db.ts`: Drizzle connections with optional read replica
-
-### 3.3 Authentication & Security
-
-- **Session-based auth**: `express-session` with configurable store (`SESSION_STORE=redis|postgres`).
-- **CSRF protection**: `GET /api/csrf-token` issues tokens; client adds `x-csrf-token` for state-changing requests.
-- **Rural auth**: phone + PIN flows via `/api/auth/*` (OTP verification is client-side when Firebase is enabled).
-- **Worker login**: `/api/auth/worker-login` uses worker number + PIN.
-- **Rate limiting**: `express-rate-limit` with optional Redis backing; disable with `DISABLE_RATE_LIMITERS=true` for load tests.
-- **Secrets validation**: `SESSION_SECRET` and `ADMIN_PASSWORD` are validated for strength in production.
-
-### 3.4 Key API Areas
-
-- **Public catalog**: `GET /api/shops`, `GET /api/products`, `GET /api/services`, `GET /api/search/global`.
-- **Auth**: `/api/register`, `/api/login`, `/api/logout`, `/api/user`, `/api/auth/*` for PIN/OTP flows.
-- **Orders**: standard orders, text orders (`/api/orders/text`), pay-later approvals, order timelines, returns.
-- **Bookings**: availability blocking, provider/customer history, payment confirmation flows.
-- **Workers**: `/api/shops/workers` CRUD + responsibility presets.
-- **Admin**: `/api/admin/*` for login, monitoring, logs, users, orders, roles, audit logs.
-- **Realtime**: `/api/events` SSE stream for cache invalidation.
-- **Swagger**: `/api/docs` (OpenAPI UI generated from route annotations).
-
-### 3.5 Background Jobs
-
-- **Booking expiration** (`BOOKING_EXPIRATION_CRON`): marks stale pending bookings as expired.
-- **Payment reminders** (`PAYMENT_REMINDER_CRON`): nudges unpaid bookings and escalates disputes.
-- **Low stock digest** (`LOW_STOCK_DIGEST_CRON`): notifies shop owners about low inventory.
-
-Jobs run via BullMQ; distributed locks rely on Redis (`JOB_LOCK_*`), and can be disabled with `DISABLE_JOB_LOCK=true` if needed.
-
-### 3.6 Observability
-
-- **Logs**: Pino writes JSON logs to `logs/app.log` (configurable via `LOG_FILE_PATH`).
-- **Health**: `GET /api/health` (public), `/api/admin/health-status` (admin).
-- **Monitoring**: `/api/admin/monitoring/summary` aggregates request/error/CPU metrics.
-- **Request IDs**: responses include `x-request-id` for traceability.
-
-## 4. Frontend
+## 4. Backend
 
 ### 4.1 Technology Stack
 
-- React + TypeScript
-- Vite
-- Wouter routing
-- TanStack Query
-- shadcn/ui + Tailwind CSS
-- React Hook Form + Zod validation
+| Component | Technology |
+|-----------|------------|
+| Runtime | Node.js 20.x |
+| Framework | Express.js |
+| Language | TypeScript |
+| Database | PostgreSQL + Drizzle ORM |
+| Caching | Redis + ioredis |
+| Job Queue | BullMQ |
+| Auth | Passport.js (Local + Session) |
+| Logging | Pino |
+| Security | Helmet, CSRF, Rate Limiting |
+| Push Notifications | Firebase Admin SDK |
 
-### 4.2 Project Structure (`/client`)
+### 4.2 Project Structure (`/server`)
 
-- `src/App.tsx`: routes (customer, provider, shop, worker, admin)
-- `src/pages/`: feature pages for each role
-- `src/hooks/`: auth, admin, realtime, and performance hooks
-- `src/lib/queryClient.ts`: API client + CSRF handling
-- `src/lib/firebase.ts`: optional Firebase OTP integration
+| File/Directory | Purpose |
+|----------------|---------|
+| `index.ts` | Express bootstrap, middleware setup, static assets |
+| `routes.ts` | Main API routes (253K+ bytes) |
+| `routes/` | Modular routers (admin, bookings, orders, promotions, workers) |
+| `auth.ts` | Standard login, rural PIN auth, worker login, OTP reset |
+| `workerAuth.ts` | Shop/worker permission enforcement |
+| `pg-storage.ts` | PostgreSQL storage layer (134K+ bytes) |
+| `realtime.ts` | SSE stream + Redis Pub/Sub fan-out |
+| `jobQueue.ts` | BullMQ job registry |
+| `jobs/` | Job handlers (booking expiration, payment reminders, low stock) |
+| `security/` | CSRF, rate limiting, secret validation |
+| `services/` | Caching, session store, job locking |
+| `db.ts` | Drizzle connections with optional read replica |
 
-### 4.3 Key UI Flows
+### 4.3 Authentication & Security
 
-- **Auth**: AuthPage (standard login/register), RuralAuthFlow (phone + PIN), WorkerLoginPage
-- **Customer**: browse services/products/shops, cart, orders, bookings, profile
-- **Provider**: services, bookings, reviews, earnings
-- **Shop**: inventory, orders, promotions, workers, reviews, dashboard stats
-- **Admin**: dashboard, monitoring, users, orders, bookings, role management
+| Feature | Implementation |
+|---------|---------------|
+| Session-based auth | `express-session` with configurable store (postgres/redis) |
+| CSRF protection | Token validation via `x-csrf-token` header |
+| Rural auth | Phone + PIN flows via `/api/auth/*` |
+| Worker login | 10-digit worker number + 4-digit PIN |
+| Rate limiting | `express-rate-limit` with optional Redis backing |
+| Security headers | Helmet with HSTS in production |
 
-### 4.4 Realtime Updates
+### 4.4 Key API Areas
 
-`use-realtime-updates` connects to `/api/events` to invalidate React Query caches on notifications, orders, cart, etc.
+| Area | Endpoints |
+|------|-----------|
+| Public Catalog | `GET /api/shops`, `/api/products`, `/api/services` |
+| Authentication | `/api/login`, `/api/auth/login-pin`, `/api/auth/worker-login` |
+| Orders | `/api/orders`, `/api/orders/text`, `/api/orders/:id/return` |
+| Bookings | `/api/bookings`, `/api/bookings/:id/status` |
+| Workers | `/api/shops/workers` CRUD + responsibility presets |
+| Admin | `/api/admin/*` for platform management |
+| Realtime | `/api/events` SSE stream |
+| Documentation | `/api/docs` Swagger UI |
 
-### 4.5 Performance Metrics
+### 4.5 Background Jobs
 
-Frontend timing metrics are captured via `use-client-performance-metrics` and posted to `/api/performance-metrics`.
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| Booking Expiration | `BOOKING_EXPIRATION_CRON` | Marks stale pending bookings as expired |
+| Payment Reminders | `PAYMENT_REMINDER_CRON` | Nudges unpaid bookings, escalates disputes |
+| Low Stock Digest | `LOW_STOCK_DIGEST_CRON` | Notifies shop owners about low inventory |
 
-## 5. Shared Code (`/shared`)
+Jobs use Redis-based distributed locks to prevent duplicate execution across instances.
 
-- `schema.ts`: Drizzle tables + Zod schemas
-- `api-contract.ts`: Zodios-compatible response contracts for key endpoints
-- `config.ts`: feature flags, platform fee settings, filter configuration
-- `monitoring.ts` / `performance.ts`: monitoring and performance metric schemas
+### 4.6 Push Notifications
 
-## 6. Database Schema (Highlights)
+Firebase Cloud Messaging (FCM) is used for push notifications:
+- Order status updates
+- Booking confirmations/rejections
+- Payment reminders
+- Low stock alerts (for shop owners)
 
-- **Core entities**: `users`, `shops`, `providers`, `services`, `products`, `orders`, `bookings`
-- **Commerce**: `order_items`, `returns`, `promotions`, `reviews`, `product_reviews`
-- **Notifications**: `notifications`
-- **Workers**: `shop_workers`
-- **Admin**: `admin_users`, `admin_roles`, `admin_permissions`, `admin_role_permissions`, `admin_audit_logs`
-- **OTP**: `phone_otp_tokens`
+Configure with `FIREBASE_SERVICE_ACCOUNT_JSON` environment variable.
 
-Refer to `shared/schema.ts` for exact fields and types.
+### 4.7 Observability
 
-## 7. Storage, Sessions, and Caching
+| Feature | Endpoint/Config |
+|---------|-----------------|
+| Health Check | `GET /api/health` |
+| Detailed Health | `GET /api/admin/health-status` (admin only) |
+| Logs | Pino → `logs/app.log` |
+| Metrics | `/api/admin/monitoring/summary` |
+| Request IDs | `x-request-id` header on all responses |
 
-- **Storage layer**: `storage.ts` chooses in-memory vs PostgreSQL based on `USE_IN_MEMORY_DB` and environment.
-- **Session store**: PostgreSQL by default; Redis when `SESSION_STORE=redis` and `REDIS_URL` is set.
-- **Caching**:
-  - `server/cache.ts` powers rate limiters and requires Redis in production.
-  - `server/services/cache.service.ts` provides data caching with local fallback.
-- **Realtime**: Redis Pub/Sub is used to broadcast invalidations across instances.
+---
 
-## 8. Mobile / Capacitor
+## 5. Frontend
 
-- Capacitor config lives in `capacitor.config.ts` and supports live reload via `DEV_SERVER_HOST` or `CAPACITOR_SERVER_URL`.
-- Build output is `dist/public`, which is bundled into the Android project via `npx cap sync android`.
-- Firebase OTP is optional and used by the Forgot PIN UI; configure `VITE_FIREBASE_*` to enable.
-- Push notifications are wired on the client (Capacitor plugins) but backend delivery is not implemented yet.
+### 5.1 Technology Stack
 
-## 9. Deployment & Ops
+| Component | Technology |
+|-----------|------------|
+| Framework | React 18 |
+| Language | TypeScript |
+| Build Tool | Vite |
+| Routing | Wouter |
+| State Management | TanStack Query |
+| UI Components | shadcn/ui + Radix UI |
+| Styling | Tailwind CSS |
+| Animations | Framer Motion |
+| Forms | React Hook Form + Zod |
+| i18n | react-i18next (en, ta) |
 
-- Build with `npm run build` and run with PM2 (`pm2 start ecosystem.config.js`).
-- Redis is required in production for caching, rate limiting, queues, and realtime.
-- HTTPS can be enabled by setting `HTTPS_ENABLED=true` with certificate paths.
-- `scripts/provision.sh` provides a sample provisioning flow (review and adapt to your infra).
+### 5.2 Project Structure (`/client/src`)
 
-## 10. Backup and Restore
+| Directory | Contents |
+|-----------|----------|
+| `components/` | 74 reusable UI components |
+| `contexts/` | Auth, Cart, Notification contexts |
+| `hooks/` | 10 custom React hooks |
+| `lib/` | API client, Firebase, utilities |
+| `pages/` | 56 page components |
+| `pages/admin/` | 13 admin dashboard pages |
+| `pages/auth/` | 5 authentication pages |
+| `pages/customer/` | 18 customer pages |
+| `pages/provider/` | 6 service provider pages |
+| `pages/shop/` | 9 shop owner pages |
 
-`scripts/provision.sh` includes a nightly `pg_dump` cron job example that uploads to object storage. To restore:
+### 5.3 Key Page Routes
 
-```bash
-aws s3 cp s3://<bucket>/db-2024-01-15.sql.gz - | gunzip | psql "$DATABASE_URL"
+#### Customer Routes
+| Route | Description |
+|-------|-------------|
+| `/` | Landing page |
+| `/customer/browse-services` | Service catalog |
+| `/customer/browse-products` | Product catalog |
+| `/customer/browse-shops` | Shop directory |
+| `/customer/cart` | Shopping cart |
+| `/customer/checkout` | Order checkout |
+| `/customer/orders` | Order history |
+| `/customer/bookings` | Booking management |
+| `/customer/profile` | Profile settings |
+
+#### Shop Routes
+| Route | Description |
+|-------|-------------|
+| `/shop/dashboard` | Shop home |
+| `/shop/products` | Inventory management |
+| `/shop/orders` | Order processing |
+| `/shop/workers` | Worker accounts |
+| `/shop/promotions` | Discount codes |
+| `/shop/returns` | Return requests |
+
+#### Provider Routes
+| Route | Description |
+|-------|-------------|
+| `/provider/dashboard` | Provider home |
+| `/provider/services` | Service management |
+| `/provider/bookings` | Booking management |
+| `/provider/calendar` | Schedule view |
+
+#### Admin Routes
+| Route | Description |
+|-------|-------------|
+| `/admin/login` | Admin authentication |
+| `/admin/dashboard` | Admin home |
+| `/admin/users` | User management |
+| `/admin/monitoring` | Health metrics |
+| `/admin/logs` | Audit logs |
+
+### 5.4 Realtime Updates
+
+The frontend connects to `/api/events` via SSE for:
+- Notification updates
+- Order status changes
+- Booking status changes
+- Cart/inventory changes
+
+```typescript
+// Realtime hook usage
+const eventSource = new EventSource('/api/events');
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'invalidate') {
+    queryClient.invalidateQueries({ queryKey: data.queryKey });
+  }
+};
 ```
 
-Adjust bucket names and credentials to match your environment.
+---
 
-## 11. Performance & Security Enhancements
+## 6. Mobile Application
 
-- **Redis-backed caching** with graceful fallback in development.
-- **Rate limiting** on auth and admin endpoints, backed by Redis when available.
-- **Helmet** security headers with HSTS enabled in production.
-- **CSRF** protection for cookie-based sessions.
-- **Request context** with `x-request-id` for trace correlation.
-- **Optional read replica** via `DATABASE_REPLICA_URL` for query offloading.
+### 6.1 Native Android App
 
-## 12. Additional References
+Located in `doorstep-android/`, the native Android app provides a full mobile experience.
 
-- `docs/environment-reference.md` - detailed environment variable descriptions
-- `docs/api-quickstart.md` - curl examples for auth, CSRF, and core flows
-- `docs/role-endpoint-matrix.md` - role-based endpoint overview
-- `docs/deployment-runbook.md` - production deployment checklist
+| Component | Technology |
+|-----------|------------|
+| Language | Kotlin |
+| UI | Jetpack Compose + Material 3 |
+| Architecture | MVVM + Clean Architecture |
+| Networking | Retrofit + OkHttp + Moshi |
+| Local Storage | Room Database + DataStore |
+| DI | Hilt (Dagger) |
+| Auth | Firebase Phone Auth |
+| Push | Firebase Cloud Messaging |
 
+### 6.2 Project Structure
 
+```
+doorstep-android/app/src/main/java/com/doorstep/tn/
+├── DoorStepApp.kt          # Application class
+├── MainActivity.kt         # Single activity
+├── core/                   # Core utilities
+├── auth/                   # Authentication feature
+├── customer/               # Customer feature
+├── shop/                   # Shop owner feature
+├── provider/               # Provider feature
+└── common/                 # Shared components
+```
 
-cd /var/www/doorstep-api
-git pull origin main
-npm install
+### 6.3 Build & Run
+
+```bash
+cd doorstep-android
+
+# Build debug APK
+./gradlew assembleDebug
+
+# Install on device
+./gradlew installDebug
+```
+
+### 6.4 API Configuration
+
+- **Production**: `https://doorsteptn.in`
+- **Development**: `http://10.0.2.2:5000` (Android emulator localhost)
+
+---
+
+## 7. Database Schema
+
+### 7.1 Core Tables
+
+| Table | Description |
+|-------|-------------|
+| `users` | User accounts (all roles) |
+| `shops` | Shop profiles |
+| `providers` | Service provider profiles |
+| `shop_workers` | Worker-shop relationships with permissions |
+| `services` | Service offerings |
+| `products` | Shop products |
+| `orders` | Customer orders |
+| `order_items` | Order line items |
+| `bookings` | Service bookings |
+| `cart` | Shopping cart items |
+| `wishlist` | Customer wishlist |
+| `reviews` | Service reviews |
+| `product_reviews` | Product reviews |
+| `returns` | Return requests |
+| `promotions` | Discount codes |
+| `notifications` | User notifications |
+
+### 7.2 Admin Tables
+
+| Table | Description |
+|-------|-------------|
+| `admin_users` | Admin console accounts |
+| `admin_roles` | Admin role definitions |
+| `admin_permissions` | Permission assignments |
+| `admin_audit_logs` | Audit trail |
+
+### 7.3 Worker Permissions
+
+Workers can have the following responsibilities:
+- `products:read` / `products:write` - Product management
+- `inventory:adjust` - Stock level modifications
+- `orders:read` / `orders:update` - Order management
+- `returns:manage` - Return handling
+- `promotions:manage` - Promotion management
+- `customers:message` - Customer communication
+- `bookings:manage` - Booking management
+- `analytics:view` - Analytics access
+
+See `shared/schema.ts` for complete schema definitions (1236 lines, 135+ types).
+
+---
+
+## 8. Configuration Reference
+
+### 8.1 Required Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SESSION_SECRET` | Session signing secret (strong random value) |
+| `ADMIN_EMAIL` | Bootstrap admin email |
+| `ADMIN_PASSWORD` | Bootstrap admin password |
+| `VITE_API_URL` | API URL for frontend |
+
+### 8.2 Database Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | - | Primary database connection |
+| `DATABASE_REPLICA_URL` | - | Read replica (optional) |
+| `DB_POOL_SIZE` | 50 | Primary connection pool |
+| `USE_IN_MEMORY_DB` | false | In-memory storage for demos |
+
+### 8.3 Session & Security
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SESSION_STORE` | postgres | `redis` or `postgres` |
+| `SESSION_TTL_SECONDS` | 86400 | Session lifetime |
+| `SESSION_COOKIE_SAMESITE` | lax | Cookie SameSite policy |
+| `SESSION_COOKIE_SECURE` | auto | Secure cookie in production |
+
+### 8.4 Redis & Caching
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDIS_URL` | - | Redis connection string |
+| `DISABLE_REDIS` | false | Disable Redis (dev only) |
+| `DISABLE_RATE_LIMITERS` | false | Disable rate limiting |
+
+### 8.5 URLs & CORS
+
+| Variable | Description |
+|----------|-------------|
+| `FRONTEND_URL` | Web app URL |
+| `APP_BASE_URL` | API base URL |
+| `ALLOWED_ORIGINS` | Comma-separated CORS whitelist |
+
+### 8.6 Firebase (Optional)
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_FIREBASE_API_KEY` | Firebase API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase auth domain |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Service account for push notifications |
+
+### 8.7 Background Jobs
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BOOKING_EXPIRATION_CRON` | `0 * * * *` | Hourly |
+| `PAYMENT_REMINDER_CRON` | `0 9 * * *` | Daily at 9 AM |
+| `LOW_STOCK_DIGEST_CRON` | `0 8 * * *` | Daily at 8 AM |
+| `CRON_TZ` | Asia/Kolkata | Job timezone |
+
+---
+
+## 9. Deployment
+
+### 9.1 Production Build
+
+```bash
+# Build both client and server
 npm run build
-pm2 restart server
+
+# Output:
+# - dist/public/  → Static frontend assets
+# - dist/index.js → Compiled server bundle
+```
+
+### 9.2 Run with PM2
+
+```bash
+npm install -g pm2
+pm2 start ecosystem.config.js
+pm2 startup
+pm2 save
+```
+
+### 9.3 Production Checklist
+
+- [ ] Set `NODE_ENV=production`
+- [ ] Configure strong `SESSION_SECRET`
+- [ ] Set up production `DATABASE_URL` and `REDIS_URL`
+- [ ] Configure `FRONTEND_URL`, `APP_BASE_URL`, `ALLOWED_ORIGINS`
+- [ ] Set up HTTPS (reverse proxy or Node.js)
+- [ ] Configure Firebase for push notifications
+- [ ] Set up database backup strategy
+- [ ] Configure log rotation
+- [ ] Set up health monitoring
+
+### 9.4 Health Monitoring
+
+```bash
+# Basic health check
+curl http://localhost:5000/api/health
+
+# Continuous monitoring script
+npm run monitor
+```
+
+---
+
+## 10. Testing
+
+### 10.1 Running Tests
+
+```bash
+# Type check
+npm run check
+
+# Run test suite
+npm run test
+
+# With coverage
+npm run test:coverage
+
+# Generate report
+npm run test:report
+```
+
+### 10.2 Load Testing
+
+```bash
+# Install k6
+brew install k6  # macOS
+
+# Start server with test config
+SESSION_SECRET='TestSecret123!' \
+USE_IN_MEMORY_DB=true \
+DISABLE_RATE_LIMITERS=true \
+npm run start
+
+# Run load test
+k6 run load-test.js
+```
+
+---
+
+## 11. Scripts Reference
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev:server` | Start backend dev server |
+| `npm run dev:client` | Start frontend dev server |
+| `npm run build` | Build for production |
+| `npm run start` | Run production server |
+| `npm run db:generate` | Generate Drizzle migrations |
+| `npm run db:migrate` | Apply migrations |
+| `npm run db:migrate:baseline` | Baseline existing schema |
+| `npm run check` | TypeScript type check |
+| `npm run lint` | Run ESLint |
+| `npm run format` | Prettier formatting |
+| `npm run test` | Run tests |
+| `npm run test:coverage` | Test with coverage |
+| `npm run monitor` | Poll health endpoint |
+
+---
+
+## 12. Additional Documentation
+
+| Document | Description |
+|----------|-------------|
+| `docs/environment-reference.md` | Complete environment variables |
+| `docs/api-quickstart.md` | cURL examples for API testing |
+| `docs/role-endpoint-matrix.md` | Role-based endpoint access |
+| `docs/deployment-runbook.md` | Production deployment guide |
+| `docs/mobile-and-cloud-setup.md` | Android and Firebase setup |
+| `docs/remote-access.md` | LAN and public access options |
+| `docs/performance-tuning.md` | Performance optimization |
+| `docs/FIREBASE_SETUP.md` | Firebase configuration |
+| `doorstep-android/README.md` | Native Android app guide |

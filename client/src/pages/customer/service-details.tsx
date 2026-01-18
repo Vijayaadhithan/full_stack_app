@@ -1,6 +1,5 @@
 import React from 'react';
 import { formatIndianDisplay } from "@shared/date-utils";
-import { useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
   Card,
@@ -24,14 +23,11 @@ import { getServiceImage } from "@shared/predefinedImages";
 export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
   const { t } = useLanguage();
-  console.log("Service ID from params:", id);
+
 
   const {
     data: service,
     isLoading,
-    isError,
-    error,
-    isSuccess,
   } = useQuery<ServiceDetail, Error>({
     queryKey: [`/api/services/${id}`],
     queryFn: () =>
@@ -42,18 +38,9 @@ export default function ServiceDetails() {
     retry: false,
   });
 
-  useEffect(() => {
-    if (isError && error) {
-      console.error("Error fetching service:", error);
-      console.error("Query key:", [`/api/services/${id}`]);
-    }
-  }, [isError, error, id]);
 
-  useEffect(() => {
-    if (isSuccess && service) {
-      console.log("Successfully fetched service:", service);
-    }
-  }, [isSuccess, service]);
+
+
 
   if (isLoading) {
     return (

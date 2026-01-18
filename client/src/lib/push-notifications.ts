@@ -170,8 +170,12 @@ export async function registerPushToken(token: string): Promise<boolean> {
             // Store token locally
             localStorage.setItem("fcm_token", token);
             return true;
+        } else if (response.status === 401 || response.status === 403) {
+            // User is not authenticated - this is expected in some cases
+            debugLog("FCM token registration skipped - user not authenticated");
+            return false;
         } else {
-            console.error("Failed to register FCM token:", response.status);
+            debugWarn("Failed to register FCM token:", response.status);
             return false;
         }
     } catch (error) {
@@ -196,10 +200,17 @@ export async function unregisterPushToken(): Promise<boolean> {
             debugLog("FCM token unregistered from backend");
             localStorage.removeItem("fcm_token");
             return true;
+        } else if (response.status === 401 || response.status === 403) {
+            // Session already expired - just clean up local storage
+            debugLog("FCM token unregistration skipped - session expired");
+            localStorage.removeItem("fcm_token");
+            return true;
         }
         return false;
     } catch (error) {
-        console.error("Error unregistering FCM token:", error);
+        // On logout, the session might already be gone, so just clean up
+        debugWarn("Error unregistering FCM token (session may be expired):", error);
+        localStorage.removeItem("fcm_token");
         return false;
     }
 }

@@ -1,5 +1,4 @@
 import React from 'react';
-import { useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import MapLink from "@/components/location/MapLink";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,15 +26,12 @@ const formatAddress = (user: ServiceDetail["provider"] | undefined): string => {
 
 export default function ServiceProvider() {
   const { id } = useParams<{ id: string }>();
-  console.log("ServiceProvider component - Service ID from params:", id);
+
 
   // Fetch service details with provider info
   const {
     data: service,
     isLoading,
-    isError: serviceIsError,
-    error: serviceError,
-    isSuccess: serviceIsSuccess,
   } = useQuery<ServiceDetail, Error>({
     queryKey: [`/api/services/${id}`],
     queryFn: () =>
@@ -46,19 +42,9 @@ export default function ServiceProvider() {
     retry: false, // Optional: prevent retries on error if desired
   });
 
-  // Handle service query side effects
-  useEffect(() => {
-    if (serviceIsError && serviceError) {
-      console.error("Error fetching service:", serviceError);
-      console.error("Query key:", [`/api/services/${id}`]);
-    }
-  }, [serviceIsError, serviceError, id]);
 
-  useEffect(() => {
-    if (serviceIsSuccess && service) {
-      console.log("Successfully fetched service data:", service);
-    }
-  }, [serviceIsSuccess, service]);
+
+
 
   const isPageLoading = isLoading;
 
@@ -89,7 +75,7 @@ export default function ServiceProvider() {
   const validReviews = Array.isArray(service.reviews) ? service.reviews : [];
   const averageRating = validReviews.length
     ? validReviews.reduce((acc, review) => acc + review.rating, 0) /
-      validReviews.length
+    validReviews.length
     : 0;
   const providerName = service.provider?.name ?? "Provider";
 
