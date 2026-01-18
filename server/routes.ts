@@ -1263,7 +1263,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       : createCsrfProtection({
         ignoreMethods: ["GET", "HEAD", "OPTIONS"],
         // Exempt analytics endpoint - sendBeacon doesn't preserve session cookies for CSRF
-        ignorePaths: ["/api/performance-metrics"],
+        // Exempt FCM endpoints - they are protected by requireAuth and cause CSRF timing issues in Chrome
+        ignorePaths: ["/api/performance-metrics", "/api/fcm/register", "/api/fcm/unregister"],
       });
 
   app.use(csrfProtection);
