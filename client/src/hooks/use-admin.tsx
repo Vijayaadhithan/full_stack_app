@@ -1,5 +1,6 @@
 import { createContext, ReactNode, useContext } from "react";
 import { useQuery, useMutation, UseMutationResult } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   apiRequest,
   getQueryFn,
@@ -27,9 +28,12 @@ const AdminContext = createContext<AdminContextType | null>(null);
 
 export function AdminProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const [location] = useLocation();
+  const isAdminRoute = location.startsWith("/admin");
   const { data: admin, isFetching } = useQuery<Admin | null>({
     queryKey: ["/api/admin/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
+    enabled: isAdminRoute,
   });
 
   const loginMutation = useMutation({

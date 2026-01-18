@@ -56,66 +56,72 @@ if (hmrProtocol) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export default defineConfig({
-  plugins: [
-    react(),
-    themePlugin(),
-    ...(process.env.NODE_ENV !== "production" &&
-      process.env.REPL_ID !== undefined
+export default defineConfig(async ({ mode }) => {
+  const isProd = mode === "production";
+  const replitPlugins =
+    !isProd && process.env.REPL_ID !== undefined
       ? [
         await import("@replit/vite-plugin-cartographer").then((m) =>
           m.cartographer(),
         ),
       ]
-      : []),
-  ],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "client", "src"),
-      "@shared": path.resolve(__dirname, "shared"),
-    },
-  },
-  server: {
-    host: devServerBind,
-    port: devServerPort,
-    hmr: hmrConfig,
-    proxy: {
-      "/api": {
-        target: apiProxyTarget,
-        changeOrigin: true,
+      : [];
+
+  return {
+    plugins: [react(), themePlugin(), ...replitPlugins],
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "client", "src"),
+        "@shared": path.resolve(__dirname, "shared"),
       },
     },
-  },
-  root: path.resolve(__dirname, "client"),
-  envDir: path.resolve(__dirname), // Load .env from project root
-  build: {
-    outDir: path.resolve(__dirname, "dist/public"),
-    emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        manualChunks: (id: string) => {
-          // Split large libraries into separate chunks for better caching
-          if (id.includes('node_modules')) {
-            // Firebase - keep together due to interdependencies
-            if (id.includes('firebase')) {
-              return 'vendor-firebase';
-            }
-            // Charts
-            if (id.includes('recharts') || id.includes('d3-')) {
-              return 'vendor-charts';
-            }
-            // Maps
-            if (id.includes('leaflet') || id.includes('react-leaflet')) {
-              return 'vendor-maps';
-            }
-            // Radix UI components
-            if (id.includes('@radix-ui')) {
-              return 'vendor-ui';
-            }
-          }
-          return undefined;
+    esbuild: isProd
+      ? {
+        pure: ["console.log", "console.info", "console.debug"],
+      }
+      : undefined,
+    server: {
+      host: devServerBind,
+      port: devServerPort,
+      hmr: hmrConfig,
+      proxy: {
+        "/api": {
+          target: apiProxyTarget,
+          changeOrigin: true,
         },
       },
     },
-  },
+    root: path.resolve(__dirname, "client"),
+    envDir: path.resolve(__dirname), // Load .env from project root
+    build: {
+      outDir: path.resolve(__dirname, "dist/public"),
+      emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks: (id: string) => {
+            // Split large libraries into separate chunks for better caching
+            if (id.includes('node_modules')) {
+              // Firebase - keep together due to interdependencies
+              if (id.includes('firebase')) {
+                return 'vendor-firebase';
+              }
+              // Charts
+              if (id.includes('recharts') || id.includes('d3-')) {
+                return 'vendor-charts';
+              }
+              // Maps
+              if (id.includes('leaflet') || id.includes('react-leaflet')) {
+                return 'vendor-maps';
+              }
+              // Radix UI components
+              if (id.includes('@radix-ui')) {
+                return 'vendor-ui';
+              }
+            }
+            return undefined;
+          },
+        },
+      },
+    },
+  };
 });

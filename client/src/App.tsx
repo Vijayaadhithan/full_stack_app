@@ -9,12 +9,9 @@ import { UserProvider } from "@/contexts/UserContext";
 import { ProtectedRoute } from "./lib/protected-route";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import RouteErrorBoundary from "@/components/RouteErrorBoundary";
-import {
-  initializePushNotifications,
-} from "@/lib/permissions"; // Added imports
 import PermissionRequester from "@/components/PermissionRequester"; // Import the new component
 import { PushNotificationManager } from "@/components/PushNotificationManager";
-import React, { useEffect, Suspense, lazy } from "react";
+import React, { Suspense, lazy } from "react";
 import { useClientPerformanceMetrics } from "@/hooks/use-client-performance-metrics";
 import { useRealtimeUpdates } from "@/hooks/use-realtime-updates";
 
@@ -207,21 +204,6 @@ function Router() {
 }
 
 function App() {
-  // Initialize Push Notifications when browser is idle (deferred to improve TTI)
-  useEffect(() => {
-    // Use requestIdleCallback to defer non-critical initialization
-    const initPush = () => {
-      initializePushNotifications();
-    };
-
-    if ('requestIdleCallback' in window) {
-      (window as Window & typeof globalThis).requestIdleCallback(initPush, { timeout: 3000 });
-    } else {
-      // Fallback for Safari and older browsers
-      setTimeout(initPush, 1000);
-    }
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>

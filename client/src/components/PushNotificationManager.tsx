@@ -1,18 +1,16 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import {
-    registerPushNotifications as registerFcmPushNotifications,
-    isPushNotificationSupported,
-    unregisterPushToken,
-} from "@/lib/push-notifications";
+import { registerPushNotifications } from "@/lib/permissions";
+import { isPushNotificationSupported } from "@/lib/push-notifications";
 import { debugLog, debugWarn } from "@/lib/debug";
+import { API_BASE_URL } from "@/lib/queryClient";
 
 /**
  * PushNotificationManager component
  * 
  * This component watches for authentication state changes and:
  * - Registers FCM token when user logs in
- * - Unregisters FCM token when user logs out
+ * - Clears local FCM token when user logs out
  * 
  * Should be placed inside AuthProvider in the component tree.
  */
@@ -33,13 +31,44 @@ export function PushNotificationManager() {
             return;
         }
 
+        let cancelled = false;
+
         const handleAuthChange = async () => {
             // User just logged in
-            if (user && !hasRegistered.current) {
-                debugLog("User authenticated, registering push notifications...");
+            if (user && (!hasRegistered.current || previousUserId.current !== user.id)) {
+                debugLog("User authenticated, scheduling push notification registration...");
+
+                // Wait for the session cookie to be properly established
+                // This delay ensures the login response cookies are fully processed
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                if (cancelled) return;
+
+                // Verify the session is actually established before registering
                 try {
-                    const success = await registerFcmPushNotifications();
-                    if (success) {
+                    const sessionCheck = await fetch(`${API_BASE_URL}/api/user`, {
+                        credentials: "include",
+                    });
+
+                    if (!sessionCheck.ok || cancelled) {
+                        debugWarn("Session not yet established, skipping FCM registration");
+                        return;
+                    }
+
+                    const sessionUser = await sessionCheck.json();
+                    if (!sessionUser || cancelled) {
+                        debugWarn("Session check returned no user, skipping FCM registration");
+                        return;
+                    }
+                } catch (error) {
+                    debugWarn("Session verification failed, skipping FCM registration:", error);
+                    return;
+                }
+
+                debugLog("Session verified, registering push notifications...");
+                try {
+                    const success = await registerPushNotifications();
+                    if (success && !cancelled) {
                         debugLog("Push notifications registered for user:", user.id);
                         hasRegistered.current = true;
                         previousUserId.current = user.id;
@@ -51,18 +80,18 @@ export function PushNotificationManager() {
 
             // User just logged out (was logged in before)
             if (!user && previousUserId.current) {
-                debugLog("User logged out, unregistering push token...");
-                try {
-                    await unregisterPushToken();
-                    hasRegistered.current = false;
-                    previousUserId.current = null;
-                } catch (error) {
-                    console.error("Failed to unregister push token:", error);
-                }
+                debugLog("User logged out, clearing local push state...");
+                hasRegistered.current = false;
+                previousUserId.current = null;
+                localStorage.removeItem("fcm_token");
             }
         };
 
         handleAuthChange();
+
+        return () => {
+            cancelled = true;
+        };
     }, [user, isFetching]);
 
     // This component doesn't render anything

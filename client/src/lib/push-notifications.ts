@@ -163,6 +163,8 @@ export async function registerPushToken(token: string): Promise<boolean> {
             token,
             platform: "web",
             deviceInfo: navigator.userAgent,
+        }, {
+            allowStatuses: [401, 403],
         });
 
         if (response.ok) {
@@ -194,7 +196,9 @@ export async function unregisterPushToken(): Promise<boolean> {
     }
 
     try {
-        const response = await apiRequest("DELETE", "/api/fcm/unregister", { token });
+        const response = await apiRequest("DELETE", "/api/fcm/unregister", { token }, {
+            allowStatuses: [401, 403],
+        });
 
         if (response.ok) {
             debugLog("FCM token unregistered from backend");

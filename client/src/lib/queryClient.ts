@@ -37,6 +37,10 @@ export const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
 let csrfToken: string | null = null;
 let csrfPromise: Promise<string> | null = null;
 
+export type ApiRequestOptions = {
+  allowStatuses?: number[];
+};
+
 async function fetchCsrfToken(): Promise<string> {
   const res = await fetch(`${API_BASE_URL}/api/csrf-token`, {
     credentials: "include",
@@ -81,6 +85,7 @@ async function performApiRequest(
   url: string,
   data: unknown | undefined,
   attempt = 0,
+  options?: ApiRequestOptions,
 ): Promise<Response> {
   const upperMethod = method.toUpperCase();
   const isFormData = data instanceof FormData;
@@ -102,10 +107,12 @@ async function performApiRequest(
   });
 
   if (!CSRF_SAFE_METHODS.has(upperMethod) && res.status === 403 && attempt === 0) {
-    return performApiRequest(method, url, data, attempt + 1);
+    return performApiRequest(method, url, data, attempt + 1, options);
   }
 
-  await throwIfResNotOk(res);
+  if (!options?.allowStatuses?.includes(res.status)) {
+    await throwIfResNotOk(res);
+  }
   return res;
 }
 
@@ -113,8 +120,9 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  options?: ApiRequestOptions,
 ): Promise<Response> {
-  return performApiRequest(method, url, data);
+  return performApiRequest(method, url, data, 0, options);
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

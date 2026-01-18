@@ -13,6 +13,7 @@ import {
   resetCsrfTokenCache,
   getCsrfToken,
 } from "../lib/queryClient";
+import { unregisterPushToken } from "@/lib/push-notifications";
 import { useToast } from "@/hooks/use-toast";
 
 type PublicUser = Omit<SelectUser, "password" | "pin">;
@@ -169,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
+      await unregisterPushToken();
       await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
@@ -213,4 +215,3 @@ export function useAuth() {
   }
   return context;
 }
-
