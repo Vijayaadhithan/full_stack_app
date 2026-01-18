@@ -11,6 +11,8 @@ import { apiRequest } from "./queryClient";
 import { debugLog, debugWarn } from "./debug";
 
 let messaging: Messaging | null = null;
+const FCM_TOKEN_STORAGE_KEY = "fcm_token";
+const FCM_TOKEN_SYNC_KEY = "fcm_token_needs_sync";
 
 /**
  * Check if push notifications are supported in this browser
@@ -158,6 +160,8 @@ export async function getFcmToken(vapidKey?: string): Promise<string | null> {
  * Register FCM token with the backend
  */
 export async function registerPushToken(token: string): Promise<boolean> {
+    localStorage.setItem(FCM_TOKEN_STORAGE_KEY, token);
+    localStorage.setItem(FCM_TOKEN_SYNC_KEY, "true");
     try {
         const response = await apiRequest("POST", "/api/fcm/register", {
             token,
@@ -169,19 +173,21 @@ export async function registerPushToken(token: string): Promise<boolean> {
 
         if (response.ok) {
             debugLog("FCM token registered with backend");
-            // Store token locally
-            localStorage.setItem("fcm_token", token);
+            localStorage.setItem(FCM_TOKEN_SYNC_KEY, "false");
             return true;
         } else if (response.status === 401 || response.status === 403) {
             // User is not authenticated - this is expected in some cases
             debugLog("FCM token registration skipped - user not authenticated");
+            localStorage.setItem(FCM_TOKEN_SYNC_KEY, "true");
             return false;
         } else {
             debugWarn("Failed to register FCM token:", response.status);
+            localStorage.setItem(FCM_TOKEN_SYNC_KEY, "true");
             return false;
         }
     } catch (error) {
         console.error("Error registering FCM token:", error);
+        localStorage.setItem(FCM_TOKEN_SYNC_KEY, "true");
         return false;
     }
 }
@@ -190,7 +196,7 @@ export async function registerPushToken(token: string): Promise<boolean> {
  * Unregister FCM token from the backend (on logout)
  */
 export async function unregisterPushToken(): Promise<boolean> {
-    const token = localStorage.getItem("fcm_token");
+    const token = localStorage.getItem(FCM_TOKEN_STORAGE_KEY);
     if (!token) {
         return true;
     }
@@ -202,21 +208,45 @@ export async function unregisterPushToken(): Promise<boolean> {
 
         if (response.ok) {
             debugLog("FCM token unregistered from backend");
-            localStorage.removeItem("fcm_token");
+            localStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
+            localStorage.removeItem(FCM_TOKEN_SYNC_KEY);
             return true;
         } else if (response.status === 401 || response.status === 403) {
             // Session already expired - just clean up local storage
             debugLog("FCM token unregistration skipped - session expired");
-            localStorage.removeItem("fcm_token");
+            localStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
+            localStorage.removeItem(FCM_TOKEN_SYNC_KEY);
             return true;
         }
         return false;
     } catch (error) {
         // On logout, the session might already be gone, so just clean up
         debugWarn("Error unregistering FCM token (session may be expired):", error);
-        localStorage.removeItem("fcm_token");
+        localStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
+        localStorage.removeItem(FCM_TOKEN_SYNC_KEY);
         return false;
     }
+}
+
+export function getStoredFcmToken(): string | null {
+    return localStorage.getItem(FCM_TOKEN_STORAGE_KEY);
+}
+
+export function isStoredFcmTokenSyncPending(): boolean {
+    return localStorage.getItem(FCM_TOKEN_SYNC_KEY) === "true";
+}
+
+export async function syncStoredPushToken(): Promise<boolean> {
+    const token = getStoredFcmToken();
+    if (!token) {
+        return false;
+    }
+
+    if (!isStoredFcmTokenSyncPending()) {
+        return true;
+    }
+
+    return registerPushToken(token);
 }
 
 /**
@@ -258,10 +288,13 @@ export async function registerPushNotifications(): Promise<boolean> {
 
     try {
         // Request permission
-        const permission = await requestNotificationPermission();
+        const permission = getNotificationPermission();
         if (permission !== "granted") {
-            debugLog("Notification permission denied");
-            return false;
+            const requested = await requestNotificationPermission();
+            if (requested !== "granted") {
+                debugLog("Notification permission denied");
+                return false;
+            }
         }
 
         // Get FCM token

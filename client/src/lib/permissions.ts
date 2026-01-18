@@ -9,7 +9,10 @@
 import {
   registerPushNotifications as registerFcmPushNotifications,
   isPushNotificationSupported,
-  setupForegroundMessageHandler
+  setupForegroundMessageHandler,
+  initializeMessaging,
+  getStoredFcmToken,
+  syncStoredPushToken,
 } from "./push-notifications";
 import { debugLog, debugWarn } from "./debug";
 
@@ -147,8 +150,15 @@ export const registerPushNotifications = async (): Promise<boolean> => {
       }
     }
 
-    // Register with FCM and backend
-    const success = await registerFcmPushNotifications();
+    await initializeMessaging();
+    const storedToken = getStoredFcmToken();
+    let success = false;
+    if (storedToken) {
+      success = await syncStoredPushToken();
+    }
+    if (!success) {
+      success = await registerFcmPushNotifications();
+    }
     if (success) {
       debugLog("FCM push notifications registered successfully");
 

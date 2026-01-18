@@ -84,6 +84,7 @@ export function PushNotificationManager() {
                 hasRegistered.current = false;
                 previousUserId.current = null;
                 localStorage.removeItem("fcm_token");
+                localStorage.removeItem("fcm_token_needs_sync");
             }
         };
 

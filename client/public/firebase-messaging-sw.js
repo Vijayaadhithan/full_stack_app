@@ -36,9 +36,12 @@ const debugLog = (...args) => {
 messaging.onBackgroundMessage((payload) => {
     debugLog("[firebase-messaging-sw.js] Received background message:", payload);
 
-    const notificationTitle = payload.notification?.title || 'DoorStep';
+    const notificationTitle =
+        payload.notification?.title ||
+        payload.data?.title ||
+        'DoorStep';
     const notificationOptions = {
-        body: payload.notification?.body || '',
+        body: payload.notification?.body || payload.data?.body || '',
         icon: '/icon-192.png',
         badge: '/icon-192.png',
         tag: payload.data?.type || 'notification',

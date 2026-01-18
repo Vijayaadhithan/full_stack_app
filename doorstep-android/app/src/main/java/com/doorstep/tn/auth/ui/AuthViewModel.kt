@@ -116,6 +116,7 @@ class AuthViewModel @Inject constructor(
                     _currentUser.value = result.data
                     _userName.value = result.data.name
                     _userRole.value = result.data.role
+                    syncFcmToken()
                 }
                 is Result.Error -> {
                     // User session may be invalid, logged out
@@ -488,19 +489,24 @@ class AuthViewModel @Inject constructor(
         _currentUser.value = user
         
         // Register FCM token with backend after successful login
-        syncFcmToken()
+        syncFcmToken(force = true)
     }
     
     /**
      * Sync FCM token with backend after login
      * This ensures push notifications work for the logged-in user
      */
-    private fun syncFcmToken() {
+    private fun syncFcmToken(force: Boolean = false) {
         viewModelScope.launch {
             try {
                 // Get stored FCM token from SharedPreferences
                 val fcmPrefs = context.getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
                 val storedToken = fcmPrefs.getString("fcm_token", null)
+                val needsSync = fcmPrefs.getBoolean("token_needs_sync", false)
+
+                if (!force && !needsSync) {
+                    return@launch
+                }
                 
                 if (storedToken != null) {
                     // Register with backend
@@ -514,6 +520,7 @@ class AuthViewModel @Inject constructor(
                         fcmPrefs.edit().putBoolean("token_needs_sync", false).apply()
                     } else {
                         android.util.Log.w("AuthViewModel", "Failed to sync FCM token")
+                        fcmPrefs.edit().putBoolean("token_needs_sync", true).apply()
                     }
                 } else {
                     // No token yet, it will be registered when onNewToken() is called

@@ -12,6 +12,29 @@ import { isFirebaseAdminAvailable, initializeFirebaseAdmin } from "./firebase-ad
 // Initialize Firebase Admin if not already done
 initializeFirebaseAdmin();
 
+const resolveFrontendBaseUrl = (): string | null => {
+    const candidates = [process.env.FRONTEND_URL, process.env.APP_BASE_URL];
+    for (const candidate of candidates) {
+        if (candidate && candidate.trim().length > 0) {
+            return candidate.trim().replace(/\/$/, "");
+        }
+    }
+    return null;
+};
+
+const frontendBaseUrl = resolveFrontendBaseUrl();
+
+const resolveClickUrl = (clickUrl: string): string => {
+    if (!frontendBaseUrl) {
+        return clickUrl;
+    }
+    try {
+        return new URL(clickUrl, frontendBaseUrl).toString();
+    } catch {
+        return clickUrl;
+    }
+};
+
 export interface PushNotificationPayload {
     title: string;
     body: string;
@@ -39,7 +62,8 @@ export async function sendPushToToken(
     }
 
     try {
-        const clickUrl = payload.data?.clickUrl || "/notifications";
+        const rawClickUrl = payload.data?.clickUrl || "/notifications";
+        const clickUrl = resolveClickUrl(rawClickUrl);
         const message: admin.messaging.Message = {
             token,
             notification: {
@@ -59,6 +83,8 @@ export async function sendPushToToken(
             },
             webpush: {
                 notification: {
+                    title: payload.title,
+                    body: payload.body,
                     icon: "/icon-192.png",
                     badge: "/icon-192.png",
                     requireInteraction: true,
@@ -113,7 +139,8 @@ export async function sendPushToTokens(
         };
     }
 
-    const clickUrl = payload.data?.clickUrl || "/notifications";
+    const rawClickUrl = payload.data?.clickUrl || "/notifications";
+    const clickUrl = resolveClickUrl(rawClickUrl);
     const message: admin.messaging.MulticastMessage = {
         tokens,
         notification: {
@@ -133,6 +160,8 @@ export async function sendPushToTokens(
         },
         webpush: {
             notification: {
+                title: payload.title,
+                body: payload.body,
                 icon: "/icon-192.png",
                 badge: "/icon-192.png",
                 requireInteraction: true,
