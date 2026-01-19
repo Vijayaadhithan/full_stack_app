@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +45,26 @@ fun ShopDetailScreen(
     val shop by viewModel.selectedShop.collectAsState()
     val products by viewModel.shopProducts.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    
+    // Search and Filter State
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    
+    // Derive unique categories from products
+    val categories = remember(products) {
+        products.mapNotNull { it.category }.distinct().sorted()
+    }
+    
+    // Compute filtered products
+    val filteredProducts = remember(products, searchQuery, selectedCategory) {
+        products.filter { product ->
+            val matchesSearch = searchQuery.trim().isEmpty() || 
+                                product.name.contains(searchQuery, ignoreCase = true) || 
+                                (product.description?.contains(searchQuery, ignoreCase = true) == true)
+            val matchesCategory = selectedCategory == null || product.category.equals(selectedCategory, ignoreCase = true)
+            matchesSearch && matchesCategory
+        }
+    }
     
     LaunchedEffect(shopId) {
         viewModel.loadShopDetails(shopId)
@@ -237,15 +260,87 @@ fun ShopDetailScreen(
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
+                // Search and Filter Section
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    // Search Bar
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search in shop...", color = WhiteTextMuted) },
+                        leadingIcon = { Icon(Icons.Default.Search, null, tint = WhiteTextMuted) },
+                        trailingIcon = if (searchQuery.isNotEmpty()) {
+                            {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Close, null, tint = WhiteTextMuted)
+                                }
+                            }
+                        } else null,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = SlateCard,
+                            unfocusedContainerColor = SlateCard,
+                            focusedBorderColor = OrangePrimary,
+                            unfocusedBorderColor = Color.Transparent,
+                            cursorColor = OrangePrimary,
+                            focusedTextColor = WhiteText,
+                            unfocusedTextColor = WhiteText
+                        ),
+                        singleLine = true
+                    )
+                    
+                    // Categories Chips
+                    if (categories.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            item {
+                                FilterChip(
+                                    selected = selectedCategory == null,
+                                    onClick = { selectedCategory = null },
+                                    label = { Text("All") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = OrangePrimary,
+                                        selectedLabelColor = WhiteText,
+                                        containerColor = SlateCard,
+                                        labelColor = WhiteTextMuted
+                                    ),
+                                    border = null
+                                )
+                            }
+                            items(categories) { category ->
+                                FilterChip(
+                                    selected = selectedCategory == category,
+                                    onClick = { selectedCategory = if (selectedCategory == category) null else category },
+                                    label = { Text(category) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = OrangePrimary,
+                                        selectedLabelColor = WhiteText,
+                                        containerColor = SlateCard,
+                                        labelColor = WhiteTextMuted
+                                    ),
+                                    border = null
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
                 // Products Grid
-                if (products.isEmpty()) {
+                if (filteredProducts.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No products available", color = WhiteTextMuted)
+                        Text(
+                            if (products.isEmpty()) "No products available" else "No matching products found", 
+                            color = WhiteTextMuted
+                        )
                     }
                 } else {
                     LazyVerticalGrid(
@@ -255,7 +350,7 @@ fun ShopDetailScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(products) { product ->
+                        items(filteredProducts) { product ->
                             ShopProductCard(
                                 product = product,
                                 onClick = { onNavigateToProduct(shopId, product.id) }

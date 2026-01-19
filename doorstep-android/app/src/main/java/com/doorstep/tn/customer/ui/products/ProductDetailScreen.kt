@@ -61,6 +61,7 @@ fun ProductDetailScreen(
         } else {
             viewModel.loadProductById(productId)
         }
+        viewModel.loadProductReviews(productId)
     }
     
     Scaffold(
@@ -298,6 +299,120 @@ fun ProductDetailScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = WhiteTextMuted
                         )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // ==================== Ratings Section ====================
+                    val reviews by viewModel.productReviews.collectAsState()
+                    
+                    Text(
+                        text = "Ratings & Reviews",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    if (reviews.isNotEmpty()) {
+                        val averageRating = reviews.map { it.rating }.average()
+                        Text(
+                            text = String.format("%.1f/5 • %d reviews", averageRating, reviews.size),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = WhiteTextMuted
+                        )
+                    } else {
+                        Text(
+                            text = "No reviews yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = WhiteTextMuted
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (reviews.isNotEmpty()) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            reviews.forEach { review ->
+                                // Review Item
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(SlateCard, RoundedCornerShape(12.dp))
+                                        .padding(16.dp)
+                                ) {
+                                    // Header: Rating + Date
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            repeat(5) { index ->
+                                                Icon(
+                                                    imageVector = Icons.Default.Star,
+                                                    contentDescription = null,
+                                                    tint = if (index < review.rating) AmberSecondary else WhiteTextMuted.copy(alpha = 0.2f),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        }
+                                        
+                                        review.createdAt?.let {
+                                            Text(
+                                                text = try { it.take(10) } catch (e: Exception) { "" },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = WhiteTextMuted
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    // Review Text
+                                    if (!review.review.isNullOrEmpty()) {
+                                        Text(
+                                            text = review.review,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = WhiteText
+                                        )
+                                    } else {
+                                         Text(
+                                            text = "No written feedback provided.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteTextMuted,
+                                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                        )
+                                    }
+                                    
+                                    // Shop Reply
+                                    if (!review.shopReply.isNullOrEmpty()) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(SlateDarker.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                                .padding(12.dp)
+                                        ) {
+                                            Text(
+                                                text = "Response from Shop",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = OrangePrimary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = review.shopReply,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = WhiteTextMuted
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     
                     Spacer(modifier = Modifier.height(32.dp))

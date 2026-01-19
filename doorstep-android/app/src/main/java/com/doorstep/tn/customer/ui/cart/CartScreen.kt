@@ -50,6 +50,9 @@ fun CartScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val userId by viewModel.userId.collectAsState()
     
+    val activePromotions by viewModel.activePromotions.collectAsState()
+    val selectedPromotion by viewModel.selectedPromotion.collectAsState()
+
     // Shop info state - fetched to check delivery options
     var shopInfo by remember { mutableStateOf<com.doorstep.tn.customer.data.model.Shop?>(null) }
     var isLoadingShop by remember { mutableStateOf(false) }
@@ -63,28 +66,59 @@ fun CartScreen(
     val subtotal = cartItems.sumOf { 
         (it.product.price.toDoubleOrNull() ?: 0.0) * it.quantity 
     }
-    val total = subtotal // Add delivery fee if needed
+    
+    // Calculate Discount
+    val discountAmount = remember(subtotal, selectedPromotion) {
+        val promo = selectedPromotion
+        if (promo != null) {
+            // Check min order amount
+            if (promo.minOrderAmount != null && subtotal < promo.minOrderAmount) {
+                0.0
+            } else {
+                if (promo.type == "percentage") {
+                    val calculated = subtotal * (promo.value / 100.0)
+                    if (promo.maxDiscount != null) {
+                        minOf(calculated, promo.maxDiscount)
+                    } else {
+                        calculated
+                    }
+                } else {
+                    // Fixed amount
+                    promo.value
+                }
+            }
+        } else {
+            0.0
+        }
+    }
+    
+    val total = if (subtotal > 0) (subtotal - discountAmount).coerceAtLeast(0.0) else 0.0
     
     // Load cart on first composition
     LaunchedEffect(Unit) {
         viewModel.loadCart()
     }
     
-    // Fetch shop info when cart items are loaded
+    // Fetch shop info and promotions when cart items are loaded
     LaunchedEffect(cartItems) {
         if (cartItems.isNotEmpty()) {
             val shopId = cartItems.firstOrNull()?.product?.shopId
-            if (shopId != null && shopInfo?.id != shopId) {
-                isLoadingShop = true
-                viewModel.getShopById(shopId) { shop ->
-                    shopInfo = shop
-                    isLoadingShop = false
-                    // Reset delivery method based on shop availability (like web)
-                    if (shop != null) {
-                        if (shop.pickupAvailable && !shop.deliveryAvailable) {
-                            deliveryMethod = "pickup"
-                        } else if (!shop.pickupAvailable && shop.deliveryAvailable) {
-                            deliveryMethod = "delivery"
+            if (shopId != null) {
+                // Load Promotions
+                viewModel.loadActivePromotions(shopId)
+                
+                if (shopInfo?.id != shopId) {
+                    isLoadingShop = true
+                    viewModel.getShopById(shopId) { shop ->
+                        shopInfo = shop
+                        isLoadingShop = false
+                        // Reset delivery method based on shop availability (like web)
+                        if (shop != null) {
+                            if (shop.pickupAvailable && !shop.deliveryAvailable) {
+                                deliveryMethod = "pickup"
+                            } else if (!shop.pickupAvailable && shop.deliveryAvailable) {
+                                deliveryMethod = "delivery"
+                            }
                         }
                     }
                 }
@@ -196,11 +230,131 @@ fun CartScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "No promotions available for this shop",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = WhiteTextMuted
-                            )
+                            
+                            if (activePromotions.isEmpty()) {
+                                Text(
+                                    text = "No promotions available for this shop",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = WhiteTextMuted
+                                )
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // "No promotion" option - matches web
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (selectedPromotion == null) OrangePrimary.copy(alpha = 0.1f) else Color.Transparent)
+                                            .clickable { viewModel.selectPromotion(null) }
+                                            .padding(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = selectedPromotion == null,
+                                            onClick = { viewModel.selectPromotion(null) },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = OrangePrimary,
+                                                unselectedColor = WhiteTextMuted
+                                            )
+                                        )
+                                        Text(
+                                            text = "No promotion",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = WhiteText,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                    activePromotions.forEach { promo ->
+                                        // Filter out invalid ones based on min amount
+                                        val isEligible = promo.minOrderAmount == null || subtotal >= promo.minOrderAmount
+                                        
+                                        // Calculate uses remaining
+                                        val usesRemaining = if (promo.usageLimit != null) {
+                                            promo.usageLimit - (promo.usedCount ?: 0)
+                                        } else null
+                                        
+                                        // Format value display
+                                        val valueDisplay = if (promo.type == "percentage") {
+                                            "${promo.value.toInt()}% off"
+                                        } else {
+                                            "₹${promo.value.toInt()} off"
+                                        }
+                                        
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (selectedPromotion?.id == promo.id) OrangePrimary.copy(alpha = 0.1f) else Color.Transparent)
+                                                .clickable(enabled = isEligible) {
+                                                    if (selectedPromotion?.id == promo.id) {
+                                                        viewModel.selectPromotion(null) // Deselect
+                                                    } else {
+                                                        viewModel.selectPromotion(promo)
+                                                    }
+                                                }
+                                                .padding(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(
+                                                selected = selectedPromotion?.id == promo.id,
+                                                onClick = {
+                                                    if (selectedPromotion?.id == promo.id) {
+                                                        viewModel.selectPromotion(null)
+                                                    } else {
+                                                        viewModel.selectPromotion(promo)
+                                                    }
+                                                },
+                                                enabled = isEligible,
+                                                colors = RadioButtonDefaults.colors(
+                                                    selectedColor = OrangePrimary,
+                                                    unselectedColor = WhiteTextMuted
+                                                )
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = promo.code,
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    color = if (isEligible) WhiteText else WhiteTextMuted,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = promo.description ?: promo.name,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = WhiteTextMuted
+                                                )
+                                                // Uses remaining - matches web
+                                                if (usesRemaining != null) {
+                                                    Text(
+                                                        text = "$usesRemaining uses remaining",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = WhiteTextMuted
+                                                    )
+                                                }
+                                                if (!isEligible) {
+                                                    Text(
+                                                        text = "Min order: ₹${promo.minOrderAmount}",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = ErrorRed
+                                                    )
+                                                }
+                                            }
+                                            // Value badge - matches web "2% off"
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = GlassWhite
+                                            ) {
+                                                Text(
+                                                    text = valueDisplay,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = WhiteText,
+                                                    fontWeight = FontWeight.Medium,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -296,9 +450,9 @@ fun CartScreen(
                             
                             Spacer(modifier = Modifier.height(8.dp))
                             
-                            // Pay Later Option
-                            val isPayLaterAllowed = shopInfo?.allowPayLater == true && 
-                                (shopInfo?.payLaterWhitelist?.contains(userId) == true)
+                            // Pay Later Option - show if shop allows it (matching web)
+                            val isPayLaterAllowed = shopInfo?.allowPayLater == true
+                            val isUserWhitelisted = shopInfo?.payLaterWhitelist?.contains(userId) == true
                                 
                             if (isPayLaterAllowed) {
                                 PaymentMethodOption(
@@ -341,6 +495,18 @@ fun CartScreen(
                                 Text("Subtotal", color = WhiteTextMuted)
                                 Text("₹${String.format("%.2f", subtotal)}", color = WhiteText)
                             }
+
+                            // Discount
+                            if (discountAmount > 0) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Discount (${selectedPromotion?.code})", color = SuccessGreen)
+                                    Text("-₹${String.format("%.2f", discountAmount)}", color = SuccessGreen)
+                                }
+                            }
                             
                             Spacer(modifier = Modifier.height(8.dp))
                             HorizontalDivider(color = GlassWhite)
@@ -377,6 +543,8 @@ fun CartScreen(
                                 paymentMethod = paymentMethod,
                                 subtotal = subtotal.toString(),
                                 total = total.toString(),
+                                discount = discountAmount.toString(),
+                                promotionId = selectedPromotion?.id,
                                 onSuccess = {
                                     isPlacingOrder = false
                                     onOrderComplete()

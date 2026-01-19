@@ -65,6 +65,8 @@ fun CustomerHomeScreen(
     val language by viewModel.language.collectAsState()
     val userName by viewModel.userName.collectAsState()
     val unreadNotificationCount by viewModel.unreadNotificationCount.collectAsState()
+    val buyAgainData by viewModel.buyAgainRecommendations.collectAsState()
+    val isBuyAgainLoading by viewModel.isBuyAgainLoading.collectAsState()
     
     val t = Translations.get(language)
     
@@ -74,6 +76,7 @@ fun CustomerHomeScreen(
         viewModel.loadBookings()
         viewModel.loadCart()
         viewModel.loadNotifications()
+        viewModel.loadBuyAgainRecommendations()
     }
     
     Scaffold(
@@ -324,6 +327,96 @@ fun CustomerHomeScreen(
                             icon = categories[index].second,
                             onClick = onNavigateToProducts
                         )
+                    }
+                }
+            }
+            
+            // Buy Again Section - matches web's dashboard.tsx "Buy Again" section
+            val hasBuyAgainItems = buyAgainData?.let { 
+                it.products.isNotEmpty() || it.services.isNotEmpty() 
+            } ?: false
+            
+            if (isBuyAgainLoading || hasBuyAgainItems) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = if (language == "ta") "மீண்டும் வாங்கு" else "Buy Again",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (language == "ta") "உங்கள் விருப்பங்கள்" else "Personalized for you",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = WhiteTextMuted
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = TempleGold.copy(alpha = 0.15f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = TempleGold,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (language == "ta") "தனிப்பட்ட" else "Personalized",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TempleGold
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    if (isBuyAgainLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(80.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = OrangePrimary, modifier = Modifier.size(28.dp))
+                        }
+                    } else {
+                        // Combine products and services, show top 4
+                        val recommendations = mutableListOf<Any>()
+                        buyAgainData?.products?.forEach { recommendations.add(it) }
+                        buyAgainData?.services?.forEach { recommendations.add(it) }
+                        
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(recommendations.take(4).size) { index ->
+                                val item = recommendations[index]
+                                when (item) {
+                                    is com.doorstep.tn.core.network.BuyAgainProduct -> {
+                                        BuyAgainProductCard(
+                                            product = item,
+                                            language = language,
+                                            onAddToCart = { viewModel.addToCart(item.productId) }
+                                        )
+                                    }
+                                    is com.doorstep.tn.core.network.BuyAgainService -> {
+                                        BuyAgainServiceCard(
+                                            service = item,
+                                            language = language,
+                                            onBook = onNavigateToServices
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -859,6 +952,98 @@ private fun BookingPreviewCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Buy Again Product Card - matches web's dashboard buy-again product card design
+ */
+@Composable
+private fun BuyAgainProductCard(
+    product: com.doorstep.tn.core.network.BuyAgainProduct,
+    language: String,
+    onAddToCart: () -> Unit
+) {
+    Card(
+        modifier = Modifier.width(160.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+                    .background(OrangePrimary.copy(alpha = 0.1f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.ShoppingBag, null, tint = OrangePrimary, modifier = Modifier.size(32.dp))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Surface(shape = RoundedCornerShape(4.dp), color = GlassBorder) {
+                    Text(if (language == "ta") "பொருள்" else "Product", style = MaterialTheme.typography.labelSmall, color = WhiteTextMuted, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+                Text("×${product.timesOrdered}", style = MaterialTheme.typography.labelSmall, color = WhiteTextMuted)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(product.name ?: "Product", style = MaterialTheme.typography.bodyMedium, color = WhiteText, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(product.shopName ?: "Shop", style = MaterialTheme.typography.bodySmall, color = WhiteTextMuted, maxLines = 1)
+            product.price?.let { Text("₹$it", style = MaterialTheme.typography.bodySmall, color = OrangePrimary, fontWeight = FontWeight.Bold) }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onAddToCart, modifier = Modifier.fillMaxWidth().height(32.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary), contentPadding = PaddingValues(4.dp)) {
+                Icon(Icons.Default.ShoppingCart, null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(if (language == "ta") "சேர்" else "Add", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+/**
+ * Buy Again Service Card - matches web's dashboard buy-again service card design
+ */
+@Composable
+private fun BuyAgainServiceCard(
+    service: com.doorstep.tn.core.network.BuyAgainService,
+    language: String,
+    onBook: () -> Unit
+) {
+    Card(
+        modifier = Modifier.width(160.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+                    .background(PeacockBlue.copy(alpha = 0.1f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Build, null, tint = PeacockBlue, modifier = Modifier.size(32.dp))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Surface(shape = RoundedCornerShape(4.dp), color = GlassBorder) {
+                    Text(if (language == "ta") "சேவை" else "Service", style = MaterialTheme.typography.labelSmall, color = WhiteTextMuted, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+                Text("×${service.timesBooked}", style = MaterialTheme.typography.labelSmall, color = WhiteTextMuted)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(service.name ?: "Service", style = MaterialTheme.typography.bodyMedium, color = WhiteText, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(service.providerName ?: "Provider", style = MaterialTheme.typography.bodySmall, color = WhiteTextMuted, maxLines = 1)
+            service.price?.let { Text("₹$it", style = MaterialTheme.typography.bodySmall, color = PeacockBlue, fontWeight = FontWeight.Bold) }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onBook, modifier = Modifier.fillMaxWidth().height(32.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = PeacockBlue), contentPadding = PaddingValues(4.dp)) {
+                Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(if (language == "ta") "முன்பதிவு" else "Book", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
             }
         }
     }

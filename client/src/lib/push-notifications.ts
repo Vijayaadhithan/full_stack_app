@@ -233,7 +233,11 @@ export function getStoredFcmToken(): string | null {
 }
 
 export function isStoredFcmTokenSyncPending(): boolean {
-    return localStorage.getItem(FCM_TOKEN_SYNC_KEY) === "true";
+    const value = localStorage.getItem(FCM_TOKEN_SYNC_KEY);
+    if (value === null) {
+        return true;
+    }
+    return value === "true";
 }
 
 export async function syncStoredPushToken(): Promise<boolean> {

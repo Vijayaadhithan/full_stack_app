@@ -132,6 +132,13 @@ class CustomerViewModel @Inject constructor(
     private val _customerProductReviews = MutableStateFlow<List<com.doorstep.tn.core.network.CustomerProductReview>>(emptyList())
     val customerProductReviews: StateFlow<List<com.doorstep.tn.core.network.CustomerProductReview>> = _customerProductReviews.asStateFlow()
     
+    // Public Reviews (for Detail Screens)
+    private val _serviceReviews = MutableStateFlow<List<com.doorstep.tn.core.network.ServiceReview>>(emptyList())
+    val serviceReviews: StateFlow<List<com.doorstep.tn.core.network.ServiceReview>> = _serviceReviews.asStateFlow()
+    
+    private val _productReviews = MutableStateFlow<List<com.doorstep.tn.core.network.ProductReview>>(emptyList())
+    val productReviews: StateFlow<List<com.doorstep.tn.core.network.ProductReview>> = _productReviews.asStateFlow()
+    
     // Notifications
     private val _notifications = MutableStateFlow<List<com.doorstep.tn.core.network.AppNotification>>(emptyList())
     val notifications: StateFlow<List<com.doorstep.tn.core.network.AppNotification>> = _notifications.asStateFlow()
@@ -156,6 +163,24 @@ class CustomerViewModel @Inject constructor(
     // Quick Order State
     private val _quickOrderSuccess = MutableStateFlow<Int?>(null) // Order ID on success
     val quickOrderSuccess: StateFlow<Int?> = _quickOrderSuccess.asStateFlow()
+
+    // Promotions
+    private val _activePromotions = MutableStateFlow<List<com.doorstep.tn.core.network.Promotion>>(emptyList())
+    val activePromotions: StateFlow<List<com.doorstep.tn.core.network.Promotion>> = _activePromotions.asStateFlow()
+
+    private val _selectedPromotion = MutableStateFlow<com.doorstep.tn.core.network.Promotion?>(null)
+    val selectedPromotion: StateFlow<com.doorstep.tn.core.network.Promotion?> = _selectedPromotion.asStateFlow()
+
+    // Platform Fee - hardcoded to match web implementation if not fetched primarily
+    private val _platformFee = MutableStateFlow(2.0)
+    val platformFee: StateFlow<Double> = _platformFee.asStateFlow()
+    
+    // Buy-Again Recommendations - matches web dashboard's buy-again section
+    private val _buyAgainRecommendations = MutableStateFlow<com.doorstep.tn.core.network.BuyAgainResponse?>(null)
+    val buyAgainRecommendations: StateFlow<com.doorstep.tn.core.network.BuyAgainResponse?> = _buyAgainRecommendations.asStateFlow()
+    
+    private val _isBuyAgainLoading = MutableStateFlow(false)
+    val isBuyAgainLoading: StateFlow<Boolean> = _isBuyAgainLoading.asStateFlow()
     
     // Initialize language from preferences and setup search debouncing
     init {
@@ -439,6 +464,22 @@ class CustomerViewModel @Inject constructor(
             _isLoading.value = false
         }
     }
+
+    fun loadActivePromotions(shopId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.getActivePromotions(shopId)) {
+                is Result.Success -> _activePromotions.value = result.data
+                is Result.Error -> _error.value = result.message
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+
+    fun selectPromotion(promotion: com.doorstep.tn.core.network.Promotion?) {
+        _selectedPromotion.value = promotion
+    }
     
     fun removeFromCart(productId: Int) {
         viewModelScope.launch {
@@ -494,6 +535,8 @@ class CustomerViewModel @Inject constructor(
         paymentMethod: String,
         subtotal: String,
         total: String,
+        discount: String = "0",
+        promotionId: Int? = null,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -509,17 +552,56 @@ class CustomerViewModel @Inject constructor(
                 )
             }
             
+            // Create request manually to include discount and promotionId
+            val request = com.doorstep.tn.core.network.CreateOrderRequest(
+                items = orderItems,
+                subtotal = subtotal,
+                total = total,
+                discount = discount,
+                promotionId = promotionId,
+                deliveryMethod = deliveryMethod,
+                paymentMethod = paymentMethod
+            )
+
+            // Direct call to API since repo wrapper might not expose all fields yet or need updating
+            // Actually reusing repo's createOrder but we need to update it to accept new params OR 
+            // since we can't easily change repo method signature without breaking other calls, 
+            // let's update repository method too. 
+            // Wait, I can update the repository method in a separate step or just overload it?
+            // Checking repository code... it constructs CreateOrderRequest inside. 
+            // I need to update repo first or use a new method. 
+            // For now, I'll update the repo call in the next step to support these params, 
+            // assuming I'll update repo right after this.
+            
+            // Actually, I can just use the repository's createOrder if I update it. 
+            // Let's assume I updated repository.createOrder to take discount and promotionId.
+            // But wait, the previous tool call didn't update createOrder signature in Repository.
+            // I should update Repository signature first.
+            
+            // To be safe and sequential, I will revert to using repository.createOrder 
+            // but I need to update it to support discount/promo.
+            // Since I cannot update two files in one step easily if I missed it, 
+            // I will update this VM method to call a NEW repository method `createOrderWithPromotion` 
+            // OR I will simply construct the request here if I could access API directly (but I can't, it's private in repo).
+            
+            // Plan: Update `CustomerRepository`'s `createOrder` to accept optional `discount` and `promotionId` 
+            // AND then update this VM method.
+            // Since I am already in VM file edit, I will write the code assuming Repo update comes next.
+             
             when (val result = repository.createOrder(
                 items = orderItems,
                 subtotal = subtotal,
                 total = total,
                 deliveryMethod = deliveryMethod,
-                paymentMethod = paymentMethod
+                paymentMethod = paymentMethod,
+                discount = discount,
+                promotionId = promotionId
             )) {
                 is Result.Success -> {
                     // Clear cart immediately for instant UI update
                     // Server clears cart on order creation, so no need to reload
                     _cartItems.value = emptyList()
+                    _selectedPromotion.value = null // Reset promotion
                     loadOrders()
                     onSuccess()
                 }
@@ -650,7 +732,8 @@ class CustomerViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = repository.agreeFinalBill(orderId)) {
                 is Result.Success -> {
-                    _selectedOrder.value = result.data
+                    // Refetch order to ensure we have full details (Shop, etc.) for payment
+                    loadOrderDetails(orderId)
                     onSuccess()
                 }
                 is Result.Error -> onError(result.message)
@@ -663,7 +746,8 @@ class CustomerViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = repository.submitPaymentReference(orderId, reference)) {
                 is Result.Success -> {
-                    _selectedOrder.value = result.data
+                    // Refetch order to ensure we have full details and correct status
+                    loadOrderDetails(orderId)
                     onSuccess()
                 }
                 is Result.Error -> onError(result.message)
@@ -676,7 +760,8 @@ class CustomerViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = repository.updatePaymentMethod(orderId, paymentMethod)) {
                 is Result.Success -> {
-                    _selectedOrder.value = result.data
+                    // Refetch order to ensure we have full details loaded for payment UI
+                    loadOrderDetails(orderId)
                     onSuccess()
                 }
                 is Result.Error -> onError(result.message)
@@ -689,7 +774,8 @@ class CustomerViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = repository.cancelOrder(orderId)) {
                 is Result.Success -> {
-                    _selectedOrder.value = result.data
+                    // Refetch to ensure consistency
+                    loadOrderDetails(orderId)
                     loadOrderTimeline(orderId)
                     onSuccess()
                 }
@@ -1289,6 +1375,32 @@ class CustomerViewModel @Inject constructor(
     
     // ==================== Product Review Actions ====================
     
+    // Load service reviews - matches web GET /api/reviews/service/:id
+    fun loadServiceReviews(serviceId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.getServiceReviews(serviceId)) {
+                is Result.Success -> _serviceReviews.value = result.data
+                is Result.Error -> {} // Fail silently for UI, or set empty
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+    
+    // Load product reviews - matches web GET /api/reviews/product/:id
+    fun loadProductReviews(productId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.getProductReviews(productId)) {
+                is Result.Success -> _productReviews.value = result.data
+                is Result.Error -> {} // Fail silently
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+
     // Submit product review - matches web POST /api/product-reviews
     fun submitProductReview(
         productId: Int,
@@ -1312,6 +1424,45 @@ class CustomerViewModel @Inject constructor(
                 is Result.Loading -> {}
             }
             
+            _isLoading.value = false
+        }
+    }
+    
+    // ==================== Buy-Again Recommendations ====================
+    
+    // Load buy-again recommendations - matches web GET /api/recommendations/buy-again
+    fun loadBuyAgainRecommendations() {
+        viewModelScope.launch {
+            _isBuyAgainLoading.value = true
+            when (val result = repository.getBuyAgainRecommendations()) {
+                is Result.Success -> _buyAgainRecommendations.value = result.data
+                is Result.Error -> _buyAgainRecommendations.value = null // Fail silently, just show empty
+                is Result.Loading -> {}
+            }
+            _isBuyAgainLoading.value = false
+        }
+    }
+    
+    // ==================== Account Management ====================
+    
+    // Delete account - matches web POST /api/delete-account
+    fun deleteAccount(
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.deleteAccount()) {
+                is Result.Success -> {
+                    _toastEvent.emit("Account deleted successfully")
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                    onError(result.message ?: "Failed to delete account")
+                }
+                is Result.Loading -> {}
+            }
             _isLoading.value = false
         }
     }

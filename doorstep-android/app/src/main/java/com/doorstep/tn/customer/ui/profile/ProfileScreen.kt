@@ -601,6 +601,116 @@ fun ProfileScreen(
                 Text("Logout")
             }
             
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Danger Zone - Delete Account (matches web's profile.tsx)
+            var showDeleteDialog by remember { mutableStateOf(false) }
+            var isDeleting by remember { mutableStateOf(false) }
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SlateCard),
+                border = BorderStroke(1.dp, ErrorRed.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = ErrorRed
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Danger Zone",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = ErrorRed,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Button(
+                        onClick = { showDeleteDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+                    ) {
+                        Icon(Icons.Default.Delete, null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Delete Account", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Permanently delete your account and all associated data. This action is irreversible.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WhiteTextMuted
+                    )
+                }
+            }
+            
+            // Delete Confirmation Dialog
+            if (showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = { if (!isDeleting) showDeleteDialog = false },
+                    containerColor = SlateCard,
+                    title = {
+                        Text(
+                            "Are you absolutely sure?",
+                            color = WhiteText,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Text(
+                            "This action cannot be undone. This will permanently delete your account and remove all your data from our servers.",
+                            color = WhiteTextMuted
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                isDeleting = true
+                                customerViewModel.deleteAccount(
+                                    onSuccess = {
+                                        isDeleting = false
+                                        showDeleteDialog = false
+                                        // Logout and navigate to auth screen
+                                        onLogout()
+                                    },
+                                    onError = { errorMessage ->
+                                        isDeleting = false
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Error: $errorMessage")
+                                        }
+                                    }
+                                )
+                            },
+                            enabled = !isDeleting,
+                            colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+                        ) {
+                            if (isDeleting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = WhiteText
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text("Yes, delete my account")
+                        }
+                    },
+                    dismissButton = {
+                        OutlinedButton(
+                            onClick = { showDeleteDialog = false },
+                            enabled = !isDeleting
+                        ) {
+                            Text("Cancel", color = WhiteText)
+                        }
+                    }
+                )
+            }
+            
             Spacer(modifier = Modifier.height(32.dp))
         }
     }

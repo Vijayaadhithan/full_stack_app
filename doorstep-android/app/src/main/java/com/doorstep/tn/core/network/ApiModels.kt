@@ -166,6 +166,19 @@ data class CustomerProductReview(
     @Json(name = "createdAt") val createdAt: String? = null
 )
 
+// Product review - GET /api/reviews/product/:id
+@JsonClass(generateAdapter = true)
+data class ProductReview(
+    @Json(name = "id") val id: Int,
+    @Json(name = "productId") val productId: Int? = null,
+    @Json(name = "orderId") val orderId: Int? = null,
+    @Json(name = "customerId") val customerId: Int? = null,
+    @Json(name = "rating") val rating: Int,
+    @Json(name = "review") val review: String? = null,
+    @Json(name = "shopReply") val shopReply: String? = null,
+    @Json(name = "createdAt") val createdAt: String? = null
+)
+
 // Notification - GET /api/notifications
 @JsonClass(generateAdapter = true)
 data class AppNotification(
@@ -296,4 +309,59 @@ data class FcmTokenRequest(
 @JsonClass(generateAdapter = true)
 data class FcmTokenUnregisterRequest(
     @Json(name = "token") val token: String
+)
+
+// ==================== PROMOTIONS ====================
+
+@JsonClass(generateAdapter = true)
+data class Promotion(
+    @Json(name = "id") val id: Int,
+    @Json(name = "shopId") val shopId: Int,
+    @Json(name = "code") val code: String,
+    @Json(name = "name") val name: String,
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "type") val type: String, // "percentage" or "fixed_amount"
+    @Json(name = "value") val value: Double,
+    @Json(name = "minPurchase") val minOrderAmount: Double? = null, // Server returns minPurchase, we alias to minOrderAmount
+    @Json(name = "maxDiscount") val maxDiscount: Double? = null,
+    @Json(name = "usageLimit") val usageLimit: Int? = null,
+    @Json(name = "usedCount") val usedCount: Int? = null,
+    @Json(name = "startDate") val startDate: String? = null,
+    @Json(name = "endDate") val endDate: String? = null, // Server may return null
+    @Json(name = "isActive") val isActive: Boolean = true
+)
+
+// ==================== BUY-AGAIN RECOMMENDATIONS ====================
+
+// Buy Again Service - matches web GET /api/recommendations/buy-again
+@JsonClass(generateAdapter = true)
+data class BuyAgainService(
+    @Json(name = "serviceId") val serviceId: Int,
+    @Json(name = "providerId") val providerId: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "price") val price: String? = null,
+    @Json(name = "image") val image: String? = null,
+    @Json(name = "timesBooked") val timesBooked: Int = 0,
+    @Json(name = "lastBookedAt") val lastBookedAt: String? = null,
+    @Json(name = "providerName") val providerName: String? = null
+)
+
+// Buy Again Product - matches web GET /api/recommendations/buy-again
+@JsonClass(generateAdapter = true)
+data class BuyAgainProduct(
+    @Json(name = "productId") val productId: Int,
+    @Json(name = "shopId") val shopId: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "price") val price: String? = null,
+    @Json(name = "image") val image: String? = null,
+    @Json(name = "timesOrdered") val timesOrdered: Int = 0,
+    @Json(name = "lastOrderedAt") val lastOrderedAt: String? = null,
+    @Json(name = "shopName") val shopName: String? = null
+)
+
+// Buy Again Response - matches web GET /api/recommendations/buy-again
+@JsonClass(generateAdapter = true)
+data class BuyAgainResponse(
+    @Json(name = "services") val services: List<BuyAgainService> = emptyList(),
+    @Json(name = "products") val products: List<BuyAgainProduct> = emptyList()
 )

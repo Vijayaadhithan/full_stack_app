@@ -67,6 +67,9 @@ export function PushNotificationManager() {
 
                 debugLog("Session verified, registering push notifications...");
                 try {
+                    if (localStorage.getItem("fcm_token")) {
+                        localStorage.setItem("fcm_token_needs_sync", "true");
+                    }
                     const success = await registerPushNotifications();
                     if (success && !cancelled) {
                         debugLog("Push notifications registered for user:", user.id);

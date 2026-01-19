@@ -404,15 +404,17 @@ class CustomerRepository @Inject constructor(
         subtotal: String,
         total: String,
         deliveryMethod: String,
-        paymentMethod: String
+        paymentMethod: String,
+        discount: String = "0",
+        promotionId: Int? = null
     ): Result<Order> {
         return try {
             val request = com.doorstep.tn.core.network.CreateOrderRequest(
                 items = items,
                 subtotal = subtotal,
                 total = total,
-                discount = "0",
-                promotionId = null,
+                discount = discount,
+                promotionId = promotionId,
                 deliveryMethod = deliveryMethod,
                 paymentMethod = paymentMethod
             )
@@ -677,6 +679,22 @@ class CustomerRepository @Inject constructor(
             Result.Error(e.message ?: "Failed to load service reviews")
         }
     }
+
+    // Get product reviews - matches web GET /api/reviews/product/:id
+    suspend fun getProductReviews(
+        productId: Int
+    ): Result<List<com.doorstep.tn.core.network.ProductReview>> {
+        return try {
+            val response = api.getProductReviews(productId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load product reviews")
+        }
+    }
     
     // Get customer's service reviews - matches web GET /api/reviews/customer
     suspend fun getCustomerReviews(): Result<List<com.doorstep.tn.core.network.CustomerReview>> {
@@ -779,6 +797,22 @@ class CustomerRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to mark notification as read")
+        }
+    }
+
+    // ==================== PROMOTIONS ====================
+
+    // Get active promotions - matches web GET /api/promotions/active/:shopId
+    suspend fun getActivePromotions(shopId: Int): Result<List<com.doorstep.tn.core.network.Promotion>> {
+        return try {
+            val response = api.getActivePromotions(shopId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load active promotions")
         }
     }
     
@@ -922,6 +956,38 @@ class CustomerRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to submit review")
+        }
+    }
+    
+    // ==================== BUY-AGAIN RECOMMENDATIONS ====================
+    
+    // Get buy-again recommendations - matches web GET /api/recommendations/buy-again
+    suspend fun getBuyAgainRecommendations(): Result<com.doorstep.tn.core.network.BuyAgainResponse> {
+        return try {
+            val response = api.getBuyAgainRecommendations()
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load recommendations")
+        }
+    }
+    
+    // ==================== ACCOUNT MANAGEMENT ====================
+    
+    // Delete account - matches web POST /api/delete-account
+    suspend fun deleteAccount(): Result<Unit> {
+        return try {
+            val response = api.deleteAccount()
+            if (response.isSuccessful) {
+                Result.Success(Unit)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to delete account")
         }
     }
 }

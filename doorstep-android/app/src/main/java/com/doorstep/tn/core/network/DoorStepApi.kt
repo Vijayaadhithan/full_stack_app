@@ -205,6 +205,12 @@ interface DoorStepApi {
     // Get customer's product reviews - matches web GET /api/product-reviews/customer
     @GET("api/product-reviews/customer")
     suspend fun getCustomerProductReviews(): Response<List<CustomerProductReview>>
+
+    // Get product reviews - matches web GET /api/reviews/product/:id
+    @GET("api/reviews/product/{id}")
+    suspend fun getProductReviews(
+        @Path("id") productId: Int
+    ): Response<List<ProductReview>>
     
     // Update service review - matches web PATCH /api/reviews/{id}
     @PATCH("api/reviews/{id}")
@@ -324,6 +330,10 @@ interface DoorStepApi {
     // Get order timeline - matches web GET /api/orders/:id/timeline
     @GET("api/orders/{id}/timeline")
     suspend fun getOrderTimeline(@Path("id") orderId: Int): Response<List<OrderTimelineEntry>>
+
+    // Promotions
+    @GET("api/promotions/active/{shopId}")
+    suspend fun getActivePromotions(@Path("shopId") shopId: Int): Response<List<Promotion>>
     
     // ==================== PRODUCT REVIEW ENDPOINT ====================
     
@@ -340,4 +350,16 @@ interface DoorStepApi {
     // Unregister FCM token (on logout) - DELETE /api/fcm/unregister
     @HTTP(method = "DELETE", path = "api/fcm/unregister", hasBody = true)
     suspend fun unregisterFcmToken(@Body request: FcmTokenUnregisterRequest): Response<Unit>
+    
+    // ==================== BUY-AGAIN RECOMMENDATIONS ====================
+    
+    // Get buy-again recommendations - matches web GET /api/recommendations/buy-again
+    @GET("api/recommendations/buy-again")
+    suspend fun getBuyAgainRecommendations(): Response<BuyAgainResponse>
+    
+    // ==================== ACCOUNT MANAGEMENT ====================
+    
+    // Delete account - matches web POST /api/delete-account
+    @POST("api/delete-account")
+    suspend fun deleteAccount(): Response<Unit>
 }

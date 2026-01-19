@@ -40,6 +40,7 @@ fun ServiceDetailScreen(
     
     LaunchedEffect(serviceId) {
         viewModel.loadServiceDetails(serviceId)
+        viewModel.loadServiceReviews(serviceId)
     }
     
     Scaffold(
@@ -380,6 +381,96 @@ fun ServiceDetailScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = WhiteTextMuted
                         )
+                    }
+                }
+                
+                // Reviews List
+                val reviews by viewModel.serviceReviews.collectAsState()
+                
+                if (reviews.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        reviews.forEach { review ->
+                            // Review Item
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(SlateCard, RoundedCornerShape(12.dp))
+                                    .padding(16.dp)
+                            ) {
+                                // Header: Rating + Date
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        repeat(5) { index ->
+                                            Icon(
+                                                imageVector = Icons.Default.Star,
+                                                contentDescription = null,
+                                                tint = if (index < review.rating) AmberSecondary else WhiteTextMuted.copy(alpha = 0.2f),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    review.createdAt?.let {
+                                        Text(
+                                            text = try { it.take(10) } catch (e: Exception) { "" },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = WhiteTextMuted
+                                        )
+                                    }
+                                }
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                // Review Text
+                                if (!review.review.isNullOrEmpty()) {
+                                    Text(
+                                        text = review.review,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteText
+                                    )
+                                } else {
+                                     Text(
+                                        text = "No written feedback provided.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = WhiteTextMuted,
+                                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                    )
+                                }
+                                
+                                // Provider Reply
+                                if (!review.providerReply.isNullOrEmpty()) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(SlateDarker.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                            .padding(12.dp)
+                                    ) {
+                                        Text(
+                                            text = "Response from Provider",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = ProviderBlue,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = review.providerReply,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteTextMuted
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                     }
                 }
                 
