@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -432,7 +433,7 @@ fun BookingDetailScreen(
                                         OutlinedButton(
                                             onClick = { showUpdateReferenceDialog = true },
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = ProviderBlue),
-                                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(ProviderBlue)),
+                                            border = BorderStroke(1.dp, ProviderBlue),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Text("Update Payment Reference")
@@ -441,7 +442,7 @@ fun BookingDetailScreen(
                                         OutlinedButton(
                                             onClick = { showDisputeDialog = true },
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
-                                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(ErrorRed)),
+                                            border = BorderStroke(1.dp, ErrorRed),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Text("Report Issue")
@@ -452,7 +453,7 @@ fun BookingDetailScreen(
                                         OutlinedButton(
                                             onClick = { showRescheduleDialog = true },
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = ProviderBlue),
-                                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(ProviderBlue)),
+                                            border = BorderStroke(1.dp, ProviderBlue),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Icon(Icons.Default.Schedule, null, Modifier.size(16.dp))
@@ -465,7 +466,7 @@ fun BookingDetailScreen(
                                         OutlinedButton(
                                             onClick = { showCancelDialog = true },
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
-                                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(ErrorRed)),
+                                            border = BorderStroke(1.dp, ErrorRed),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Icon(Icons.Default.Cancel, null, Modifier.size(16.dp))

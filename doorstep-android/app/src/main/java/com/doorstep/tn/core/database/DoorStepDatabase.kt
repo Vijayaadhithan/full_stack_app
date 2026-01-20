@@ -39,7 +39,7 @@ abstract class DoorStepDatabase : RoomDatabase() {
                     DoorStepDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .fallbackToDestructiveMigration() // For cache DB, data loss is acceptable
+                    .fallbackToDestructiveMigration(dropAllTables = true) // For cache DB, data loss is acceptable
                     .build()
                 INSTANCE = instance
                 instance
