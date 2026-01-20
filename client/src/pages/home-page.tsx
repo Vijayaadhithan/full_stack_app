@@ -44,15 +44,15 @@ const useReducedMotion = () => {
       const handler = (e: MediaQueryListEvent) => setPrefersReduced(e.matches);
       if ("addEventListener" in mediaQuery) {
         mediaQuery.addEventListener("change", handler);
-      } else if ("addListener" in mediaQuery) {
-        mediaQuery.addListener(handler);
+      } else if ("addListener" in (mediaQuery as any)) {
+        (mediaQuery as any).addListener(handler);
       }
 
       return () => {
         if ("removeEventListener" in mediaQuery) {
           mediaQuery.removeEventListener("change", handler);
-        } else if ("removeListener" in mediaQuery) {
-          mediaQuery.removeListener(handler);
+        } else if ("removeListener" in (mediaQuery as any)) {
+          (mediaQuery as any).removeListener(handler);
         }
       };
     }
@@ -124,7 +124,7 @@ function StatCounter({
     if ("requestIdleCallback" in window) {
       idleHandle = (window as Window & typeof globalThis).requestIdleCallback(startAnimation);
     } else {
-      startTimeoutHandle = window.setTimeout(startAnimation, 100);
+      startTimeoutHandle = (window as Window).setTimeout(startAnimation, 100);
     }
 
     return () => {
@@ -181,7 +181,7 @@ export default function HomePage() {
     if ("requestIdleCallback" in window) {
       idleHandle = (window as Window & typeof globalThis).requestIdleCallback(show, { timeout: 1500 });
     } else {
-      timeoutHandle = window.setTimeout(show, 1200);
+      timeoutHandle = (window as Window).setTimeout(show, 1200);
     }
 
     return () => {
