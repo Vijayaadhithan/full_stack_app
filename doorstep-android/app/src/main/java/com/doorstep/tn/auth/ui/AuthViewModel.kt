@@ -435,6 +435,40 @@ class AuthViewModel @Inject constructor(
     }
     
     /**
+     * Switch user role - updates backend and local storage
+     */
+    fun switchRole(newRole: String) {
+        viewModelScope.launch {
+            val userId = _currentUser.value?.id
+            
+            try {
+                // Update role in backend API (uses PATCH /api/users/{id})
+                if (userId != null) {
+                    authRepository.updateUserRole(userId, newRole)
+                }
+                
+                // Update local storage
+                context.dataStore.edit { prefs ->
+                    prefs[PreferenceKeys.USER_ROLE] = newRole
+                }
+                
+                // Update state
+                _userRole.value = newRole
+                
+                // Update user object
+                _currentUser.value = _currentUser.value?.copy(role = newRole)
+            } catch (e: Exception) {
+                // If API fails, still update locally for immediate navigation
+                context.dataStore.edit { prefs ->
+                    prefs[PreferenceKeys.USER_ROLE] = newRole
+                }
+                _userRole.value = newRole
+                _currentUser.value = _currentUser.value?.copy(role = newRole)
+            }
+        }
+    }
+    
+    /**
      * Reset PIN after OTP verification
      */
     fun resetPin(onSuccess: () -> Unit) {

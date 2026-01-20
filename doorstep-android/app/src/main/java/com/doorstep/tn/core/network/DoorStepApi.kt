@@ -127,6 +127,13 @@ interface DoorStepApi {
         @Path("id") userId: Int,
         @Body data: UpdateProfileRequest
     ): Response<UserResponse>
+    
+    // Generic profile update for role switching and partial updates
+    @PATCH("api/users/{id}")
+    suspend fun updateUserProfile(
+        @Path("id") userId: Int,
+        @Body data: Map<String, String>
+    ): Response<Unit>
 
     // Get user by ID - matches web GET /api/users/{id}
     @GET("api/users/{id}")
@@ -292,14 +299,56 @@ interface DoorStepApi {
     
     // ==================== PROVIDER ENDPOINTS ====================
     
+    // Provider Bookings
     @GET("api/bookings/provider/pending")
-    suspend fun getProviderPendingBookings(): Response<List<Booking>>
+    suspend fun getProviderPendingBookings(): Response<List<com.doorstep.tn.provider.data.model.ProviderBooking>>
     
+    @GET("api/bookings/provider")
+    suspend fun getProviderBookings(
+        @Query("status") status: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 20
+    ): Response<com.doorstep.tn.core.network.PaginatedBookingsResponse>
+    
+    @PATCH("api/bookings/{id}")
+    suspend fun updateProviderBookingStatus(
+        @Path("id") bookingId: Int,
+        @Body request: com.doorstep.tn.provider.data.model.UpdateBookingStatusRequest
+    ): Response<com.doorstep.tn.provider.data.model.ProviderBooking>
+    
+    // Provider Services
+    @GET("api/services/provider/{id}")
+    suspend fun getProviderServices(
+        @Path("id") providerId: Int
+    ): Response<List<com.doorstep.tn.provider.data.model.ProviderService>>
+    
+    @POST("api/services")
+    suspend fun createService(
+        @Body request: com.doorstep.tn.provider.data.model.CreateServiceRequest
+    ): Response<com.doorstep.tn.provider.data.model.ProviderService>
+    
+    @PATCH("api/services/{id}")
+    suspend fun updateService(
+        @Path("id") serviceId: Int,
+        @Body request: com.doorstep.tn.provider.data.model.UpdateServiceRequest
+    ): Response<com.doorstep.tn.provider.data.model.ProviderService>
+    
+    @DELETE("api/services/{id}")
+    suspend fun deleteService(@Path("id") serviceId: Int): Response<Unit>
+    
+    // Provider Availability
+    @PATCH("api/provider/availability")
+    suspend fun updateProviderAvailability(
+        @Body request: com.doorstep.tn.provider.data.model.ProviderAvailabilityRequest
+    ): Response<UserResponse>
+    
+    // Legacy provider endpoints (for backward compatibility)
     @PATCH("api/bookings/{id}/status")
     suspend fun updateBookingStatus(
         @Path("id") bookingId: Int,
         @Body statusUpdate: Map<String, String>
     ): Response<Booking>
+    
     
     // ==================== SEARCH ENDPOINTS ====================
     

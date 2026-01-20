@@ -130,7 +130,7 @@ fun ProfileSetupScreen(
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
-                    // Role Selection
+                    // Role Selection - Dropdown Style (matching web implementation)
                     Text(
                         text = t.chooseRole,
                         style = MaterialTheme.typography.bodyMedium,
@@ -140,7 +140,26 @@ fun ProfileSetupScreen(
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    // Role buttons
+                    // Dropdown selector
+                    RoleDropdownSelector(
+                        selectedRole = selectedRole,
+                        language = language,
+                        onRoleSelected = { viewModel.updateSelectedRole(it) }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Visual role cards below dropdown for additional context
+                    Text(
+                        text = if (language == "en") "Role Details:" else "பங்கு விவரங்கள்:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = WhiteTextSubtle,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Role buttons (clickable cards with descriptions)
                     RoleButton(
                         icon = Icons.Default.PersonOutline,
                         title = t.customer,
@@ -202,6 +221,135 @@ fun ProfileSetupScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Dropdown selector for role selection - matches web implementation
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RoleDropdownSelector(
+    selectedRole: String,
+    language: String,
+    onRoleSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    val roles = listOf(
+        Triple("customer", 
+            if (language == "en") "Customer" else "வாடிக்கையாளர்",
+            CustomerOrange
+        ),
+        Triple("shop",
+            if (language == "en") "Shop Owner" else "கடை உரிமையாளர்",
+            ShopGreen
+        ),
+        Triple("provider",
+            if (language == "en") "Service Provider" else "சேவை வழங்குநர்",
+            ProviderBlue
+        )
+    )
+    
+    val selectedRoleData = roles.find { it.first == selectedRole } ?: roles[0]
+    
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it }
+    ) {
+        OutlinedTextField(
+            value = selectedRoleData.second,
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(),
+            leadingIcon = {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(selectedRoleData.third),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = when (selectedRole) {
+                            "customer" -> Icons.Default.PersonOutline
+                            "shop" -> Icons.Default.Store
+                            else -> Icons.Default.Build
+                        },
+                        contentDescription = null,
+                        tint = WhiteText,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = selectedRoleData.third,
+                unfocusedBorderColor = GlassBorder,
+                focusedContainerColor = GlassWhite,
+                unfocusedContainerColor = GlassWhite,
+                focusedTextColor = WhiteText,
+                unfocusedTextColor = WhiteText
+            )
+        )
+        
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            roles.forEach { (roleKey, roleLabel, roleColor) ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(roleColor),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = when (roleKey) {
+                                        "customer" -> Icons.Default.PersonOutline
+                                        "shop" -> Icons.Default.Store
+                                        else -> Icons.Default.Build
+                                    },
+                                    contentDescription = null,
+                                    tint = WhiteText,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = roleLabel,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (selectedRole == roleKey) FontWeight.Bold else FontWeight.Normal
+                            )
+                            if (selectedRole == roleKey) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = roleColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        onRoleSelected(roleKey)
+                        expanded = false
+                    }
+                )
             }
         }
     }

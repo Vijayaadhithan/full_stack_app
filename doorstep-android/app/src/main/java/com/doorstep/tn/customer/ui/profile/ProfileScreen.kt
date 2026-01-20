@@ -48,6 +48,7 @@ fun ProfileScreen(
     customerViewModel: CustomerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToReviews: () -> Unit,
+    onSwitchRole: ((String) -> Unit)? = null,  // Optional callback for role switching
     onLogout: () -> Unit
 ) {
     val user by authViewModel.user.collectAsState()
@@ -586,6 +587,72 @@ fun ProfileScreen(
                 Text("My Reviews")
             }
             
+            // Role Switching Section (if callback is provided)
+            if (onSwitchRole != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.SwapHoriz, null, tint = ProviderBlue)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Switch Role",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Change your app role to access different features",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = WhiteTextMuted
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val currentRole = user?.role ?: "customer"
+                        
+                        // Role Options
+                        RoleSwitchOption(
+                            icon = Icons.Default.PersonOutline,
+                            title = "Customer",
+                            description = "Book services & shop products",
+                            color = OrangePrimary,
+                            isSelected = currentRole == "customer",
+                            onClick = { onSwitchRole("customer") }
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        RoleSwitchOption(
+                            icon = Icons.Default.Store,
+                            title = "Shop Owner",
+                            description = "Sell your products",
+                            color = SuccessGreen,
+                            isSelected = currentRole == "shop",
+                            onClick = { onSwitchRole("shop") }
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        RoleSwitchOption(
+                            icon = Icons.Default.Build,
+                            title = "Service Provider",
+                            description = "Offer your services",
+                            color = ProviderBlue,
+                            isSelected = currentRole == "provider",
+                            onClick = { onSwitchRole("provider") }
+                        )
+                    }
+                }
+            }
+            
             Spacer(modifier = Modifier.height(16.dp))
             
             // Logout Button
@@ -921,5 +988,83 @@ private fun captureLocation(
         }
     } catch (e: Exception) {
         onError(e.message ?: "Location capture failed")
+    }
+}
+
+/**
+ * Role switch option card for role switching in profile
+ */
+@Composable
+private fun RoleSwitchOption(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    color: androidx.compose.ui.graphics.Color,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !isSelected, onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) color.copy(alpha = 0.15f) else SlateBackground
+        ),
+        border = if (isSelected) BorderStroke(2.dp, color) else BorderStroke(1.dp, GlassWhite)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isSelected) color else color.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = WhiteText,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (isSelected) color else WhiteText,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted
+                )
+            }
+            
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Selected",
+                    tint = color,
+                    modifier = Modifier.size(24.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Switch",
+                    tint = WhiteTextMuted,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
     }
 }

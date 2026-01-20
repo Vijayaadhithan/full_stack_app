@@ -40,6 +40,8 @@ import com.doorstep.tn.customer.ui.search.UniversalSearchScreen
 import com.doorstep.tn.customer.ui.quickorder.QuickOrderScreen
 import com.doorstep.tn.shop.ui.ShopDashboardScreen
 import com.doorstep.tn.provider.ui.ProviderDashboardScreen
+import com.doorstep.tn.provider.ui.ProviderServicesScreen
+import com.doorstep.tn.provider.ui.ProviderBookingsScreen
 
 /**
  * Navigation routes for the app
@@ -335,6 +337,18 @@ fun DoorStepNavHost(
             ProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
+                onSwitchRole = { newRole ->
+                    // Update role in AuthViewModel and navigate to new dashboard
+                    authViewModel.switchRole(newRole)
+                    val destination = when (newRole) {
+                        "shop" -> Routes.SHOP_DASHBOARD
+                        "provider" -> Routes.PROVIDER_DASHBOARD
+                        else -> Routes.CUSTOMER_HOME
+                    }
+                    navController.navigate(destination) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
                 onLogout = {
                     authViewModel.logout()
                     navController.navigate(Routes.PHONE_ENTRY) {
@@ -505,6 +519,31 @@ fun DoorStepNavHost(
             )
         }
         
+        // Shop Profile
+        composable(Routes.SHOP_PROFILE) {
+            ProfileScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
+                onSwitchRole = { newRole ->
+                    authViewModel.switchRole(newRole)
+                    val destination = when (newRole) {
+                        "provider" -> Routes.PROVIDER_DASHBOARD
+                        "customer" -> Routes.CUSTOMER_HOME
+                        else -> Routes.SHOP_DASHBOARD
+                    }
+                    navController.navigate(destination) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onLogout = {
+                    authViewModel.logout()
+                    navController.navigate(Routes.PHONE_ENTRY) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+        
         // ==================== PROVIDER ROUTES ====================
         composable(Routes.PROVIDER_DASHBOARD) {
             ProviderDashboardScreen(
@@ -512,6 +551,71 @@ fun DoorStepNavHost(
                 onNavigateToBookings = { navController.navigate(Routes.PROVIDER_BOOKINGS) },
                 onNavigateToEarnings = { navController.navigate(Routes.PROVIDER_EARNINGS) },
                 onNavigateToProfile = { navController.navigate(Routes.PROVIDER_PROFILE) },
+                onLogout = {
+                    authViewModel.logout()
+                    navController.navigate(Routes.PHONE_ENTRY) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+        
+        // Provider Services Screen
+        composable(Routes.PROVIDER_SERVICES) {
+            ProviderServicesScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        // Provider Bookings Screen
+        composable(Routes.PROVIDER_BOOKINGS) {
+            ProviderBookingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        // Provider Earnings (placeholder - uses profile for now)
+        composable(Routes.PROVIDER_EARNINGS) {
+            // TODO: Implement ProviderEarningsScreen
+            ProfileScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
+                onSwitchRole = { newRole ->
+                    authViewModel.switchRole(newRole)
+                    val destination = when (newRole) {
+                        "shop" -> Routes.SHOP_DASHBOARD
+                        "customer" -> Routes.CUSTOMER_HOME
+                        else -> Routes.PROVIDER_DASHBOARD
+                    }
+                    navController.navigate(destination) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onLogout = {
+                    authViewModel.logout()
+                    navController.navigate(Routes.PHONE_ENTRY) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+        
+        // Provider Profile
+        composable(Routes.PROVIDER_PROFILE) {
+            ProfileScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
+                onSwitchRole = { newRole ->
+                    authViewModel.switchRole(newRole)
+                    val destination = when (newRole) {
+                        "shop" -> Routes.SHOP_DASHBOARD
+                        "customer" -> Routes.CUSTOMER_HOME
+                        else -> Routes.PROVIDER_DASHBOARD
+                    }
+                    navController.navigate(destination) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
                 onLogout = {
                     authViewModel.logout()
                     navController.navigate(Routes.PHONE_ENTRY) {

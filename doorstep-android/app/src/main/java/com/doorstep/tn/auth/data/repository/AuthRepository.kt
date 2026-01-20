@@ -125,6 +125,23 @@ class AuthRepository @Inject constructor(
     }
     
     /**
+     * Update user role - for role switching functionality
+     * Uses existing PATCH /api/users/{id} endpoint
+     */
+    suspend fun updateUserRole(userId: Int, newRole: String): Result<Unit> {
+        return try {
+            val response = api.updateUserProfile(userId, mapOf("role" to newRole))
+            if (response.isSuccessful) {
+                Result.Success(Unit)
+            } else {
+                Result.Error("Failed to update role", response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to update role")
+        }
+    }
+    
+    /**
      * Reset PIN using Firebase ID token
      */
     suspend fun resetPin(firebaseIdToken: String, newPin: String): Result<Unit> {

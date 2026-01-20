@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,24 +18,58 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.provider.data.model.ProviderBooking
 
 /**
- * Service Provider Dashboard Screen
+ * Service Provider Dashboard Screen with real API integration
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProviderDashboardScreen(
+    viewModel: ProviderViewModel = hiltViewModel(),
     onNavigateToServices: () -> Unit,
     onNavigateToBookings: () -> Unit,
     onNavigateToEarnings: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onLogout: () -> Unit
 ) {
-    var isAvailable by remember { mutableStateOf(true) }
+    val isAvailable by viewModel.isAvailable.collectAsState()
+    val pendingBookings by viewModel.pendingBookings.collectAsState()
+    val isLoadingPendingBookings by viewModel.isLoadingPendingBookings.collectAsState()
+    val services by viewModel.services.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val successMessage by viewModel.successMessage.collectAsState()
+    val stats by viewModel.stats.collectAsState()
+    
+    // Show snackbar for messages
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    LaunchedEffect(successMessage) {
+        successMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSuccessMessage()
+        }
+    }
+    
+    LaunchedEffect(error) {
+        error?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
+    
+    // Accept/Reject dialog state
+    var showActionDialog by remember { mutableStateOf(false) }
+    var actionBooking by remember { mutableStateOf<ProviderBooking?>(null) }
+    var isAcceptAction by remember { mutableStateOf(true) }
+    var comments by remember { mutableStateOf("") }
     
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -112,7 +147,7 @@ fun ProviderDashboardScreen(
                         }
                         Switch(
                             checked = isAvailable,
-                            onCheckedChange = { isAvailable = it },
+                            onCheckedChange = { viewModel.toggleAvailability() },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = WhiteText,
                                 checkedTrackColor = SuccessGreen,
@@ -140,17 +175,17 @@ fun ProviderDashboardScreen(
                 ) {
                     ProviderStatCard(
                         title = "Bookings",
-                        value = "5",
-                        subtitle = "2 pending",
+                        value = stats.pendingBookings.toString(),
+                        subtitle = "pending",
                         icon = Icons.Default.CalendarMonth,
                         color = ProviderBlue,
                         modifier = Modifier.weight(1f)
                     )
                     ProviderStatCard(
-                        title = "Earnings",
-                        value = "₹2,800",
-                        subtitle = "This week",
-                        icon = Icons.Default.CurrencyRupee,
+                        title = "Services",
+                        value = services.size.toString(),
+                        subtitle = "active",
+                        icon = Icons.Default.Build,
                         color = SuccessGreen,
                         modifier = Modifier.weight(1f)
                     )
@@ -182,7 +217,7 @@ fun ProviderDashboardScreen(
                         icon = Icons.AutoMirrored.Filled.EventNote,
                         label = "Bookings",
                         color = OrangePrimary,
-                        badge = "2",
+                        badge = if (stats.pendingBookings > 0) stats.pendingBookings.toString() else null,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToBookings
                     )
@@ -226,54 +261,66 @@ fun ProviderDashboardScreen(
                         Text("View All", color = OrangePrimary)
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                BookingRequestCard(
-                    serviceName = "AC Repair",
-                    customerName = "Ramesh Kumar",
-                    date = "Tomorrow",
-                    time = "Morning",
-                    location = "Customer location",
-                    price = "₹500",
-                    onClick = onNavigateToBookings
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                BookingRequestCard(
-                    serviceName = "AC Repair",
-                    customerName = "Priya S",
-                    date = "Today",
-                    time = "Evening",
-                    location = "Customer location",
-                    price = "₹500",
-                    onClick = onNavigateToBookings
-                )
             }
             
-            // Today's Schedule
-            item {
-                Text(
-                    text = "Today's Schedule",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = WhiteText,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                ScheduleCard(
-                    time = "10:00 AM",
-                    serviceName = "Plumbing Repair",
-                    customerName = "Venkat R",
-                    address = "12, Gandhi Street, Coimbatore",
-                    status = "Confirmed"
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                ScheduleCard(
-                    time = "2:00 PM",
-                    serviceName = "AC Service",
-                    customerName = "Lakshmi N",
-                    address = "45, Anna Nagar, Chennai",
-                    status = "Confirmed"
-                )
+            if (isLoadingPendingBookings) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = ProviderBlue)
+                    }
+                }
+            } else if (pendingBookings.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateCard)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EventAvailable,
+                                contentDescription = null,
+                                tint = WhiteTextMuted,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "No pending requests",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = WhiteTextMuted
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(pendingBookings.take(3)) { booking ->
+                    BookingRequestCard(
+                        booking = booking,
+                        onAccept = {
+                            actionBooking = booking
+                            isAcceptAction = true
+                            comments = ""
+                            showActionDialog = true
+                        },
+                        onReject = {
+                            actionBooking = booking
+                            isAcceptAction = false
+                            comments = ""
+                            showActionDialog = true
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             }
             
             // Logout
@@ -295,6 +342,63 @@ fun ProviderDashboardScreen(
                 }
             }
         }
+    }
+    
+    // Accept/Reject Dialog
+    if (showActionDialog && actionBooking != null) {
+        AlertDialog(
+            onDismissRequest = { showActionDialog = false },
+            title = {
+                Text(
+                    text = if (isAcceptAction) "Accept Booking" else "Reject Booking",
+                    color = WhiteText
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "${actionBooking?.serviceName} for ${actionBooking?.customerName}",
+                        color = WhiteTextMuted
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = comments,
+                        onValueChange = { comments = it },
+                        label = { Text("Comments (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = if (isAcceptAction) SuccessGreen else ErrorRed,
+                            unfocusedBorderColor = GlassBorder
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        actionBooking?.let {
+                            if (isAcceptAction) {
+                                viewModel.acceptBooking(it.id, comments.ifBlank { null })
+                            } else {
+                                viewModel.rejectBooking(it.id, comments.ifBlank { null })
+                            }
+                        }
+                        showActionDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isAcceptAction) SuccessGreen else ErrorRed
+                    )
+                ) {
+                    Text(if (isAcceptAction) "Accept" else "Reject")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showActionDialog = false }) {
+                    Text("Cancel", color = WhiteTextMuted)
+                }
+            },
+            containerColor = SlateCard
+        )
     }
 }
 
@@ -401,13 +505,9 @@ private fun ProviderActionCard(
 
 @Composable
 private fun BookingRequestCard(
-    serviceName: String,
-    customerName: String,
-    date: String,
-    time: String,
-    location: String,
-    price: String,
-    onClick: () -> Unit
+    booking: ProviderBooking,
+    onAccept: () -> Unit,
+    onReject: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -426,31 +526,35 @@ private fun BookingRequestCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = serviceName,
+                        text = booking.serviceName,
                         style = MaterialTheme.typography.titleSmall,
                         color = WhiteText,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = customerName,
+                        text = booking.customerName,
                         style = MaterialTheme.typography.bodyMedium,
                         color = WhiteTextMuted
                     )
                     Row {
                         Text(
-                            text = "$date • $time",
+                            text = "${booking.scheduledDate ?: "TBD"} • ${booking.scheduledTime ?: "TBD"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = OrangePrimary
                         )
                     }
                     Text(
-                        text = location,
+                        text = booking.formattedAddress,
                         style = MaterialTheme.typography.bodySmall,
-                        color = WhiteTextSubtle
+                        color = WhiteTextSubtle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Text(
-                    text = price,
+                    text = booking.displayPrice,
                     style = MaterialTheme.typography.titleMedium,
                     color = SuccessGreen,
                     fontWeight = FontWeight.Bold
@@ -464,7 +568,7 @@ private fun BookingRequestCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
-                    onClick = onClick,
+                    onClick = onReject,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = ErrorRed
@@ -473,7 +577,7 @@ private fun BookingRequestCard(
                     Text("Reject")
                 }
                 Button(
-                    onClick = onClick,
+                    onClick = onAccept,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SuccessGreen
@@ -481,85 +585,6 @@ private fun BookingRequestCard(
                 ) {
                     Text("Accept")
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScheduleCard(
-    time: String,
-    serviceName: String,
-    customerName: String,
-    address: String,
-    status: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = GlassWhite)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Time
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = time,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = ProviderBlue,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            // Divider
-            Box(
-                modifier = Modifier
-                    .width(2.dp)
-                    .height(50.dp)
-                    .background(ProviderBlue)
-            )
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            // Details
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = serviceName,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = WhiteText,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = customerName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = WhiteTextMuted
-                )
-                Text(
-                    text = address,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = WhiteTextSubtle,
-                    maxLines = 1
-                )
-            }
-            
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = SuccessGreen.copy(alpha = 0.2f)
-            ) {
-                Text(
-                    text = status,
-                    color = SuccessGreen,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
             }
         }
     }

@@ -365,3 +365,15 @@ data class BuyAgainResponse(
     @Json(name = "services") val services: List<BuyAgainService> = emptyList(),
     @Json(name = "products") val products: List<BuyAgainProduct> = emptyList()
 )
+
+// ==================== PROVIDER PAGINATION ====================
+
+// Paginated Provider Bookings Response - matches web /api/bookings/provider
+@JsonClass(generateAdapter = true)
+data class PaginatedBookingsResponse(
+    @Json(name = "data") val data: List<com.doorstep.tn.provider.data.model.ProviderBooking> = emptyList(),
+    @Json(name = "total") val total: Int = 0,
+    @Json(name = "totalPages") val totalPages: Int = 1,
+    @Json(name = "page") val page: Int = 1
+)
+
