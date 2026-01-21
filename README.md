@@ -83,7 +83,7 @@ full_stack_app/
 │   └── index.html
 ├── server/                    # Express backend
 │   ├── index.ts               # Server bootstrap
-│   ├── routes.ts              # Main API routes (253K+ lines)
+│   ├── routes.ts              # Main API routes
 │   ├── routes/                # Modular route handlers
 │   ├── auth.ts                # Authentication logic
 │   ├── pg-storage.ts          # PostgreSQL storage layer
