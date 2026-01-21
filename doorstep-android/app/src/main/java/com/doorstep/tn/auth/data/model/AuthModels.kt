@@ -58,6 +58,11 @@ data class UserResponse(
     @Json(name = "hasShopProfile") val hasShopProfile: Boolean? = false,
     @Json(name = "hasProviderProfile") val hasProviderProfile: Boolean? = false,
     @Json(name = "upiId") val upiId: String? = null,
+    @Json(name = "bio") val bio: String? = null,
+    @Json(name = "qualifications") val qualifications: String? = null,
+    @Json(name = "experience") val experience: String? = null,
+    @Json(name = "workingHours") val workingHours: String? = null,
+    @Json(name = "languages") val languages: String? = null,
     @Json(name = "addressStreet") val addressStreet: String? = null,
     @Json(name = "addressCity") val addressCity: String? = null,
     @Json(name = "addressState") val addressState: String? = null,
@@ -66,6 +71,50 @@ data class UserResponse(
     @Json(name = "addressLandmark") val addressLandmark: String? = null,
     @Json(name = "latitude") val latitude: String? = null,
     @Json(name = "longitude") val longitude: String? = null
+)
+
+/**
+ * Shop/provider profile availability for role switching
+ */
+@JsonClass(generateAdapter = true)
+data class AuthProfilesResponse(
+    @Json(name = "hasShop") val hasShop: Boolean = false,
+    @Json(name = "hasProvider") val hasProvider: Boolean = false
+)
+
+/**
+ * Request to create a shop profile
+ */
+@JsonClass(generateAdapter = true)
+data class CreateShopRequest(
+    @Json(name = "shopName") val shopName: String,
+    @Json(name = "description") val description: String? = null
+)
+
+/**
+ * Response from create shop endpoint
+ */
+@JsonClass(generateAdapter = true)
+data class CreateShopResponse(
+    @Json(name = "id") val id: Int,
+    @Json(name = "shopName") val shopName: String? = null
+)
+
+/**
+ * Request to create a provider profile
+ */
+@JsonClass(generateAdapter = true)
+data class CreateProviderRequest(
+    @Json(name = "bio") val bio: String? = null
+)
+
+/**
+ * Response from create provider endpoint
+ */
+@JsonClass(generateAdapter = true)
+data class CreateProviderResponse(
+    @Json(name = "id") val id: Int,
+    @Json(name = "bio") val bio: String? = null
 )
 
 /**

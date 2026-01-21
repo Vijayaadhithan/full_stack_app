@@ -1,6 +1,5 @@
 package com.doorstep.tn.provider.data.repository
 
-import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.core.network.DoorStepApi
 import com.doorstep.tn.provider.data.model.*
 import javax.inject.Inject
@@ -51,45 +50,173 @@ class ProviderRepository @Inject constructor(
             Result.Error(e.message ?: "Network error")
         }
     }
+
+    /**
+     * Get booking history for the provider
+     */
+    suspend fun getProviderBookingHistory(
+        page: Int = 1,
+        limit: Int = 20
+    ): Result<List<ProviderBooking>> {
+        return try {
+            val response = api.getProviderBookingHistory(page, limit)
+            if (response.isSuccessful) {
+                Result.Success(response.body()?.data ?: emptyList())
+            } else {
+                Result.Error("Failed to fetch booking history: ${response.message()}")
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Network error")
+        }
+    }
     
     /**
      * Accept a booking request
      */
     suspend fun acceptBooking(bookingId: Int, comments: String? = null): Result<ProviderBooking> {
-        return updateBookingStatus(bookingId, "accepted", comments)
+        return updateBookingStatus(
+            bookingId,
+            UpdateBookingStatusRequest(status = "accepted")
+        )
     }
     
     /**
      * Reject a booking request
      */
     suspend fun rejectBooking(bookingId: Int, comments: String? = null): Result<ProviderBooking> {
-        return updateBookingStatus(bookingId, "rejected", comments)
+        return updateBookingStatus(
+            bookingId,
+            UpdateBookingStatusRequest(
+                status = "rejected",
+                rejectionReason = comments
+            )
+        )
+    }
+
+    /**
+     * Reschedule a booking request
+     */
+    suspend fun rescheduleBooking(
+        bookingId: Int,
+        rescheduleDateIso: String,
+        comments: String? = null
+    ): Result<ProviderBooking> {
+        return updateBookingStatus(
+            bookingId,
+            UpdateBookingStatusRequest(
+                status = "rescheduled",
+                rescheduleDate = rescheduleDateIso,
+                rescheduleReason = comments
+            )
+        )
     }
     
     /**
      * Mark booking as completed
      */
     suspend fun completeBooking(bookingId: Int, comments: String? = null): Result<ProviderBooking> {
-        return updateBookingStatus(bookingId, "completed", comments)
+        return try {
+            val response = api.providerCompleteBooking(bookingId)
+            if (response.isSuccessful) {
+                response.body()?.booking?.let {
+                    Result.Success(it)
+                } ?: Result.Error("Empty response")
+            } else {
+                Result.Error("Failed to complete booking: ${response.message()}")
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Network error")
+        }
     }
-    
+
     /**
      * Update booking status
      */
     private suspend fun updateBookingStatus(
         bookingId: Int,
-        status: String,
-        comments: String?
+        request: UpdateBookingStatusRequest
     ): Result<ProviderBooking> {
         return try {
-            val request = UpdateBookingStatusRequest(status = status, comments = comments)
             val response = api.updateProviderBookingStatus(bookingId, request)
+            if (response.isSuccessful) {
+                response.body()?.booking?.let {
+                    Result.Success(it)
+                } ?: Result.Error("Empty response")
+            } else {
+                Result.Error("Failed to update booking: ${response.message()}")
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Network error")
+        }
+    }
+
+    /**
+     * Mark provider as en route
+     */
+    suspend fun markEnRoute(bookingId: Int): Result<ProviderBooking> {
+        return try {
+            val response = api.markProviderEnRoute(bookingId)
+            if (response.isSuccessful) {
+                response.body()?.booking?.let {
+                    Result.Success(it)
+                } ?: Result.Error("Empty response")
+            } else {
+                Result.Error("Failed to mark en route: ${response.message()}")
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Network error")
+        }
+    }
+
+    /**
+     * Report dispute for awaiting payment booking
+     */
+    suspend fun reportDispute(bookingId: Int, reason: String): Result<ProviderBooking> {
+        return try {
+            val response = api.reportProviderBookingDispute(
+                bookingId,
+                com.doorstep.tn.core.network.BookingDisputeRequest(reason)
+            )
+            if (response.isSuccessful) {
+                response.body()?.booking?.let {
+                    Result.Success(it)
+                } ?: Result.Error("Empty response")
+            } else {
+                Result.Error("Failed to report dispute: ${response.message()}")
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Network error")
+        }
+    }
+
+    /**
+     * Provider reviews
+     */
+    suspend fun getProviderReviews(providerId: Int): Result<List<com.doorstep.tn.core.network.ServiceReview>> {
+        return try {
+            val response = api.getProviderReviews(providerId)
+            if (response.isSuccessful) {
+                Result.Success(response.body() ?: emptyList())
+            } else {
+                Result.Error("Failed to fetch reviews: ${response.message()}")
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Network error")
+        }
+    }
+
+    /**
+     * Reply to a review
+     */
+    suspend fun replyToReview(reviewId: Int, responseText: String): Result<com.doorstep.tn.core.network.ServiceReview> {
+        return try {
+            val response = api.replyToReview(reviewId, com.doorstep.tn.core.network.ReviewReplyRequest(responseText))
             if (response.isSuccessful) {
                 response.body()?.let {
                     Result.Success(it)
                 } ?: Result.Error("Empty response")
             } else {
-                Result.Error("Failed to update booking: ${response.message()}")
+                Result.Error("Failed to reply to review: ${response.message()}")
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Network error")
@@ -181,7 +308,7 @@ class ProviderRepository @Inject constructor(
     suspend fun updateProviderAvailability(
         isAvailable: Boolean,
         note: String? = null
-    ): Result<UserResponse> {
+    ): Result<ProviderAvailabilityResponse> {
         return try {
             val request = ProviderAvailabilityRequest(isAvailableNow = isAvailable, availabilityNote = note)
             val response = api.updateProviderAvailability(request)

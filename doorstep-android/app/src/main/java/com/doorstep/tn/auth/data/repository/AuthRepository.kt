@@ -2,10 +2,15 @@ package com.doorstep.tn.auth.data.repository
 
 import com.doorstep.tn.auth.data.model.CheckUserRequest
 import com.doorstep.tn.auth.data.model.CheckUserResponse
+import com.doorstep.tn.auth.data.model.CreateProviderRequest
+import com.doorstep.tn.auth.data.model.CreateProviderResponse
+import com.doorstep.tn.auth.data.model.CreateShopRequest
+import com.doorstep.tn.auth.data.model.CreateShopResponse
 import com.doorstep.tn.auth.data.model.LoginPinRequest
 import com.doorstep.tn.auth.data.model.ResetPinRequest
 import com.doorstep.tn.auth.data.model.RuralRegisterRequest
 import com.doorstep.tn.auth.data.model.UserResponse
+import com.doorstep.tn.auth.data.model.AuthProfilesResponse
 import com.doorstep.tn.core.network.DoorStepApi
 import com.doorstep.tn.core.network.FcmTokenRequest
 import javax.inject.Inject
@@ -159,6 +164,64 @@ class AuthRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to reset PIN")
+        }
+    }
+
+    /**
+     * Fetch shop/provider profile status for role switching
+     */
+    suspend fun getAuthProfiles(): Result<AuthProfilesResponse> {
+        return try {
+            val response = api.getAuthProfiles()
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error("Failed to fetch profiles", response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to fetch profiles")
+        }
+    }
+
+    /**
+     * Create a shop profile for the current user
+     */
+    suspend fun createShopProfile(
+        shopName: String,
+        description: String? = null
+    ): Result<CreateShopResponse> {
+        return try {
+            val response = api.createShopProfile(
+                CreateShopRequest(
+                    shopName = shopName,
+                    description = description
+                )
+            )
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to create shop profile")
+        }
+    }
+
+    /**
+     * Create a provider profile for the current user
+     */
+    suspend fun createProviderProfile(
+        bio: String? = null
+    ): Result<CreateProviderResponse> {
+        return try {
+            val response = api.createProviderProfile(CreateProviderRequest(bio = bio))
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to create provider profile")
         }
     }
     

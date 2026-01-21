@@ -42,14 +42,17 @@ data class ProviderBookingCustomer(
     @Json(name = "addressCity") val addressCity: String? = null,
     @Json(name = "addressState") val addressState: String? = null,
     @Json(name = "addressPostalCode") val addressPostalCode: String? = null,
-    @Json(name = "addressCountry") val addressCountry: String? = null
+    @Json(name = "addressCountry") val addressCountry: String? = null,
+    @Json(name = "latitude") val latitude: Double? = null,
+    @Json(name = "longitude") val longitude: Double? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class ProviderBookingService(
     val name: String,
     val price: String? = null,
-    val category: String? = null
+    val category: String? = null,
+    val duration: Int? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -76,15 +79,18 @@ data class ProviderBooking(
     @Json(name = "serviceId") val serviceId: Int? = null,
     @Json(name = "customerId") val customerId: Int? = null,
     val status: String,
-    @Json(name = "scheduledDate") val scheduledDate: String? = null,
-    @Json(name = "scheduledTime") val scheduledTime: String? = null, // Could be "morning", "afternoon", "evening", or specific time
+    @Json(name = "bookingDate") val bookingDate: String? = null,
+    @Json(name = "timeSlotLabel") val timeSlotLabel: String? = null,
     @Json(name = "serviceLocation") val serviceLocation: String? = null, // "customer" or "provider"
-    val notes: String? = null,
-    @Json(name = "providerComments") val providerComments: String? = null,
+    @Json(name = "comments") val comments: String? = null,
+    @Json(name = "rejectionReason") val rejectionReason: String? = null,
+    @Json(name = "rescheduleDate") val rescheduleDate: String? = null,
     @Json(name = "paymentMethod") val paymentMethod: String? = null,
     @Json(name = "paymentStatus") val paymentStatus: String? = null,
     @Json(name = "paymentReference") val paymentReference: String? = null,
-    @Json(name = "cancellationReason") val cancellationReason: String? = null,
+    @Json(name = "disputeReason") val disputeReason: String? = null,
+    @Json(name = "providerAddress") val providerAddress: String? = null,
+    @Json(name = "expiresAt") val expiresAt: String? = null,
     @Json(name = "completedAt") val completedAt: String? = null,
     @Json(name = "createdAt") val createdAt: String? = null,
     @Json(name = "updatedAt") val updatedAt: String? = null,
@@ -119,7 +125,11 @@ data class ProviderBooking(
         get() = status == "pending" || status == "rescheduled_pending_provider_approval"
     
     val isConfirmed: Boolean
-        get() = status == "confirmed" || status == "accepted" || status == "rescheduled_by_provider"
+        get() = status == "confirmed" ||
+            status == "accepted" ||
+            status == "rescheduled_by_provider" ||
+            status == "rescheduled" ||
+            status == "en_route"
     
     val isCompleted: Boolean
         get() = status == "completed" || status == "payment_confirmed"
@@ -177,9 +187,17 @@ data class ProviderAvailabilityRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class ProviderAvailabilityResponse(
+    @Json(name = "updated") val updated: Int = 0,
+    @Json(name = "services") val services: List<ProviderService> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
 data class UpdateBookingStatusRequest(
     val status: String,
-    val comments: String? = null
+    @Json(name = "rejectionReason") val rejectionReason: String? = null,
+    @Json(name = "rescheduleDate") val rescheduleDate: String? = null,
+    @Json(name = "rescheduleReason") val rescheduleReason: String? = null
 )
 
 // ─── Response Wrappers ───────────────────────────────────────────────────────
@@ -192,4 +210,10 @@ data class PendingBookingsResponse(
 @JsonClass(generateAdapter = true)
 data class ProviderServicesResponse(
     val services: List<ProviderService>
+)
+
+@JsonClass(generateAdapter = true)
+data class ProviderBookingActionResponse(
+    @Json(name = "booking") val booking: ProviderBooking? = null,
+    @Json(name = "message") val message: String? = null
 )

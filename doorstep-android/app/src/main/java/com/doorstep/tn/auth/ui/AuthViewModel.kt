@@ -53,6 +53,12 @@ class AuthViewModel @Inject constructor(
     
     private val _currentUser = MutableStateFlow<UserResponse?>(null)
     val user: StateFlow<UserResponse?> = _currentUser.asStateFlow()
+
+    private val _hasShopProfile = MutableStateFlow(false)
+    val hasShopProfile: StateFlow<Boolean> = _hasShopProfile.asStateFlow()
+
+    private val _hasProviderProfile = MutableStateFlow(false)
+    val hasProviderProfile: StateFlow<Boolean> = _hasProviderProfile.asStateFlow()
     
     // Form State
     private val _phone = MutableStateFlow("")
@@ -116,6 +122,8 @@ class AuthViewModel @Inject constructor(
                     _currentUser.value = result.data
                     _userName.value = result.data.name
                     _userRole.value = result.data.role
+                    _hasShopProfile.value = result.data.hasShopProfile == true
+                    _hasProviderProfile.value = result.data.hasProviderProfile == true
                     syncFcmToken()
                 }
                 is Result.Error -> {
@@ -425,6 +433,9 @@ class AuthViewModel @Inject constructor(
             _isLoggedIn.value = false
             _userRole.value = null
             _userName.value = null
+            _currentUser.value = null
+            _hasShopProfile.value = false
+            _hasProviderProfile.value = false
             
             // Clear form
             _pin.value = ""
@@ -505,6 +516,85 @@ class AuthViewModel @Inject constructor(
             _isLoading.value = false
         }
     }
+
+    /**
+     * Refresh profile availability for shop/provider switching
+     */
+    fun refreshProfiles() {
+        viewModelScope.launch {
+            when (val result = authRepository.getAuthProfiles()) {
+                is Result.Success -> {
+                    updateProfileFlags(
+                        hasShop = result.data.hasShop,
+                        hasProvider = result.data.hasProvider
+                    )
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+        }
+    }
+
+    /**
+     * Create shop profile and update local flags
+     */
+    fun createShopProfile(
+        shopName: String,
+        description: String?,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            when (val result = authRepository.createShopProfile(shopName, description)) {
+                is Result.Success -> {
+                    updateProfileFlags(hasShop = true)
+                    refreshProfiles()
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    if (result.message.contains("already", ignoreCase = true)) {
+                        updateProfileFlags(hasShop = true)
+                        refreshProfiles()
+                        onSuccess()
+                    } else {
+                        onError(result.message)
+                    }
+                }
+                is Result.Loading -> {}
+            }
+        }
+    }
+
+    /**
+     * Create provider profile and update local flags
+     */
+    fun createProviderProfile(
+        bio: String?,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            when (val result = authRepository.createProviderProfile(bio)) {
+                is Result.Success -> {
+                    updateProfileFlags(hasProvider = true)
+                    refreshProfiles()
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    if (result.message.contains("already", ignoreCase = true)) {
+                        updateProfileFlags(hasProvider = true)
+                        refreshProfiles()
+                        onSuccess()
+                    } else {
+                        onError(result.message)
+                    }
+                }
+                is Result.Loading -> {}
+            }
+        }
+    }
     
     // ==================== Private Helpers ====================
     
@@ -521,9 +611,27 @@ class AuthViewModel @Inject constructor(
         _userRole.value = user.role
         _userName.value = user.name
         _currentUser.value = user
+        _hasShopProfile.value = user.hasShopProfile == true
+        _hasProviderProfile.value = user.hasProviderProfile == true
         
         // Register FCM token with backend after successful login
         syncFcmToken(force = true)
+    }
+
+    private fun updateProfileFlags(hasShop: Boolean? = null, hasProvider: Boolean? = null) {
+        val current = _currentUser.value
+        if (current != null) {
+            _currentUser.value = current.copy(
+                hasShopProfile = hasShop ?: current.hasShopProfile,
+                hasProviderProfile = hasProvider ?: current.hasProviderProfile
+            )
+        }
+        if (hasShop != null) {
+            _hasShopProfile.value = hasShop
+        }
+        if (hasProvider != null) {
+            _hasProviderProfile.value = hasProvider
+        }
     }
     
     /**

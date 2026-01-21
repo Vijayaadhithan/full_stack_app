@@ -24,6 +24,7 @@ import com.doorstep.tn.customer.ui.products.ProductsListScreen
 import com.doorstep.tn.customer.ui.products.ProductDetailScreen
 import com.doorstep.tn.customer.ui.services.ServicesListScreen
 import com.doorstep.tn.customer.ui.services.ServiceDetailScreen
+import com.doorstep.tn.customer.ui.services.ServiceProviderScreen
 import com.doorstep.tn.customer.ui.orders.OrdersListScreen
 import com.doorstep.tn.customer.ui.orders.OrderDetailScreen
 import com.doorstep.tn.customer.ui.bookings.BookingsListScreen
@@ -42,6 +43,8 @@ import com.doorstep.tn.shop.ui.ShopDashboardScreen
 import com.doorstep.tn.provider.ui.ProviderDashboardScreen
 import com.doorstep.tn.provider.ui.ProviderServicesScreen
 import com.doorstep.tn.provider.ui.ProviderBookingsScreen
+import com.doorstep.tn.provider.ui.ProviderReviewsScreen
+import com.doorstep.tn.provider.ui.ProviderEarningsScreen
 
 /**
  * Navigation routes for the app
@@ -62,6 +65,7 @@ object Routes {
     const val CUSTOMER_PRODUCT_DETAIL = "customer_shop/{shopId}/product/{productId}"
     const val CUSTOMER_SERVICES = "customer_services"
     const val CUSTOMER_SERVICE_DETAIL = "customer_service/{serviceId}"
+    const val CUSTOMER_SERVICE_PROVIDER = "customer_service_provider/{serviceId}"
     const val CUSTOMER_CART = "customer_cart"
     const val CUSTOMER_CHECKOUT = "customer_checkout"
     const val CUSTOMER_ORDERS = "customer_orders"
@@ -101,11 +105,13 @@ object Routes {
     const val PROVIDER_BOOKINGS = "provider_bookings"
     const val PROVIDER_BOOKING_DETAIL = "provider_booking/{bookingId}"
     const val PROVIDER_EARNINGS = "provider_earnings"
+    const val PROVIDER_REVIEWS = "provider_reviews"
     const val PROVIDER_PROFILE = "provider_profile"
     
     // Helper functions
     fun productDetail(shopId: Int, productId: Int) = "customer_shop/$shopId/product/$productId"
     fun serviceDetail(serviceId: Int) = "customer_service/$serviceId"
+    fun serviceProvider(serviceId: Int) = "customer_service_provider/$serviceId"
     fun orderDetail(orderId: Int) = "customer_order/$orderId"
     fun bookingDetail(bookingId: Int) = "customer_booking/$bookingId"
     fun shopDetail(shopId: Int) = "customer_shop/$shopId"
@@ -463,6 +469,19 @@ fun DoorStepNavHost(
             ServiceDetailScreen(
                 serviceId = serviceId,
                 onNavigateBack = { navController.popBackStack() },
+                onBookService = { sId -> navController.navigate(Routes.bookService(sId)) },
+                onViewProvider = { sId -> navController.navigate(Routes.serviceProvider(sId)) }
+            )
+        }
+
+        composable(
+            route = Routes.CUSTOMER_SERVICE_PROVIDER,
+            arguments = listOf(navArgument("serviceId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val serviceId = backStackEntry.arguments?.getInt("serviceId") ?: 0
+            ServiceProviderScreen(
+                serviceId = serviceId,
+                onNavigateBack = { navController.popBackStack() },
                 onBookService = { sId -> navController.navigate(Routes.bookService(sId)) }
             )
         }
@@ -550,6 +569,7 @@ fun DoorStepNavHost(
                 onNavigateToServices = { navController.navigate(Routes.PROVIDER_SERVICES) },
                 onNavigateToBookings = { navController.navigate(Routes.PROVIDER_BOOKINGS) },
                 onNavigateToEarnings = { navController.navigate(Routes.PROVIDER_EARNINGS) },
+                onNavigateToReviews = { navController.navigate(Routes.PROVIDER_REVIEWS) },
                 onNavigateToProfile = { navController.navigate(Routes.PROVIDER_PROFILE) },
                 onLogout = {
                     authViewModel.logout()
@@ -574,29 +594,16 @@ fun DoorStepNavHost(
             )
         }
         
-        // Provider Earnings (placeholder - uses profile for now)
+        // Provider Earnings
         composable(Routes.PROVIDER_EARNINGS) {
-            // TODO: Implement ProviderEarningsScreen
-            ProfileScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
-                onSwitchRole = { newRole ->
-                    authViewModel.switchRole(newRole)
-                    val destination = when (newRole) {
-                        "shop" -> Routes.SHOP_DASHBOARD
-                        "customer" -> Routes.CUSTOMER_HOME
-                        else -> Routes.PROVIDER_DASHBOARD
-                    }
-                    navController.navigate(destination) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
-                onLogout = {
-                    authViewModel.logout()
-                    navController.navigate(Routes.PHONE_ENTRY) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                }
+            ProviderEarningsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.PROVIDER_REVIEWS) {
+            ProviderReviewsScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         

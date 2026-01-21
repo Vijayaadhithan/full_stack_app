@@ -62,6 +62,12 @@ class ProviderViewModel @Inject constructor(
     
     private val _isLoadingBookings = MutableStateFlow(false)
     val isLoadingBookings: StateFlow<Boolean> = _isLoadingBookings.asStateFlow()
+
+    private val _bookingHistory = MutableStateFlow<List<ProviderBooking>>(emptyList())
+    val bookingHistory: StateFlow<List<ProviderBooking>> = _bookingHistory.asStateFlow()
+
+    private val _isLoadingBookingHistory = MutableStateFlow(false)
+    val isLoadingBookingHistory: StateFlow<Boolean> = _isLoadingBookingHistory.asStateFlow()
     
     // ─── Services ────────────────────────────────────────────────────────────
     
@@ -70,6 +76,14 @@ class ProviderViewModel @Inject constructor(
     
     private val _isLoadingServices = MutableStateFlow(false)
     val isLoadingServices: StateFlow<Boolean> = _isLoadingServices.asStateFlow()
+
+    // ─── Reviews ─────────────────────────────────────────────────────────────
+
+    private val _reviews = MutableStateFlow<List<com.doorstep.tn.core.network.ServiceReview>>(emptyList())
+    val reviews: StateFlow<List<com.doorstep.tn.core.network.ServiceReview>> = _reviews.asStateFlow()
+
+    private val _isLoadingReviews = MutableStateFlow(false)
+    val isLoadingReviews: StateFlow<Boolean> = _isLoadingReviews.asStateFlow()
     
     // ─── Stats ───────────────────────────────────────────────────────────────
     
@@ -92,18 +106,25 @@ class ProviderViewModel @Inject constructor(
     fun loadDashboardData() {
         loadPendingBookings()
         loadProviderServices()
+        loadAllBookings()
+        loadProviderReviews()
+        loadBookingHistory()
     }
     
     // ─── Availability ────────────────────────────────────────────────────────
     
     fun toggleAvailability() {
-        val newAvailability = !_isAvailable.value
+        setAvailability(!_isAvailable.value)
+    }
+
+    fun setAvailability(isAvailable: Boolean, note: String? = null) {
         viewModelScope.launch {
             _isLoading.value = true
-            when (val result = repository.updateProviderAvailability(newAvailability)) {
+            when (val result = repository.updateProviderAvailability(isAvailable, note)) {
                 is Result.Success -> {
-                    _isAvailable.value = newAvailability
-                    _successMessage.value = if (newAvailability) "You're now online" else "You're now offline"
+                    _services.value = result.data.services
+                    _isAvailable.value = result.data.services.any { it.isAvailableNow != false }
+                    _successMessage.value = if (isAvailable) "You're now online" else "You're now offline"
                 }
                 is Result.Error -> {
                     _error.value = result.message
@@ -208,6 +229,25 @@ class ProviderViewModel @Inject constructor(
             _isLoadingBookings.value = false
         }
     }
+
+    fun loadBookingHistory() {
+        viewModelScope.launch {
+            _isLoadingBookingHistory.value = true
+            _error.value = null
+
+            when (val result = repository.getProviderBookingHistory()) {
+                is Result.Success -> {
+                    _bookingHistory.value = result.data
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+
+            _isLoadingBookingHistory.value = false
+        }
+    }
     
     // ─── Services ────────────────────────────────────────────────────────────
     
@@ -225,6 +265,7 @@ class ProviderViewModel @Inject constructor(
             when (val result = repository.getProviderServices(providerId)) {
                 is Result.Success -> {
                     _services.value = result.data
+                    _isAvailable.value = result.data.any { it.isAvailableNow != false }
                 }
                 is Result.Error -> {
                     _error.value = result.message
@@ -233,6 +274,117 @@ class ProviderViewModel @Inject constructor(
             }
             
             _isLoadingServices.value = false
+        }
+    }
+
+    fun loadProviderReviews() {
+        val providerId = currentUserId
+        if (providerId == null) {
+            _error.value = "User not logged in"
+            return
+        }
+
+        viewModelScope.launch {
+            _isLoadingReviews.value = true
+            _error.value = null
+
+            when (val result = repository.getProviderReviews(providerId)) {
+                is Result.Success -> {
+                    _reviews.value = result.data
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+
+            _isLoadingReviews.value = false
+        }
+    }
+
+    fun replyToReview(reviewId: Int, responseText: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.replyToReview(reviewId, responseText)) {
+                is Result.Success -> {
+                    _successMessage.value = "Reply sent"
+                    loadProviderReviews()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+
+    fun rescheduleBooking(bookingId: Int, rescheduleDateIso: String, comments: String? = null) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.rescheduleBooking(bookingId, rescheduleDateIso, comments)) {
+                is Result.Success -> {
+                    _successMessage.value = "Booking rescheduled"
+                    loadPendingBookings()
+                    loadAllBookings()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+
+    fun markEnRoute(bookingId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.markEnRoute(bookingId)) {
+                is Result.Success -> {
+                    _successMessage.value = "Marked as en route"
+                    loadAllBookings()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+
+    fun confirmPayment(bookingId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.completeBooking(bookingId)) {
+                is Result.Success -> {
+                    _successMessage.value = "Payment confirmed"
+                    loadAllBookings()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+
+    fun reportDispute(bookingId: Int, reason: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.reportDispute(bookingId, reason)) {
+                is Result.Success -> {
+                    _successMessage.value = "Issue reported"
+                    loadAllBookings()
+                }
+                is Result.Error -> {
+                    _error.value = result.message
+                }
+                is Result.Loading -> {}
+            }
+            _isLoading.value = false
         }
     }
     

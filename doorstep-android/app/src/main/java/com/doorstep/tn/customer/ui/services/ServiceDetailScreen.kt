@@ -2,6 +2,7 @@ package com.doorstep.tn.customer.ui.services
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,7 +34,8 @@ fun ServiceDetailScreen(
     serviceId: Int,
     viewModel: CustomerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
-    onBookService: (Int) -> Unit
+    onBookService: (Int) -> Unit,
+    onViewProvider: (Int) -> Unit
 ) {
     val service by viewModel.selectedService.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -258,7 +260,9 @@ fun ServiceDetailScreen(
                     
                     // Provider Card
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onViewProvider(serviceId) },
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = SlateCard)
                     ) {

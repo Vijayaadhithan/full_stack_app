@@ -66,10 +66,23 @@ fun ProfileScreen(
     var addressPostalCode by remember(user) { mutableStateOf(user?.addressPostalCode ?: "") }
     var addressCountry by remember(user) { mutableStateOf(user?.addressCountry ?: "India") }
     var addressLandmark by remember(user) { mutableStateOf(user?.addressLandmark ?: "") }
+    var profileBio by remember(user) { mutableStateOf(user?.bio ?: "") }
+    var profileQualifications by remember(user) { mutableStateOf(user?.qualifications ?: "") }
+    var profileExperience by remember(user) { mutableStateOf(user?.experience ?: "") }
+    var profileWorkingHours by remember(user) { mutableStateOf(user?.workingHours ?: "") }
+    var profileLanguages by remember(user) { mutableStateOf(user?.languages ?: "") }
 
     val upiSuggestions = remember(upiId) { buildUpiSuggestions(upiId) }
     
     var isLoading by remember { mutableStateOf(false) }
+
+    var showCreateShopDialog by remember { mutableStateOf(false) }
+    var showCreateProviderDialog by remember { mutableStateOf(false) }
+    var shopName by remember { mutableStateOf("") }
+    var shopDescription by remember { mutableStateOf("") }
+    var providerBio by remember { mutableStateOf("") }
+    var isCreatingShop by remember { mutableStateOf(false) }
+    var isCreatingProvider by remember { mutableStateOf(false) }
     
     // GPS Location state
     val context = LocalContext.current
@@ -516,6 +529,74 @@ fun ProfileScreen(
                     }
                 }
             }
+
+            val showProviderSection = user?.role == "provider" || user?.hasProviderProfile == true
+            if (showProviderSection) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Build, null, tint = ProviderBlue)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Provider Details",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        ProfileTextField(
+                            label = "Bio",
+                            value = profileBio,
+                            onValueChange = { profileBio = it },
+                            placeholder = "Tell customers about your services",
+                            singleLine = false,
+                            maxLines = 3
+                        )
+
+                        ProfileTextField(
+                            label = "Qualifications",
+                            value = profileQualifications,
+                            onValueChange = { profileQualifications = it },
+                            placeholder = "Certifications or training",
+                            singleLine = false,
+                            maxLines = 3
+                        )
+
+                        ProfileTextField(
+                            label = "Experience",
+                            value = profileExperience,
+                            onValueChange = { profileExperience = it },
+                            placeholder = "Years of experience",
+                            singleLine = false,
+                            maxLines = 2
+                        )
+
+                        ProfileTextField(
+                            label = "Working Hours",
+                            value = profileWorkingHours,
+                            onValueChange = { profileWorkingHours = it },
+                            placeholder = "Mon-Sat, 9 AM - 6 PM"
+                        )
+
+                        ProfileTextField(
+                            label = "Languages",
+                            value = profileLanguages,
+                            onValueChange = { profileLanguages = it },
+                            placeholder = "English, Tamil",
+                            singleLine = false,
+                            maxLines = 2
+                        )
+                    }
+                }
+            }
             
             Spacer(modifier = Modifier.height(24.dp))
             
@@ -532,6 +613,11 @@ fun ProfileScreen(
                                 phone = phone.takeIf { it.isNotBlank() },
                                 email = email.takeIf { it.isNotBlank() },
                                 upiId = upiId.takeIf { it.isNotBlank() },
+                                bio = profileBio.takeIf { it.isNotBlank() },
+                                qualifications = profileQualifications.takeIf { it.isNotBlank() },
+                                experience = profileExperience.takeIf { it.isNotBlank() },
+                                workingHours = profileWorkingHours.takeIf { it.isNotBlank() },
+                                languages = profileLanguages.takeIf { it.isNotBlank() },
                                 addressStreet = addressStreet.takeIf { it.isNotBlank() },
                                 addressCity = addressCity.takeIf { it.isNotBlank() },
                                 addressState = addressState.takeIf { it.isNotBlank() },
@@ -617,40 +703,89 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         val currentRole = user?.role ?: "customer"
+                        val hasShopProfile = user?.hasShopProfile == true
+                        val hasProviderProfile = user?.hasProviderProfile == true
                         
-                        // Role Options
-                        RoleSwitchOption(
-                            icon = Icons.Default.PersonOutline,
-                            title = "Customer",
-                            description = "Book services & shop products",
-                            color = OrangePrimary,
-                            isSelected = currentRole == "customer",
-                            onClick = { onSwitchRole("customer") }
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        RoleSwitchOption(
-                            icon = Icons.Default.Store,
-                            title = "Shop Owner",
-                            description = "Sell your products",
-                            color = SuccessGreen,
-                            isSelected = currentRole == "shop",
-                            onClick = { onSwitchRole("shop") }
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        RoleSwitchOption(
-                            icon = Icons.Default.Build,
-                            title = "Service Provider",
-                            description = "Offer your services",
-                            color = ProviderBlue,
-                            isSelected = currentRole == "provider",
-                            onClick = { onSwitchRole("provider") }
+                        RoleSwitchDropdown(
+                            currentRole = currentRole,
+                            hasShopProfile = hasShopProfile,
+                            hasProviderProfile = hasProviderProfile,
+                            onSwitchRole = onSwitchRole,
+                            onCreateShop = { showCreateShopDialog = true },
+                            onCreateProvider = { showCreateProviderDialog = true }
                         )
                     }
                 }
+            }
+
+            if (showCreateShopDialog) {
+                CreateShopDialog(
+                    shopName = shopName,
+                    shopDescription = shopDescription,
+                    isCreating = isCreatingShop,
+                    onShopNameChange = { shopName = it },
+                    onShopDescriptionChange = { shopDescription = it },
+                    onConfirm = {
+                        val trimmedName = shopName.trim()
+                        if (trimmedName.isEmpty()) {
+                            return@CreateShopDialog
+                        }
+                        isCreatingShop = true
+                        authViewModel.createShopProfile(
+                            shopName = trimmedName,
+                            description = shopDescription.trim().ifEmpty { null },
+                            onSuccess = {
+                                isCreatingShop = false
+                                showCreateShopDialog = false
+                                shopName = ""
+                                shopDescription = ""
+                                onSwitchRole?.invoke("shop")
+                            },
+                            onError = { errorMessage ->
+                                isCreatingShop = false
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Error: $errorMessage")
+                                }
+                            }
+                        )
+                    },
+                    onDismiss = {
+                        if (!isCreatingShop) {
+                            showCreateShopDialog = false
+                        }
+                    }
+                )
+            }
+
+            if (showCreateProviderDialog) {
+                CreateProviderDialog(
+                    bio = providerBio,
+                    isCreating = isCreatingProvider,
+                    onBioChange = { providerBio = it },
+                    onConfirm = {
+                        isCreatingProvider = true
+                        authViewModel.createProviderProfile(
+                            bio = providerBio.trim().ifEmpty { null },
+                            onSuccess = {
+                                isCreatingProvider = false
+                                showCreateProviderDialog = false
+                                providerBio = ""
+                                onSwitchRole?.invoke("provider")
+                            },
+                            onError = { errorMessage ->
+                                isCreatingProvider = false
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Error: $errorMessage")
+                                }
+                            }
+                        )
+                    },
+                    onDismiss = {
+                        if (!isCreatingProvider) {
+                            showCreateProviderDialog = false
+                        }
+                    }
+                )
             }
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -991,80 +1126,278 @@ private fun captureLocation(
     }
 }
 
-/**
- * Role switch option card for role switching in profile
- */
+private data class RoleOption(
+    val key: String,
+    val label: String,
+    val color: androidx.compose.ui.graphics.Color,
+    val icon: ImageVector,
+    val available: Boolean
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RoleSwitchOption(
-    icon: ImageVector,
-    title: String,
-    description: String,
-    color: androidx.compose.ui.graphics.Color,
-    isSelected: Boolean,
-    onClick: () -> Unit
+private fun RoleSwitchDropdown(
+    currentRole: String,
+    hasShopProfile: Boolean,
+    hasProviderProfile: Boolean,
+    onSwitchRole: (String) -> Unit,
+    onCreateShop: () -> Unit,
+    onCreateProvider: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = !isSelected, onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) color.copy(alpha = 0.15f) else SlateBackground
+    var expanded by remember { mutableStateOf(false) }
+
+    val roles = listOf(
+        RoleOption(
+            key = "customer",
+            label = "Customer",
+            color = OrangePrimary,
+            icon = Icons.Default.PersonOutline,
+            available = true
         ),
-        border = if (isSelected) BorderStroke(2.dp, color) else BorderStroke(1.dp, GlassWhite)
+        RoleOption(
+            key = "shop",
+            label = "Shop Owner",
+            color = SuccessGreen,
+            icon = Icons.Default.Store,
+            available = hasShopProfile
+        ),
+        RoleOption(
+            key = "provider",
+            label = "Service Provider",
+            color = ProviderBlue,
+            icon = Icons.Default.Build,
+            available = hasProviderProfile
+        )
+    )
+
+    val selected = roles.find { it.key == currentRole } ?: roles.first()
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it }
     ) {
-        Row(
+        OutlinedTextField(
+            value = selected.label,
+            onValueChange = {},
+            readOnly = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            leadingIcon = {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(selected.color),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = selected.icon,
+                        contentDescription = null,
+                        tint = WhiteText,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = WhiteText,
+                unfocusedTextColor = WhiteText,
+                focusedBorderColor = selected.color,
+                unfocusedBorderColor = GlassWhite,
+                focusedContainerColor = SlateBackground,
+                unfocusedContainerColor = SlateBackground
+            ),
+            shape = RoundedCornerShape(10.dp)
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(SlateCard)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (isSelected) color else color.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = WhiteText,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (isSelected) color else WhiteText,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = WhiteTextMuted
-                )
-            }
-            
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Selected",
-                    tint = color,
-                    modifier = Modifier.size(24.dp)
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Switch",
-                    tint = WhiteTextMuted,
-                    modifier = Modifier.size(24.dp)
+            roles.forEach { role ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(role.color),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = role.icon,
+                                    contentDescription = null,
+                                    tint = WhiteText,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = role.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = WhiteText,
+                                fontWeight = if (role.key == currentRole) FontWeight.Bold else FontWeight.Normal
+                            )
+                            if (role.key != "customer" && !role.available) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(
+                                    text = "Create",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = WhiteTextMuted
+                                )
+                            } else if (role.key == currentRole) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = role.color,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        when (role.key) {
+                            "customer" -> onSwitchRole("customer")
+                            "shop" -> if (role.available) onSwitchRole("shop") else onCreateShop()
+                            "provider" -> if (role.available) onSwitchRole("provider") else onCreateProvider()
+                        }
+                    }
                 )
             }
         }
     }
+}
+
+@Composable
+private fun CreateShopDialog(
+    shopName: String,
+    shopDescription: String,
+    isCreating: Boolean,
+    onShopNameChange: (String) -> Unit,
+    onShopDescriptionChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SlateCard,
+        title = {
+            Text(
+                text = "Create Shop Profile",
+                color = WhiteText,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                ProfileTextField(
+                    label = "Shop Name *",
+                    value = shopName,
+                    onValueChange = onShopNameChange,
+                    placeholder = "Enter your shop name"
+                )
+                ProfileTextField(
+                    label = "Description (Optional)",
+                    value = shopDescription,
+                    onValueChange = onShopDescriptionChange,
+                    placeholder = "What do you sell?",
+                    singleLine = false,
+                    maxLines = 2
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = shopName.trim().isNotEmpty() && !isCreating,
+                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+            ) {
+                if (isCreating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = WhiteText
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Create Shop")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                enabled = !isCreating
+            ) {
+                Text("Cancel", color = WhiteText)
+            }
+        }
+    )
+}
+
+@Composable
+private fun CreateProviderDialog(
+    bio: String,
+    isCreating: Boolean,
+    onBioChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SlateCard,
+        title = {
+            Text(
+                text = "Create Provider Profile",
+                color = WhiteText,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                ProfileTextField(
+                    label = "About You (Optional)",
+                    value = bio,
+                    onValueChange = onBioChange,
+                    placeholder = "Tell customers about your services",
+                    singleLine = false,
+                    maxLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = !isCreating,
+                colors = ButtonDefaults.buttonColors(containerColor = ProviderBlue)
+            ) {
+                if (isCreating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = WhiteText
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Create Provider")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                enabled = !isCreating
+            ) {
+                Text("Cancel", color = WhiteText)
+            }
+        }
+    )
 }

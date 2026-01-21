@@ -27,6 +27,11 @@ data class UpdateProfileRequest(
     @Json(name = "phone") val phone: String? = null,
     @Json(name = "email") val email: String? = null,
     @Json(name = "upiId") val upiId: String? = null,
+    @Json(name = "bio") val bio: String? = null,
+    @Json(name = "qualifications") val qualifications: String? = null,
+    @Json(name = "experience") val experience: String? = null,
+    @Json(name = "workingHours") val workingHours: String? = null,
+    @Json(name = "languages") val languages: String? = null,
     @Json(name = "addressLandmark") val addressLandmark: String? = null,
     @Json(name = "addressStreet") val addressStreet: String? = null,
     @Json(name = "addressCity") val addressCity: String? = null,
@@ -127,6 +132,12 @@ data class SubmitReviewRequest(
 data class ReviewResponse(
     @Json(name = "id") val id: Int? = null,
     @Json(name = "message") val message: String? = null
+)
+
+// Provider review reply - POST /api/reviews/:id/reply
+@JsonClass(generateAdapter = true)
+data class ReviewReplyRequest(
+    @Json(name = "response") val response: String
 )
 
 // Service review - GET /api/reviews/service/:id
@@ -376,4 +387,3 @@ data class PaginatedBookingsResponse(
     @Json(name = "totalPages") val totalPages: Int = 1,
     @Json(name = "page") val page: Int = 1
 )
-
