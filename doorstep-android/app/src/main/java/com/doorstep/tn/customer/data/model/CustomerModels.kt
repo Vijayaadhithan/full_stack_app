@@ -91,6 +91,9 @@ data class Shop(
     // Delivery options - matches web's shopInfo
     @Json(name = "pickupAvailable") val pickupAvailable: Boolean = true,
     @Json(name = "deliveryAvailable") val deliveryAvailable: Boolean = false,
+    @Json(name = "catalogModeEnabled") val catalogModeEnabled: Boolean? = null,
+    @Json(name = "openOrderMode") val openOrderMode: Boolean? = null,
+    @Json(name = "returnsEnabled") val returnsEnabled: Boolean? = null,
     @Json(name = "allowPayLater") val allowPayLater: Boolean = false,
     @Json(name = "payLaterWhitelist") val payLaterWhitelist: List<Int>? = null
 )
@@ -112,6 +115,7 @@ data class Order(
     @Json(name = "deliveryMethod") val deliveryMethod: String? = null,  // "pickup" or "delivery"
     @Json(name = "orderType") val orderType: String? = null,  // "product_order" or "text_order"
     @Json(name = "orderText") val orderText: String? = null,  // For text/quick orders
+    @Json(name = "returnRequested") val returnRequested: Boolean? = null,
     @Json(name = "items") val items: List<OrderItem>? = null,
     @Json(name = "shop") val shop: OrderShop? = null
 )
@@ -125,7 +129,8 @@ data class OrderShop(
     @Json(name = "latitude") val latitude: Double? = null,
     @Json(name = "longitude") val longitude: Double? = null,
     @Json(name = "address") val address: String? = null,
-    @Json(name = "upiId") val upiId: String? = null  // For UPI payments
+    @Json(name = "upiId") val upiId: String? = null,  // For UPI payments
+    @Json(name = "returnsEnabled") val returnsEnabled: Boolean? = null
 )
 
 @JsonClass(generateAdapter = true)

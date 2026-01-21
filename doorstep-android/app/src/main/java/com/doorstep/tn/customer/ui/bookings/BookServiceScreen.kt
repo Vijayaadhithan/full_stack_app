@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.auth.ui.AuthViewModel
+import com.doorstep.tn.common.config.PlatformConfig
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.core.network.UpdateProfileRequest
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -214,6 +215,8 @@ fun BookServiceScreen(
     val isServiceLoading = service == null && isLoading
 
     val s = service
+    val priceAmount = s?.price?.toDoubleOrNull() ?: 0.0
+    val platformFee = if (PlatformConfig.PLATFORM_FEES_ENABLED) PlatformConfig.SERVICE_BOOKING_FEE else 0.0
     val providerOnline = (s?.isAvailableNow ?: true) && (s?.isAvailable ?: true)
     val effectiveMaxDailyBookings = remember(s?.maxDailyBookings) {
         val raw = s?.maxDailyBookings
@@ -1027,6 +1030,15 @@ fun BookServiceScreen(
                             color = OrangePrimary,
                             fontWeight = FontWeight.Bold
                         )
+                        if (PlatformConfig.PLATFORM_FEES_ENABLED &&
+                            PlatformConfig.PLATFORM_FEE_BREAKDOWN_ENABLED &&
+                            priceAmount > 0.0
+                        ) {
+                            Text(
+                                text = "Platform Service Fee: ₹${String.format("%.2f", platformFee)}",
+                                color = WhiteTextMuted
+                            )
+                        }
                     }
                 }
             },

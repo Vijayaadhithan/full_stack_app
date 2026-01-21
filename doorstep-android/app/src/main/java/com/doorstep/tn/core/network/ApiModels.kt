@@ -303,7 +303,13 @@ data class UpdateReviewRequest(
 @JsonClass(generateAdapter = true)
 data class CreateReturnRequest(
     @Json(name = "reason") val reason: String,
-    @Json(name = "comments") val comments: String? = null
+    @Json(name = "description") val description: String? = null
+)
+
+// Promotions - POST /api/promotions/:id/apply
+@JsonClass(generateAdapter = true)
+data class PromotionApplyRequest(
+    @Json(name = "orderId") val orderId: Int
 )
 
 // ==================== FCM PUSH NOTIFICATIONS ====================
@@ -323,6 +329,29 @@ data class FcmTokenUnregisterRequest(
 )
 
 // ==================== PROMOTIONS ====================
+
+@JsonClass(generateAdapter = true)
+data class PromotionValidationItem(
+    @Json(name = "productId") val productId: Int,
+    @Json(name = "quantity") val quantity: Int,
+    @Json(name = "price") val price: Double
+)
+
+@JsonClass(generateAdapter = true)
+data class PromotionValidationRequest(
+    @Json(name = "code") val code: String,
+    @Json(name = "shopId") val shopId: Int,
+    @Json(name = "cartItems") val cartItems: List<PromotionValidationItem>,
+    @Json(name = "subtotal") val subtotal: Double
+)
+
+@JsonClass(generateAdapter = true)
+data class PromotionValidationResponse(
+    @Json(name = "valid") val valid: Boolean,
+    @Json(name = "promotion") val promotion: Promotion? = null,
+    @Json(name = "discountAmount") val discountAmount: Double? = null,
+    @Json(name = "finalTotal") val finalTotal: Double? = null
+)
 
 @JsonClass(generateAdapter = true)
 data class Promotion(

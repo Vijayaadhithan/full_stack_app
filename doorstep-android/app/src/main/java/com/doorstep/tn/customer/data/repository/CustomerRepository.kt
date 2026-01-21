@@ -497,6 +497,32 @@ class CustomerRepository @Inject constructor(
             Result.Error(e.message ?: "Failed to load bookings")
         }
     }
+
+    suspend fun getCustomerBookingRequests(): Result<List<Booking>> {
+        return try {
+            val response = api.getCustomerBookingRequests()
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load booking requests")
+        }
+    }
+
+    suspend fun getCustomerBookingHistory(): Result<List<Booking>> {
+        return try {
+            val response = api.getCustomerBookingHistory()
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to load booking history")
+        }
+    }
     
     suspend fun getBookingById(bookingId: Int): Result<Booking> {
         return try {
@@ -755,9 +781,9 @@ class CustomerRepository @Inject constructor(
     }
     
     // Create return request - matches web POST /api/orders/{orderId}/return
-    suspend fun createReturnRequest(orderId: Int, reason: String, comments: String? = null): Result<Unit> {
+    suspend fun createReturnRequest(orderId: Int, reason: String, description: String? = null): Result<Unit> {
         return try {
-            val request = com.doorstep.tn.core.network.CreateReturnRequest(reason = reason, comments = comments)
+            val request = com.doorstep.tn.core.network.CreateReturnRequest(reason = reason, description = description)
             val response = api.createReturnRequest(orderId, request)
             if (response.isSuccessful) {
                 Result.Success(Unit)
@@ -813,6 +839,44 @@ class CustomerRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to load active promotions")
+        }
+    }
+
+    suspend fun validatePromotion(
+        code: String,
+        shopId: Int,
+        items: List<com.doorstep.tn.core.network.PromotionValidationItem>,
+        subtotal: Double
+    ): Result<com.doorstep.tn.core.network.PromotionValidationResponse> {
+        return try {
+            val request = com.doorstep.tn.core.network.PromotionValidationRequest(
+                code = code,
+                shopId = shopId,
+                cartItems = items,
+                subtotal = subtotal
+            )
+            val response = api.validatePromotion(request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to validate promotion")
+        }
+    }
+
+    suspend fun applyPromotion(promotionId: Int, orderId: Int): Result<Unit> {
+        return try {
+            val request = com.doorstep.tn.core.network.PromotionApplyRequest(orderId)
+            val response = api.applyPromotion(promotionId, request)
+            if (response.isSuccessful) {
+                Result.Success(Unit)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to apply promotion")
         }
     }
     

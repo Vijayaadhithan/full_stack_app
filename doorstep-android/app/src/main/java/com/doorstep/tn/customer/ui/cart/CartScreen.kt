@@ -23,6 +23,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.doorstep.tn.auth.data.model.UserResponse
+import com.doorstep.tn.common.config.PlatformConfig
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.customer.data.model.CartItem
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -48,19 +50,28 @@ fun CartScreen(
 ) {
     val cartItems by viewModel.cartItems.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val userId by viewModel.userId.collectAsState()
-    
     val activePromotions by viewModel.activePromotions.collectAsState()
     val selectedPromotion by viewModel.selectedPromotion.collectAsState()
 
     // Shop info state - fetched to check delivery options
-    var shopInfo by remember { mutableStateOf<com.doorstep.tn.customer.data.model.Shop?>(null) }
+    var shopInfo by remember { mutableStateOf<UserResponse?>(null) }
     var isLoadingShop by remember { mutableStateOf(false) }
     
     // Delivery and Payment method state - matches web defaults
     var deliveryMethod by remember { mutableStateOf("pickup") } // "pickup" or "delivery"
     var paymentMethod by remember { mutableStateOf("upi") } // "upi", "cash", "pay_later"
     var isPlacingOrder by remember { mutableStateOf(false) }
+    var promoCode by remember { mutableStateOf("") }
+    var promoCodeError by remember { mutableStateOf<String?>(null) }
+    var promoCodeApplied by remember { mutableStateOf<String?>(null) }
+    var promoCodeLoading by remember { mutableStateOf(false) }
+    var validatedDiscountAmount by remember { mutableStateOf<Double?>(null) }
+
+    fun clearPromoValidation() {
+        promoCodeError = null
+        promoCodeApplied = null
+        validatedDiscountAmount = null
+    }
     
     // Calculate totals
     val subtotal = cartItems.sumOf { 
@@ -68,39 +79,74 @@ fun CartScreen(
     }
     
     // Calculate Discount
-    val discountAmount = remember(subtotal, selectedPromotion) {
-        val promo = selectedPromotion
-        if (promo != null) {
-            // Check min order amount
-            if (promo.minOrderAmount != null && subtotal < promo.minOrderAmount) {
-                0.0
-            } else {
-                if (promo.type == "percentage") {
-                    val calculated = subtotal * (promo.value / 100.0)
-                    if (promo.maxDiscount != null) {
-                        minOf(calculated, promo.maxDiscount)
-                    } else {
-                        calculated
-                    }
+    val discountAmount = remember(subtotal, selectedPromotion, validatedDiscountAmount) {
+        validatedDiscountAmount ?: run {
+            val promo = selectedPromotion
+            if (promo != null) {
+                // Check min order amount
+                if (promo.minOrderAmount != null && subtotal < promo.minOrderAmount) {
+                    0.0
                 } else {
-                    // Fixed amount
-                    promo.value
+                    if (promo.type == "percentage") {
+                        val calculated = subtotal * (promo.value / 100.0)
+                        if (promo.maxDiscount != null) {
+                            minOf(calculated, promo.maxDiscount)
+                        } else {
+                            calculated
+                        }
+                    } else {
+                        // Fixed amount
+                        promo.value
+                    }
                 }
+            } else {
+                0.0
             }
-        } else {
-            0.0
         }
     }
-    
-    val total = if (subtotal > 0) (subtotal - discountAmount).coerceAtLeast(0.0) else 0.0
+
+    val platformFee = if (PlatformConfig.PLATFORM_FEES_ENABLED) PlatformConfig.PRODUCT_ORDER_FEE else 0.0
+    val totalAmount = if (subtotal > 0) (subtotal - discountAmount + platformFee).coerceAtLeast(0.0) else 0.0
+
+    val productOpenOrderEnabled = cartItems.firstOrNull()?.product?.let { product ->
+        product.catalogModeEnabled == true || product.openOrderMode == true
+    } == true
+    val openOrderEnabled = when {
+        shopInfo?.catalogModeEnabled == true || shopInfo?.openOrderMode == true -> true
+        shopInfo != null -> false
+        else -> productOpenOrderEnabled
+    }
+
+    val payLaterEligibility = shopInfo?.payLaterEligibilityForCustomer
+    val payLaterEnabled = shopInfo?.allowPayLater == true
+    val payLaterAvailable = payLaterEnabled && (payLaterEligibility?.eligible ?: true)
+    val payLaterDisabledReason = when {
+        !payLaterEnabled -> "Pay Later is disabled for this shop."
+        payLaterEligibility?.eligible == false ->
+            "Pay Later is limited to repeat or whitelisted customers. Ask the shop owner to whitelist you."
+        else -> null
+    }
     
     // Load cart on first composition
     LaunchedEffect(Unit) {
         viewModel.loadCart()
     }
+
+    LaunchedEffect(deliveryMethod) {
+        if (deliveryMethod == "delivery" && paymentMethod == "cash") {
+            paymentMethod = "upi"
+        }
+    }
+
+    LaunchedEffect(payLaterAvailable) {
+        if (!payLaterAvailable && paymentMethod == "pay_later") {
+            paymentMethod = "upi"
+        }
+    }
     
     // Fetch shop info and promotions when cart items are loaded
     LaunchedEffect(cartItems) {
+        clearPromoValidation()
         if (cartItems.isNotEmpty()) {
             val shopId = cartItems.firstOrNull()?.product?.shopId
             if (shopId != null) {
@@ -109,20 +155,24 @@ fun CartScreen(
                 
                 if (shopInfo?.id != shopId) {
                     isLoadingShop = true
-                    viewModel.getShopById(shopId) { shop ->
+                    viewModel.getShopInfo(shopId) { shop ->
                         shopInfo = shop
                         isLoadingShop = false
                         // Reset delivery method based on shop availability (like web)
                         if (shop != null) {
-                            if (shop.pickupAvailable && !shop.deliveryAvailable) {
+                            val pickupAvailable = shop.pickupAvailable == true
+                            val deliveryAvailable = shop.deliveryAvailable == true
+                            if (pickupAvailable && !deliveryAvailable) {
                                 deliveryMethod = "pickup"
-                            } else if (!shop.pickupAvailable && shop.deliveryAvailable) {
+                            } else if (!pickupAvailable && deliveryAvailable) {
                                 deliveryMethod = "delivery"
                             }
                         }
                     }
                 }
             }
+        } else {
+            viewModel.selectPromotion(null)
         }
     }
     
@@ -197,10 +247,15 @@ fun CartScreen(
             ) {
                 // ==================== Cart Items ====================
                 items(cartItems) { item ->
+                    val maxQuantity = if (openOrderEnabled) null else (item.product.stock ?: 0)
+                    val canIncrease = maxQuantity?.let { item.quantity < it } ?: true
                     CartItemCard(
                         item = item,
+                        canIncrease = canIncrease,
                         onUpdateQuantity = { newQty ->
-                            viewModel.updateCartQuantity(item.productId, newQty)
+                            if (openOrderEnabled || maxQuantity == null || newQty <= maxQuantity) {
+                                viewModel.updateCartQuantity(item.productId, newQty)
+                            }
                         },
                         onRemove = { viewModel.removeFromCart(item.productId) }
                     )
@@ -230,6 +285,97 @@ fun CartScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = promoCode,
+                                    onValueChange = {
+                                        promoCode = it
+                                        promoCodeError = null
+                                    },
+                                    label = { Text("Promo code") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = OrangePrimary,
+                                        unfocusedBorderColor = GlassWhite,
+                                        focusedTextColor = WhiteText,
+                                        unfocusedTextColor = WhiteText
+                                    )
+                                )
+                                Button(
+                                    onClick = {
+                                        val shopId = cartItems.firstOrNull()?.product?.shopId
+                                        val code = promoCode.trim()
+                                        if (shopId == null || code.isEmpty()) {
+                                            promoCodeError = "Enter a valid promo code."
+                                            return@Button
+                                        }
+                                        promoCodeLoading = true
+                                        viewModel.validatePromotionCode(
+                                            code = code,
+                                            shopId = shopId,
+                                            cartItems = cartItems,
+                                            subtotal = subtotal,
+                                            onSuccess = { response ->
+                                                promoCodeLoading = false
+                                                val promotion = response.promotion
+                                                if (response.valid && promotion != null) {
+                                                    promoCodeError = null
+                                                    promoCodeApplied = promotion.code ?: code
+                                                    validatedDiscountAmount = response.discountAmount
+                                                    viewModel.selectPromotion(promotion)
+                                                } else {
+                                                    promoCodeApplied = null
+                                                    validatedDiscountAmount = null
+                                                    promoCodeError = "Invalid or expired promotion code."
+                                                }
+                                            },
+                                            onError = { message ->
+                                                promoCodeLoading = false
+                                                promoCodeApplied = null
+                                                validatedDiscountAmount = null
+                                                promoCodeError = message
+                                            }
+                                        )
+                                    },
+                                    enabled = promoCode.isNotBlank() && !promoCodeLoading,
+                                    colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
+                                ) {
+                                    if (promoCodeLoading) {
+                                        CircularProgressIndicator(
+                                            color = WhiteText,
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Text("Apply")
+                                    }
+                                }
+                            }
+
+                            promoCodeError?.let { error ->
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ErrorRed
+                                )
+                            }
+
+                            promoCodeApplied?.let { applied ->
+                                if (promoCodeError == null) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "Applied: $applied",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = SuccessGreen
+                                    )
+                                }
+                            }
                             
                             if (activePromotions.isEmpty()) {
                                 Text(
@@ -245,13 +391,19 @@ fun CartScreen(
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(if (selectedPromotion == null) OrangePrimary.copy(alpha = 0.1f) else Color.Transparent)
-                                            .clickable { viewModel.selectPromotion(null) }
+                                            .clickable {
+                                                clearPromoValidation()
+                                                viewModel.selectPromotion(null)
+                                            }
                                             .padding(8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         RadioButton(
                                             selected = selectedPromotion == null,
-                                            onClick = { viewModel.selectPromotion(null) },
+                                            onClick = {
+                                                clearPromoValidation()
+                                                viewModel.selectPromotion(null)
+                                            },
                                             colors = RadioButtonDefaults.colors(
                                                 selectedColor = OrangePrimary,
                                                 unselectedColor = WhiteTextMuted
@@ -286,6 +438,7 @@ fun CartScreen(
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .background(if (selectedPromotion?.id == promo.id) OrangePrimary.copy(alpha = 0.1f) else Color.Transparent)
                                                 .clickable(enabled = isEligible) {
+                                                    clearPromoValidation()
                                                     if (selectedPromotion?.id == promo.id) {
                                                         viewModel.selectPromotion(null) // Deselect
                                                     } else {
@@ -298,6 +451,7 @@ fun CartScreen(
                                             RadioButton(
                                                 selected = selectedPromotion?.id == promo.id,
                                                 onClick = {
+                                                    clearPromoValidation()
                                                     if (selectedPromotion?.id == promo.id) {
                                                         viewModel.selectPromotion(null)
                                                     } else {
@@ -436,7 +590,8 @@ fun CartScreen(
                             PaymentMethodOption(
                                 label = "UPI",
                                 isSelected = paymentMethod == "upi",
-                                onClick = { paymentMethod = "upi" }
+                                onClick = { paymentMethod = "upi" },
+                                enabled = true
                             )
                             
                             Spacer(modifier = Modifier.height(8.dp))
@@ -445,26 +600,26 @@ fun CartScreen(
                             PaymentMethodOption(
                                 label = "Cash",
                                 isSelected = paymentMethod == "cash",
-                                onClick = { paymentMethod = "cash" }
+                                onClick = { paymentMethod = "cash" },
+                                enabled = deliveryMethod != "delivery"
                             )
                             
                             Spacer(modifier = Modifier.height(8.dp))
                             
                             // Pay Later Option - show if shop allows it (matching web)
-                            val isPayLaterAllowed = shopInfo?.allowPayLater == true
-                            val isUserWhitelisted = shopInfo?.payLaterWhitelist?.contains(userId) == true
-                                
-                            if (isPayLaterAllowed) {
+                            if (payLaterEnabled) {
                                 PaymentMethodOption(
                                     label = "Pay Later",
                                     isSelected = paymentMethod == "pay_later",
-                                    onClick = { paymentMethod = "pay_later" }
+                                    onClick = { paymentMethod = "pay_later" },
+                                    enabled = payLaterAvailable
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Trusted (repeat or whitelisted) customers can request Pay Later. Orders stay pending until the shop approves the credit.",
+                                    text = payLaterDisabledReason
+                                        ?: "Trusted (repeat or whitelisted) customers can request Pay Later. Orders stay pending until the shop approves the credit.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = WhiteTextMuted
+                                    color = if (payLaterAvailable) WhiteTextMuted else ErrorRed
                                 )
                             }
                         }
@@ -507,6 +662,18 @@ fun CartScreen(
                                     Text("-₹${String.format("%.2f", discountAmount)}", color = SuccessGreen)
                                 }
                             }
+
+                            if (PlatformConfig.PLATFORM_FEES_ENABLED &&
+                                PlatformConfig.PLATFORM_FEE_BREAKDOWN_ENABLED) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Platform Service Fee", color = WhiteTextMuted)
+                                    Text("₹${String.format("%.2f", platformFee)}", color = WhiteText)
+                                }
+                            }
                             
                             Spacer(modifier = Modifier.height(8.dp))
                             HorizontalDivider(color = GlassWhite)
@@ -523,7 +690,7 @@ fun CartScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    "₹${String.format("%.2f", total)}",
+                                    "₹${String.format("%.2f", totalAmount)}",
                                     color = OrangePrimary,
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.titleMedium
@@ -542,7 +709,7 @@ fun CartScreen(
                                 deliveryMethod = deliveryMethod,
                                 paymentMethod = paymentMethod,
                                 subtotal = subtotal.toString(),
-                                total = total.toString(),
+                                total = totalAmount.toString(),
                                 discount = discountAmount.toString(),
                                 promotionId = selectedPromotion?.id,
                                 onSuccess = {
@@ -589,6 +756,7 @@ fun CartScreen(
 @Composable
 private fun CartItemCard(
     item: CartItem,
+    canIncrease: Boolean,
     onUpdateQuantity: (Int) -> Unit,
     onRemove: () -> Unit
 ) {
@@ -682,14 +850,15 @@ private fun CartItemCard(
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     
-                    // Plus Button
-                    IconButton(
-                        onClick = { onUpdateQuantity(item.quantity + 1) },
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(GlassWhite)
-                    ) {
+                // Plus Button
+                IconButton(
+                    onClick = { onUpdateQuantity(item.quantity + 1) },
+                    enabled = canIncrease,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(GlassWhite)
+                ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Increase",
@@ -782,17 +951,19 @@ private fun DeliveryMethodOption(
 private fun PaymentMethodOption(
     label: String,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(
             selected = isSelected,
             onClick = onClick,
+            enabled = enabled,
             colors = RadioButtonDefaults.colors(
                 selectedColor = OrangePrimary,
                 unselectedColor = WhiteTextMuted
@@ -801,7 +972,7 @@ private fun PaymentMethodOption(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = WhiteText
+            color = if (enabled) WhiteText else WhiteTextMuted
         )
     }
 }

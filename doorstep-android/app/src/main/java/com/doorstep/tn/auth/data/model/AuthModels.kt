@@ -70,7 +70,21 @@ data class UserResponse(
     @Json(name = "addressCountry") val addressCountry: String? = null,
     @Json(name = "addressLandmark") val addressLandmark: String? = null,
     @Json(name = "latitude") val latitude: String? = null,
-    @Json(name = "longitude") val longitude: String? = null
+    @Json(name = "longitude") val longitude: String? = null,
+    @Json(name = "pickupAvailable") val pickupAvailable: Boolean? = null,
+    @Json(name = "deliveryAvailable") val deliveryAvailable: Boolean? = null,
+    @Json(name = "returnsEnabled") val returnsEnabled: Boolean? = null,
+    @Json(name = "catalogModeEnabled") val catalogModeEnabled: Boolean? = null,
+    @Json(name = "openOrderMode") val openOrderMode: Boolean? = null,
+    @Json(name = "allowPayLater") val allowPayLater: Boolean? = null,
+    @Json(name = "payLaterEligibilityForCustomer") val payLaterEligibilityForCustomer: PayLaterEligibility? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class PayLaterEligibility(
+    @Json(name = "eligible") val eligible: Boolean? = null,
+    @Json(name = "isKnownCustomer") val isKnownCustomer: Boolean? = null,
+    @Json(name = "isWhitelisted") val isWhitelisted: Boolean? = null
 )
 
 /**

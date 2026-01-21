@@ -200,13 +200,14 @@ fun OrderDetailScreen(
     if (showReturnDialog) {
         ReturnRequestDialog(
             onDismiss = { showReturnDialog = false },
-            onSubmit = { reason, comments ->
+            onSubmit = { reason, description ->
                 viewModel.createReturnRequest(
                     orderId = orderId,
                     reason = reason,
-                    comments = comments,
+                    description = description,
                     onSuccess = {
                         Toast.makeText(context, "Return request submitted", Toast.LENGTH_LONG).show()
+                        viewModel.loadOrderDetails(orderId)
                         showReturnDialog = false
                     },
                     onError = { message ->
@@ -1033,7 +1034,11 @@ private fun OrderDetailContent(
         }
         
         // ==================== Return Request (For Delivered Orders) ====================
-        if (order.status.lowercase() == "delivered") {
+        val canRequestReturn = order.status.lowercase() == "delivered" &&
+            order.shop?.returnsEnabled == true &&
+            order.returnRequested != true
+
+        if (canRequestReturn) {
              item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1099,10 +1104,10 @@ private fun OrderDetailContent(
 @Composable
 private fun ReturnRequestDialog(
     onDismiss: () -> Unit,
-    onSubmit: (String, String) -> Unit
+    onSubmit: (String, String?) -> Unit
 ) {
     var reason by remember { mutableStateOf("") }
-    var comments by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
     
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -1143,9 +1148,9 @@ private fun ReturnRequestDialog(
                 
                 // Comments Input
                 OutlinedTextField(
-                    value = comments,
-                    onValueChange = { comments = it },
-                    label = { Text("Additional Comments (Optional)") },
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Additional Details (Optional)") },
                     modifier = Modifier.fillMaxWidth().height(100.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = WhiteText,
@@ -1172,7 +1177,7 @@ private fun ReturnRequestDialog(
                     Button(
                         onClick = { 
                             if (reason.isNotBlank()) {
-                                onSubmit(reason, comments)
+                                onSubmit(reason, description.takeIf { it.isNotBlank() })
                             }
                         },
                         enabled = reason.isNotBlank(),

@@ -49,10 +49,14 @@ fun OrdersListScreen(
     val statusOptions = listOf(
         StatusOption("all", "All", Icons.AutoMirrored.Filled.ViewList, OrangePrimary),
         StatusOption("pending", "Pending", Icons.Default.Schedule, WarningYellow),
+        StatusOption("awaiting_customer_agreement", "Awaiting Approval", Icons.Default.HelpOutline, WarningYellow),
         StatusOption("confirmed", "Confirmed", Icons.Default.CheckCircle, SuccessGreen),
         StatusOption("processing", "Processing", Icons.Default.Settings, ProviderBlue),
+        StatusOption("packed", "Packed", Icons.Default.Inventory, ProviderBlue),
+        StatusOption("dispatched", "Dispatched", Icons.Default.LocalShipping, ProviderBlue),
         StatusOption("shipped", "Shipped", Icons.Default.LocalShipping, ProviderBlue),
         StatusOption("delivered", "Delivered", Icons.Default.Done, SuccessGreen),
+        StatusOption("returned", "Returned", Icons.Default.History, ErrorRed),
         StatusOption("cancelled", "Cancelled", Icons.Default.Cancel, ErrorRed)
     )
     

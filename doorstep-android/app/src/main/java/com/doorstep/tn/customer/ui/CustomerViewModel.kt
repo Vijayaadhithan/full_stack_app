@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.auth.data.repository.Result
 import com.doorstep.tn.core.network.ServiceBookingSlot
 import com.doorstep.tn.customer.data.model.*
@@ -105,11 +106,23 @@ class CustomerViewModel @Inject constructor(
     private val _selectedBooking = MutableStateFlow<Booking?>(null)
     val selectedBooking: StateFlow<Booking?> = _selectedBooking.asStateFlow()
 
+    private val _bookingRequests = MutableStateFlow<List<Booking>>(emptyList())
+    val bookingRequests: StateFlow<List<Booking>> = _bookingRequests.asStateFlow()
+
+    private val _bookingHistory = MutableStateFlow<List<Booking>>(emptyList())
+    val bookingHistory: StateFlow<List<Booking>> = _bookingHistory.asStateFlow()
+
     private val _bookingSlots = MutableStateFlow<List<ServiceBookingSlot>>(emptyList())
     val bookingSlots: StateFlow<List<ServiceBookingSlot>> = _bookingSlots.asStateFlow()
 
     private val _bookingSlotsLoading = MutableStateFlow(false)
     val bookingSlotsLoading: StateFlow<Boolean> = _bookingSlotsLoading.asStateFlow()
+
+    private val _bookingRequestsLoading = MutableStateFlow(false)
+    val bookingRequestsLoading: StateFlow<Boolean> = _bookingRequestsLoading.asStateFlow()
+
+    private val _bookingHistoryLoading = MutableStateFlow(false)
+    val bookingHistoryLoading: StateFlow<Boolean> = _bookingHistoryLoading.asStateFlow()
     
     // Loading & Error
     private val _isLoading = MutableStateFlow(false)
@@ -423,6 +436,16 @@ class CustomerViewModel @Inject constructor(
         }
     }
 
+    fun getShopInfo(shopId: Int, onResult: (UserResponse?) -> Unit) {
+        viewModelScope.launch {
+            when (val result = repository.getUserById(shopId)) {
+                is Result.Success -> onResult(result.data)
+                is Result.Error -> onResult(null)
+                is Result.Loading -> {}
+            }
+        }
+    }
+
     fun getShopUpiId(shopId: Int, onResult: (String?) -> Unit) {
         viewModelScope.launch {
             when (val result = repository.getUserById(shopId)) {
@@ -474,6 +497,30 @@ class CustomerViewModel @Inject constructor(
                 is Result.Loading -> {}
             }
             _isLoading.value = false
+        }
+    }
+
+    fun validatePromotionCode(
+        code: String,
+        shopId: Int,
+        cartItems: List<CartItem>,
+        subtotal: Double,
+        onSuccess: (com.doorstep.tn.core.network.PromotionValidationResponse) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val items = cartItems.map { item ->
+                com.doorstep.tn.core.network.PromotionValidationItem(
+                    productId = item.productId,
+                    quantity = item.quantity,
+                    price = item.product.price.toDoubleOrNull() ?: 0.0
+                )
+            }
+            when (val result = repository.validatePromotion(code, shopId, items, subtotal)) {
+                is Result.Success -> onSuccess(result.data)
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
         }
     }
 
@@ -598,6 +645,14 @@ class CustomerViewModel @Inject constructor(
                 promotionId = promotionId
             )) {
                 is Result.Success -> {
+                    if (promotionId != null) {
+                        when (val promoResult = repository.applyPromotion(promotionId, result.data.id)) {
+                            is Result.Error -> {
+                                _toastEvent.emit(promoResult.message ?: "Failed to apply promotion")
+                            }
+                            else -> {}
+                        }
+                    }
                     // Clear cart immediately for instant UI update
                     // Server clears cart on order creation, so no need to reload
                     _cartItems.value = emptyList()
@@ -825,6 +880,30 @@ class CustomerViewModel @Inject constructor(
             }
             
             _isLoading.value = false
+        }
+    }
+
+    fun loadBookingRequests() {
+        viewModelScope.launch {
+            _bookingRequestsLoading.value = true
+            when (val result = repository.getCustomerBookingRequests()) {
+                is Result.Success -> _bookingRequests.value = result.data
+                is Result.Error -> _error.value = result.message
+                is Result.Loading -> {}
+            }
+            _bookingRequestsLoading.value = false
+        }
+    }
+
+    fun loadBookingHistory() {
+        viewModelScope.launch {
+            _bookingHistoryLoading.value = true
+            when (val result = repository.getCustomerBookingHistory()) {
+                is Result.Success -> _bookingHistory.value = result.data
+                is Result.Error -> _error.value = result.message
+                is Result.Loading -> {}
+            }
+            _bookingHistoryLoading.value = false
         }
     }
     
@@ -1171,13 +1250,13 @@ class CustomerViewModel @Inject constructor(
     fun createReturnRequest(
         orderId: Int,
         reason: String,
-        comments: String? = null,
+        description: String? = null,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
         viewModelScope.launch {
             _isLoading.value = true
-            when (val result = repository.createReturnRequest(orderId, reason, comments)) {
+            when (val result = repository.createReturnRequest(orderId, reason, description)) {
                 is Result.Success -> onSuccess()
                 is Result.Error -> onError(result.message)
                 is Result.Loading -> {}

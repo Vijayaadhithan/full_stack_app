@@ -31,6 +31,10 @@ import com.doorstep.tn.core.network.ServiceReview
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 /**
  * Booking Detail Screen
@@ -61,6 +65,15 @@ fun BookingDetailScreen(
     
     // Reschedule dialog state
     var showRescheduleDialog by remember { mutableStateOf(false) }
+    var rescheduleComments by remember { mutableStateOf("") }
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = System.currentTimeMillis() + 86400000
+    )
+    val timePickerState = rememberTimePickerState(
+        initialHour = 10,
+        initialMinute = 0,
+        is24Hour = false
+    )
     
     // Payment dialog state
     var showPaymentDialog by remember { mutableStateOf(false) }
@@ -588,74 +601,109 @@ fun BookingDetailScreen(
                     )
                 }
 
-                // Reschedule Dialog (Simplified placeholder - just date/time picker would be complex to fully replicate here inline, assuming external or simplified input)
+                // Reschedule Dialog (matches BookingsListScreen)
                 if (showRescheduleDialog) {
-                     // For brevity, we'll use a simple text input for "New Date/Time" or "Comments" since full date picker is complex
-                     // Ideally we reuse the BookingRescheduleDialog if it exists or create one.
-                     // The requirement is to Match BookingsListScreen. In the list screen there was inline logic.
-                     // Let's implement a simple comment/date request dialog.
-                     var comments by remember { mutableStateOf("") }
-                     AlertDialog(
+                    DatePickerDialog(
                         onDismissRequest = { showRescheduleDialog = false },
-                        title = { Text("Request Reschedule") },
-                        text = {
-                            Column {
-                                Text("Enter preferred date/time and reason:", color = WhiteTextMuted)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = comments,
-                                    onValueChange = { comments = it },
-                                    label = { Text("Details") },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = WhiteText,
-                                        unfocusedTextColor = WhiteText
-                                    )
-                                )
-                            }
-                        },
                         confirmButton = {
                             Button(
                                 onClick = {
+                                    val selectedMillis = datePickerState.selectedDateMillis
+                                    if (selectedMillis == null) {
+                                        scope.launch { snackbarHostState.showSnackbar("Please select a date") }
+                                        return@Button
+                                    }
+
+                                    val zoneId = ZoneId.systemDefault()
+                                    val selectedDate = Instant.ofEpochMilli(selectedMillis)
+                                        .atZone(zoneId)
+                                        .toLocalDate()
+                                    val selectedTime = LocalTime.of(
+                                        timePickerState.hour,
+                                        timePickerState.minute
+                                    )
+                                    val selectedDateTime = ZonedDateTime.of(selectedDate, selectedTime, zoneId)
+
+                                    if (selectedDateTime.toInstant().isBefore(Instant.now())) {
+                                        scope.launch { snackbarHostState.showSnackbar("Please select a future time") }
+                                        return@Button
+                                    }
+
                                     showRescheduleDialog = false
-                                    // Use current date as placeholder if not picked, logic handled by viewmodel usually needs specific date
-                                    // For now passing today + 1 day as dummy or relying on comments if API allows
-                                    // The ViewModel.rescheduleBooking needs a String date.
-                                    // In a real app we'd use a DatePicker. For now, we assume user types it in comments or we send a placeholder "Requesting..."
-                                    // CAUTION: The API might expect ISO string. 
-                                    // Let's try to send a valid future date string or just comments if logic permits.
-                                    // Based on BookingsListScreen, it uses a date picker state. 
-                                    // We will skip full date picker re-implementation to avoid massive code block here, 
-                                    // and assume the user wants to trigger the flow. 
-                                    // Actually, let's just make a simple assumption: User communicates via text for now or we just send details.
-                                    // NOTE: To properly match, we should have used the same dialog code from List screen.
-                                    // Since I can't see the helper file for 'BookingRescheduleDialog', I'll make a best effort basic one.
-                                    val tomorrow = java.time.LocalDateTime.now().plusDays(1).toString()
                                     viewModel.rescheduleBooking(
                                         bookingId = b.id,
-                                        newBookingDate = tomorrow, // Placeholder defaults to tomorrow
-                                        comments = comments,
+                                        newBookingDate = selectedDateTime.toInstant().toString(),
+                                        comments = rescheduleComments.takeIf { it.isNotBlank() },
                                         onSuccess = {
                                             scope.launch { snackbarHostState.showSnackbar("Reschedule requested") }
                                             viewModel.loadBookingDetails(bookingId)
                                         },
                                         onError = {
-                                             scope.launch { snackbarHostState.showSnackbar("Error: $it") }
+                                            scope.launch { snackbarHostState.showSnackbar("Error: $it") }
                                         }
                                     )
+                                    rescheduleComments = ""
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = ProviderBlue)
                             ) {
-                                Text("Send Request")
+                                Text("Reschedule")
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showRescheduleDialog = false }) { Text("Cancel") }
                         },
-                        containerColor = SlateCard,
-                        titleContentColor = WhiteText
-                    )
+                        colors = DatePickerDefaults.colors(
+                            containerColor = SlateCard
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                "Select New Date",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+                            DatePicker(
+                                state = datePickerState,
+                                title = null,
+                                headline = null,
+                                showModeToggle = false,
+                                colors = DatePickerDefaults.colors(
+                                    containerColor = SlateCard,
+                                    titleContentColor = WhiteText,
+                                    headlineContentColor = WhiteText,
+                                    weekdayContentColor = WhiteTextMuted,
+                                    dayContentColor = WhiteText,
+                                    selectedDayContainerColor = ProviderBlue,
+                                    selectedDayContentColor = WhiteText,
+                                    todayContentColor = OrangePrimary,
+                                    todayDateBorderColor = OrangePrimary
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "Select Time",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = WhiteText
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TimePicker(state = timePickerState)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            OutlinedTextField(
+                                value = rescheduleComments,
+                                onValueChange = { rescheduleComments = it },
+                                label = { Text("Comments (optional)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = WhiteText,
+                                    unfocusedTextColor = WhiteTextMuted,
+                                    focusedBorderColor = ProviderBlue,
+                                    unfocusedBorderColor = GlassWhite
+                                )
+                            )
+                        }
+                    }
                 }
-
                 // Review Dialog
                 if (showReviewDialog) {
                     var rating by remember { mutableStateOf(existingReview?.rating ?: 5) }

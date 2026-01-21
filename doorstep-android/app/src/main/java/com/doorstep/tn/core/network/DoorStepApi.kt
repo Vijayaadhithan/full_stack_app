@@ -170,6 +170,12 @@ interface DoorStepApi {
     // /api/bookings returns service and provider info, /api/bookings/customer returns basic data only
     @GET("api/bookings")
     suspend fun getCustomerBookings(): Response<List<Booking>>
+
+    @GET("api/bookings/customer/requests")
+    suspend fun getCustomerBookingRequests(): Response<List<Booking>>
+
+    @GET("api/bookings/customer/history")
+    suspend fun getCustomerBookingHistory(): Response<List<Booking>>
     
     @GET("api/bookings/{id}")
     suspend fun getBookingById(@Path("id") bookingId: Int): Response<Booking>
@@ -422,6 +428,19 @@ interface DoorStepApi {
     // Promotions
     @GET("api/promotions/active/{shopId}")
     suspend fun getActivePromotions(@Path("shopId") shopId: Int): Response<List<Promotion>>
+
+    // Validate promotion code - matches web POST /api/promotions/validate
+    @POST("api/promotions/validate")
+    suspend fun validatePromotion(
+        @Body request: PromotionValidationRequest
+    ): Response<PromotionValidationResponse>
+
+    // Apply promotion to order - matches web POST /api/promotions/:id/apply
+    @POST("api/promotions/{id}/apply")
+    suspend fun applyPromotion(
+        @Path("id") promotionId: Int,
+        @Body request: PromotionApplyRequest
+    ): Response<Unit>
     
     // ==================== PRODUCT REVIEW ENDPOINT ====================
     

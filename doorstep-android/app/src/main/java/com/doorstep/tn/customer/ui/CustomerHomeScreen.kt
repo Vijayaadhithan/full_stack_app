@@ -34,6 +34,7 @@ import com.doorstep.tn.common.ui.GradientCard
 import com.doorstep.tn.common.ui.GradientType
 import com.doorstep.tn.common.ui.LanguageToggleButton
 import com.doorstep.tn.common.ui.TimeBasedGreeting
+import com.doorstep.tn.common.util.StatusUtils
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.data.model.Order
 
@@ -60,8 +61,12 @@ fun CustomerHomeScreen(
     // Collect state from ViewModel
     val orders by viewModel.orders.collectAsState()
     val bookings by viewModel.bookings.collectAsState()
+    val bookingRequests by viewModel.bookingRequests.collectAsState()
+    val bookingHistory by viewModel.bookingHistory.collectAsState()
     val cartItems by viewModel.cartItems.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val bookingRequestsLoading by viewModel.bookingRequestsLoading.collectAsState()
+    val bookingHistoryLoading by viewModel.bookingHistoryLoading.collectAsState()
     val language by viewModel.language.collectAsState()
     val userName by viewModel.userName.collectAsState()
     val unreadNotificationCount by viewModel.unreadNotificationCount.collectAsState()
@@ -74,6 +79,8 @@ fun CustomerHomeScreen(
     LaunchedEffect(Unit) {
         viewModel.loadOrders()
         viewModel.loadBookings()
+        viewModel.loadBookingRequests()
+        viewModel.loadBookingHistory()
         viewModel.loadCart()
         viewModel.loadNotifications()
         viewModel.loadBuyAgainRecommendations()
@@ -516,6 +523,110 @@ fun CustomerHomeScreen(
                     )
                 }
             }
+
+            // Booking Requests Section
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "ta") "முன்பதிவு கோரிக்கைகள்" else "Booking Requests",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(onClick = onNavigateToBookings) {
+                        Text(t.viewAll, color = OrangePrimary)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = OrangePrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val pendingRequests = bookingRequests.filter { it.status.lowercase() == "pending" }
+
+                if (bookingRequestsLoading && pendingRequests.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(80.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = OrangePrimary)
+                    }
+                } else if (pendingRequests.isEmpty()) {
+                    EmptyStateCard(
+                        message = if (language == "ta") "புதிய கோரிக்கைகள் இல்லை." else "No pending booking requests.",
+                        icon = Icons.Default.EventNote
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        pendingRequests.take(3).forEach { booking ->
+                            BookingListItem(
+                                booking = booking,
+                                statusLabel = StatusUtils.getBookingStatusLabel(booking.status),
+                                statusColor = StatusUtils.getBookingStatusColor(booking.status),
+                                onClick = onNavigateToBookings
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Booking History Section
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "ta") "முன்பதிவு வரலாறு" else "Booking History",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(onClick = onNavigateToBookings) {
+                        Text(t.viewAll, color = OrangePrimary)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = OrangePrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (bookingHistoryLoading && bookingHistory.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(80.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = OrangePrimary)
+                    }
+                } else if (bookingHistory.isEmpty()) {
+                    EmptyStateCard(
+                        message = if (language == "ta") "முன்பதிவு வரலாறு இல்லை." else "No booking history yet.",
+                        icon = Icons.Default.History
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        bookingHistory.take(3).forEach { booking ->
+                            BookingListItem(
+                                booking = booking,
+                                statusLabel = StatusUtils.getBookingStatusLabel(booking.status),
+                                statusColor = StatusUtils.getBookingStatusColor(booking.status),
+                                onClick = onNavigateToBookings
+                            )
+                        }
+                    }
+                }
+            }
             
             // Logout
             item {
@@ -778,21 +889,19 @@ private fun OrderPreviewCard(
     language: String,
     onClick: () -> Unit
 ) {
-    val statusColor = when (order.status.lowercase()) {
-        "delivered" -> SuccessGreen
-        "dispatched", "shipped" -> PeacockBlue
-        "cancelled" -> ErrorRed
-        else -> OrangePrimary
-    }
+    val statusColor = StatusUtils.getOrderStatusColor(order.status)
+    val statusLabel = StatusUtils.getOrderStatusLabel(order.status)
     
     val statusText = when (language) {
         "ta" -> when (order.status.lowercase()) {
             "pending" -> "நிலுவையில்"
             "delivered" -> "டெலிவரி ஆனது"
             "cancelled" -> "ரத்து"
+            "returned" -> "திருப்பப்பட்டது"
+            "awaiting_customer_agreement" -> "உறுதிப்படுத்தல் தேவை"
             else -> order.status
         }
-        else -> order.status
+        else -> statusLabel
     }
     
     Card(
@@ -951,6 +1060,67 @@ private fun BookingPreviewCard(
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingListItem(
+    booking: Booking,
+    statusLabel: String,
+    statusColor: Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = booking.service?.name ?: "Service #${booking.serviceId}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = WhiteText,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                val timeLabel = booking.timeSlotLabel ?: "Scheduled"
+                Text(
+                    text = timeLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted
+                )
+                booking.bookingDate?.let { date ->
+                    Text(
+                        text = date,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OrangePrimary
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = statusColor.copy(alpha = 0.15f)
+            ) {
+                Text(
+                    text = statusLabel,
+                    color = statusColor,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
         }
