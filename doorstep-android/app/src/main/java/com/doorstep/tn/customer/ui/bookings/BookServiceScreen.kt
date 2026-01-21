@@ -125,8 +125,7 @@ fun BookServiceScreen(
                     capturedLongitude = location.longitude
                     lastGpsAccuracyMeters = location.accuracy.toDouble()
 
-                    val userId = user?.id
-                    if (userId == null) {
+                    if (user == null) {
                         isCapturingLocation = false
                         scope.launch {
                             snackbarHostState.showSnackbar("Unable to save location. Please try again.")
@@ -134,12 +133,9 @@ fun BookServiceScreen(
                         return@addOnSuccessListener
                     }
 
-                    viewModel.updateProfile(
-                        userId = userId,
-                        request = UpdateProfileRequest(
-                            latitude = String.format(Locale.US, "%.7f", location.latitude),
-                            longitude = String.format(Locale.US, "%.7f", location.longitude)
-                        ),
+                    viewModel.updateProfileLocation(
+                        latitude = String.format(Locale.US, "%.7f", location.latitude),
+                        longitude = String.format(Locale.US, "%.7f", location.longitude),
                         onSuccess = {
                             isCapturingLocation = false
                             scope.launch {

@@ -42,6 +42,20 @@ data class UpdateProfileRequest(
     @Json(name = "longitude") val longitude: String? = null
 )
 
+// Profile Location - POST /api/profile/location (matches web app)
+@JsonClass(generateAdapter = true)
+data class UpdateProfileLocationRequest(
+    @Json(name = "latitude") val latitude: String,
+    @Json(name = "longitude") val longitude: String,
+    @Json(name = "context") val context: String = "user"
+)
+
+@JsonClass(generateAdapter = true)
+data class UpdateProfileLocationResponse(
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "user") val user: com.doorstep.tn.auth.data.model.UserResponse? = null
+)
+
 // Order - POST /api/orders
 @JsonClass(generateAdapter = true)
 data class CreateOrderRequest(

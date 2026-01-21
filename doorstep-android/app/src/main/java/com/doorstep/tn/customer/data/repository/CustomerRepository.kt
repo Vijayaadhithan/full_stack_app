@@ -23,12 +23,22 @@ class CustomerRepository @Inject constructor(
     private val cacheRepository: CacheRepository
 ) {
     // In-memory caches with 5-minute TTL (Layer 1 - fastest)
-    private val productsCache = MemoryCache<String, List<Product>>(maxSize = 50)
+    private val productsCache = MemoryCache<String, ProductsResponse>(maxSize = 50)
     private val servicesCache = MemoryCache<String, List<Service>>(maxSize = 50)
     private val shopsCache = MemoryCache<String, List<Shop>>(maxSize = 50)
     private val productDetailCache = MemoryCache<Int, Product>(maxSize = 100)
     private val serviceDetailCache = MemoryCache<Int, Service>(maxSize = 100)
     private val shopDetailCache = MemoryCache<Int, Shop>(maxSize = 50)
+
+    private fun filterShopsBySearch(shops: List<Shop>, search: String?): List<Shop> {
+        val query = search?.trim()?.lowercase()
+        if (query.isNullOrEmpty()) return shops
+        return shops.filter { shop ->
+            val name = shop.shopProfile?.shopName ?: shop.name ?: ""
+            val description = shop.shopProfile?.description ?: ""
+            name.lowercase().contains(query) || description.lowercase().contains(query)
+        }
+    }
     
     /**
      * Invalidate all caches - call after mutations that affect cached data
@@ -51,14 +61,19 @@ class CustomerRepository @Inject constructor(
     suspend fun getProducts(
         search: String? = null,
         category: String? = null,
+        minPrice: Double? = null,
+        maxPrice: Double? = null,
+        attributes: String? = null,
+        locationCity: String? = null,
+        locationState: String? = null,
         latitude: Double? = null,
         longitude: Double? = null,
         radius: Int? = null,
         page: Int = 1,
         pageSize: Int = 24
-    ): Result<List<Product>> {
+    ): Result<ProductsResponse> {
         // Generate cache key from parameters
-        val cacheKey = "products_${search}_${category}_${latitude}_${longitude}_${radius}_${page}"
+        val cacheKey = "products_${search}_${category}_${minPrice}_${maxPrice}_${attributes}_${locationCity}_${locationState}_${latitude}_${longitude}_${radius}_${page}"
         
         // Layer 1: In-memory cache (instant)
         productsCache.get(cacheKey)?.let { 
@@ -67,19 +82,39 @@ class CustomerRepository @Inject constructor(
         
         // Layer 2 + 3: Try network, fall back to Room
         return try {
-            val response = api.getProducts(search, category, page, pageSize, latitude, longitude, radius)
+            val response = api.getProducts(
+                search = search,
+                category = category,
+                minPrice = minPrice,
+                maxPrice = maxPrice,
+                attributes = attributes,
+                locationCity = locationCity,
+                locationState = locationState,
+                page = page,
+                pageSize = pageSize,
+                latitude = latitude,
+                longitude = longitude,
+                radius = radius
+            )
             if (response.isSuccessful && response.body() != null) {
-                val items = response.body()!!.items
+                val body = response.body()!!
                 // Cache to memory (Layer 1)
-                productsCache.put(cacheKey, items)
+                productsCache.put(cacheKey, body)
                 // Cache to Room database (Layer 2 - offline support)
-                cacheRepository.cacheProducts(items, cacheKey)
-                Result.Success(items)
+                cacheRepository.cacheProducts(body.items, cacheKey)
+                Result.Success(body)
             } else {
                 // Network failed, try Room cache
                 val cachedProducts = cacheRepository.getCachedProducts().firstOrNull()
                 if (!cachedProducts.isNullOrEmpty()) {
-                    Result.Success(cachedProducts)
+                    Result.Success(
+                        ProductsResponse(
+                            page = page,
+                            pageSize = pageSize,
+                            hasMore = false,
+                            items = cachedProducts
+                        )
+                    )
                 } else {
                     Result.Error(response.message(), response.code())
                 }
@@ -88,7 +123,14 @@ class CustomerRepository @Inject constructor(
             // Network error - return Room cache for offline support
             val cachedProducts = cacheRepository.getCachedProducts().firstOrNull()
             if (!cachedProducts.isNullOrEmpty()) {
-                Result.Success(cachedProducts)
+                Result.Success(
+                    ProductsResponse(
+                        page = page,
+                        pageSize = pageSize,
+                        hasMore = false,
+                        items = cachedProducts
+                    )
+                )
             } else {
                 Result.Error(e.message ?: "Failed to load products")
             }
@@ -135,29 +177,36 @@ class CustomerRepository @Inject constructor(
     // ==================== Shops ====================
     
     suspend fun getShops(
-        category: String? = null,
+        locationCity: String? = null,
+        locationState: String? = null,
         latitude: Double? = null,
         longitude: Double? = null,
-        search: String? = null,
-        radius: Int? = null
+        radius: Int? = null,
+        search: String? = null
     ): Result<List<Shop>> {
-        val cacheKey = "shops_${category}_${latitude}_${longitude}_${search}_${radius}"
+        val cacheKey = "shops_${locationCity}_${locationState}_${latitude}_${longitude}_${radius}"
         
         // Layer 1: In-memory cache
-        shopsCache.get(cacheKey)?.let { return Result.Success(it) }
+        shopsCache.get(cacheKey)?.let { cached ->
+            return Result.Success(filterShopsBySearch(cached, search))
+        }
         
         // Layer 2 + 3: Network with Room fallback
         return try {
-            val response = api.getShops(category, latitude, longitude, search, radius)
+            val response = if (latitude != null && longitude != null) {
+                api.searchNearbyShops(latitude, longitude, radius ?: 45)
+            } else {
+                api.getShops(locationCity, locationState)
+            }
             if (response.isSuccessful && response.body() != null) {
                 val shops = response.body()!!
                 shopsCache.put(cacheKey, shops)
                 cacheRepository.cacheShops(shops, cacheKey)
-                Result.Success(shops)
+                Result.Success(filterShopsBySearch(shops, search))
             } else {
                 val cachedShops = cacheRepository.getCachedShops().firstOrNull()
                 if (!cachedShops.isNullOrEmpty()) {
-                    Result.Success(cachedShops)
+                    Result.Success(filterShopsBySearch(cachedShops, search))
                 } else {
                     Result.Error(response.message(), response.code())
                 }
@@ -165,7 +214,7 @@ class CustomerRepository @Inject constructor(
         } catch (e: Exception) {
             val cachedShops = cacheRepository.getCachedShops().firstOrNull()
             if (!cachedShops.isNullOrEmpty()) {
-                Result.Success(cachedShops)
+                Result.Success(filterShopsBySearch(cachedShops, search))
             } else {
                 Result.Error(e.message ?: "Failed to load shops")
             }
@@ -206,18 +255,35 @@ class CustomerRepository @Inject constructor(
     
     suspend fun getServices(
         category: String? = null,
+        search: String? = null,
+        minPrice: Double? = null,
+        maxPrice: Double? = null,
+        locationCity: String? = null,
+        locationState: String? = null,
+        availableNow: Boolean? = null,
         latitude: Double? = null,
         longitude: Double? = null,
         radius: Int? = null
     ): Result<List<Service>> {
-        val cacheKey = "services_${category}_${latitude}_${longitude}_${radius}"
+        val cacheKey = "services_${category}_${search}_${minPrice}_${maxPrice}_${locationCity}_${locationState}_${availableNow}_${latitude}_${longitude}_${radius}"
         
         // Layer 1: In-memory cache
         servicesCache.get(cacheKey)?.let { return Result.Success(it) }
         
         // Layer 2 + 3: Network with Room fallback
         return try {
-            val response = api.getServices(category, latitude, longitude, radius)
+            val response = api.getServices(
+                category = category,
+                search = search,
+                minPrice = minPrice,
+                maxPrice = maxPrice,
+                locationCity = locationCity,
+                locationState = locationState,
+                availableNow = availableNow,
+                latitude = latitude,
+                longitude = longitude,
+                radius = radius
+            )
             if (response.isSuccessful && response.body() != null) {
                 val services = response.body()!!
                 servicesCache.put(cacheKey, services)
@@ -354,6 +420,29 @@ class CustomerRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to update profile")
+        }
+    }
+
+    suspend fun updateProfileLocation(
+        latitude: String,
+        longitude: String,
+        context: String = "user"
+    ): Result<UserResponse> {
+        return try {
+            val request = com.doorstep.tn.core.network.UpdateProfileLocationRequest(
+                latitude = latitude,
+                longitude = longitude,
+                context = context
+            )
+            val response = api.updateProfileLocation(request)
+            val user = response.body()?.user
+            if (response.isSuccessful && user != null) {
+                Result.Success(user)
+            } else {
+                Result.Error(response.message(), response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to update location")
         }
     }
 

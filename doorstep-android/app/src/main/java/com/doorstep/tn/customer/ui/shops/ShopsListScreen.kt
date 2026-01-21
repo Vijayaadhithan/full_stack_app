@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -44,18 +43,37 @@ fun ShopsListScreen(
     val shops by viewModel.shops.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
+    var locationCity by remember { mutableStateOf("") }
+    var locationState by remember { mutableStateOf("") }
+    var showLocationFilters by remember { mutableStateOf(false) }
     
     // Location filter state
     var locationRadius by remember { mutableIntStateOf(45) }
     var locationLat by remember { mutableStateOf<Double?>(null) }
     var locationLng by remember { mutableStateOf<Double?>(null) }
     
-    LaunchedEffect(locationLat, locationLng, locationRadius) {
+    LaunchedEffect(locationLat, locationLng, locationRadius, locationCity, locationState) {
         viewModel.loadShops(
+            locationCity = locationCity.takeIf { it.isNotBlank() && locationLat == null },
+            locationState = locationState.takeIf { it.isNotBlank() && locationLat == null },
             latitude = locationLat,
             longitude = locationLng,
             radius = if (locationLat != null) locationRadius else null
         )
+    }
+
+    val filteredShops = remember(shops, searchQuery) {
+        val query = searchQuery.trim()
+        if (query.isEmpty()) {
+            shops
+        } else {
+            val lowered = query.lowercase()
+            shops.filter { shop ->
+                val name = shop.shopProfile?.shopName ?: shop.name ?: ""
+                val description = shop.shopProfile?.description ?: ""
+                name.lowercase().contains(lowered) || description.lowercase().contains(lowered)
+            }
+        }
     }
     
     Scaffold(
@@ -103,16 +121,12 @@ fun ShopsListScreen(
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { 
                                 searchQuery = ""
-                                viewModel.loadShops(latitude = locationLat, longitude = locationLng, radius = if (locationLat != null) locationRadius else null)
                             }) {
                                 Icon(Icons.Default.Clear, contentDescription = "Clear", tint = WhiteTextMuted, modifier = Modifier.size(16.dp))
                             }
                         }
                     },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(
-                        onSearch = { viewModel.loadShops(search = searchQuery, latitude = locationLat, longitude = locationLng, radius = if (locationLat != null) locationRadius else null) }
-                    ),
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -145,6 +159,15 @@ fun ShopsListScreen(
                         locationLng = null
                     }
                 )
+
+                // City/State filter trigger (fallback when location is not set)
+                IconButton(onClick = { showLocationFilters = true }) {
+                    Icon(
+                        imageVector = Icons.Default.FilterList,
+                        contentDescription = "Filters",
+                        tint = WhiteTextMuted
+                    )
+                }
             }
             
             // Location info
@@ -169,7 +192,7 @@ fun ShopsListScreen(
                         CircularProgressIndicator(color = ShopGreen)
                     }
                 }
-                shops.isEmpty() -> {
+                filteredShops.isEmpty() -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -192,7 +215,7 @@ fun ShopsListScreen(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(shops) { shop ->
+                        items(filteredShops) { shop ->
                             ShopCard(
                                 shop = shop,
                                 onClick = { onNavigateToShop(shop.id) }
@@ -203,6 +226,70 @@ fun ShopsListScreen(
             }
         }
     }
+
+    if (showLocationFilters) {
+        LocationFilterDialog(
+            initialCity = locationCity,
+            initialState = locationState,
+            onApply = { city, state ->
+                locationCity = city
+                locationState = state
+            },
+            onDismiss = { showLocationFilters = false }
+        )
+    }
+}
+
+@Composable
+private fun LocationFilterDialog(
+    initialCity: String,
+    initialState: String,
+    onApply: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var city by remember(initialCity) { mutableStateOf(initialCity) }
+    var state by remember(initialState) { mutableStateOf(initialState) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Filter by location") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = city,
+                    onValueChange = { city = it },
+                    label = { Text("City") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = state,
+                    onValueChange = { state = it },
+                    label = { Text("State") },
+                    singleLine = true
+                )
+                Text(
+                    text = "These filters apply when nearby search is not enabled.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onApply(city.trim(), state.trim())
+                    onDismiss()
+                }
+            ) {
+                Text("Apply")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -234,7 +321,7 @@ private fun ShopCard(
                 if (!shop.profileImage.isNullOrEmpty()) {
                     AsyncImage(
                         model = shop.profileImage,
-                        contentDescription = shop.name,
+                        contentDescription = shop.displayName,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
@@ -253,7 +340,7 @@ private fun ShopCard(
             // Shop Info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = shop.name,
+                    text = shop.displayName,
                     style = MaterialTheme.typography.titleMedium,
                     color = WhiteText,
                     fontWeight = FontWeight.Bold,
@@ -295,7 +382,8 @@ private fun ShopCard(
                     }
                     
                     // Rating
-                    if (shop.rating != null && shop.rating > 0) {
+                    val rating = shop.rating
+                    if (rating != null && rating > 0) {
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = null,

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.core.network.OrderTimelineEntry
 import com.doorstep.tn.customer.data.model.Order
@@ -274,8 +275,17 @@ private fun OrderDetailContent(
     var isUpdatingPaymentMethod by remember { mutableStateOf(false) }
     val normalizedPaymentMethod = order.paymentMethod?.lowercase()
     val isTextOrder = order.orderType == "text_order"
+    var shopInfo by remember { mutableStateOf<UserResponse?>(null) }
     var resolvedUpiId by remember(order.shop?.upiId, order.shopId) {
         mutableStateOf(order.shop?.upiId)
+    }
+
+    LaunchedEffect(order.shopId) {
+        order.shopId?.let { shopId ->
+            viewModel.getShopInfo(shopId) { shop ->
+                shopInfo = shop
+            }
+        }
     }
 
     LaunchedEffect(order.shopId, order.shop?.upiId) {
@@ -292,6 +302,15 @@ private fun OrderDetailContent(
         }
     }
     val upiIdToUse = resolvedUpiId?.takeIf { it.isNotBlank() }
+    val payLaterEligibility = shopInfo?.payLaterEligibilityForCustomer
+    val payLaterEnabled = shopInfo?.allowPayLater == true
+    val payLaterAvailable = payLaterEnabled && (payLaterEligibility?.eligible ?: true)
+    val payLaterDisabledReason = when {
+        !payLaterEnabled -> "Pay Later is disabled for this shop."
+        payLaterEligibility?.eligible == false ->
+            "Pay Later is limited to repeat or whitelisted customers. Ask the shop owner to whitelist you."
+        else -> null
+    }
     
     // Helper to copy UPI ID to clipboard
     val copyUpiToClipboard: () -> Unit = {
@@ -584,7 +603,7 @@ private fun OrderDetailContent(
                                     OrderPaymentMethodOption(
                                         label = "UPI",
                                         isSelected = normalizedPaymentMethod == "upi",
-                                        enabled = !isUpdatingPaymentMethod,
+                                        enabled = !isUpdatingPaymentMethod && !upiIdToUse.isNullOrBlank(),
                                         onClick = { updatePaymentMethod("upi") }
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -594,16 +613,23 @@ private fun OrderDetailContent(
                                         enabled = !isUpdatingPaymentMethod,
                                         onClick = { updatePaymentMethod("cash") }
                                     )
-                                    if (normalizedPaymentMethod == "pay_later") {
+                                    if (payLaterEnabled) {
                                         Spacer(modifier = Modifier.height(8.dp))
                                         OrderPaymentMethodOption(
                                             label = "Pay Later",
-                                            isSelected = true,
-                                            enabled = !isUpdatingPaymentMethod,
+                                            isSelected = normalizedPaymentMethod == "pay_later",
+                                            enabled = !isUpdatingPaymentMethod && payLaterAvailable,
                                             onClick = { updatePaymentMethod("pay_later") }
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(16.dp))
+                                    if (payLaterDisabledReason != null && payLaterEnabled) {
+                                        Text(
+                                            text = payLaterDisabledReason,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteTextMuted
+                                        )
+                                    }
                                 }
                                 
                                 when (normalizedPaymentMethod) {

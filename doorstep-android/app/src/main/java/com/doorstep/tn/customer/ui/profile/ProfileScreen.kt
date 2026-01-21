@@ -39,7 +39,7 @@ import java.util.Locale
 /**
  * Customer Profile Screen - matches web app's profile.tsx
  * Features: Full form, address fields, verification status
- * Uses same PATCH /api/users/{id} API as web
+ * Uses PATCH /api/users/{id} for profile fields and /api/profile/location for GPS pin
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +89,7 @@ fun ProfileScreen(
     var capturedLatitude by remember(user) { mutableStateOf(user?.latitude?.toDoubleOrNull()) }
     var capturedLongitude by remember(user) { mutableStateOf(user?.longitude?.toDoubleOrNull()) }
     var isCapturingLocation by remember { mutableStateOf(false) }
+    var isSavingLocation by remember { mutableStateOf(false) }
     
     // Location permission launcher
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -527,6 +528,55 @@ fun ProfileScreen(
                             Text(if (hasLocation) "Update Location" else "Capture My Location")
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            val lat = capturedLatitude
+                            val lng = capturedLongitude
+                            if (lat == null || lng == null) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Capture a location before saving.")
+                                }
+                                return@Button
+                            }
+                            isSavingLocation = true
+                            customerViewModel.updateProfileLocation(
+                                latitude = String.format(Locale.US, "%.7f", lat),
+                                longitude = String.format(Locale.US, "%.7f", lng),
+                                onSuccess = {
+                                    isSavingLocation = false
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Location saved successfully!")
+                                    }
+                                },
+                                onError = { errorMessage ->
+                                    isSavingLocation = false
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Error: $errorMessage")
+                                    }
+                                }
+                            )
+                        },
+                        enabled = hasLocation && !isSavingLocation,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
+                    ) {
+                        if (isSavingLocation) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = WhiteText
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Saving...")
+                        } else {
+                            Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Save Location")
+                        }
+                    }
                 }
             }
 
@@ -600,7 +650,7 @@ fun ProfileScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Save Button - calls PATCH /api/users/{id} like web
+            // Save Button - calls PATCH /api/users/{id} like web (location saved separately)
             Button(
                 onClick = { 
                     isLoading = true
@@ -623,9 +673,7 @@ fun ProfileScreen(
                                 addressState = addressState.takeIf { it.isNotBlank() },
                                 addressPostalCode = addressPostalCode.takeIf { it.isNotBlank() },
                                 addressCountry = addressCountry.takeIf { it.isNotBlank() },
-                                addressLandmark = addressLandmark.takeIf { it.isNotBlank() },
-                                latitude = capturedLatitude?.let { String.format(Locale.US, "%.7f", it) },
-                                longitude = capturedLongitude?.let { String.format(Locale.US, "%.7f", it) }
+                                addressLandmark = addressLandmark.takeIf { it.isNotBlank() }
                             ),
                             onSuccess = {
                                 isLoading = false

@@ -64,6 +64,11 @@ interface DoorStepApi {
     suspend fun getProducts(
         @Query("searchTerm") search: String? = null,
         @Query("category") category: String? = null,
+        @Query("minPrice") minPrice: Double? = null,
+        @Query("maxPrice") maxPrice: Double? = null,
+        @Query("attributes") attributes: String? = null,
+        @Query("locationCity") locationCity: String? = null,
+        @Query("locationState") locationState: String? = null,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 24,
         @Query("lat") latitude: Double? = null,
@@ -85,6 +90,12 @@ interface DoorStepApi {
     @GET("api/services")
     suspend fun getServices(
         @Query("category") category: String? = null,
+        @Query("searchTerm") search: String? = null,
+        @Query("minPrice") minPrice: Double? = null,
+        @Query("maxPrice") maxPrice: Double? = null,
+        @Query("locationCity") locationCity: String? = null,
+        @Query("locationState") locationState: String? = null,
+        @Query("availableNow") availableNow: Boolean? = null,
         @Query("lat") latitude: Double? = null,
         @Query("lng") longitude: Double? = null,
         @Query("radius") radius: Int? = null
@@ -97,11 +108,16 @@ interface DoorStepApi {
     
     @GET("api/shops")
     suspend fun getShops(
-        @Query("category") category: String? = null,
-        @Query("lat") latitude: Double? = null,
-        @Query("lng") longitude: Double? = null,
-        @Query("search") search: String? = null,
-        @Query("radius") radius: Int? = null
+        @Query("locationCity") locationCity: String? = null,
+        @Query("locationState") locationState: String? = null
+    ): Response<List<Shop>>
+
+    // Nearby shop search - matches web GET /api/search/nearby
+    @GET("api/search/nearby")
+    suspend fun searchNearbyShops(
+        @Query("lat") latitude: Double,
+        @Query("lng") longitude: Double,
+        @Query("radius") radius: Int
     ): Response<List<Shop>>
     
     @GET("api/shops/{id}")
@@ -141,6 +157,11 @@ interface DoorStepApi {
         @Path("id") userId: Int,
         @Body data: UpdateProfileRequest
     ): Response<UserResponse>
+
+    @POST("api/profile/location")
+    suspend fun updateProfileLocation(
+        @Body request: UpdateProfileLocationRequest
+    ): Response<UpdateProfileLocationResponse>
     
     // Generic profile update for role switching and partial updates
     @PATCH("api/users/{id}")

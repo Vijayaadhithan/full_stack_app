@@ -208,17 +208,22 @@ private fun CachedShop.toShop(): Shop {
     return Shop(
         id = id,
         name = name,
-        description = description,
+        shopProfile = com.doorstep.tn.customer.data.model.ShopProfile(
+            shopName = name,
+            description = description
+        ),
         phone = phone,
-        rating = rating,
-        isOpen = isOpen
+        profilePicture = images,
+        averageRating = rating,
+        pickupAvailable = true,
+        deliveryAvailable = false
     )
 }
 
 private fun Shop.toCachedShop(): CachedShop {
     return CachedShop(
         id = id,
-        name = name,
+        name = displayName,
         description = description,
         address = addressStreet,
         phone = phone,

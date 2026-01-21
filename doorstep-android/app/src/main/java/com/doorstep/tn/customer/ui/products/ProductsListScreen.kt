@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -31,6 +33,7 @@ import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.ui.LocationFilterDropdown
 import com.doorstep.tn.customer.data.model.Product
 import com.doorstep.tn.customer.ui.CustomerViewModel
+import org.json.JSONObject
 
 /**
  * Products List Screen - with location filter matching web UI
@@ -45,8 +48,19 @@ fun ProductsListScreen(
 ) {
     val products by viewModel.products.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isLoadingMore by viewModel.isLoadingMore.collectAsState()
+    val productsHasMore by viewModel.productsHasMore.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
+
+    var appliedSearch by remember { mutableStateOf("") }
+    var minPriceFilter by remember { mutableStateOf("") }
+    var maxPriceFilter by remember { mutableStateOf("") }
+    var locationCityFilter by remember { mutableStateOf("") }
+    var locationStateFilter by remember { mutableStateOf("") }
+    var colorFilter by remember { mutableStateOf("") }
+    var sizeFilter by remember { mutableStateOf("") }
+    var showFilters by remember { mutableStateOf(false) }
     
     // Reactive Cart Count
     val cartCount by viewModel.cartItems.collectAsState().let { state ->
@@ -69,16 +83,60 @@ fun ProductsListScreen(
     var locationLat by remember { mutableStateOf<Double?>(null) }
     var locationLng by remember { mutableStateOf<Double?>(null) }
     
-    val categories = listOf("All", "Grocery", "Electronics", "Clothing", "Home", "Beauty")
+    val categories = listOf(
+        "All" to null,
+        "Groceries" to "groceries",
+        "Electronics" to "electronics",
+        "Clothing" to "readymade",
+        "Home" to "hardware",
+        "Beauty" to "beauty"
+    )
+
+    val gridState = rememberLazyGridState()
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val layoutInfo = gridState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems > 0 && lastVisible >= totalItems - 4
+        }
+    }
     
     // Re-fetch products when category or location changes
-    LaunchedEffect(selectedCategory, locationLat, locationLng, locationRadius) {
+    LaunchedEffect(
+        selectedCategory,
+        locationLat,
+        locationLng,
+        locationRadius,
+        appliedSearch,
+        minPriceFilter,
+        maxPriceFilter,
+        locationCityFilter,
+            locationStateFilter,
+            colorFilter,
+            sizeFilter
+    ) {
         viewModel.loadProducts(
             category = selectedCategory,
+            search = appliedSearch.takeIf { it.isNotBlank() },
+            minPrice = minPriceFilter.toDoubleOrNull(),
+            maxPrice = maxPriceFilter.toDoubleOrNull(),
+            attributes = buildAttributesJson(
+                color = colorFilter,
+                size = sizeFilter
+            ),
+            locationCity = locationCityFilter.takeIf { it.isNotBlank() },
+            locationState = locationStateFilter.takeIf { it.isNotBlank() },
             latitude = locationLat,
             longitude = locationLng,
             radius = if (locationLat != null) locationRadius else null
         )
+    }
+
+    LaunchedEffect(shouldLoadMore, productsHasMore, isLoadingMore, isLoading) {
+        if (shouldLoadMore && productsHasMore && !isLoadingMore && !isLoading) {
+            viewModel.loadMoreProducts()
+        }
     }
     
     Scaffold(
@@ -143,14 +201,17 @@ fun ProductsListScreen(
                     },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                            IconButton(onClick = {
+                                viewModel.updateSearchQuery("")
+                                appliedSearch = ""
+                            }) {
                                 Icon(Icons.Default.Clear, contentDescription = "Clear", tint = WhiteTextMuted, modifier = Modifier.size(16.dp))
                             }
                         }
                     },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(
-                        onSearch = { viewModel.loadProducts(search = searchQuery, latitude = locationLat, longitude = locationLng, radius = if (locationLat != null) locationRadius else null) }
+                        onSearch = { appliedSearch = searchQuery.trim() }
                     ),
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
@@ -184,6 +245,14 @@ fun ProductsListScreen(
                         locationLng = null
                     }
                 )
+
+                IconButton(onClick = { showFilters = true }) {
+                    Icon(
+                        imageVector = Icons.Default.FilterList,
+                        contentDescription = "Filters",
+                        tint = WhiteTextMuted
+                    )
+                }
             }
             
             // Location info
@@ -197,19 +266,23 @@ fun ProductsListScreen(
             }
             
             // Category Chips
+            val selectedTabIndex = categories.indexOfFirst { it.second == selectedCategory }.let { index ->
+                if (index >= 0) index else 0
+            }
+
             ScrollableTabRow(
-                selectedTabIndex = categories.indexOf(selectedCategory ?: "All"),
+                selectedTabIndex = selectedTabIndex,
                 modifier = Modifier.fillMaxWidth(),
                 containerColor = SlateDarker,
                 edgePadding = 16.dp,
                 divider = {}
             ) {
-                categories.forEach { category ->
-                    val isSelected = (selectedCategory ?: "All") == category
+                categories.forEach { (categoryLabel, categoryValue) ->
+                    val isSelected = selectedCategory == categoryValue
                     Tab(
                         selected = isSelected,
                         onClick = { 
-                            viewModel.updateCategory(if (category == "All") null else category)
+                            viewModel.updateCategory(categoryValue)
                         }
                     ) {
                         Surface(
@@ -218,7 +291,7 @@ fun ProductsListScreen(
                             modifier = Modifier.padding(8.dp)
                         ) {
                             Text(
-                                text = category,
+                                text = categoryLabel,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                 color = WhiteText
                             )
@@ -260,6 +333,7 @@ fun ProductsListScreen(
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         modifier = Modifier.fillMaxSize(),
+                        state = gridState,
                         contentPadding = PaddingValues(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -279,11 +353,145 @@ fun ProductsListScreen(
                                 }
                             )
                         }
+                        if (isLoadingMore) {
+                            item(span = { GridItemSpan(2) }) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(color = OrangePrimary)
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
+    if (showFilters) {
+        ProductFiltersDialog(
+            initialMinPrice = minPriceFilter,
+            initialMaxPrice = maxPriceFilter,
+            initialCity = locationCityFilter,
+            initialState = locationStateFilter,
+            initialColor = colorFilter,
+            initialSize = sizeFilter,
+            onApply = { minPrice, maxPrice, city, state, color, size ->
+                minPriceFilter = minPrice
+                maxPriceFilter = maxPrice
+                locationCityFilter = city
+                locationStateFilter = state
+                colorFilter = color
+                sizeFilter = size
+            },
+            onDismiss = { showFilters = false }
+        )
+    }
+}
+
+@Composable
+private fun ProductFiltersDialog(
+    initialMinPrice: String,
+    initialMaxPrice: String,
+    initialCity: String,
+    initialState: String,
+    initialColor: String,
+    initialSize: String,
+    onApply: (String, String, String, String, String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var minPrice by remember(initialMinPrice) { mutableStateOf(initialMinPrice) }
+    var maxPrice by remember(initialMaxPrice) { mutableStateOf(initialMaxPrice) }
+    var city by remember(initialCity) { mutableStateOf(initialCity) }
+    var state by remember(initialState) { mutableStateOf(initialState) }
+    var color by remember(initialColor) { mutableStateOf(initialColor) }
+    var size by remember(initialSize) { mutableStateOf(initialSize) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Filters") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = minPrice,
+                    onValueChange = { minPrice = it },
+                    label = { Text("Min price") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = maxPrice,
+                    onValueChange = { maxPrice = it },
+                    label = { Text("Max price") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = city,
+                    onValueChange = { city = it },
+                    label = { Text("City") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = state,
+                    onValueChange = { state = it },
+                    label = { Text("State") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = color,
+                    onValueChange = { color = it },
+                    label = { Text("Color") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = size,
+                    onValueChange = { size = it },
+                    label = { Text("Size") },
+                    singleLine = true
+                )
+                Text(
+                    text = "City/State filters apply when nearby search is disabled.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onApply(
+                        minPrice.trim(),
+                        maxPrice.trim(),
+                        city.trim(),
+                        state.trim(),
+                        color.trim(),
+                        size.trim()
+                    )
+                    onDismiss()
+                }
+            ) {
+                Text("Apply")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+private fun buildAttributesJson(color: String, size: String): String? {
+    val attributes = mutableMapOf<String, String>()
+    if (color.isNotBlank()) {
+        attributes["color"] = color.trim()
+    }
+    if (size.isNotBlank()) {
+        attributes["size"] = size.trim()
+    }
+    return if (attributes.isEmpty()) null else JSONObject(attributes).toString()
 }
 
 @Composable

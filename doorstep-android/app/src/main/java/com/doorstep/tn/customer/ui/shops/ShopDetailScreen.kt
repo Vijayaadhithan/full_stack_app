@@ -73,7 +73,7 @@ fun ShopDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(shop?.name ?: "Shop Details", color = WhiteText) },
+                title = { Text(shop?.displayName ?: "Shop Details", color = WhiteText) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -136,7 +136,7 @@ fun ShopDetailScreen(
                             if (!s.profileImage.isNullOrEmpty()) {
                                 AsyncImage(
                                     model = s.profileImage,
-                                    contentDescription = s.name,
+                                    contentDescription = s.displayName,
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop
                                 )
@@ -153,7 +153,7 @@ fun ShopDetailScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         Text(
-                            text = s.name,
+                            text = s.displayName,
                             style = MaterialTheme.typography.titleLarge,
                             color = WhiteText,
                             fontWeight = FontWeight.Bold
@@ -193,7 +193,8 @@ fun ShopDetailScreen(
                             }
                             
                             // Rating
-                            if (s.rating != null && s.rating > 0) {
+                            val rating = s.rating
+                            if (rating != null && rating > 0) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Default.Star,
@@ -228,7 +229,7 @@ fun ShopDetailScreen(
                         
                         // Quick Order Button - Premium feature
                         Button(
-                            onClick = { onNavigateToQuickOrder(shopId, s.name) },
+                            onClick = { onNavigateToQuickOrder(shopId, s.displayName) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(

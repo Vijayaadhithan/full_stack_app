@@ -71,32 +71,83 @@ data class Service(
 // ==================== Shops ====================
 
 @JsonClass(generateAdapter = true)
+data class ShopProfile(
+    @Json(name = "shopName") val shopName: String? = null,
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "businessType") val businessType: String? = null,
+    @Json(name = "workingHours") val workingHours: ShopWorkingHours? = null,
+    @Json(name = "catalogModeEnabled") val catalogModeEnabled: Boolean? = null,
+    @Json(name = "openOrderMode") val openOrderMode: Boolean? = null,
+    @Json(name = "allowPayLater") val allowPayLater: Boolean? = null,
+    @Json(name = "payLaterWhitelist") val payLaterWhitelist: List<Int>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class ShopWorkingHours(
+    @Json(name = "from") val from: String? = null,
+    @Json(name = "to") val to: String? = null,
+    @Json(name = "days") val days: List<String>? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class Shop(
     @Json(name = "id") val id: Int,
-    @Json(name = "name") val name: String,
+    @Json(name = "ownerId") val ownerId: Int? = null,
+    @Json(name = "shopTableId") val shopTableId: Int? = null,
+    @Json(name = "name") val name: String? = null,
     @Json(name = "phone") val phone: String? = null,
     @Json(name = "email") val email: String? = null,
+    @Json(name = "shopProfile") val shopProfile: ShopProfile? = null,
+    @Json(name = "profilePicture") val profilePicture: String? = null,
+    @Json(name = "shopBannerImageUrl") val shopBannerImageUrl: String? = null,
+    @Json(name = "shopLogoImageUrl") val shopLogoImageUrl: String? = null,
     @Json(name = "addressStreet") val addressStreet: String? = null,
     @Json(name = "addressCity") val addressCity: String? = null,
     @Json(name = "addressState") val addressState: String? = null,
-    @Json(name = "latitude") val latitude: Double? = null,
-    @Json(name = "longitude") val longitude: Double? = null,
-    @Json(name = "profileImage") val profileImage: String? = null,
-    @Json(name = "coverImage") val coverImage: String? = null,
-    @Json(name = "description") val description: String? = null,
-    @Json(name = "openingHours") val openingHours: String? = null,
-    @Json(name = "isOpen") val isOpen: Boolean = true,
-    @Json(name = "rating") val rating: Double? = null,
-    @Json(name = "reviewCount") val reviewCount: Int = 0,
-    // Delivery options - matches web's shopInfo
-    @Json(name = "pickupAvailable") val pickupAvailable: Boolean = true,
+    @Json(name = "addressPostalCode") val addressPostalCode: String? = null,
+    @Json(name = "addressCountry") val addressCountry: String? = null,
+    @Json(name = "latitude") val latitude: String? = null,
+    @Json(name = "longitude") val longitude: String? = null,
     @Json(name = "deliveryAvailable") val deliveryAvailable: Boolean = false,
+    @Json(name = "pickupAvailable") val pickupAvailable: Boolean = false,
+    @Json(name = "returnsEnabled") val returnsEnabled: Boolean = false,
+    @Json(name = "averageRating") val averageRating: Any? = null,
+    @Json(name = "totalReviews") val totalReviews: Int = 0,
     @Json(name = "catalogModeEnabled") val catalogModeEnabled: Boolean? = null,
     @Json(name = "openOrderMode") val openOrderMode: Boolean? = null,
-    @Json(name = "returnsEnabled") val returnsEnabled: Boolean? = null,
-    @Json(name = "allowPayLater") val allowPayLater: Boolean = false,
-    @Json(name = "payLaterWhitelist") val payLaterWhitelist: List<Int>? = null
-)
+    @Json(name = "allowPayLater") val allowPayLater: Boolean? = null
+) {
+    val displayName: String
+        get() = shopProfile?.shopName?.takeIf { it.isNotBlank() } ?: (name ?: "Shop")
+
+    val description: String?
+        get() = shopProfile?.description?.takeIf { it.isNotBlank() }
+
+    val rating: Double?
+        get() = when (val value = averageRating) {
+            is Number -> value.toDouble()
+            is String -> value.toDoubleOrNull()
+            else -> null
+        }
+
+    val reviewCount: Int
+        get() = totalReviews
+
+    val profileImage: String?
+        get() = shopLogoImageUrl ?: profilePicture
+
+    val coverImage: String?
+        get() = shopBannerImageUrl
+
+    val latitudeValue: Double?
+        get() = latitude?.toDoubleOrNull()
+
+    val longitudeValue: Double?
+        get() = longitude?.toDoubleOrNull()
+
+    val isOpen: Boolean
+        get() = true
+}
 
 // ==================== Orders ====================
 

@@ -54,6 +54,14 @@ class CustomerViewModel @Inject constructor(
     // Products
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     val products: StateFlow<List<Product>> = _products.asStateFlow()
+
+    private val _productsHasMore = MutableStateFlow(true)
+    val productsHasMore: StateFlow<Boolean> = _productsHasMore.asStateFlow()
+
+    private val _isLoadingMore = MutableStateFlow(false)
+    val isLoadingMore: StateFlow<Boolean> = _isLoadingMore.asStateFlow()
+
+    private val _productsPage = MutableStateFlow(1)
     
     private val _selectedProduct = MutableStateFlow<Product?>(null)
     val selectedProduct: StateFlow<Product?> = _selectedProduct.asStateFlow()
@@ -137,6 +145,22 @@ class CustomerViewModel @Inject constructor(
     
     private val _selectedCategory = MutableStateFlow<String?>(null)
     val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
+
+    private data class ProductsQuery(
+        val search: String?,
+        val category: String?,
+        val minPrice: Double?,
+        val maxPrice: Double?,
+        val attributes: String?,
+        val locationCity: String?,
+        val locationState: String?,
+        val latitude: Double?,
+        val longitude: Double?,
+        val radius: Int?
+    )
+
+    private var currentProductsQuery: ProductsQuery? = null
+    private val productsPageSize = 24
     
     // Customer Reviews
     private val _customerReviews = MutableStateFlow<List<com.doorstep.tn.core.network.CustomerReview>>(emptyList())
@@ -236,21 +260,87 @@ class CustomerViewModel @Inject constructor(
     fun loadProducts(
         search: String? = null, 
         category: String? = null,
+        minPrice: Double? = null,
+        maxPrice: Double? = null,
+        attributes: String? = null,
+        locationCity: String? = null,
+        locationState: String? = null,
         latitude: Double? = null,
         longitude: Double? = null,
         radius: Int? = null
     ) {
+        val query = ProductsQuery(
+            search = search,
+            category = category,
+            minPrice = minPrice,
+            maxPrice = maxPrice,
+            attributes = attributes,
+            locationCity = locationCity,
+            locationState = locationState,
+            latitude = latitude,
+            longitude = longitude,
+            radius = radius
+        )
+        currentProductsQuery = query
+        _productsPage.value = 1
+        _productsHasMore.value = true
+        _isLoadingMore.value = false
+        loadProductsPage(query, page = 1, append = false)
+    }
+
+    fun loadMoreProducts() {
+        val query = currentProductsQuery ?: return
+        if (_isLoading.value || _isLoadingMore.value || !_productsHasMore.value) {
+            return
+        }
+        val nextPage = _productsPage.value + 1
+        loadProductsPage(query, page = nextPage, append = true)
+    }
+
+    private fun loadProductsPage(query: ProductsQuery, page: Int, append: Boolean) {
         viewModelScope.launch {
-            _isLoading.value = true
+            if (append) {
+                _isLoadingMore.value = true
+            } else {
+                _isLoading.value = true
+            }
             _error.value = null
             
-            when (val result = repository.getProducts(search, category, latitude, longitude, radius)) {
-                is Result.Success -> _products.value = result.data
+            when (
+                val result = repository.getProducts(
+                    search = query.search,
+                    category = query.category,
+                    minPrice = query.minPrice,
+                    maxPrice = query.maxPrice,
+                    attributes = query.attributes,
+                    locationCity = query.locationCity,
+                    locationState = query.locationState,
+                    latitude = query.latitude,
+                    longitude = query.longitude,
+                    radius = query.radius,
+                    page = page,
+                    pageSize = productsPageSize
+                )
+            ) {
+                is Result.Success -> {
+                    val response = result.data
+                    _productsPage.value = response.page
+                    _productsHasMore.value = response.hasMore
+                    _products.value = if (append) {
+                        _products.value + response.items
+                    } else {
+                        response.items
+                    }
+                }
                 is Result.Error -> _error.value = result.message
                 is Result.Loading -> {}
             }
             
-            _isLoading.value = false
+            if (append) {
+                _isLoadingMore.value = false
+            } else {
+                _isLoading.value = false
+            }
         }
     }
     
@@ -331,13 +421,18 @@ class CustomerViewModel @Inject constructor(
     
     fun updateCategory(category: String?) {
         _selectedCategory.value = category
-        loadProducts(category = category)
     }
     
     // ==================== Service Actions ====================
     
     fun loadServices(
         category: String? = null,
+        search: String? = null,
+        minPrice: Double? = null,
+        maxPrice: Double? = null,
+        locationCity: String? = null,
+        locationState: String? = null,
+        availableNow: Boolean? = null,
         latitude: Double? = null,
         longitude: Double? = null,
         radius: Int? = null
@@ -346,7 +441,20 @@ class CustomerViewModel @Inject constructor(
             _isLoading.value = true
             _error.value = null
             
-            when (val result = repository.getServices(category, latitude, longitude, radius)) {
+            when (
+                val result = repository.getServices(
+                    category = category,
+                    search = search,
+                    minPrice = minPrice,
+                    maxPrice = maxPrice,
+                    locationCity = locationCity,
+                    locationState = locationState,
+                    availableNow = availableNow,
+                    latitude = latitude,
+                    longitude = longitude,
+                    radius = radius
+                )
+            ) {
                 is Result.Success -> _services.value = result.data
                 is Result.Error -> _error.value = result.message
                 is Result.Loading -> {}
@@ -386,6 +494,8 @@ class CustomerViewModel @Inject constructor(
     
     fun loadShops(
         search: String? = null,
+        locationCity: String? = null,
+        locationState: String? = null,
         latitude: Double? = null,
         longitude: Double? = null,
         radius: Int? = null
@@ -394,7 +504,16 @@ class CustomerViewModel @Inject constructor(
             _isLoading.value = true
             _error.value = null
             
-            when (val result = repository.getShops(search = search, latitude = latitude, longitude = longitude, radius = radius)) {
+            when (
+                val result = repository.getShops(
+                    search = search,
+                    locationCity = locationCity,
+                    locationState = locationState,
+                    latitude = latitude,
+                    longitude = longitude,
+                    radius = radius
+                )
+            ) {
                 is Result.Success -> _shops.value = result.data
                 is Result.Error -> _error.value = result.message
                 is Result.Loading -> {}
@@ -995,6 +1114,22 @@ class CustomerViewModel @Inject constructor(
             }
             
             _isLoading.value = false
+        }
+    }
+
+    fun updateProfileLocation(
+        latitude: String,
+        longitude: String,
+        context: String = "user",
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            when (val result = repository.updateProfileLocation(latitude, longitude, context)) {
+                is Result.Success -> onSuccess()
+                is Result.Error -> onError(result.message)
+                is Result.Loading -> {}
+            }
         }
     }
     

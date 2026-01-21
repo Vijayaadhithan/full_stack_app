@@ -42,28 +42,69 @@ fun QuickOrderScreen(
 ) {
     val context = LocalContext.current
     val isLoading by viewModel.isLoading.collectAsState()
+    val orders by viewModel.orders.collectAsState()
+    val userId by viewModel.userId.collectAsState()
     
     var orderText by remember { mutableStateOf("") }
     var deliveryMethod by remember { mutableStateOf("pickup") }
+    var shopInfo by remember { mutableStateOf<com.doorstep.tn.customer.data.model.Shop?>(null) }
     
     // Monthly list state (persisted to SharedPreferences)
     var monthlyList by remember { mutableStateOf("") }
     
     // Load monthly list on screen launch
-    LaunchedEffect(shopId) {
-        monthlyList = loadMonthlyList(context, shopId)
+    LaunchedEffect(shopId, userId) {
+        monthlyList = loadMonthlyList(context, shopId, userId)
+        viewModel.loadOrders()
+        viewModel.getShopById(shopId) { shop ->
+            shopInfo = shop
+        }
     }
     
-    // Sample quick add items (in real app, these would come from order history)
-    val frequentItems = remember {
-        listOf(
-            "1kg Rice",
-            "Sugar 500g",
-            "Milk 1L",
-            "Bread",
-            "Eggs (12)",
-            "Cooking Oil 1L"
-        )
+    val pickupAvailable = shopInfo?.pickupAvailable ?: true
+    val deliveryAvailable = shopInfo?.deliveryAvailable ?: false
+
+    LaunchedEffect(pickupAvailable, deliveryAvailable) {
+        if (pickupAvailable && !deliveryAvailable) {
+            deliveryMethod = "pickup"
+        } else if (!pickupAvailable && deliveryAvailable) {
+            deliveryMethod = "delivery"
+        }
+    }
+
+    val frequentItems = remember(orders, shopId) {
+        val counts = mutableMapOf<String, Int>()
+
+        fun bump(value: String) {
+            val trimmed = value.trim()
+            if (trimmed.isEmpty()) return
+            counts[trimmed] = (counts[trimmed] ?: 0) + 1
+        }
+
+        orders.forEach { order ->
+            if (order.shopId != shopId) return@forEach
+            if (order.status == "cancelled") return@forEach
+
+            if (order.orderType == "product_order") {
+                order.items.orEmpty().forEach { item ->
+                    val name = item.product?.name?.trim().orEmpty()
+                    if (name.isEmpty()) return@forEach
+                    val value = if (item.quantity > 1) "${item.quantity} $name" else name
+                    bump(value)
+                }
+            } else if (order.orderType == "text_order") {
+                order.orderText
+                    ?.split(Regex("[\\n,]+"))
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    ?.forEach { bump(it) }
+            }
+        }
+
+        counts.entries
+            .sortedByDescending { it.value }
+            .map { it.key }
+            .take(12)
     }
     
     Scaffold(
@@ -73,7 +114,7 @@ fun QuickOrderScreen(
                     Column {
                         Text("Quick Order", color = WhiteText)
                         Text(
-                            text = shopName,
+                            text = shopInfo?.displayName ?: shopName,
                             style = MaterialTheme.typography.bodySmall,
                             color = WhiteTextMuted
                         )
@@ -174,6 +215,7 @@ fun QuickOrderScreen(
                             label = "Pickup",
                             icon = Icons.Default.Store,
                             selected = deliveryMethod == "pickup",
+                            enabled = pickupAvailable,
                             onClick = { deliveryMethod = "pickup" },
                             modifier = Modifier.weight(1f)
                         )
@@ -181,6 +223,7 @@ fun QuickOrderScreen(
                             label = "Delivery",
                             icon = Icons.Default.LocalShipping,
                             selected = deliveryMethod == "delivery",
+                            enabled = deliveryAvailable,
                             onClick = { deliveryMethod = "delivery" },
                             modifier = Modifier.weight(1f)
                         )
@@ -287,7 +330,7 @@ fun QuickOrderScreen(
                         OutlinedButton(
                             onClick = {
                                 if (orderText.isNotBlank()) {
-                                    saveMonthlyList(context, shopId, orderText)
+                                    saveMonthlyList(context, shopId, userId, orderText)
                                     monthlyList = orderText
                                     Toast.makeText(context, "Monthly list saved", Toast.LENGTH_SHORT).show()
                                 }
@@ -305,54 +348,57 @@ fun QuickOrderScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Quick Add Chips
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = SlateCard)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
+            if (frequentItems.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
                 ) {
-                    Text(
-                        text = "Tap to add",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = WhiteText,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Column(
+                        modifier = Modifier.padding(16.dp)
                     ) {
-                        items(frequentItems) { item ->
-                            SuggestionChip(
-                                onClick = {
-                                    orderText = if (orderText.isBlank()) {
-                                        item
-                                    } else {
-                                        "$orderText, $item"
-                                    }
-                                },
-                                label = { Text(item, color = WhiteText) },
-                                colors = SuggestionChipDefaults.suggestionChipColors(
-                                    containerColor = ProviderBlue.copy(alpha = 0.2f)
-                                ),
-                                border = SuggestionChipDefaults.suggestionChipBorder(
-                                    enabled = true,
-                                    borderColor = ProviderBlue.copy(alpha = 0.3f)
+                        Text(
+                            text = "Tap to add",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = WhiteText,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(frequentItems) { item ->
+                                SuggestionChip(
+                                    onClick = {
+                                        orderText = if (orderText.isBlank()) {
+                                            item
+                                        } else {
+                                            "$orderText, $item"
+                                        }
+                                    },
+                                    label = { Text(item, color = WhiteText) },
+                                    colors = SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = ProviderBlue.copy(alpha = 0.2f)
+                                    ),
+                                    border = SuggestionChipDefaults.suggestionChipBorder(
+                                        enabled = true,
+                                        borderColor = ProviderBlue.copy(alpha = 0.3f)
+                                    )
                                 )
-                            )
+                            }
                         }
+                        Text(
+                            text = "Based on popular items from this shop.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = WhiteTextMuted,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
                     }
-                    Text(
-                        text = "Based on popular items from this shop.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = WhiteTextMuted,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
             
             Spacer(modifier = Modifier.height(24.dp))
@@ -418,13 +464,14 @@ private fun DeliveryOptionChip(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier.clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(12.dp),
-        color = if (selected) OrangePrimary.copy(alpha = 0.15f) else SlateBackground,
+        color = if (selected) OrangePrimary.copy(alpha = if (enabled) 0.15f else 0.08f) else SlateBackground,
         border = if (selected) {
             androidx.compose.foundation.BorderStroke(2.dp, OrangePrimary)
         } else {
@@ -441,13 +488,21 @@ private fun DeliveryOptionChip(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (selected) OrangePrimary else WhiteTextMuted,
+                tint = when {
+                    !enabled -> WhiteTextMuted.copy(alpha = 0.5f)
+                    selected -> OrangePrimary
+                    else -> WhiteTextMuted
+                },
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = label,
-                color = if (selected) OrangePrimary else WhiteTextMuted,
+                color = when {
+                    !enabled -> WhiteTextMuted.copy(alpha = 0.5f)
+                    selected -> OrangePrimary
+                    else -> WhiteTextMuted
+                },
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
             )
         }
@@ -455,12 +510,14 @@ private fun DeliveryOptionChip(
 }
 
 // Persistence helpers for monthly list
-private fun saveMonthlyList(context: Context, shopId: Int, list: String) {
+private fun saveMonthlyList(context: Context, shopId: Int, userId: Int?, list: String) {
     val prefs = context.getSharedPreferences("quick_order", Context.MODE_PRIVATE)
-    prefs.edit().putString("monthly_list_$shopId", list).apply()
+    val userKey = userId?.toString() ?: "anon"
+    prefs.edit().putString("monthly_list_${userKey}_$shopId", list).apply()
 }
 
-private fun loadMonthlyList(context: Context, shopId: Int): String {
+private fun loadMonthlyList(context: Context, shopId: Int, userId: Int?): String {
     val prefs = context.getSharedPreferences("quick_order", Context.MODE_PRIVATE)
-    return prefs.getString("monthly_list_$shopId", "") ?: ""
+    val userKey = userId?.toString() ?: "anon"
+    return prefs.getString("monthly_list_${userKey}_$shopId", "") ?: ""
 }

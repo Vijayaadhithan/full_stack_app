@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -19,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -50,20 +53,46 @@ fun ServicesListScreen(
     
     // Booking type state
     var bookingType by remember { mutableStateOf("scheduled") }
+
+    // Search and filter state
+    var searchQuery by remember { mutableStateOf("") }
+    var appliedSearch by remember { mutableStateOf("") }
+    var minPriceFilter by remember { mutableStateOf("") }
+    var maxPriceFilter by remember { mutableStateOf("") }
+    var locationCityFilter by remember { mutableStateOf("") }
+    var locationStateFilter by remember { mutableStateOf("") }
+    var showFilters by remember { mutableStateOf(false) }
     
     val categories = listOf(
-        "All Services" to Icons.Default.Apps,
-        "Carpentry" to Icons.Default.Handyman,
-        "Beauty" to Icons.Default.Face,
-        "Vehicle" to Icons.Default.TwoWheeler,
-        "AC Repair" to Icons.Default.AcUnit,
-        "Plumbing" to Icons.Default.Plumbing,
-        "Electrical" to Icons.Default.ElectricalServices
+        Triple("All Services", null, Icons.Default.Apps),
+        Triple("Carpentry", "carpentry", Icons.Default.Handyman),
+        Triple("Beauty", "beauty_salon", Icons.Default.Face),
+        Triple("Vehicle", "motor_repair", Icons.Default.TwoWheeler),
+        Triple("AC Repair", "appliance_repair", Icons.Default.AcUnit),
+        Triple("Plumbing", "plumbing", Icons.Default.Plumbing),
+        Triple("Electrical", "electrical_work", Icons.Default.ElectricalServices)
     )
     
-    LaunchedEffect(selectedCategory, locationLat, locationLng, locationRadius) {
+    LaunchedEffect(
+        selectedCategory,
+        locationLat,
+        locationLng,
+        locationRadius,
+        bookingType,
+        appliedSearch,
+        minPriceFilter,
+        maxPriceFilter,
+        locationCityFilter,
+        locationStateFilter
+    ) {
         viewModel.loadServices(
             category = selectedCategory,
+            search = appliedSearch.takeIf { it.isNotBlank() },
+            minPrice = minPriceFilter.toDoubleOrNull(),
+            maxPrice = maxPriceFilter.toDoubleOrNull(),
+            locationCity = locationCityFilter.takeIf { it.isNotBlank() },
+            locationState = locationStateFilter.takeIf { it.isNotBlank() },
+            availableNow = if (bookingType == "emergency") true else null,
             latitude = locationLat,
             longitude = locationLng,
             radius = if (locationLat != null) locationRadius else null
@@ -132,6 +161,73 @@ fun ServicesListScreen(
                         }
                     )
                 }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.width(220.dp),
+                        placeholder = {
+                            Text(
+                                text = "Search services...",
+                                color = WhiteTextSubtle,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = WhiteTextMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    searchQuery = ""
+                                    appliedSearch = ""
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = "Clear",
+                                        tint = WhiteTextMuted,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = { appliedSearch = searchQuery.trim() }
+                        ),
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = OrangePrimary,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedContainerColor = GlassWhite,
+                            unfocusedContainerColor = GlassWhite,
+                            focusedTextColor = WhiteText,
+                            unfocusedTextColor = WhiteText
+                        ),
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+
+                    IconButton(onClick = { showFilters = true }) {
+                        Icon(
+                            imageVector = Icons.Default.FilterList,
+                            contentDescription = "Filters",
+                            tint = WhiteTextMuted
+                        )
+                    }
+                }
                 
                 // Subtitle
                 Text(
@@ -147,14 +243,13 @@ fun ServicesListScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp)
             ) {
-                items(categories) { (category, icon) ->
-                    val categoryKey = if (category == "All Services") null else category
-                    val isSelected = selectedCategory == categoryKey
+                items(categories) { (categoryLabel, categoryValue, icon) ->
+                    val isSelected = selectedCategory == categoryValue
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .width(72.dp)
-                            .clickable { viewModel.updateCategory(categoryKey) }
+                            .clickable { viewModel.updateCategory(categoryValue) }
                     ) {
                         Box(
                             modifier = Modifier
@@ -165,14 +260,14 @@ fun ServicesListScreen(
                         ) {
                             Icon(
                                 imageVector = icon,
-                                contentDescription = category,
+                                contentDescription = categoryLabel,
                                 tint = WhiteText,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = category.replace(" ", "\n"),
+                            text = categoryLabel.replace(" ", "\n"),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isSelected) OrangePrimary else WhiteTextMuted,
                             maxLines = 2,
@@ -240,6 +335,90 @@ fun ServicesListScreen(
             }
         }
     }
+
+    if (showFilters) {
+        ServiceFiltersDialog(
+            initialMinPrice = minPriceFilter,
+            initialMaxPrice = maxPriceFilter,
+            initialCity = locationCityFilter,
+            initialState = locationStateFilter,
+            onApply = { minPrice, maxPrice, city, state ->
+                minPriceFilter = minPrice
+                maxPriceFilter = maxPrice
+                locationCityFilter = city
+                locationStateFilter = state
+            },
+            onDismiss = { showFilters = false }
+        )
+    }
+}
+
+@Composable
+private fun ServiceFiltersDialog(
+    initialMinPrice: String,
+    initialMaxPrice: String,
+    initialCity: String,
+    initialState: String,
+    onApply: (String, String, String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var minPrice by remember(initialMinPrice) { mutableStateOf(initialMinPrice) }
+    var maxPrice by remember(initialMaxPrice) { mutableStateOf(initialMaxPrice) }
+    var city by remember(initialCity) { mutableStateOf(initialCity) }
+    var state by remember(initialState) { mutableStateOf(initialState) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Filters") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = minPrice,
+                    onValueChange = { minPrice = it },
+                    label = { Text("Min price") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = maxPrice,
+                    onValueChange = { maxPrice = it },
+                    label = { Text("Max price") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = city,
+                    onValueChange = { city = it },
+                    label = { Text("City") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = state,
+                    onValueChange = { state = it },
+                    label = { Text("State") },
+                    singleLine = true
+                )
+                Text(
+                    text = "City/State filters apply when nearby search is disabled.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onApply(minPrice.trim(), maxPrice.trim(), city.trim(), state.trim())
+                    onDismiss()
+                }
+            ) {
+                Text("Apply")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
