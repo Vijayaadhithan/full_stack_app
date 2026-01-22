@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -570,7 +571,7 @@ fun CustomerHomeScreen(
                 } else if (pendingRequests.isEmpty()) {
                     EmptyStateCard(
                         message = if (language == "ta") "புதிய கோரிக்கைகள் இல்லை." else "No pending booking requests.",
-                        icon = Icons.Default.EventNote
+                        icon = Icons.AutoMirrored.Filled.EventNote
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

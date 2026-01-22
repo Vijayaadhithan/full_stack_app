@@ -265,7 +265,7 @@ private fun RoleDropdownSelector(
             readOnly = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor(),
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
             leadingIcon = {
                 Box(
                     modifier = Modifier

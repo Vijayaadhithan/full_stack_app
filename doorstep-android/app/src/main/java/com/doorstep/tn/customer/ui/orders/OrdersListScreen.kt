@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -50,7 +51,7 @@ fun OrdersListScreen(
     val statusOptions = listOf(
         StatusOption("all", "All", Icons.AutoMirrored.Filled.ViewList, OrangePrimary),
         StatusOption("pending", "Pending", Icons.Default.Schedule, WarningYellow),
-        StatusOption("awaiting_customer_agreement", "Awaiting Approval", Icons.Default.HelpOutline, WarningYellow),
+        StatusOption("awaiting_customer_agreement", "Awaiting Approval", Icons.AutoMirrored.Filled.HelpOutline, WarningYellow),
         StatusOption("confirmed", "Confirmed", Icons.Default.CheckCircle, SuccessGreen),
         StatusOption("processing", "Processing", Icons.Default.Settings, ProviderBlue),
         StatusOption("packed", "Packed", Icons.Default.Inventory, ProviderBlue),

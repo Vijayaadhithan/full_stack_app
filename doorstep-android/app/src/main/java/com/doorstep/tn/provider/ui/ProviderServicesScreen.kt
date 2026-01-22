@@ -460,7 +460,7 @@ private fun ServiceFilters(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = ProviderBlue,
                         unfocusedBorderColor = GlassBorder,
@@ -850,7 +850,7 @@ private fun AddEditServiceDialog(
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .menuAnchor(),
+                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = ProviderBlue,
                                         unfocusedBorderColor = GlassBorder
@@ -915,7 +915,7 @@ private fun AddEditServiceDialog(
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = locationExpanded) },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .menuAnchor(),
+                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = ProviderBlue,
                                         unfocusedBorderColor = GlassBorder

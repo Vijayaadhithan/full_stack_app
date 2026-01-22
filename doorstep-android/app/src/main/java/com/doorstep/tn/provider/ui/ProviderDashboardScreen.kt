@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -304,7 +305,7 @@ fun ProviderDashboardScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
-                                Divider(color = GlassBorder)
+                                HorizontalDivider(color = GlassBorder)
                             }
                         }
                     }
@@ -846,7 +847,7 @@ private fun PendingBookingItem(
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = WhiteText)
                     ) {
-                        Icon(Icons.Default.Message, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("WhatsApp")
                     }
