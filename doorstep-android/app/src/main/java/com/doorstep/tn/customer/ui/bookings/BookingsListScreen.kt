@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.util.StatusUtils
 import com.doorstep.tn.core.network.ServiceReview
 import com.doorstep.tn.customer.data.model.Booking
@@ -66,6 +67,10 @@ fun BookingsListScreen(
     val indiaZoneId = remember { ZoneId.of("Asia/Kolkata") }
     
     LaunchedEffect(Unit) {
+        viewModel.loadBookings()
+    }
+
+    PollingEffect(intervalMs = 30_000L) {
         viewModel.loadBookings()
     }
     

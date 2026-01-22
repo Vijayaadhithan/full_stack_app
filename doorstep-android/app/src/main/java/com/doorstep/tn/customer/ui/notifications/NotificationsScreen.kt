@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.core.network.AppNotification
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -48,6 +49,10 @@ fun NotificationsScreen(
     val scope = rememberCoroutineScope()
     
     LaunchedEffect(Unit) {
+        viewModel.loadNotifications()
+    }
+
+    PollingEffect(intervalMs = 30_000L) {
         viewModel.loadNotifications()
     }
     

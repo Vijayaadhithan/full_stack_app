@@ -64,6 +64,7 @@ class CustomerRepository @Inject constructor(
         minPrice: Double? = null,
         maxPrice: Double? = null,
         attributes: String? = null,
+        shopId: Int? = null,
         locationCity: String? = null,
         locationState: String? = null,
         latitude: Double? = null,
@@ -73,7 +74,7 @@ class CustomerRepository @Inject constructor(
         pageSize: Int = 24
     ): Result<ProductsResponse> {
         // Generate cache key from parameters
-        val cacheKey = "products_${search}_${category}_${minPrice}_${maxPrice}_${attributes}_${locationCity}_${locationState}_${latitude}_${longitude}_${radius}_${page}"
+        val cacheKey = "products_${search}_${category}_${minPrice}_${maxPrice}_${attributes}_${shopId}_${locationCity}_${locationState}_${latitude}_${longitude}_${radius}_${page}"
         
         // Layer 1: In-memory cache (instant)
         productsCache.get(cacheKey)?.let { 
@@ -88,6 +89,7 @@ class CustomerRepository @Inject constructor(
                 minPrice = minPrice,
                 maxPrice = maxPrice,
                 attributes = attributes,
+                shopId = shopId,
                 locationCity = locationCity,
                 locationState = locationState,
                 page = page,
@@ -239,15 +241,10 @@ class CustomerRepository @Inject constructor(
     }
     
     suspend fun getShopProducts(shopId: Int): Result<List<Product>> {
-        return try {
-            val response = api.getShopProducts(shopId)
-            if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
-            } else {
-                Result.Error(response.message(), response.code())
-            }
-        } catch (e: Exception) {
-            Result.Error(e.message ?: "Failed to load shop products")
+        return when (val result = getProducts(shopId = shopId, page = 1, pageSize = 100)) {
+            is Result.Success -> Result.Success(result.data.items)
+            is Result.Error -> Result.Error(result.message, result.code)
+            is Result.Loading -> Result.Loading
         }
     }
     

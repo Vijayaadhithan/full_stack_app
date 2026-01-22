@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,13 +16,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.core.network.ServiceReview
+import com.doorstep.tn.customer.ui.CustomerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProviderReviewsScreen(
     viewModel: ProviderViewModel = hiltViewModel(),
+    onNavigateToNotifications: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val reviews by viewModel.reviews.collectAsState()
@@ -30,6 +34,8 @@ fun ProviderReviewsScreen(
     val actionLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
+    val notificationsViewModel: CustomerViewModel = hiltViewModel()
+    val unreadNotificationCount by notificationsViewModel.unreadNotificationCount.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -38,6 +44,12 @@ fun ProviderReviewsScreen(
     LaunchedEffect(Unit) {
         viewModel.loadProviderServices()
         viewModel.loadProviderReviews()
+        notificationsViewModel.loadNotifications()
+    }
+
+    PollingEffect(intervalMs = 30_000L) {
+        viewModel.loadProviderReviews()
+        notificationsViewModel.loadNotifications()
     }
 
     LaunchedEffect(successMessage) {
@@ -78,6 +90,28 @@ fun ProviderReviewsScreen(
                             contentDescription = "Back",
                             tint = WhiteText
                         )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onNavigateToNotifications) {
+                        BadgedBox(
+                            badge = {
+                                if (unreadNotificationCount > 0) {
+                                    Badge(containerColor = ErrorRed) {
+                                        Text(
+                                            text = if (unreadNotificationCount > 99) "99+" else "$unreadNotificationCount",
+                                            color = WhiteText
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = WhiteText
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = SlateBackground)

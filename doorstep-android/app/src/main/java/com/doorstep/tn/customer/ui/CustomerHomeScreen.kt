@@ -29,6 +29,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.R
 import com.doorstep.tn.common.localization.Translations
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.ui.FestivalBanner
 import com.doorstep.tn.common.ui.GradientCard
 import com.doorstep.tn.common.ui.GradientType
@@ -84,6 +85,14 @@ fun CustomerHomeScreen(
         viewModel.loadCart()
         viewModel.loadNotifications()
         viewModel.loadBuyAgainRecommendations()
+    }
+
+    PollingEffect(intervalMs = 30_000L) {
+        viewModel.loadOrders()
+        viewModel.loadBookings()
+        viewModel.loadBookingRequests()
+        viewModel.loadBookingHistory()
+        viewModel.loadNotifications()
     }
     
     Scaffold(

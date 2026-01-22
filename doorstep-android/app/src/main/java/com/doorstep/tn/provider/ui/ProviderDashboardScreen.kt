@@ -22,8 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.core.network.ServiceReview
+import com.doorstep.tn.customer.ui.CustomerViewModel
 import com.doorstep.tn.provider.data.model.ProviderBooking
 import com.doorstep.tn.provider.data.model.ProviderService
 import java.text.NumberFormat
@@ -46,9 +48,11 @@ fun ProviderDashboardScreen(
     onNavigateToBookings: () -> Unit,
     onNavigateToEarnings: () -> Unit,
     onNavigateToReviews: () -> Unit,
+    onNavigateToNotifications: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val notificationsViewModel: CustomerViewModel = hiltViewModel()
     val isAvailable by viewModel.isAvailable.collectAsState()
     val pendingBookings by viewModel.pendingBookings.collectAsState()
     val isLoadingPendingBookings by viewModel.isLoadingPendingBookings.collectAsState()
@@ -61,11 +65,20 @@ fun ProviderDashboardScreen(
     val error by viewModel.error.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val unreadNotificationCount by notificationsViewModel.unreadNotificationCount.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
         viewModel.loadDashboardData()
+        notificationsViewModel.loadNotifications()
+    }
+
+    PollingEffect(intervalMs = 30_000L) {
+        viewModel.loadPendingBookings()
+        viewModel.loadAllBookings()
+        viewModel.loadBookingHistory()
+        notificationsViewModel.loadNotifications()
     }
 
     LaunchedEffect(successMessage) {
@@ -118,6 +131,28 @@ fun ProviderDashboardScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onNavigateToNotifications) {
+                        BadgedBox(
+                            badge = {
+                                if (unreadNotificationCount > 0) {
+                                    Badge(
+                                        containerColor = ErrorRed
+                                    ) {
+                                        Text(
+                                            text = if (unreadNotificationCount > 99) "99+" else "$unreadNotificationCount",
+                                            color = WhiteText
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = WhiteText
+                            )
+                        }
+                    }
                     IconButton(onClick = onNavigateToProfile) {
                         Icon(
                             imageVector = Icons.Default.Settings,

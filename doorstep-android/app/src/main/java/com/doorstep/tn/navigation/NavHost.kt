@@ -106,6 +106,7 @@ object Routes {
     const val PROVIDER_BOOKING_DETAIL = "provider_booking/{bookingId}"
     const val PROVIDER_EARNINGS = "provider_earnings"
     const val PROVIDER_REVIEWS = "provider_reviews"
+    const val PROVIDER_NOTIFICATIONS = "provider_notifications"
     const val PROVIDER_PROFILE = "provider_profile"
     
     // Helper functions
@@ -570,6 +571,7 @@ fun DoorStepNavHost(
                 onNavigateToBookings = { navController.navigate(Routes.PROVIDER_BOOKINGS) },
                 onNavigateToEarnings = { navController.navigate(Routes.PROVIDER_EARNINGS) },
                 onNavigateToReviews = { navController.navigate(Routes.PROVIDER_REVIEWS) },
+                onNavigateToNotifications = { navController.navigate(Routes.PROVIDER_NOTIFICATIONS) },
                 onNavigateToProfile = { navController.navigate(Routes.PROVIDER_PROFILE) },
                 onLogout = {
                     authViewModel.logout()
@@ -583,6 +585,7 @@ fun DoorStepNavHost(
         // Provider Services Screen
         composable(Routes.PROVIDER_SERVICES) {
             ProviderServicesScreen(
+                onNavigateToNotifications = { navController.navigate(Routes.PROVIDER_NOTIFICATIONS) },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -590,6 +593,7 @@ fun DoorStepNavHost(
         // Provider Bookings Screen
         composable(Routes.PROVIDER_BOOKINGS) {
             ProviderBookingsScreen(
+                onNavigateToNotifications = { navController.navigate(Routes.PROVIDER_NOTIFICATIONS) },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -597,13 +601,27 @@ fun DoorStepNavHost(
         // Provider Earnings
         composable(Routes.PROVIDER_EARNINGS) {
             ProviderEarningsScreen(
+                onNavigateToNotifications = { navController.navigate(Routes.PROVIDER_NOTIFICATIONS) },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
         composable(Routes.PROVIDER_REVIEWS) {
             ProviderReviewsScreen(
+                onNavigateToNotifications = { navController.navigate(Routes.PROVIDER_NOTIFICATIONS) },
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.PROVIDER_NOTIFICATIONS) {
+            NotificationsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToBooking = { _ ->
+                    navController.navigate(Routes.PROVIDER_BOOKINGS)
+                },
+                onNavigateToBookings = {
+                    navController.navigate(Routes.PROVIDER_BOOKINGS)
+                }
             )
         }
         

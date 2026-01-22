@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.customer.data.model.Order
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -61,6 +62,10 @@ fun OrdersListScreen(
     )
     
     LaunchedEffect(selectedStatus) {
+        viewModel.loadOrders(status = if (selectedStatus == "all") null else selectedStatus)
+    }
+
+    PollingEffect(intervalMs = 30_000L) {
         viewModel.loadOrders(status = if (selectedStatus == "all") null else selectedStatus)
     }
     

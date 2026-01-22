@@ -67,6 +67,7 @@ interface DoorStepApi {
         @Query("minPrice") minPrice: Double? = null,
         @Query("maxPrice") maxPrice: Double? = null,
         @Query("attributes") attributes: String? = null,
+        @Query("shopId") shopId: Int? = null,
         @Query("locationCity") locationCity: String? = null,
         @Query("locationState") locationState: String? = null,
         @Query("page") page: Int = 1,

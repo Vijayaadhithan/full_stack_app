@@ -20,7 +20,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.customer.ui.CustomerViewModel
 import com.doorstep.tn.provider.data.model.CreateServiceRequest
 import com.doorstep.tn.provider.data.model.ProviderService
 import com.doorstep.tn.provider.data.model.UpdateServiceRequest
@@ -43,12 +45,15 @@ val SERVICE_CATEGORIES = listOf(
 @Composable
 fun ProviderServicesScreen(
     viewModel: ProviderViewModel = hiltViewModel(),
+    onNavigateToNotifications: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val services by viewModel.services.collectAsState()
     val isLoading by viewModel.isLoadingServices.collectAsState()
     val error by viewModel.error.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
+    val notificationsViewModel: CustomerViewModel = hiltViewModel()
+    val unreadNotificationCount by notificationsViewModel.unreadNotificationCount.collectAsState()
     
     // State for add/edit dialog
     var showAddEditDialog by remember { mutableStateOf(false) }
@@ -119,6 +124,11 @@ fun ProviderServicesScreen(
     // Load services on start
     LaunchedEffect(Unit) {
         viewModel.loadProviderServices()
+        notificationsViewModel.loadNotifications()
+    }
+
+    PollingEffect(intervalMs = 30_000L) {
+        notificationsViewModel.loadNotifications()
     }
     
     Scaffold(
@@ -139,6 +149,28 @@ fun ProviderServicesScreen(
                             contentDescription = "Back",
                             tint = WhiteText
                         )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onNavigateToNotifications) {
+                        BadgedBox(
+                            badge = {
+                                if (unreadNotificationCount > 0) {
+                                    Badge(containerColor = ErrorRed) {
+                                        Text(
+                                            text = if (unreadNotificationCount > 99) "99+" else "$unreadNotificationCount",
+                                            color = WhiteText
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = WhiteText
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
