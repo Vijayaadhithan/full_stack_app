@@ -58,6 +58,7 @@ import {
   UserRole,
   TimeSlotLabel,
   shops,
+  providers,
   Shop,
   fcmTokens,
   FcmToken,
@@ -1668,7 +1669,7 @@ export class PostgresStorage implements IStorage {
         await tx.insert(notifications).values({
           ...notification,
           type: notification.type as any,
-          relatedBookingId: notification.relatedBookingId ?? null,
+          relatedBookingId: notification.relatedBookingId ?? inserted.id,
         });
       }
 
@@ -1688,6 +1689,16 @@ export class PostgresStorage implements IStorage {
 
     if (notification) {
       notifyNotificationChange(notification.userId ?? null);
+      if (notification.userId) {
+        const relatedId = notification.relatedBookingId ?? createdBooking?.id ?? null;
+        void this.sendPushNotificationAsync(
+          notification.userId,
+          notification.title,
+          notification.message,
+          notification.type,
+          relatedId,
+        );
+      }
     }
 
     return createdBooking;
@@ -1854,7 +1865,7 @@ export class PostgresStorage implements IStorage {
           await tx.insert(notifications).values({
             ...notification,
             type: notification.type as any,
-            relatedBookingId: notification.relatedBookingId ?? null,
+            relatedBookingId: notification.relatedBookingId ?? id,
           });
         }
 
@@ -1875,6 +1886,16 @@ export class PostgresStorage implements IStorage {
       });
       if (notification) {
         notifyNotificationChange(notification.userId ?? null);
+        if (notification.userId) {
+          const relatedId = notification.relatedBookingId ?? id;
+          void this.sendPushNotificationAsync(
+            notification.userId,
+            notification.title,
+            notification.message,
+            notification.type,
+            relatedId,
+          );
+        }
       }
     }
 
@@ -2956,21 +2977,62 @@ export class PostgresStorage implements IStorage {
         return;
       }
 
-      // Get user role to generate correct click URL
+      // Get user role and profile access to generate correct click URL
       const user = await this.getUser(userId);
       const userRole = user?.role || "customer";
+      const isShopRole = userRole === "shop" || userRole === "worker";
+      const isProviderRole = userRole === "provider";
 
-      logger.info({ userId, tokenCount: fcmTokenRecords.length, userRole }, "Sending push notification to FCM tokens");
+      const [shopResult, providerResult, workerResult] = await Promise.all([
+        db.primary
+          .select({ id: shops.id })
+          .from(shops)
+          .where(eq(shops.ownerId, userId))
+          .limit(1),
+        db.primary
+          .select({ id: providers.id })
+          .from(providers)
+          .where(eq(providers.userId, userId))
+          .limit(1),
+        db.primary
+          .select({ id: shopWorkers.id })
+          .from(shopWorkers)
+          .where(and(eq(shopWorkers.workerUserId, userId), eq(shopWorkers.active, true)))
+          .limit(1),
+      ]);
+
+      const hasShopAccess = isShopRole || shopResult.length > 0 || workerResult.length > 0;
+      const hasProviderAccess = isProviderRole || providerResult.length > 0;
 
       const resolvedRelatedId = relatedId ?? this.extractRelatedIdFromText(type, title, body);
-      // Generate role-specific click URL
-      const clickUrl = this.getClickUrlForNotification(type, resolvedRelatedId, userRole);
+      const clickUrl = this.getClickUrlForNotification({
+        notificationType: type,
+        title,
+        message: body,
+        relatedId: resolvedRelatedId,
+        hasShopAccess,
+        hasProviderAccess,
+      });
+
+      logger.info(
+        {
+          userId,
+          tokenCount: fcmTokenRecords.length,
+          userRole,
+          notificationType: type,
+          relatedId: resolvedRelatedId ?? null,
+          clickUrl,
+          hasTitle: Boolean(title),
+          hasBody: Boolean(body),
+        },
+        "Push notification payload ready",
+      );
 
       const tokens = fcmTokenRecords.map(t => t.token);
       const result = await sendPushToTokens(tokens, {
         title,
         body,
-        data: createPushData(type, resolvedRelatedId, clickUrl),
+        data: createPushData(type, resolvedRelatedId, clickUrl, title, body),
       });
 
       logger.info(
@@ -3054,46 +3116,140 @@ export class PostgresStorage implements IStorage {
   /**
    * Generate role-specific click URL for notification navigation
    */
-  private getClickUrlForNotification(
-    notificationType: string,
-    relatedId?: number | null,
-    userRole?: string
-  ): string {
-    const isShopRole = userRole === "shop" || userRole === "shop_owner" || userRole === "worker";
-    const rolePrefix = userRole === "provider" ? "/provider" : isShopRole ? "/shop" : "/customer";
+  private getClickUrlForNotification(options: {
+    notificationType: string;
+    title: string;
+    message: string;
+    relatedId?: number | null;
+    hasShopAccess: boolean;
+    hasProviderAccess: boolean;
+  }): string {
+    const {
+      notificationType,
+      title,
+      message,
+      relatedId,
+      hasShopAccess,
+      hasProviderAccess,
+    } = options;
+    const normalizedTitle = (title || "").toLowerCase();
+    const normalizedMessage = (message || "").toLowerCase();
+
+    const buildCustomerBookingsUrl = (bookingId?: number | null) => {
+      if (!bookingId) return "/customer/bookings";
+      return `/customer/bookings?bookingId=${encodeURIComponent(String(bookingId))}`;
+    };
+
+    const buildProviderBookingsUrl = (status?: string) => {
+      if (!status) return "/provider/bookings";
+      return `/provider/bookings?status=${encodeURIComponent(status)}`;
+    };
+
+    const buildCustomerOrdersUrl = (orderId?: number | null) => {
+      if (!orderId) return "/customer/orders";
+      return `/customer/order/${encodeURIComponent(String(orderId))}`;
+    };
 
     switch (notificationType) {
-      // Booking-related notifications
-      case "booking":
-      case "booking_request":
-      case "service":
-      case "new_booking":
-      case "booking_accepted":
-      case "booking_completed":
-      case "payment_submitted":
-      case "payment_confirmed":
-        if (userRole === "provider") {
-          // Provider should see their bookings with the specific booking info
-          return relatedId ? `${rolePrefix}/bookings?bookingId=${relatedId}` : `${rolePrefix}/bookings`;
-        }
-        // Customer also uses query param since there's no /customer/bookings/:id route
-        return relatedId ? `${rolePrefix}/bookings?bookingId=${relatedId}` : `${rolePrefix}/bookings`;
+      case "order": {
+        const isForShop =
+          normalizedTitle.includes("new order") ||
+          normalizedTitle.includes("order received") ||
+          normalizedTitle.includes("approval needed") ||
+          normalizedTitle.includes("quick order") ||
+          normalizedTitle.includes("action required") ||
+          normalizedTitle.includes("payment reference") ||
+          normalizedTitle.includes("agreed to final bill") ||
+          normalizedTitle.includes("customer agreed");
 
-      // Order-related notifications  
-      case "order":
-      case "new_order":
-      case "order_shipped":
-      case "order_delivered":
-        if (isShopRole) {
-          return relatedId ? `${rolePrefix}/orders?orderId=${relatedId}` : `${rolePrefix}/orders`;
+        if (isForShop && hasShopAccess) {
+          return "/shop/orders";
         }
-        if (rolePrefix === "/customer") {
-          return relatedId ? `${rolePrefix}/order/${relatedId}` : `${rolePrefix}/orders`;
+
+        return buildCustomerOrdersUrl(relatedId);
+      }
+
+      case "return": {
+        const isForShop =
+          normalizedTitle.includes("new return") ||
+          (normalizedTitle.includes("return request") &&
+            !normalizedTitle.includes("received"));
+
+        if (isForShop && hasShopAccess) {
+          return "/shop/orders";
         }
-        return relatedId ? `${rolePrefix}/orders/${relatedId}` : `${rolePrefix}/orders`;
+
+        return buildCustomerOrdersUrl(relatedId);
+      }
+
+      case "booking_request":
+      case "booking_cancelled_by_customer":
+        if (hasProviderAccess) {
+          return buildProviderBookingsUrl("pending");
+        }
+        return buildCustomerBookingsUrl(relatedId);
+
+      case "booking_update": {
+        const isProviderPaymentUpdate =
+          hasProviderAccess &&
+          (normalizedTitle.includes("payment submitted") ||
+            normalizedMessage.includes("payment reference") ||
+            normalizedMessage.includes("submitted payment"));
+
+        if (isProviderPaymentUpdate) {
+          return buildProviderBookingsUrl("awaiting_payment");
+        }
+
+        return buildCustomerBookingsUrl(relatedId);
+      }
+
+      case "booking_rescheduled_request":
+        if (hasProviderAccess) {
+          return buildProviderBookingsUrl("rescheduled_pending_provider_approval");
+        }
+        return buildCustomerBookingsUrl(relatedId);
+
+      case "booking_confirmed":
+      case "booking_rejected":
+      case "booking_rescheduled_by_provider":
+        return buildCustomerBookingsUrl(relatedId);
+
+      case "booking":
+      case "service":
+      case "service_request": {
+        const isForProvider =
+          normalizedTitle.includes("new booking") ||
+          normalizedTitle.includes("booking request") ||
+          normalizedTitle.includes("new service") ||
+          normalizedTitle.includes("service request");
+
+        if (isForProvider && hasProviderAccess) {
+          return buildProviderBookingsUrl("pending");
+        }
+
+        return buildCustomerBookingsUrl(relatedId);
+      }
+
+      case "shop":
+        if (hasShopAccess) {
+          return "/shop/inventory";
+        }
+        return "/customer";
+
+      case "promotion":
+        return "/customer/browse-products";
+
+      case "system":
+        if (hasShopAccess) {
+          return "/shop";
+        }
+        if (hasProviderAccess) {
+          return "/provider";
+        }
+        return "/customer";
 
       default:
-        return `${rolePrefix}/notifications`;
+        return "/customer";
     }
   }
 

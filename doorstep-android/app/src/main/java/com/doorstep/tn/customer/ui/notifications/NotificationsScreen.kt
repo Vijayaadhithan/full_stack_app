@@ -170,7 +170,9 @@ fun NotificationsScreen(
                                 if (!notification.isRead) {
                                     viewModel.markNotificationRead(notification.id)
                                 }
-                                
+
+                                val entityId = extractEntityId(notification)
+
                                 // Navigate based on notification type - matches web's navigateToRelevantPage
                                 when (notification.type) {
                                     // Booking-related types - navigate to specific booking or bookings list
@@ -178,13 +180,17 @@ fun NotificationsScreen(
                                     "booking_confirmed", "booking_rejected", "booking_cancelled_by_customer",
                                     "booking_rescheduled_request", "booking_rescheduled_by_provider",
                                     "service", "service_request" -> {
-                                        notification.relatedBookingId?.let { bookingId ->
+                                        entityId?.let { bookingId ->
                                             onNavigateToBooking(bookingId)
                                         } ?: onNavigateToBookings()
                                     }
                                     // Order-related types - navigate to orders
                                     "order", "shop" -> {
-                                        onNavigateToOrders()
+                                        if (entityId != null) {
+                                            onNavigateToOrder(entityId)
+                                        } else {
+                                            onNavigateToOrders()
+                                        }
                                     }
                                     // Return types - navigate to orders (returns are under orders)
                                     "return" -> {
@@ -211,6 +217,26 @@ fun NotificationsScreen(
             }
         }
     }
+}
+
+private fun extractEntityId(notification: AppNotification): Int? {
+    notification.relatedBookingId?.let { return it }
+
+    val haystack = "${notification.title} ${notification.message}"
+    val patterns = listOf(
+        Regex("""ID:\s*(\d+)""", RegexOption.IGNORE_CASE),
+        Regex("""\border\s*#\s*(\d+)""", RegexOption.IGNORE_CASE),
+        Regex("""\bbooking\s*#\s*(\d+)""", RegexOption.IGNORE_CASE),
+        Regex("""#\s*(\d+)""")
+    )
+
+    for (pattern in patterns) {
+        val match = pattern.find(haystack)
+        val value = match?.groupValues?.getOrNull(1)?.toIntOrNull()
+        if (value != null) return value
+    }
+
+    return null
 }
 
 @Composable

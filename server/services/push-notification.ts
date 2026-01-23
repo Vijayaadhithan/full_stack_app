@@ -35,6 +35,20 @@ const resolveClickUrl = (clickUrl: string): string => {
     }
 };
 
+const buildNotificationRedirectUrl = (payload: PushNotificationPayload): string => {
+    const params = new URLSearchParams();
+    const data = payload.data || {};
+
+    if (data.type) params.set("type", data.type);
+    if (data.title) params.set("title", data.title);
+    if (data.body) params.set("message", data.body);
+    if (data.relatedId) params.set("relatedId", data.relatedId);
+    if (data.clickUrl) params.set("clickUrl", data.clickUrl);
+
+    const path = `/notification/redirect${params.toString() ? `?${params.toString()}` : ""}`;
+    return resolveClickUrl(path);
+};
+
 export interface PushNotificationPayload {
     title: string;
     body: string;
@@ -62,8 +76,15 @@ export async function sendPushToToken(
     }
 
     try {
-        const rawClickUrl = payload.data?.clickUrl || "/notifications";
-        const clickUrl = resolveClickUrl(rawClickUrl);
+        const clickUrl = buildNotificationRedirectUrl(payload);
+        logger.info(
+            {
+                notificationType: payload.data?.type,
+                relatedId: payload.data?.relatedId,
+                webpushLink: clickUrl,
+            },
+            "Web push link resolved",
+        );
         const message: admin.messaging.Message = {
             token,
             notification: {
@@ -139,8 +160,15 @@ export async function sendPushToTokens(
         };
     }
 
-    const rawClickUrl = payload.data?.clickUrl || "/notifications";
-    const clickUrl = resolveClickUrl(rawClickUrl);
+    const clickUrl = buildNotificationRedirectUrl(payload);
+    logger.info(
+        {
+            notificationType: payload.data?.type,
+            relatedId: payload.data?.relatedId,
+            webpushLink: clickUrl,
+        },
+        "Web push link resolved",
+    );
     const message: admin.messaging.MulticastMessage = {
         tokens,
         notification: {
@@ -224,7 +252,9 @@ export async function sendPushToTokens(
 export function createPushData(
     notificationType: string,
     relatedId?: number | null,
-    clickUrl?: string
+    clickUrl?: string,
+    title?: string,
+    body?: string
 ): Record<string, string> {
     const data: Record<string, string> = {
         type: notificationType,
@@ -233,6 +263,14 @@ export function createPushData(
 
     if (relatedId) {
         data.relatedId = relatedId.toString();
+    }
+
+    if (title) {
+        data.title = title;
+    }
+
+    if (body) {
+        data.body = body;
     }
 
     // Add click URL for proper navigation

@@ -90,17 +90,21 @@ class MainActivity : ComponentActivity() {
         val clickUrl = intent.getStringExtra("clickUrl")
         val notificationType = intent.getStringExtra("type")
         val relatedId = intent.getStringExtra("relatedId")
+        val relatedBookingId = intent.getStringExtra("relatedBookingId")
+        val relatedOrderId = intent.getStringExtra("relatedOrderId")
         
-        Log.d(TAG, "Handling notification intent: clickUrl=$clickUrl, type=$notificationType, relatedId=$relatedId")
+        Log.d(TAG, "Handling notification intent: clickUrl=$clickUrl, type=$notificationType, relatedId=$relatedId, bookingId=$relatedBookingId, orderId=$relatedOrderId")
         
         if (clickUrl != null) {
             // Convert web URL to Android route
-            pendingNotificationRoute = convertClickUrlToRoute(clickUrl, notificationType, relatedId)
+            pendingNotificationRoute = convertClickUrlToRoute(clickUrl, notificationType, relatedId ?: relatedBookingId ?: relatedOrderId)
             Log.d(TAG, "Pending navigation route: $pendingNotificationRoute")
+            Log.i(TAG, "Notification route resolved: $pendingNotificationRoute")
         } else if (notificationType != null) {
             // Fallback: use type to determine route
-            pendingNotificationRoute = getRouteFromType(notificationType, relatedId)
+            pendingNotificationRoute = getRouteFromType(notificationType, relatedId ?: relatedBookingId ?: relatedOrderId)
             Log.d(TAG, "Fallback navigation route: $pendingNotificationRoute")
+            Log.i(TAG, "Notification route fallback: $pendingNotificationRoute")
         }
     }
     
@@ -114,14 +118,14 @@ class MainActivity : ComponentActivity() {
 
         // Parse the clickUrl and convert to Android route
         return when {
-            clickUrl.contains("/provider/bookings") -> {
-                if (bookingId != null) "provider_booking/$bookingId" else "provider_bookings"
-            }
+            clickUrl.contains("/provider/bookings") -> "provider_bookings"
             clickUrl.contains("/customer/bookings") -> {
                 if (bookingId != null) "customer_booking/$bookingId" else "customer_bookings"
             }
-            clickUrl.contains("/shop/orders") -> {
-                if (orderId != null) "shop_order/$orderId" else "shop_orders"
+            clickUrl.contains("/shop/orders") || clickUrl.contains("/shop/returns") -> "shop_dashboard"
+            clickUrl.contains("/shop/inventory") -> "shop_dashboard"
+            clickUrl.contains("/customer/returns") -> {
+                if (orderId != null) "customer_order/$orderId" else "customer_orders"
             }
             clickUrl.contains("/customer/orders") || clickUrl.contains("/customer/order") -> {
                 if (orderId != null) "customer_order/$orderId" else "customer_orders"
@@ -129,10 +133,13 @@ class MainActivity : ComponentActivity() {
             clickUrl.contains("/notifications") -> {
                 when {
                     clickUrl.contains("/provider/") -> "provider_notifications"
-                    clickUrl.contains("/shop/") -> "shop_notifications"
+                    clickUrl.contains("/shop/") -> "shop_dashboard"
                     else -> "customer_notifications"
                 }
             }
+            clickUrl.contains("/shop") -> "shop_dashboard"
+            clickUrl.contains("/provider") -> "provider_dashboard"
+            clickUrl.contains("/customer") -> "customer_home"
             else -> "customer_notifications"
         }
     }
@@ -161,13 +168,17 @@ class MainActivity : ComponentActivity() {
      */
     private fun getRouteFromType(type: String, relatedId: String?): String {
         return when (type) {
-            "booking", "booking_request", "new_booking", "booking_accepted", 
+            "booking", "booking_request", "booking_update", "booking_confirmed",
+            "booking_rejected", "booking_cancelled_by_customer",
+            "booking_rescheduled_request", "booking_rescheduled_by_provider",
+            "service", "service_request", "new_booking", "booking_accepted",
             "booking_completed", "payment_submitted", "payment_confirmed" -> {
                 if (relatedId != null) "customer_booking/$relatedId" else "customer_bookings"
             }
-            "order", "new_order", "order_shipped", "order_delivered" -> {
+            "order", "new_order", "order_shipped", "order_delivered", "return" -> {
                 if (relatedId != null) "customer_order/$relatedId" else "customer_orders"
             }
+            "shop" -> "shop_dashboard"
             else -> "customer_notifications"
         }
     }

@@ -35,17 +35,30 @@ const debugLog = (...args) => {
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
     debugLog("[firebase-messaging-sw.js] Received background message:", payload);
+    console.info("[firebase-messaging-sw.js] Payload summary", {
+        type: payload.data?.type,
+        relatedId: payload.data?.relatedId,
+        hasTitle: Boolean(payload.notification?.title || payload.data?.title),
+        hasBody: Boolean(payload.notification?.body || payload.data?.body),
+    });
 
     const notificationTitle =
         payload.notification?.title ||
         payload.data?.title ||
         'DoorStep';
+    const notificationBody = payload.notification?.body || payload.data?.body || '';
+    const notificationData = {
+        ...(payload.data || {}),
+        title: payload.data?.title || notificationTitle,
+        body: payload.data?.body || notificationBody,
+    };
+
     const notificationOptions = {
-        body: payload.notification?.body || payload.data?.body || '',
+        body: notificationBody,
         icon: '/icon-192.png',
         badge: '/icon-192.png',
         tag: payload.data?.type || 'notification',
-        data: payload.data || {},
+        data: notificationData,
         actions: [
             {
                 action: 'open',
@@ -67,8 +80,14 @@ self.addEventListener('notificationclick', (event) => {
     // Get the notification data
     const data = event.notification.data || {};
 
-    // Use clickUrl from data, or fallback to notifications page
-    let urlToOpen = data.clickUrl || '/notifications';
+    const params = new URLSearchParams();
+    if (data.type) params.set('type', data.type);
+    if (data.title) params.set('title', data.title);
+    if (data.body) params.set('message', data.body);
+    if (data.relatedId) params.set('relatedId', data.relatedId);
+    if (data.clickUrl) params.set('clickUrl', data.clickUrl);
+
+    let urlToOpen = `/notification/redirect${params.toString() ? `?${params.toString()}` : ''}`;
 
     // Make sure URL is absolute
     if (urlToOpen.startsWith('/')) {

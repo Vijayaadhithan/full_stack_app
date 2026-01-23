@@ -50,7 +50,6 @@ import {
   TimeSlotLabel,
   timeSlotLabelSchema,
   shops,
-  notifications,
   InsertNotification,
   bookings,
 } from "@shared/schema";
@@ -86,7 +85,6 @@ import {
 } from "./security/rateLimiters";
 import {
   registerRealtimeClient,
-  notifyNotificationChanges,
 } from "./realtime";
 import {
   hasRoleAccess,
@@ -1877,25 +1875,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error("Failed to update booking");
         }
         finalUpdatedBooking = updated;
-
-        if (notificationsToCreate.length > 0) {
-          await tx.insert(notifications).values(
-            notificationsToCreate.map((n) => ({
-              ...n,
-              type: n.type as any,
-              relatedBookingId: n.relatedBookingId ?? null,
-              createdAt: new Date(),
-            })),
-          );
-        }
       });
 
       if (!finalUpdatedBooking) {
         throw new Error("Failed to update booking");
       }
 
-      // Send realtime notifications after transaction commits
-      notifyNotificationChanges(notificationsToCreate.map((n) => n.userId));
+      if (notificationsToCreate.length > 0) {
+        await Promise.all(
+          notificationsToCreate.map((notification) =>
+            storage.createNotification(notification),
+          ),
+        );
+      }
 
       logger.info(
         `[API] Successfully updated booking ${bookingId}:`,

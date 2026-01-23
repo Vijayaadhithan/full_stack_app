@@ -70,6 +70,7 @@ const HomePage = lazy(() => import("@/pages/home-page"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
 const TermsOfService = lazy(() => import("@/pages/terms-of-service"));
+const NotificationRedirect = lazy(() => import("@/pages/notification-redirect"));
 // Email-based pages removed (verify-email, reset-password) - using phone OTP instead
 const WorkerLoginPage = lazy(() => import("@/pages/auth/WorkerLoginPage"));
 
@@ -133,6 +134,7 @@ function Router() {
       </Route>
       <Route path="/auth" component={AuthPage} />
       <Route path="/worker-login" component={WorkerLoginPage} />
+      <Route path="/notification/redirect" component={NotificationRedirect} />
       {/* Customer Routes */}
       <ProtectedRoute
         path="/customer"

@@ -88,6 +88,10 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
         // Handle data-only messages if needed
         if (message.data.isNotEmpty()) {
             Log.d(TAG, "Data payload: ${message.data}")
+            Log.i(
+                TAG,
+                "Push data keys=${message.data.keys} type=${message.data["type"]} relatedId=${message.data["relatedId"]} clickUrl=${message.data["clickUrl"]}"
+            )
             handleDataMessage(message.data)
         }
     }
@@ -147,7 +151,8 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
      */
     private fun showNotification(title: String, body: String, data: Map<String, String>) {
         val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            action = Intent.ACTION_VIEW
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             // Pass notification data to the activity
             data.forEach { (key, value) ->
                 putExtra(key, value)
