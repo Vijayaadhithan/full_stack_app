@@ -37,7 +37,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.util.parseGeoPoint
 import com.doorstep.tn.core.network.SearchResult
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import kotlinx.coroutines.delay
@@ -50,6 +52,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun UniversalSearchScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToService: (Int) -> Unit,
     onNavigateToProduct: (Int, Int) -> Unit,  // shopId, productId
@@ -58,6 +61,7 @@ fun UniversalSearchScreen(
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val user by authViewModel.user.collectAsState()
     
     var localQuery by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
@@ -70,6 +74,18 @@ fun UniversalSearchScreen(
         focusRequester.requestFocus()
     }
     
+    val savedLocation = remember(user) {
+        parseGeoPoint(user?.latitude, user?.longitude)
+    }
+
+    LaunchedEffect(savedLocation) {
+        viewModel.updateSearchLocation(
+            latitude = savedLocation?.latitude,
+            longitude = savedLocation?.longitude,
+            radius = if (savedLocation != null) 45 else null
+        )
+    }
+
     // Debounced search
     LaunchedEffect(localQuery) {
         if (localQuery.length >= 2) {

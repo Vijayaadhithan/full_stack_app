@@ -1,5 +1,10 @@
 package com.doorstep.tn.customer.ui.shops
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -19,14 +24,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.ui.LocationFilterDropdown
+import com.doorstep.tn.common.util.fetchCurrentLocation
+import com.doorstep.tn.common.util.parseGeoPoint
 import com.doorstep.tn.customer.data.model.Shop
 import com.doorstep.tn.customer.ui.CustomerViewModel
 
@@ -37,11 +47,13 @@ import com.doorstep.tn.customer.ui.CustomerViewModel
 @Composable
 fun ShopsListScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToShop: (Int) -> Unit
 ) {
     val shops by viewModel.shops.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val user by authViewModel.user.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var locationCity by remember { mutableStateOf("") }
     var locationState by remember { mutableStateOf("") }
@@ -51,6 +63,61 @@ fun ShopsListScreen(
     var locationRadius by remember { mutableIntStateOf(45) }
     var locationLat by remember { mutableStateOf<Double?>(null) }
     var locationLng by remember { mutableStateOf<Double?>(null) }
+    var locationSource by remember { mutableStateOf<String?>(null) }
+
+    val context = LocalContext.current
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (fineGranted || coarseGranted) {
+            fetchCurrentLocation(
+                context = context,
+                onSuccess = { point ->
+                    locationLat = point.latitude
+                    locationLng = point.longitude
+                    locationSource = "Device"
+                },
+                onError = { message ->
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            )
+        } else {
+            Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val requestDeviceLocation = {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (fineGranted || coarseGranted) {
+            fetchCurrentLocation(
+                context = context,
+                onSuccess = { point ->
+                    locationLat = point.latitude
+                    locationLng = point.longitude
+                    locationSource = "Device"
+                },
+                onError = { message ->
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            )
+        } else {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
     
     LaunchedEffect(locationLat, locationLng, locationRadius, locationCity, locationState) {
         viewModel.loadShops(
@@ -146,18 +213,27 @@ fun ShopsListScreen(
                     currentLat = locationLat,
                     currentLng = locationLng,
                     onRadiusChange = { locationRadius = it },
-                    onUseDeviceLocation = {
-                        locationLat = 10.557
-                        locationLng = 77.235
-                    },
+                    onUseDeviceLocation = { requestDeviceLocation() },
                     onUseSavedLocation = {
-                        locationLat = 10.557
-                        locationLng = 77.235
+                        val saved = parseGeoPoint(user?.latitude, user?.longitude)
+                        if (saved != null) {
+                            locationLat = saved.latitude
+                            locationLng = saved.longitude
+                            locationSource = "Profile"
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "Saved location not available",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     },
                     onClear = {
                         locationLat = null
                         locationLng = null
-                    }
+                        locationSource = null
+                    },
+                    sourceLabel = locationSource
                 )
 
                 // City/State filter trigger (fallback when location is not set)

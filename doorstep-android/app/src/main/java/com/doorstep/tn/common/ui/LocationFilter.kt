@@ -35,6 +35,7 @@ fun LocationFilterDropdown(
     onUseDeviceLocation: () -> Unit,
     onUseSavedLocation: () -> Unit,
     onClear: () -> Unit,
+    sourceLabel: String? = null,
     modifier: Modifier = Modifier
 ) {
     var isExpanded by remember { mutableStateOf(false) }
@@ -140,11 +141,13 @@ fun LocationFilterDropdown(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = WhiteTextMuted
                                     )
-                                    Text(
-                                        text = "Source: Profile",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = WhiteTextMuted
-                                    )
+                                    sourceLabel?.takeIf { it.isNotBlank() }?.let { label ->
+                                        Text(
+                                            text = "Source: $label",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = WhiteTextMuted
+                                        )
+                                    }
                                 }
                                 Text(
                                     text = "${String.format("%.3f", currentLat)}, ${String.format("%.3f", currentLng)}",

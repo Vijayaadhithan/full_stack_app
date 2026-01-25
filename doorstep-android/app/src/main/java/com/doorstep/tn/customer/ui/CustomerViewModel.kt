@@ -193,6 +193,14 @@ class CustomerViewModel @Inject constructor(
     
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private data class SearchLocation(
+        val latitude: Double?,
+        val longitude: Double?,
+        val radius: Int?
+    )
+
+    private val _searchLocation = MutableStateFlow(SearchLocation(null, null, null))
     
     // Debounced search input channel - reduces API calls by 70-80%
     private val searchInputChannel = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -1474,6 +1482,11 @@ class CustomerViewModel @Inject constructor(
     }
     
     // ==================== Search Actions ====================
+
+    fun updateSearchLocation(latitude: Double?, longitude: Double?, radius: Int?) {
+        val normalizedRadius = if (latitude != null && longitude != null) radius else null
+        _searchLocation.value = SearchLocation(latitude, longitude, normalizedRadius)
+    }
     
     // Debounced search - emits to channel which handles 500ms debounce
     fun performSearch(query: String) {
@@ -1484,8 +1497,13 @@ class CustomerViewModel @Inject constructor(
     // Internal search called by debounce collector
     private suspend fun performSearchInternal(query: String) {
         _isSearching.value = true
-        
-        when (val result = repository.globalSearch(query)) {
+
+        val location = _searchLocation.value
+        val latitude = location.latitude
+        val longitude = location.longitude
+        val radius = if (latitude != null && longitude != null) location.radius else null
+
+        when (val result = repository.globalSearch(query, latitude, longitude, radius)) {
             is Result.Success -> {
                 _searchResults.value = result.data.results
             }
