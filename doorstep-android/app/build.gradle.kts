@@ -97,6 +97,9 @@ dependencies {
     // DataStore
     implementation(libs.datastore.preferences)
 
+    // Security Crypto (EncryptedSharedPreferences)
+    implementation(libs.androidx.security.crypto)
+
     // Image Loading
     implementation(libs.coil.compose)
 

@@ -9,6 +9,7 @@ import com.doorstep.tn.auth.data.repository.AuthRepository
 import com.doorstep.tn.auth.data.repository.Result
 import com.doorstep.tn.core.datastore.PreferenceKeys
 import com.doorstep.tn.core.datastore.dataStore
+import com.doorstep.tn.core.security.SecureSessionStore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
@@ -421,6 +422,7 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.logout()
             firebaseAuth.signOut()
+            SecureSessionStore.clearSession(context)
             
             context.dataStore.edit { prefs ->
                 prefs[PreferenceKeys.IS_LOGGED_IN] = false

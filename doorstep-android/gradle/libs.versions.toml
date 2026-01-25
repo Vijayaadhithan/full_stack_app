@@ -19,6 +19,7 @@ ksp = "2.0.0-1.0.24"
 googleServices = "4.4.2"
 coroutines = "1.9.0"
 playServicesLocation = "21.3.0"
+securityCrypto = "1.0.0"
 
 [libraries]
 # Core Android
@@ -75,6 +76,7 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 
 # Play Services Location
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 
 # Testing
 junit = { group = "junit", name = "junit", version = "4.13.2" }
