@@ -226,8 +226,8 @@ describe("csrfProtection", () => {
         });
     });
 
-    describe("Authorization header bypass", () => {
-        it("should bypass CSRF for requests with Authorization header", (_, done) => {
+    describe("Authorization header behavior", () => {
+        it("should not bypass CSRF for requests with Authorization header", (_, done) => {
             const middleware = createCsrfProtection();
             const req: any = createMockReq({
                 method: "POST",
@@ -236,7 +236,8 @@ describe("csrfProtection", () => {
             req.session = createMockSession();
 
             middleware(req, createMockRes(), (err?: any) => {
-                assert.ok(!err);
+                assert.ok(err);
+                assert.ok(err.message.includes("Missing CSRF token"));
                 done();
             });
         });
