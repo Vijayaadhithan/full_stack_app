@@ -16,7 +16,7 @@ import androidx.room.RoomDatabase
         CachedShop::class,
         CacheMetadata::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class DoorStepDatabase : RoomDatabase() {

@@ -36,6 +36,7 @@ import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.ui.LocationFilterDropdown
 import com.doorstep.tn.common.util.fetchCurrentLocation
+import com.doorstep.tn.common.util.haversineDistanceKm
 import com.doorstep.tn.common.util.parseGeoPoint
 import com.doorstep.tn.customer.data.model.Shop
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -292,8 +293,30 @@ fun ShopsListScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(filteredShops) { shop ->
+                            val distanceLabel = if (locationLat != null && locationLng != null) {
+                                val shopLat = shop.latitudeValue
+                                val shopLng = shop.longitudeValue
+                                if (shopLat != null && shopLng != null) {
+                                    val distanceKm = haversineDistanceKm(
+                                        locationLat!!,
+                                        locationLng!!,
+                                        shopLat,
+                                        shopLng
+                                    )
+                                    if (distanceKm.isFinite()) {
+                                        String.format("%.1f km away", distanceKm)
+                                    } else {
+                                        null
+                                    }
+                                } else {
+                                    null
+                                }
+                            } else {
+                                null
+                            }
                             ShopCard(
                                 shop = shop,
+                                distanceLabel = distanceLabel,
                                 onClick = { onNavigateToShop(shop.id) }
                             )
                         }
@@ -371,6 +394,7 @@ private fun LocationFilterDialog(
 @Composable
 private fun ShopCard(
     shop: Shop,
+    distanceLabel: String?,
     onClick: () -> Unit
 ) {
     Card(
@@ -454,6 +478,23 @@ private fun ShopCard(
                             color = WhiteTextSubtle
                         )
                         
+                        Spacer(modifier = Modifier.width(12.dp))
+                    }
+
+                    if (distanceLabel != null) {
+                        Icon(
+                            imageVector = Icons.Default.NearMe,
+                            contentDescription = null,
+                            tint = WhiteTextSubtle,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = distanceLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = WhiteTextSubtle
+                        )
+
                         Spacer(modifier = Modifier.width(12.dp))
                     }
                     

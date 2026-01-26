@@ -1,6 +1,7 @@
 package com.doorstep.tn.customer.ui
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.EventNote
@@ -16,18 +19,24 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.doorstep.tn.R
+import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.localization.Translations
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.ui.PollingEffect
@@ -37,6 +46,8 @@ import com.doorstep.tn.common.ui.GradientType
 import com.doorstep.tn.common.ui.LanguageToggleButton
 import com.doorstep.tn.common.ui.TimeBasedGreeting
 import com.doorstep.tn.common.util.StatusUtils
+import com.doorstep.tn.common.util.parseGeoPoint
+import com.doorstep.tn.core.network.SearchResult
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.data.model.Order
 
@@ -48,6 +59,7 @@ import com.doorstep.tn.customer.data.model.Order
 @Composable
 fun CustomerHomeScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
     onNavigateToProducts: () -> Unit,
     onNavigateToServices: () -> Unit,
     onNavigateToShops: () -> Unit,
@@ -57,6 +69,9 @@ fun CustomerHomeScreen(
     onNavigateToBookings: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToSearch: () -> Unit,
+    onNavigateToServiceDetail: (Int) -> Unit,
+    onNavigateToProductDetail: (Int, Int) -> Unit,
+    onNavigateToShopDetail: (Int) -> Unit,
     onNavigateToNotifications: () -> Unit = {},
     onLogout: () -> Unit
 ) {
@@ -74,8 +89,15 @@ fun CustomerHomeScreen(
     val unreadNotificationCount by viewModel.unreadNotificationCount.collectAsState()
     val buyAgainData by viewModel.buyAgainRecommendations.collectAsState()
     val isBuyAgainLoading by viewModel.isBuyAgainLoading.collectAsState()
+    val searchResults by viewModel.searchResults.collectAsState()
+    val isSearching by viewModel.isSearching.collectAsState()
+    val user by authViewModel.user.collectAsState()
     
     val t = Translations.get(language)
+    var inlineSearchQuery by rememberSaveable { mutableStateOf("") }
+    val savedLocation = remember(user) {
+        parseGeoPoint(user?.latitude, user?.longitude)
+    }
     
     // Load data on first composition
     LaunchedEffect(Unit) {
@@ -86,6 +108,27 @@ fun CustomerHomeScreen(
         viewModel.loadCart()
         viewModel.loadNotifications()
         viewModel.loadBuyAgainRecommendations()
+    }
+
+    LaunchedEffect(savedLocation) {
+        viewModel.updateSearchLocation(
+            latitude = savedLocation?.latitude,
+            longitude = savedLocation?.longitude,
+            radius = if (savedLocation != null) 45 else null
+        )
+        val trimmedQuery = inlineSearchQuery.trim()
+        if (trimmedQuery.length >= 2) {
+            viewModel.performSearch(trimmedQuery)
+        }
+    }
+
+    LaunchedEffect(inlineSearchQuery) {
+        val trimmedQuery = inlineSearchQuery.trim()
+        when {
+            trimmedQuery.length >= 2 -> viewModel.performSearch(trimmedQuery)
+            trimmedQuery.isEmpty() -> viewModel.clearSearch()
+            else -> viewModel.clearSearch()
+        }
     }
 
     PollingEffect(intervalMs = 30_000L) {
@@ -219,49 +262,151 @@ fun CustomerHomeScreen(
                 FestivalBanner()
             }
             
-            // Premium Search Bar
+            // Premium Search Bar + Inline Results
             item {
-                GradientCard(
-                    gradientType = GradientType.SUNSET,
-                    modifier = Modifier.clickable(onClick = onNavigateToSearch)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GradientCard(
+                        gradientType = GradientType.SUNSET
                     ) {
-                        Box(
+                        Column(
                             modifier = Modifier
-                                .size(44.dp)
-                                .background(
-                                    color = WhiteText.copy(alpha = 0.2f),
-                                    shape = RoundedCornerShape(12.dp)
-                                ),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = WhiteText,
-                                modifier = Modifier.size(24.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .background(
+                                            color = WhiteText.copy(alpha = 0.2f),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = WhiteText,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column {
+                                    Text(
+                                        text = t.searchPlaceholder,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = WhiteText,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = t.tapToSearch,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = WhiteText.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = inlineSearchQuery,
+                                onValueChange = { inlineSearchQuery = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = {
+                                    Text(
+                                        text = if (language == "ta") "தேடத் தொடங்கு..." else "Start typing...",
+                                        color = WhiteText.copy(alpha = 0.7f)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = WhiteText.copy(alpha = 0.9f)
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (inlineSearchQuery.isNotEmpty()) {
+                                        IconButton(onClick = {
+                                            inlineSearchQuery = ""
+                                            viewModel.clearSearch()
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Clear,
+                                                contentDescription = "Clear",
+                                                tint = WhiteText.copy(alpha = 0.9f)
+                                            )
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(
+                                    onSearch = {
+                                        val trimmedQuery = inlineSearchQuery.trim()
+                                        if (trimmedQuery.length >= 2) {
+                                            viewModel.performSearch(trimmedQuery)
+                                        }
+                                    }
+                                ),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = WhiteText,
+                                    unfocusedTextColor = WhiteText,
+                                    focusedBorderColor = WhiteText.copy(alpha = 0.6f),
+                                    unfocusedBorderColor = WhiteText.copy(alpha = 0.35f),
+                                    focusedContainerColor = WhiteText.copy(alpha = 0.2f),
+                                    unfocusedContainerColor = WhiteText.copy(alpha = 0.15f),
+                                    cursorColor = WhiteText
+                                )
                             )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column {
-                            Text(
-                                text = t.searchPlaceholder,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = WhiteText,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = t.tapToSearch,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = WhiteText.copy(alpha = 0.7f)
-                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (savedLocation != null) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = WhiteText.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (language == "ta") "இடம் அடிப்படையில் தேடுகிறது" else "Searching near you",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = WhiteText.copy(alpha = 0.7f)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.weight(1f))
+
+                                TextButton(
+                                    onClick = onNavigateToSearch,
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = WhiteText
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (language == "ta") "முழு தேடல்" else "Full search",
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+                            }
                         }
                     }
+
+                    InlineSearchResults(
+                        query = inlineSearchQuery,
+                        isSearching = isSearching,
+                        results = searchResults,
+                        language = language,
+                        onNavigateToService = onNavigateToServiceDetail,
+                        onNavigateToProduct = onNavigateToProductDetail,
+                        onNavigateToShop = onNavigateToShopDetail
+                    )
                 }
             }
             
@@ -665,6 +810,248 @@ fun CustomerHomeScreen(
                     )
                 }
                 Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun InlineSearchResults(
+    query: String,
+    isSearching: Boolean,
+    results: List<SearchResult>,
+    language: String,
+    onNavigateToService: (Int) -> Unit,
+    onNavigateToProduct: (Int, Int) -> Unit,
+    onNavigateToShop: (Int) -> Unit
+) {
+    val trimmedQuery = query.trim()
+    if (trimmedQuery.isEmpty() && !isSearching && results.isEmpty()) {
+        return
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            when {
+                trimmedQuery.length < 2 -> {
+                    Text(
+                        text = if (language == "ta") {
+                            "தேட குறைந்தது 2 எழுத்துகளை உள்ளிடுங்கள்"
+                        } else {
+                            "Type at least 2 characters to search"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WhiteTextMuted
+                    )
+                }
+                isSearching -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            color = OrangePrimary,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (language == "ta") "தேடுகிறது..." else "Searching...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = WhiteTextMuted
+                        )
+                    }
+                }
+                results.isEmpty() -> {
+                    Text(
+                        text = if (language == "ta") "முடிவு கிடைக்கவில்லை" else "No results found",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WhiteTextMuted
+                    )
+                }
+                else -> {
+                    Text(
+                        text = if (language == "ta") "சிறந்த முடிவுகள்" else "Top results",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = WhiteText,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        results.take(6).forEach { result ->
+                            InlineSearchResultRow(
+                                result = result,
+                                language = language,
+                                onClick = {
+                                    when (result.type) {
+                                        "service" -> onNavigateToService(result.id)
+                                        "product" -> onNavigateToProduct(0, result.id)
+                                        "shop" -> onNavigateToShop(result.id)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InlineSearchResultRow(
+    result: SearchResult,
+    language: String,
+    onClick: () -> Unit
+) {
+    val (icon, color) = when (result.type) {
+        "service" -> Icons.Default.Handshake to ProviderBlue
+        "product" -> Icons.Default.ShoppingBag to OrangePrimary
+        "shop" -> Icons.Default.Store to SuccessGreen
+        else -> Icons.Default.Search to WhiteTextMuted
+    }
+
+    val distanceLabel = result.distance?.let { dist ->
+        if (dist.isFinite()) String.format("%.1f km away", dist) else null
+    }
+
+    val typeLabel = when (result.type) {
+        "service" -> if (language == "ta") "சேவை" else "Service"
+        "product" -> if (language == "ta") "பொருள்" else "Product"
+        "shop" -> if (language == "ta") "கடை" else "Shop"
+        else -> if (language == "ta") "தேடல்" else "Search"
+    }
+    val actionLabel = when (result.type) {
+        "service" -> if (language == "ta") "முன்பதிவு" else "Book"
+        "product" -> if (language == "ta") "பார்" else "View"
+        "shop" -> if (language == "ta") "திற" else "Open"
+        else -> if (language == "ta") "பார்" else "View"
+    }
+    val subtitle = result.description?.takeIf { it.isNotBlank() }
+        ?: result.providerName?.takeIf { it.isNotBlank() }
+        ?: result.shopName?.takeIf { it.isNotBlank() }
+        ?: result.category?.takeIf { it.isNotBlank() }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateDarker)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(color.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!result.imageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = result.imageUrl,
+                        contentDescription = result.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = color.copy(alpha = 0.2f)
+                    ) {
+                        Text(
+                            text = typeLabel,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = color
+                        )
+                    }
+                    distanceLabel?.let { label ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = WhiteText.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = label,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WhiteTextSubtle
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = result.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = WhiteText,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                subtitle?.let { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WhiteTextMuted,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                result.price?.let { price ->
+                    Text(
+                        text = "₹$price",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = OrangePrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                OutlinedButton(
+                    onClick = onClick,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = WhiteText),
+                    border = BorderStroke(1.dp, color.copy(alpha = 0.5f))
+                ) {
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
         }
     }

@@ -38,6 +38,7 @@ import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.ui.BookingTypeSelector
 import com.doorstep.tn.common.ui.LocationFilterDropdown
 import com.doorstep.tn.common.util.fetchCurrentLocation
+import com.doorstep.tn.common.util.haversineDistanceKm
 import com.doorstep.tn.common.util.parseGeoPoint
 import com.doorstep.tn.customer.data.model.Service
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -401,8 +402,30 @@ fun ServicesListScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(services) { service ->
+                            val distanceLabel = if (locationLat != null && locationLng != null) {
+                                val providerLat = service.provider?.latitude
+                                val providerLng = service.provider?.longitude
+                                if (providerLat != null && providerLng != null) {
+                                    val distanceKm = haversineDistanceKm(
+                                        locationLat!!,
+                                        locationLng!!,
+                                        providerLat,
+                                        providerLng
+                                    )
+                                    if (distanceKm.isFinite()) {
+                                        String.format("%.1f km away", distanceKm)
+                                    } else {
+                                        null
+                                    }
+                                } else {
+                                    null
+                                }
+                            } else {
+                                null
+                            }
                             ServiceCard(
                                 service = service,
+                                distanceLabel = distanceLabel,
                                 onClick = { onNavigateToService(service.id) }
                             )
                         }
@@ -500,6 +523,7 @@ private fun ServiceFiltersDialog(
 @Composable
 private fun ServiceCard(
     service: Service,
+    distanceLabel: String?,
     onClick: () -> Unit
 ) {
     Card(
@@ -596,6 +620,24 @@ private fun ServiceCard(
                             Spacer(modifier = Modifier.width(2.dp))
                             Text(
                                 text = "${service.duration ?: 30} mins",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WhiteTextMuted
+                            )
+                        }
+                    }
+
+                    if (distanceLabel != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.NearMe,
+                                contentDescription = null,
+                                tint = WhiteTextMuted,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = distanceLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = WhiteTextMuted
                             )

@@ -12,6 +12,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.Cache
+import okhttp3.CertificatePinner
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -28,6 +30,37 @@ import javax.inject.Singleton
 object NetworkModule {
     
     private const val HTTP_CACHE_SIZE = 10L * 1024 * 1024 // 10 MB
+
+    private fun buildCertificatePinner(): CertificatePinner? {
+        val rawPins = BuildConfig.API_CERT_PINS.trim()
+        if (rawPins.isEmpty()) {
+            return null
+        }
+
+        val host = BuildConfig.API_BASE_URL
+            .trim()
+            .trimEnd('/')
+            .toHttpUrlOrNull()
+            ?.host
+            ?: return null
+
+        val pins = rawPins.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { pin ->
+                if (pin.startsWith("sha256/")) pin else "sha256/$pin"
+            }
+
+        if (pins.isEmpty()) {
+            return null
+        }
+
+        val builder = CertificatePinner.Builder()
+        pins.forEach { pin ->
+            builder.add(host, pin)
+        }
+        return builder.build()
+    }
     
     @Provides
     @Singleton
@@ -71,10 +104,16 @@ object NetworkModule {
         authInterceptor: AuthInterceptor,
         cache: Cache
     ): OkHttpClient {
+        val certificatePinner = buildCertificatePinner()
         return OkHttpClient.Builder()
             .cache(cache)
             .addInterceptor(authInterceptor)
             .addInterceptor(loggingInterceptor)
+            .apply {
+                if (certificatePinner != null) {
+                    certificatePinner(certificatePinner)
+                }
+            }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)

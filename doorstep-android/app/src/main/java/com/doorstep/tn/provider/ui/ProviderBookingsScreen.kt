@@ -619,12 +619,34 @@ private fun BookingCard(
                 )
             }
 
-            booking.proximityInfo?.message?.takeIf { it.isNotBlank() }?.let { message ->
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ProviderBlue
-                )
+            val proximityInfo = booking.proximityInfo
+            val proximityLabel = proximityInfo?.message?.takeIf { it.isNotBlank() }
+                ?: proximityInfo?.distanceKm?.takeIf { it.isFinite() }?.let { dist ->
+                    val rounded = String.format(Locale.US, "%.1f", dist)
+                    val dateLabel = proximityInfo.nearestBookingDate?.let { formatBookingDate(it) }
+                    if (dateLabel != null) {
+                        "Nearest booking $rounded km away on $dateLabel"
+                    } else {
+                        "Nearest booking $rounded km away"
+                    }
+                }
+            proximityLabel?.let { label ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.NearMe,
+                        contentDescription = null,
+                        tint = ProviderBlue,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ProviderBlue
+                    )
+                }
             }
 
             Column(

@@ -26,6 +26,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.customer.ui.CustomerViewModel
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Product Detail Screen
@@ -111,9 +113,32 @@ fun ProductDetailScreen(
         } else if (product != null) {
             val p = product!!
             val openOrderAllowed = (p.openOrderMode == true || p.catalogModeEnabled == true)
-            val maxQuantity = if (!openOrderAllowed) p.stock?.takeIf { it > 0 } else null
-            val canDecrease = quantity > 1
+            val minQuantity = max(1, p.minOrderQuantity ?: 1)
+            val maxQuantity = run {
+                val maxByProduct = p.maxOrderQuantity
+                val stockCap = if (!openOrderAllowed && (p.stock ?: 0) > 0) p.stock else null
+                if (maxByProduct != null && stockCap != null) {
+                    min(maxByProduct, stockCap)
+                } else {
+                    maxByProduct ?: stockCap
+                }
+            }
+            val clampQuantity = { value: Int ->
+                val next = max(minQuantity, value)
+                if (maxQuantity != null) min(next, maxQuantity) else next
+            }
+            val quantityOutOfRange =
+                quantity < minQuantity || (maxQuantity != null && quantity > maxQuantity)
+            val canDecrease = quantity > minQuantity
             val canIncrease = maxQuantity?.let { quantity < it } ?: true
+
+            LaunchedEffect(p.id, minQuantity, maxQuantity) {
+                var next = minQuantity
+                if (maxQuantity != null) {
+                    next = min(next, maxQuantity)
+                }
+                quantity = next
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -235,7 +260,7 @@ fun ProductDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
                         IconButton(
-                            onClick = { if (canDecrease) quantity -= 1 },
+                            onClick = { if (canDecrease) quantity = clampQuantity(quantity - 1) },
                             enabled = canDecrease,
                             modifier = Modifier
                                 .size(32.dp)
@@ -258,7 +283,7 @@ fun ProductDetailScreen(
                         )
                         
                         IconButton(
-                            onClick = { if (canIncrease) quantity += 1 },
+                            onClick = { if (canIncrease) quantity = clampQuantity(quantity + 1) },
                             enabled = canIncrease,
                             modifier = Modifier
                                 .size(32.dp)
@@ -272,15 +297,20 @@ fun ProductDetailScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
-                        
-                        maxQuantity?.let { max ->
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Max $max",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = WhiteTextMuted
-                            )
-                        }
+                    }
+
+                    val quantityRangeLabel = listOfNotNull(
+                        if (minQuantity > 1) "Min $minQuantity" else null,
+                        maxQuantity?.let { "Max $it" }
+                    ).joinToString(" / ")
+
+                    if (quantityRangeLabel.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = quantityRangeLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = WhiteTextMuted
+                        )
                     }
                     
                     Spacer(modifier = Modifier.height(24.dp))
@@ -427,7 +457,7 @@ fun ProductDetailScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
-                            enabled = p.isAvailable
+                            enabled = p.isAvailable && !quantityOutOfRange
                         ) {
                             Icon(Icons.Default.AddShoppingCart, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))

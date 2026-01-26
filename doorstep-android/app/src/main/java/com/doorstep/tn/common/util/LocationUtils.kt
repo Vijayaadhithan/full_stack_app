@@ -5,11 +5,30 @@ import android.content.Context
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import kotlin.math.pow
 
 data class GeoPoint(
     val latitude: Double,
     val longitude: Double
 )
+
+fun haversineDistanceKm(
+    latitude1: Double,
+    longitude1: Double,
+    latitude2: Double,
+    longitude2: Double
+): Double {
+    val radiusKm = 6371.0
+    fun toRad(deg: Double) = deg * Math.PI / 180.0
+    val dLat = toRad(latitude2 - latitude1)
+    val dLon = toRad(longitude2 - longitude1)
+    val lat1 = toRad(latitude1)
+    val lat2 = toRad(latitude2)
+    val a = Math.sin(dLat / 2).pow(2.0) +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2).pow(2.0)
+    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return radiusKm * c
+}
 
 fun parseGeoPoint(latitude: String?, longitude: String?): GeoPoint? {
     val lat = latitude?.toDoubleOrNull()

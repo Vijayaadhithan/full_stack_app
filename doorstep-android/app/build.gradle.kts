@@ -22,6 +22,13 @@ android {
         
         // API Base URL
         buildConfigField("String", "API_BASE_URL", "\"https://api.doorsteptn.in\"")
+        val apiCertPins = (project.findProperty("API_CERT_PINS") as String?)
+            ?.trim()
+            .orEmpty()
+        val escapedPins = apiCertPins
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+        buildConfigField("String", "API_CERT_PINS", "\"$escapedPins\"")
     }
 
     buildTypes {

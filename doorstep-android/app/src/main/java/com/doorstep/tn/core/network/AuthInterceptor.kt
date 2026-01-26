@@ -8,6 +8,7 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.CertificatePinner
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONObject
 import javax.crypto.Mac
@@ -27,7 +28,44 @@ class AuthInterceptor(
         private val CSRF_SAFE_METHODS = setOf("GET", "HEAD", "OPTIONS")
     }
 
-    private val csrfClient = OkHttpClient.Builder().build()
+    private val csrfClient = buildCsrfClient()
+
+    private fun buildCsrfClient(): OkHttpClient {
+        val builder = OkHttpClient.Builder()
+        buildCertificatePinner()?.let { builder.certificatePinner(it) }
+        return builder.build()
+    }
+
+    private fun buildCertificatePinner(): CertificatePinner? {
+        val rawPins = BuildConfig.API_CERT_PINS.trim()
+        if (rawPins.isEmpty()) {
+            return null
+        }
+
+        val host = BuildConfig.API_BASE_URL
+            .trim()
+            .trimEnd('/')
+            .toHttpUrlOrNull()
+            ?.host
+            ?: return null
+
+        val pins = rawPins.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { pin ->
+                if (pin.startsWith("sha256/")) pin else "sha256/$pin"
+            }
+
+        if (pins.isEmpty()) {
+            return null
+        }
+
+        val builder = CertificatePinner.Builder()
+        pins.forEach { pin ->
+            builder.add(host, pin)
+        }
+        return builder.build()
+    }
     
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()

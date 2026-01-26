@@ -315,8 +315,15 @@ data class UpdateReviewRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class ReturnRequestItem(
+    @Json(name = "productId") val productId: Int,
+    @Json(name = "quantity") val quantity: Int
+)
+
+@JsonClass(generateAdapter = true)
 data class CreateReturnRequest(
     @Json(name = "reason") val reason: String,
+    @Json(name = "items") val items: List<ReturnRequestItem>,
     @Json(name = "description") val description: String? = null
 )
 

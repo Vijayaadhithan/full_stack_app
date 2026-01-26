@@ -37,6 +37,8 @@ data class Product(
     @Json(name = "price") val price: String,
     @Json(name = "mrp") val mrp: String? = null,
     @Json(name = "stock") val stock: Int? = null,
+    @Json(name = "minOrderQuantity") val minOrderQuantity: Int? = null,
+    @Json(name = "maxOrderQuantity") val maxOrderQuantity: Int? = null,
     @Json(name = "category") val category: String? = null,
     @Json(name = "images") val images: List<String>? = null,
     @Json(name = "isAvailable") val isAvailable: Boolean = true,

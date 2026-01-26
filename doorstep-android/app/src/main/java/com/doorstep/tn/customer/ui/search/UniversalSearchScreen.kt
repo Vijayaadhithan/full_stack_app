@@ -84,6 +84,9 @@ fun UniversalSearchScreen(
             longitude = savedLocation?.longitude,
             radius = if (savedLocation != null) 45 else null
         )
+        if (localQuery.length >= 2) {
+            viewModel.performSearch(localQuery)
+        }
     }
 
     // Debounced search

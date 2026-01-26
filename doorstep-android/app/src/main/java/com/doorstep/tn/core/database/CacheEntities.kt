@@ -18,6 +18,8 @@ data class CachedProduct(
     val description: String?,
     val price: String,
     val mrp: String?,
+    val minOrderQuantity: Int?,
+    val maxOrderQuantity: Int?,
     val category: String?,
     val images: String?, // JSON array stored as string
     val shopId: Int?,

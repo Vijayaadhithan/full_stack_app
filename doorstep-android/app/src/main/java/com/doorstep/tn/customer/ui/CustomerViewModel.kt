@@ -1393,13 +1393,14 @@ class CustomerViewModel @Inject constructor(
     fun createReturnRequest(
         orderId: Int,
         reason: String,
+        items: List<com.doorstep.tn.core.network.ReturnRequestItem>,
         description: String? = null,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
         viewModelScope.launch {
             _isLoading.value = true
-            when (val result = repository.createReturnRequest(orderId, reason, description)) {
+            when (val result = repository.createReturnRequest(orderId, reason, items, description)) {
                 is Result.Success -> onSuccess()
                 is Result.Error -> onError(result.message)
                 is Result.Loading -> {}
@@ -1484,7 +1485,7 @@ class CustomerViewModel @Inject constructor(
     // ==================== Search Actions ====================
 
     fun updateSearchLocation(latitude: Double?, longitude: Double?, radius: Int?) {
-        val normalizedRadius = if (latitude != null && longitude != null) radius else null
+        val normalizedRadius = if (latitude != null && longitude != null) radius ?: 45 else null
         _searchLocation.value = SearchLocation(latitude, longitude, normalizedRadius)
     }
     

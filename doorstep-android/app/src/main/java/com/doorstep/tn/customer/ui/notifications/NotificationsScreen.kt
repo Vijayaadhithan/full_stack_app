@@ -36,11 +36,13 @@ import java.time.format.DateTimeParseException
 @Composable
 fun NotificationsScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
+    screenTitle: String = "Notifications",
     onNavigateBack: () -> Unit,
     onNavigateToBooking: (Int) -> Unit = {},
     onNavigateToBookings: () -> Unit = {},
     onNavigateToOrders: () -> Unit = {},
-    onNavigateToOrder: (Int) -> Unit = {}
+    onNavigateToOrder: (Int) -> Unit = {},
+    onNotificationNavigate: ((AppNotification, Int?) -> Unit)? = null
 ) {
     val notifications by viewModel.notifications.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -67,7 +69,7 @@ fun NotificationsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Notifications", color = WhiteText) },
+                title = { Text(screenTitle, color = WhiteText) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -173,37 +175,41 @@ fun NotificationsScreen(
 
                                 val entityId = extractEntityId(notification)
 
-                                // Navigate based on notification type - matches web's navigateToRelevantPage
-                                when (notification.type) {
-                                    // Booking-related types - navigate to specific booking or bookings list
-                                    "booking", "booking_request", "booking_update", 
-                                    "booking_confirmed", "booking_rejected", "booking_cancelled_by_customer",
-                                    "booking_rescheduled_request", "booking_rescheduled_by_provider",
-                                    "service", "service_request" -> {
-                                        entityId?.let { bookingId ->
-                                            onNavigateToBooking(bookingId)
-                                        } ?: onNavigateToBookings()
-                                    }
-                                    // Order-related types - navigate to orders
-                                    "order", "shop" -> {
-                                        if (entityId != null) {
-                                            onNavigateToOrder(entityId)
-                                        } else {
+                                if (onNotificationNavigate != null) {
+                                    onNotificationNavigate(notification, entityId)
+                                } else {
+                                    // Navigate based on notification type - matches web's navigateToRelevantPage
+                                    when (notification.type) {
+                                        // Booking-related types - navigate to specific booking or bookings list
+                                        "booking", "booking_request", "booking_update",
+                                        "booking_confirmed", "booking_rejected", "booking_cancelled_by_customer",
+                                        "booking_rescheduled_request", "booking_rescheduled_by_provider",
+                                        "service", "service_request" -> {
+                                            entityId?.let { bookingId ->
+                                                onNavigateToBooking(bookingId)
+                                            } ?: onNavigateToBookings()
+                                        }
+                                        // Order-related types - navigate to orders
+                                        "order", "shop" -> {
+                                            if (entityId != null) {
+                                                onNavigateToOrder(entityId)
+                                            } else {
+                                                onNavigateToOrders()
+                                            }
+                                        }
+                                        // Return types - navigate to orders (returns are under orders)
+                                        "return" -> {
                                             onNavigateToOrders()
                                         }
-                                    }
-                                    // Return types - navigate to orders (returns are under orders)
-                                    "return" -> {
-                                        onNavigateToOrders()
-                                    }
-                                    // Promotion and system - no specific navigation
-                                    "promotion", "system" -> {
-                                        // Just mark as read, no navigation
-                                    }
-                                    // Default fallback - try booking if ID available
-                                    else -> {
-                                        notification.relatedBookingId?.let { bookingId ->
-                                            onNavigateToBooking(bookingId)
+                                        // Promotion and system - no specific navigation
+                                        "promotion", "system" -> {
+                                            // Just mark as read, no navigation
+                                        }
+                                        // Default fallback - try booking if ID available
+                                        else -> {
+                                            notification.relatedBookingId?.let { bookingId ->
+                                                onNavigateToBooking(bookingId)
+                                            }
                                         }
                                     }
                                 }

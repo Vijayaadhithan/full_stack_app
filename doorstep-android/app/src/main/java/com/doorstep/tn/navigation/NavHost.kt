@@ -45,6 +45,8 @@ import com.doorstep.tn.provider.ui.ProviderServicesScreen
 import com.doorstep.tn.provider.ui.ProviderBookingsScreen
 import com.doorstep.tn.provider.ui.ProviderReviewsScreen
 import com.doorstep.tn.provider.ui.ProviderEarningsScreen
+import com.doorstep.tn.provider.ui.ProviderNotificationsScreen
+import com.doorstep.tn.provider.ui.ProviderProfileScreen
 
 /**
  * Navigation routes for the app
@@ -239,6 +241,7 @@ fun DoorStepNavHost(
         // ==================== CUSTOMER ROUTES ====================
         composable(Routes.CUSTOMER_HOME) {
             CustomerHomeScreen(
+                authViewModel = authViewModel,
                 onNavigateToProducts = { navController.navigate(Routes.CUSTOMER_PRODUCTS) },
                 onNavigateToServices = { navController.navigate(Routes.CUSTOMER_SERVICES) },
                 onNavigateToShops = { navController.navigate(Routes.CUSTOMER_SHOPS) },
@@ -248,6 +251,15 @@ fun DoorStepNavHost(
                 onNavigateToBookings = { navController.navigate(Routes.CUSTOMER_BOOKINGS) },
                 onNavigateToProfile = { navController.navigate(Routes.CUSTOMER_PROFILE) },
                 onNavigateToSearch = { navController.navigate(Routes.CUSTOMER_SEARCH) },
+                onNavigateToServiceDetail = { serviceId ->
+                    navController.navigate(Routes.serviceDetail(serviceId))
+                },
+                onNavigateToProductDetail = { shopId, productId ->
+                    navController.navigate(Routes.productDetail(shopId, productId))
+                },
+                onNavigateToShopDetail = { shopId ->
+                    navController.navigate(Routes.shopDetail(shopId))
+                },
                 onNavigateToNotifications = { navController.navigate(Routes.CUSTOMER_NOTIFICATIONS) },
                 onLogout = {
                     authViewModel.logout()
@@ -614,22 +626,21 @@ fun DoorStepNavHost(
         }
 
         composable(Routes.PROVIDER_NOTIFICATIONS) {
-            NotificationsScreen(
+            ProviderNotificationsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToBooking = { _ ->
-                    navController.navigate(Routes.PROVIDER_BOOKINGS)
-                },
-                onNavigateToBookings = {
-                    navController.navigate(Routes.PROVIDER_BOOKINGS)
-                }
+                onNavigateToBookings = { navController.navigate(Routes.PROVIDER_BOOKINGS) },
+                onNavigateToEarnings = { navController.navigate(Routes.PROVIDER_EARNINGS) },
+                onNavigateToReviews = { navController.navigate(Routes.PROVIDER_REVIEWS) },
+                onNavigateToServices = { navController.navigate(Routes.PROVIDER_SERVICES) },
+                onNavigateToDashboard = { navController.navigate(Routes.PROVIDER_DASHBOARD) }
             )
         }
         
         // Provider Profile
         composable(Routes.PROVIDER_PROFILE) {
-            ProfileScreen(
+            ProviderProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
+                onNavigateToReviews = { navController.navigate(Routes.PROVIDER_REVIEWS) },
                 onSwitchRole = { newRole ->
                     authViewModel.switchRole(newRole)
                     val destination = when (newRole) {

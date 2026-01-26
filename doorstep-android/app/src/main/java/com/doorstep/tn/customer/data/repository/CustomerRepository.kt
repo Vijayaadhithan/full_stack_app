@@ -867,9 +867,18 @@ class CustomerRepository @Inject constructor(
     }
     
     // Create return request - matches web POST /api/orders/{orderId}/return
-    suspend fun createReturnRequest(orderId: Int, reason: String, description: String? = null): Result<Unit> {
+    suspend fun createReturnRequest(
+        orderId: Int,
+        reason: String,
+        items: List<com.doorstep.tn.core.network.ReturnRequestItem>,
+        description: String? = null
+    ): Result<Unit> {
         return try {
-            val request = com.doorstep.tn.core.network.CreateReturnRequest(reason = reason, description = description)
+            val request = com.doorstep.tn.core.network.CreateReturnRequest(
+                reason = reason,
+                items = items,
+                description = description
+            )
             val response = api.createReturnRequest(orderId, request)
             if (response.isSuccessful) {
                 Result.Success(Unit)

@@ -46,6 +46,8 @@ import java.util.Locale
 fun ProfileScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
     customerViewModel: CustomerViewModel = hiltViewModel(),
+    profileTitle: String = "Profile Settings",
+    reviewsLabel: String = "My Reviews",
     onNavigateBack: () -> Unit,
     onNavigateToReviews: () -> Unit,
     onSwitchRole: ((String) -> Unit)? = null,  // Optional callback for role switching
@@ -171,7 +173,7 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Profile Settings", color = WhiteText) },
+                title = { Text(profileTitle, color = WhiteText) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -718,7 +720,7 @@ fun ProfileScreen(
             ) {
                 Icon(Icons.Default.RateReview, null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("My Reviews")
+                Text(reviewsLabel)
             }
             
             // Role Switching Section (if callback is provided)

@@ -8,8 +8,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -200,11 +202,13 @@ fun OrderDetailScreen(
     // Return Request Dialog
     if (showReturnDialog) {
         ReturnRequestDialog(
+            orderItems = selectedOrder?.items.orEmpty(),
             onDismiss = { showReturnDialog = false },
-            onSubmit = { reason, description ->
+            onSubmit = { reason, description, items ->
                 viewModel.createReturnRequest(
                     orderId = orderId,
                     reason = reason,
+                    items = items,
                     description = description,
                     onSuccess = {
                         Toast.makeText(context, "Return request submitted", Toast.LENGTH_LONG).show()
@@ -1129,11 +1133,25 @@ private fun OrderDetailContent(
 
 @Composable
 private fun ReturnRequestDialog(
+    orderItems: List<OrderItem>,
     onDismiss: () -> Unit,
-    onSubmit: (String, String?) -> Unit
+    onSubmit: (String, String?, List<com.doorstep.tn.core.network.ReturnRequestItem>) -> Unit
 ) {
     var reason by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    val returnableItems = remember(orderItems) {
+        orderItems.filter { it.productId != null && it.quantity > 0 }
+    }
+    val selectedQuantities = remember(orderItems) { mutableStateMapOf<Int, Int>() }
+    val selectedItems = returnableItems.mapNotNull { item ->
+        val productId = item.productId ?: return@mapNotNull null
+        val quantity = selectedQuantities[productId] ?: return@mapNotNull null
+        com.doorstep.tn.core.network.ReturnRequestItem(
+            productId = productId,
+            quantity = quantity
+        )
+    }
+    val canSubmit = reason.isNotBlank() && selectedItems.isNotEmpty()
     
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -1170,7 +1188,134 @@ private fun ReturnRequestDialog(
                     )
                 )
                 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Select Items",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = WhiteText,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (returnableItems.isEmpty()) {
+                    Text(
+                        text = "No returnable items found for this order.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WhiteTextMuted
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 240.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        returnableItems.forEach { item ->
+                            val productId = item.productId ?: return@forEach
+                            val selectedQuantity = selectedQuantities[productId]
+                            val isSelected = selectedQuantity != null
+                            val maxQuantity = item.quantity
+                            val displayName = item.product?.name
+                                ?: item.productId?.let { "Item #$it" }
+                                ?: "Item #${item.id}"
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(SlateDarker, RoundedCornerShape(12.dp))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = { checked ->
+                                        if (checked) {
+                                            selectedQuantities[productId] = maxQuantity
+                                        } else {
+                                            selectedQuantities.remove(productId)
+                                        }
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = OrangePrimary,
+                                        uncheckedColor = WhiteTextMuted,
+                                        checkmarkColor = SlateBackground
+                                    )
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = displayName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteText,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "Ordered: $maxQuantity",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = WhiteTextMuted
+                                    )
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(
+                                        onClick = {
+                                            if (isSelected && selectedQuantity != null && selectedQuantity > 1) {
+                                                selectedQuantities[productId] = selectedQuantity - 1
+                                            }
+                                        },
+                                        enabled = isSelected && (selectedQuantity ?: 1) > 1
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Remove,
+                                            contentDescription = "Decrease",
+                                            tint = if (isSelected) WhiteText else WhiteTextMuted,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "${selectedQuantity ?: 0}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (isSelected) WhiteText else WhiteTextMuted,
+                                        modifier = Modifier.width(24.dp),
+                                        maxLines = 1
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            if (isSelected && selectedQuantity != null && selectedQuantity < maxQuantity) {
+                                                selectedQuantities[productId] = selectedQuantity + 1
+                                            }
+                                        },
+                                        enabled = isSelected && (selectedQuantity ?: 0) < maxQuantity
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Increase",
+                                            tint = if (isSelected) WhiteText else WhiteTextMuted,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (returnableItems.isNotEmpty() && selectedItems.isEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Select at least one item to return.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WhiteTextMuted
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
                 
                 // Comments Input
                 OutlinedTextField(
@@ -1202,11 +1347,15 @@ private fun ReturnRequestDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = { 
-                            if (reason.isNotBlank()) {
-                                onSubmit(reason, description.takeIf { it.isNotBlank() })
+                            if (canSubmit) {
+                                onSubmit(
+                                    reason,
+                                    description.takeIf { it.isNotBlank() },
+                                    selectedItems
+                                )
                             }
                         },
-                        enabled = reason.isNotBlank(),
+                        enabled = canSubmit,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = OrangePrimary,
                             disabledContainerColor = OrangePrimary.copy(alpha = 0.5f)
