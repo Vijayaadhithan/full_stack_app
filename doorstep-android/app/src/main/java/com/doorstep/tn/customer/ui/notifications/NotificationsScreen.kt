@@ -40,6 +40,7 @@ fun NotificationsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToBooking: (Int) -> Unit = {},
     onNavigateToBookings: () -> Unit = {},
+    onNavigateToBookingsWithId: ((Int?) -> Unit)? = null,
     onNavigateToOrders: () -> Unit = {},
     onNavigateToOrder: (Int) -> Unit = {},
     onNotificationNavigate: ((AppNotification, Int?) -> Unit)? = null
@@ -179,15 +180,23 @@ fun NotificationsScreen(
                                     onNotificationNavigate(notification, entityId)
                                 } else {
                                     // Navigate based on notification type - matches web's navigateToRelevantPage
+                                    val navigateToBookings = onNavigateToBookingsWithId
+                                        ?: { bookingId ->
+                                            if (bookingId != null) {
+                                                onNavigateToBooking(bookingId)
+                                            } else {
+                                                onNavigateToBookings()
+                                            }
+                                        }
+
                                     when (notification.type) {
                                         // Booking-related types - navigate to specific booking or bookings list
                                         "booking", "booking_request", "booking_update",
                                         "booking_confirmed", "booking_rejected", "booking_cancelled_by_customer",
                                         "booking_rescheduled_request", "booking_rescheduled_by_provider",
-                                        "service", "service_request" -> {
-                                            entityId?.let { bookingId ->
-                                                onNavigateToBooking(bookingId)
-                                            } ?: onNavigateToBookings()
+                                        "booking_accepted", "booking_completed", "payment_submitted",
+                                        "payment_confirmed", "new_booking", "service", "service_request" -> {
+                                            navigateToBookings(entityId)
                                         }
                                         // Order-related types - navigate to orders
                                         "order", "shop" -> {
@@ -207,9 +216,7 @@ fun NotificationsScreen(
                                         }
                                         // Default fallback - try booking if ID available
                                         else -> {
-                                            notification.relatedBookingId?.let { bookingId ->
-                                                onNavigateToBooking(bookingId)
-                                            }
+                                            navigateToBookings(notification.relatedBookingId)
                                         }
                                     }
                                 }

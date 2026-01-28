@@ -87,6 +87,17 @@ object Routes {
     // Route builders with parameters
     fun quickOrder(shopId: Int, shopName: String): String = 
         "customer_quick_order/$shopId/${java.net.URLEncoder.encode(shopName, "UTF-8")}"
+    fun customerBookings(timeFilter: String? = null, bookingId: Int? = null): String {
+        val params = mutableListOf<String>()
+        if (!timeFilter.isNullOrBlank()) {
+            params.add("timeFilter=${java.net.URLEncoder.encode(timeFilter, "UTF-8")}")
+        }
+        if (bookingId != null) {
+            params.add("bookingId=$bookingId")
+        }
+        if (params.isEmpty()) return CUSTOMER_BOOKINGS
+        return "$CUSTOMER_BOOKINGS?${params.joinToString("&")}"
+    }
     
     // Shop routes
     const val SHOP_DASHBOARD = "shop_dashboard"
@@ -334,9 +345,26 @@ fun DoorStepNavHost(
             )
         }
         
-        composable(Routes.CUSTOMER_BOOKINGS) {
+        composable(
+            route = Routes.CUSTOMER_BOOKINGS + "?timeFilter={timeFilter}&bookingId={bookingId}",
+            arguments = listOf(
+                navArgument("timeFilter") {
+                    type = NavType.StringType
+                    defaultValue = "Upcoming"
+                },
+                navArgument("bookingId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val timeFilter = backStackEntry.arguments?.getString("timeFilter") ?: "Upcoming"
+            val bookingIdParam = backStackEntry.arguments?.getString("bookingId") ?: ""
+            val bookingId = bookingIdParam.toIntOrNull()
             // Booking info shown inline like web - no navigation to detail page
             BookingsListScreen(
+                initialTimeFilter = timeFilter,
+                initialBookingId = bookingId,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -408,6 +436,9 @@ fun DoorStepNavHost(
                 },
                 onNavigateToBookings = {
                     navController.navigate(Routes.CUSTOMER_BOOKINGS)
+                },
+                onNavigateToBookingsWithId = { bookingId ->
+                    navController.navigate(Routes.customerBookings(bookingId = bookingId))
                 },
                 onNavigateToOrders = {
                     navController.navigate(Routes.CUSTOMER_ORDERS)

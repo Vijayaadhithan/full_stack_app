@@ -3,12 +3,14 @@ package com.doorstep.tn.customer.ui.bookings
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,15 +50,29 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun BookingsListScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
+    initialTimeFilter: String = "Upcoming",
+    initialBookingId: Int? = null,
     onNavigateBack: () -> Unit
 ) {
     val bookings by viewModel.bookings.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
     
     // Time filter: Upcoming or Past (like web)
-    var selectedTimeFilter by remember { mutableStateOf("Upcoming") }
+    val normalizedInitialTimeFilter = remember(initialTimeFilter) {
+        when (initialTimeFilter.trim().lowercase()) {
+            "past" -> "Past"
+            "upcoming" -> "Upcoming"
+            else -> "Upcoming"
+        }
+    }
+    var selectedTimeFilter by remember(normalizedInitialTimeFilter) {
+        mutableStateOf(normalizedInitialTimeFilter)
+    }
+    var didAutoSelectTimeFilter by remember(initialBookingId) { mutableStateOf(false) }
+    var didScrollToBooking by remember(initialBookingId) { mutableStateOf(false) }
     // Status filter (like web)
     var selectedStatusFilter by remember { mutableStateOf("All") }
     
@@ -76,6 +92,20 @@ fun BookingsListScreen(
     
     // Filter bookings by time and status (matching web logic)
     val today = LocalDate.now(indiaZoneId)
+    LaunchedEffect(initialBookingId, bookings) {
+        if (didAutoSelectTimeFilter) return@LaunchedEffect
+        val bookingId = initialBookingId ?: return@LaunchedEffect
+        val booking = bookings.firstOrNull { it.id == bookingId } ?: return@LaunchedEffect
+        val normalizedStatus = normalizeBookingStatus(booking.status)
+        val bookingDate = parseBookingLocalDate(booking.bookingDate, indiaZoneId)
+        val isArchived = isArchivedBookingStatus(normalizedStatus)
+        val shouldShowPast = isArchived || (bookingDate != null && bookingDate.isBefore(today))
+        val targetFilter = if (shouldShowPast) "Past" else "Upcoming"
+        if (selectedTimeFilter != targetFilter) {
+            selectedTimeFilter = targetFilter
+        }
+        didAutoSelectTimeFilter = true
+    }
     val filteredBookings = bookings.filter { booking ->
         val normalizedStatus = normalizeBookingStatus(booking.status)
         val bookingDate = parseBookingLocalDate(booking.bookingDate, indiaZoneId)
@@ -97,6 +127,16 @@ fun BookingsListScreen(
         }
 
         timeMatch && statusMatch
+    }
+
+    LaunchedEffect(filteredBookings, initialBookingId) {
+        if (didScrollToBooking) return@LaunchedEffect
+        val bookingId = initialBookingId ?: return@LaunchedEffect
+        val index = filteredBookings.indexOfFirst { it.id == bookingId }
+        if (index >= 0) {
+            listState.scrollToItem(index)
+            didScrollToBooking = true
+        }
     }
 
     fun loadReviewForBooking(booking: Booking, force: Boolean = false) {
@@ -243,6 +283,7 @@ fun BookingsListScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    state = listState,
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -253,6 +294,7 @@ fun BookingsListScreen(
                         // Booking card with action buttons
                         BookingCardInline(
                             booking = booking,
+                            isHighlighted = booking.id == initialBookingId,
                             existingReview = existingReview,
                             isReviewLoading = isReviewLoading,
                             onLoadExistingReview = { loadReviewForBooking(booking) },
@@ -394,6 +436,7 @@ fun BookingsListScreen(
 @Composable
 private fun BookingCardInline(
     booking: Booking,
+    isHighlighted: Boolean = false,
     existingReview: ServiceReview?,
     isReviewLoading: Boolean,
     onLoadExistingReview: () -> Unit,
@@ -462,7 +505,10 @@ private fun BookingCardInline(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = SlateCard)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isHighlighted) SlateCard.copy(alpha = 0.95f) else SlateCard
+        ),
+        border = if (isHighlighted) BorderStroke(1.dp, OrangePrimary) else null
     ) {
         Column(
             modifier = Modifier

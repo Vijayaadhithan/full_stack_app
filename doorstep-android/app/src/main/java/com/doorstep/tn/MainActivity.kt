@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import com.doorstep.tn.common.theme.DoorStepTheme
 import com.doorstep.tn.core.security.SecureUserStore
 import com.doorstep.tn.navigation.DoorStepNavHost
+import com.doorstep.tn.navigation.Routes
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -121,7 +122,10 @@ class MainActivity : ComponentActivity() {
         return when {
             clickUrl.contains("/provider/bookings") -> "provider_bookings"
             clickUrl.contains("/customer/bookings") -> {
-                if (bookingId != null) "customer_booking/$bookingId" else "customer_bookings"
+                Routes.customerBookings(bookingId = bookingId?.toIntOrNull())
+            }
+            clickUrl.contains("/bookings") -> {
+                Routes.customerBookings(bookingId = bookingId?.toIntOrNull())
             }
             clickUrl.contains("/shop/orders") || clickUrl.contains("/shop/returns") -> "shop_dashboard"
             clickUrl.contains("/shop/inventory") -> "shop_dashboard"
@@ -168,13 +172,15 @@ class MainActivity : ComponentActivity() {
      * Get route from notification type (fallback)
      */
     private fun getRouteFromType(type: String, relatedId: String?): String {
+        val relatedIdInt = relatedId?.toIntOrNull()
         return when (type) {
             "booking", "booking_request", "booking_update", "booking_confirmed",
             "booking_rejected", "booking_cancelled_by_customer",
             "booking_rescheduled_request", "booking_rescheduled_by_provider",
-            "service", "service_request", "new_booking", "booking_accepted",
-            "booking_completed", "payment_submitted", "payment_confirmed" -> {
-                if (relatedId != null) "customer_booking/$relatedId" else "customer_bookings"
+            "new_booking", "booking_accepted",
+            "booking_completed", "payment_submitted", "payment_confirmed",
+            "service", "service_request" -> {
+                Routes.customerBookings(bookingId = relatedIdInt)
             }
             "order", "new_order", "order_shipped", "order_delivered", "return" -> {
                 if (relatedId != null) "customer_order/$relatedId" else "customer_orders"
