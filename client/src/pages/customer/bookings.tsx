@@ -448,8 +448,8 @@ export default function Bookings() {
       id?: number;
     }) => {
       if (data.id) {
-        // Use the customer-specific update endpoint
-        return apiRequest("PUT", `/api/reviews/${data.id}/customer`, {
+        // Update review using the shared PATCH endpoint
+        return apiRequest("PATCH", `/api/reviews/${data.id}`, {
           rating: data.rating,
           review: data.review,
         }).then((r) => r.json());

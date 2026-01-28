@@ -1,7 +1,6 @@
 package com.doorstep.tn.provider.ui
 
 import android.content.Context
-import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.doorstep.tn.provider.data.model.*
@@ -17,7 +16,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.doorstep.tn.core.datastore.dataStore
-import com.doorstep.tn.core.datastore.PreferenceKeys
+import com.doorstep.tn.core.security.SecureUserStore
 
 /**
  * ViewModel for Provider screens
@@ -94,10 +93,12 @@ class ProviderViewModel @Inject constructor(
     
     init {
         viewModelScope.launch {
-            // Load user ID from DataStore (stored as String, convert to Int)
-            currentUserId = context.dataStore.data.map { prefs ->
-                prefs[PreferenceKeys.USER_ID]?.toIntOrNull()
-            }.first()
+            val prefs = context.dataStore.data.first()
+            val migrated = SecureUserStore.migrateFromDataStore(context, prefs)
+            if (migrated) {
+                SecureUserStore.clearLegacyDataStore(context)
+            }
+            currentUserId = SecureUserStore.getUserId(context)?.toIntOrNull()
             
             loadDashboardData()
         }

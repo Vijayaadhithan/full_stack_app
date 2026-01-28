@@ -259,7 +259,12 @@ fun UniversalSearchScreen(
                 }
                 localQuery.isEmpty() -> {
                     // Empty state with suggestions
-                    EmptySearchState()
+                    EmptySearchState(
+                        onSuggestionClick = { term ->
+                            localQuery = term
+                            viewModel.performSearch(term)
+                        }
+                    )
                 }
                 searchResults.isEmpty() && localQuery.length >= 2 -> {
                     // No results
@@ -313,7 +318,9 @@ private fun QuickCategoryChip(
 }
 
 @Composable
-private fun EmptySearchState() {
+private fun EmptySearchState(
+    onSuggestionClick: (String) -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -383,7 +390,7 @@ private fun EmptySearchState() {
         ) {
             listOf("Groceries", "Plumber", "Electronics").forEach { term ->
                 SuggestionChip(
-                    onClick = { /* TODO: Set search term */ },
+                    onClick = { onSuggestionClick(term) },
                     label = { Text(term, color = WhiteTextMuted) },
                     colors = SuggestionChipDefaults.suggestionChipColors(
                         containerColor = SlateCard

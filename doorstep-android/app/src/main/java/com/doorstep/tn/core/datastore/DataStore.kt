@@ -17,10 +17,11 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "do
  */
 object PreferenceKeys {
     val IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
+    val LANGUAGE = stringPreferencesKey("language")
+    // Legacy PII keys migrated to SecureUserStore.
     val USER_ID = stringPreferencesKey("user_id")
     val USER_NAME = stringPreferencesKey("user_name")
     val USER_ROLE = stringPreferencesKey("user_role")
     val USER_PHONE = stringPreferencesKey("user_phone")
-    val LANGUAGE = stringPreferencesKey("language")
     val LAST_PHONE = stringPreferencesKey("last_phone")
 }

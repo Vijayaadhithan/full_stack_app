@@ -17,6 +17,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.doorstep.tn.common.theme.DoorStepTheme
+import com.doorstep.tn.core.security.SecureUserStore
 import com.doorstep.tn.navigation.DoorStepNavHost
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.AndroidEntryPoint
@@ -230,11 +231,8 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG, "FCM Token obtained in MainActivity")
             
             // Store token for later sync with backend
-            getSharedPreferences("fcm_prefs", MODE_PRIVATE)
-                .edit()
-                .putString("fcm_token", token)
-                .putBoolean("token_needs_sync", true)
-                .apply()
+            SecureUserStore.setFcmToken(this, token)
+            SecureUserStore.setFcmNeedsSync(this, true)
         }
     }
 }

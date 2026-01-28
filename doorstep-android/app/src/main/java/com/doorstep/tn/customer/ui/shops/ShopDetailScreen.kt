@@ -1,5 +1,8 @@
 package com.doorstep.tn.customer.ui.shops
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -27,6 +31,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.customer.data.model.Product
+import com.doorstep.tn.customer.data.model.Shop
 import com.doorstep.tn.customer.ui.CustomerViewModel
 
 /**
@@ -45,6 +50,7 @@ fun ShopDetailScreen(
     val shop by viewModel.selectedShop.collectAsState()
     val products by viewModel.shopProducts.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val context = LocalContext.current
     
     // Search and Filter State
     var searchQuery by remember { mutableStateOf("") }
@@ -247,6 +253,75 @@ fun ShopDetailScreen(
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
+
+                        val mapUri = remember(s) { buildShopMapUri(s) }
+                        val phoneDigits = remember(s.phone) { normalizePhoneNumber(s.phone) }
+                        if (mapUri != null || !phoneDigits.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (mapUri != null) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            val intent = Intent(Intent.ACTION_VIEW, mapUri)
+                                            context.startActivity(intent)
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = WhiteText
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            Brush.linearGradient(
+                                                listOf(OrangePrimary, AmberSecondary)
+                                            )
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Map,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Map")
+                                    }
+                                }
+
+                                if (!phoneDigits.isNullOrBlank()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            val intent = Intent(
+                                                Intent.ACTION_DIAL,
+                                                Uri.parse("tel:$phoneDigits")
+                                            )
+                                            context.startActivity(intent)
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = WhiteText
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            Brush.linearGradient(
+                                                listOf(OrangePrimary, AmberSecondary)
+                                            )
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Phone,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Call")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 
@@ -380,6 +455,35 @@ fun ShopDetailScreen(
             }
         }
     }
+}
+
+private fun normalizePhoneNumber(phone: String?): String? {
+    if (phone.isNullOrBlank()) return null
+    val digits = phone.filter { it.isDigit() }
+    return digits.takeIf { it.isNotBlank() }
+}
+
+private fun formatShopAddress(shop: Shop): String? {
+    val parts = listOf(
+        shop.addressStreet,
+        shop.addressCity,
+        shop.addressState,
+        shop.addressPostalCode,
+        shop.addressCountry
+    ).mapNotNull { part ->
+        part?.trim()?.takeIf { it.isNotEmpty() }
+    }
+    return if (parts.isEmpty()) null else parts.joinToString(", ")
+}
+
+private fun buildShopMapUri(shop: Shop): Uri? {
+    val latitude = shop.latitude?.toDoubleOrNull()
+    val longitude = shop.longitude?.toDoubleOrNull()
+    if (latitude != null && longitude != null) {
+        return Uri.parse("https://maps.google.com/?q=$latitude,$longitude")
+    }
+    val address = formatShopAddress(shop) ?: return null
+    return Uri.parse("https://www.google.com/maps/search/?api=1&query=${Uri.encode(address)}")
 }
 
 @Composable

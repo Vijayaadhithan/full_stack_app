@@ -7,6 +7,15 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+val apiCertPins = (project.findProperty("API_CERT_PINS") as String?)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("API_CERT_PINS")?.trim()?.takeIf { it.isNotEmpty() }
+
+fun escapeBuildConfig(value: String): String {
+    return value.replace("\\", "\\\\").replace("\"", "\\\"")
+}
+
 android {
     namespace = "com.doorstep.tn"
     compileSdk = 35
@@ -22,12 +31,8 @@ android {
         
         // API Base URL
         buildConfigField("String", "API_BASE_URL", "\"https://api.doorsteptn.in\"")
-        val apiCertPins = (project.findProperty("API_CERT_PINS") as String?)
-            ?.trim()
-            .orEmpty()
-        val escapedPins = apiCertPins
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
+        val resolvedPins = apiCertPins ?: ""
+        val escapedPins = escapeBuildConfig(resolvedPins)
         buildConfigField("String", "API_CERT_PINS", "\"$escapedPins\"")
     }
 
@@ -44,7 +49,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val releasePins = apiCertPins ?: ""
+            val escapedPins = escapeBuildConfig(releasePins)
             buildConfigField("String", "API_BASE_URL", "\"https://api.doorsteptn.in\"")
+            buildConfigField("String", "API_CERT_PINS", "\"$escapedPins\"")
         }
     }
 
@@ -60,6 +68,14 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+}
+
+tasks.matching { it.name.contains("Release") }.configureEach {
+    doFirst {
+        if (apiCertPins.isNullOrBlank()) {
+            throw GradleException("API_CERT_PINS must be set for release builds.")
+        }
     }
 }
 

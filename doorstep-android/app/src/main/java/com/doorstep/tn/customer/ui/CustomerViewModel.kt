@@ -11,6 +11,7 @@ import com.doorstep.tn.customer.data.model.*
 import com.doorstep.tn.customer.data.repository.CustomerRepository
 import com.doorstep.tn.core.datastore.PreferenceKeys
 import com.doorstep.tn.core.datastore.dataStore
+import com.doorstep.tn.core.security.SecureUserStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.FlowPreview
@@ -231,9 +232,13 @@ class CustomerViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val prefs = context.dataStore.data.first()
+            val migrated = SecureUserStore.migrateFromDataStore(context, prefs)
+            if (migrated) {
+                SecureUserStore.clearLegacyDataStore(context)
+            }
             _language.value = prefs[PreferenceKeys.LANGUAGE] ?: "en"
-            _userName.value = prefs[PreferenceKeys.USER_NAME]
-            _userId.value = prefs[PreferenceKeys.USER_ID]?.toIntOrNull()
+            _userName.value = SecureUserStore.getUserName(context)
+            _userId.value = SecureUserStore.getUserId(context)?.toIntOrNull()
         }
         
         // Setup debounced search - waits 500ms after last keystroke before making API call

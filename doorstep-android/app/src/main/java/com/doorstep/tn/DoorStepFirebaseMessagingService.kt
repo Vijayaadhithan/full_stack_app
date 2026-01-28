@@ -3,7 +3,6 @@ package com.doorstep.tn
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
@@ -12,6 +11,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.doorstep.tn.core.network.DoorStepApi
 import com.doorstep.tn.core.network.FcmTokenRequest
+import com.doorstep.tn.core.security.SecureUserStore
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,11 +56,8 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "New FCM token received")
         
         // Store token locally for later registration after login
-        getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
-            .edit()
-            .putString("fcm_token", token)
-            .putBoolean("token_needs_sync", true)
-            .apply()
+        SecureUserStore.setFcmToken(this, token)
+        SecureUserStore.setFcmNeedsSync(this, true)
         
         // Try to register token if user is logged in
         registerTokenWithBackend(token)
@@ -112,15 +109,14 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
                 if (response.isSuccessful) {
                     Log.d(TAG, "FCM token registered with backend successfully")
                     // Mark token as synced
-                    getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
-                        .edit()
-                        .putBoolean("token_needs_sync", false)
-                        .apply()
+                    SecureUserStore.setFcmNeedsSync(this@DoorStepFirebaseMessagingService, false)
                 } else {
                     Log.w(TAG, "Failed to register FCM token: ${response.code()}")
+                    SecureUserStore.setFcmNeedsSync(this@DoorStepFirebaseMessagingService, true)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error registering FCM token", e)
+                SecureUserStore.setFcmNeedsSync(this@DoorStepFirebaseMessagingService, true)
                 // Token will be synced later when user logs in
             }
         }

@@ -419,8 +419,8 @@ interface DoorStepApi {
     
     // ==================== SEARCH ENDPOINTS ====================
     
-    // Universal/Global search - matches web GET /api/search
-    @GET("api/search")
+    // Universal/Global search - matches web GET /api/search/global
+    @GET("api/search/global")
     suspend fun globalSearch(
         @Query("q") query: String,
         @Query("lat") latitude: Double? = null,

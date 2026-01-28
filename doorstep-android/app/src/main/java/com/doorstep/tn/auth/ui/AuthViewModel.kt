@@ -10,6 +10,7 @@ import com.doorstep.tn.auth.data.repository.Result
 import com.doorstep.tn.core.datastore.PreferenceKeys
 import com.doorstep.tn.core.datastore.dataStore
 import com.doorstep.tn.core.security.SecureSessionStore
+import com.doorstep.tn.core.security.SecureUserStore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
@@ -98,13 +99,18 @@ class AuthViewModel @Inject constructor(
         // Check if user is already logged in
         viewModelScope.launch {
             val prefs = context.dataStore.data.first()
+            val migrated = SecureUserStore.migrateFromDataStore(context, prefs)
+            if (migrated) {
+                SecureUserStore.clearLegacyDataStore(context)
+            }
+            SecureUserStore.migrateLegacyFcmPrefs(context)
             _isLoggedIn.value = prefs[PreferenceKeys.IS_LOGGED_IN] ?: false
-            _userRole.value = prefs[PreferenceKeys.USER_ROLE]
-            _userName.value = prefs[PreferenceKeys.USER_NAME]
+            _userRole.value = SecureUserStore.getUserRole(context)
+            _userName.value = SecureUserStore.getUserName(context)
             _language.value = prefs[PreferenceKeys.LANGUAGE] ?: "en"
             
             // Load last used phone number
-            prefs[PreferenceKeys.LAST_PHONE]?.let {
+            SecureUserStore.getLastPhone(context)?.let {
                 _phone.value = it
             }
             
@@ -123,6 +129,10 @@ class AuthViewModel @Inject constructor(
                     _currentUser.value = result.data
                     _userName.value = result.data.name
                     _userRole.value = result.data.role
+                    SecureUserStore.setUserId(context, result.data.id.toString())
+                    SecureUserStore.setUserName(context, result.data.name)
+                    SecureUserStore.setUserRole(context, result.data.role)
+                    SecureUserStore.setUserPhone(context, result.data.phone)
                     _hasShopProfile.value = result.data.hasShopProfile == true
                     _hasProviderProfile.value = result.data.hasProviderProfile == true
                     syncFcmToken()
@@ -212,9 +222,7 @@ class AuthViewModel @Inject constructor(
             _error.value = null
             
             // Save last phone
-            context.dataStore.edit { prefs ->
-                prefs[PreferenceKeys.LAST_PHONE] = _phone.value
-            }
+            SecureUserStore.setLastPhone(context, _phone.value)
             
             when (val result = authRepository.checkUser(_phone.value)) {
                 is Result.Success -> {
@@ -423,6 +431,7 @@ class AuthViewModel @Inject constructor(
             authRepository.logout()
             firebaseAuth.signOut()
             SecureSessionStore.clearSession(context)
+            SecureUserStore.clearUser(context)
             
             context.dataStore.edit { prefs ->
                 prefs[PreferenceKeys.IS_LOGGED_IN] = false
@@ -461,9 +470,7 @@ class AuthViewModel @Inject constructor(
                 }
                 
                 // Update local storage
-                context.dataStore.edit { prefs ->
-                    prefs[PreferenceKeys.USER_ROLE] = newRole
-                }
+                SecureUserStore.setUserRole(context, newRole)
                 
                 // Update state
                 _userRole.value = newRole
@@ -472,9 +479,7 @@ class AuthViewModel @Inject constructor(
                 _currentUser.value = _currentUser.value?.copy(role = newRole)
             } catch (e: Exception) {
                 // If API fails, still update locally for immediate navigation
-                context.dataStore.edit { prefs ->
-                    prefs[PreferenceKeys.USER_ROLE] = newRole
-                }
+                SecureUserStore.setUserRole(context, newRole)
                 _userRole.value = newRole
                 _currentUser.value = _currentUser.value?.copy(role = newRole)
             }
@@ -603,11 +608,15 @@ class AuthViewModel @Inject constructor(
     private suspend fun saveUserSession(user: UserResponse) {
         context.dataStore.edit { prefs ->
             prefs[PreferenceKeys.IS_LOGGED_IN] = true
-            prefs[PreferenceKeys.USER_ID] = user.id.toString()
-            prefs[PreferenceKeys.USER_NAME] = user.name ?: ""
-            prefs[PreferenceKeys.USER_ROLE] = user.role ?: "customer"
-            prefs[PreferenceKeys.USER_PHONE] = user.phone ?: ""
+            prefs.remove(PreferenceKeys.USER_ID)
+            prefs.remove(PreferenceKeys.USER_NAME)
+            prefs.remove(PreferenceKeys.USER_ROLE)
+            prefs.remove(PreferenceKeys.USER_PHONE)
         }
+        SecureUserStore.setUserId(context, user.id.toString())
+        SecureUserStore.setUserName(context, user.name)
+        SecureUserStore.setUserRole(context, user.role ?: "customer")
+        SecureUserStore.setUserPhone(context, user.phone)
         
         _isLoggedIn.value = true
         _userRole.value = user.role
@@ -643,10 +652,8 @@ class AuthViewModel @Inject constructor(
     private fun syncFcmToken(force: Boolean = false) {
         viewModelScope.launch {
             try {
-                // Get stored FCM token from SharedPreferences
-                val fcmPrefs = context.getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
-                val storedToken = fcmPrefs.getString("fcm_token", null)
-                val needsSync = fcmPrefs.getBoolean("token_needs_sync", false)
+                val storedToken = SecureUserStore.getFcmToken(context)
+                val needsSync = SecureUserStore.getFcmNeedsSync(context)
 
                 if (!force && !needsSync) {
                     return@launch
@@ -661,10 +668,10 @@ class AuthViewModel @Inject constructor(
                     )
                     if (response is Result.Success) {
                         android.util.Log.d("AuthViewModel", "FCM token synced successfully")
-                        fcmPrefs.edit().putBoolean("token_needs_sync", false).apply()
+                        SecureUserStore.setFcmNeedsSync(context, false)
                     } else {
                         android.util.Log.w("AuthViewModel", "Failed to sync FCM token")
-                        fcmPrefs.edit().putBoolean("token_needs_sync", true).apply()
+                        SecureUserStore.setFcmNeedsSync(context, true)
                     }
                 } else {
                     // No token yet, it will be registered when onNewToken() is called
@@ -672,6 +679,7 @@ class AuthViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 android.util.Log.e("AuthViewModel", "Error syncing FCM token", e)
+                SecureUserStore.setFcmNeedsSync(context, true)
             }
         }
     }
