@@ -46,7 +46,7 @@ fun ProductDetailScreen(
     val cartCount by viewModel.cartItems.collectAsState().let { state ->
         derivedStateOf { state.value.sumOf { it.quantity } }
     }
-    var quantity by remember(productId) { mutableStateOf(1) }
+    var quantity by remember(productId) { mutableIntStateOf(1) }
     
     // Toast events
     val context = LocalContext.current

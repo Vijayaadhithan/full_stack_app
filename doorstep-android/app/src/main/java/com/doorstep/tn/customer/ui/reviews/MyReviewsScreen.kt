@@ -38,7 +38,7 @@ fun MyReviewsScreen(
     val error by viewModel.error.collectAsState()
     
     // Tab selection: 0=Services, 1=Products
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     
     // Edit Review State
     var showEditDialog by remember { mutableStateOf(false) }

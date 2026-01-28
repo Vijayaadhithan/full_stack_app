@@ -706,7 +706,7 @@ fun BookingDetailScreen(
                 }
                 // Review Dialog
                 if (showReviewDialog) {
-                    var rating by remember { mutableStateOf(existingReview?.rating ?: 5) }
+                    var rating by remember { mutableIntStateOf(existingReview?.rating ?: 5) }
                     var reviewText by remember { mutableStateOf(existingReview?.review ?: "") }
                     
                     AlertDialog(

@@ -141,8 +141,8 @@ fun AnimatedKolam(
 @Composable
 fun TimeBasedGreeting(
     language: String,
-    userName: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    userName: String? = null
 ) {
     val t = Translations.get(language)
     val calendar = Calendar.getInstance()

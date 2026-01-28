@@ -413,7 +413,7 @@ private fun BookingCardInline(
     
     // Review dialog state
     var showReviewDialog by remember { mutableStateOf(false) }
-    var rating by remember { mutableStateOf(5) }
+    var rating by remember { mutableIntStateOf(5) }
     var reviewText by remember { mutableStateOf("") }
 
     LaunchedEffect(showReviewDialog) {

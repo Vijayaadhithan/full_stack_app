@@ -35,8 +35,8 @@ fun LocationFilterDropdown(
     onUseDeviceLocation: () -> Unit,
     onUseSavedLocation: () -> Unit,
     onClear: () -> Unit,
-    sourceLabel: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sourceLabel: String? = null
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     

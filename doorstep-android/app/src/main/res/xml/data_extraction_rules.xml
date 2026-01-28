@@ -1,15 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Data extraction rules for Android 12+ (API 31+).
+  Controls both cloud backup and device-to-device transfer.
+  Sensitive session data and DataStore preferences are excluded.
+-->
 <data-extraction-rules>
     <cloud-backup>
+        <!-- Include shared preferences by default -->
         <include domain="sharedpref" path="."/>
         <exclude domain="sharedpref" path="device.xml"/>
         <exclude domain="sharedpref" path="secure_session.xml"/>
+        
+        <!-- Include root domain to allow datastore exclusion -->
+        <include domain="root" path="."/>
         <exclude domain="root" path="datastore/doorstep_prefs.preferences_pb"/>
+        <exclude domain="root" path="no_backup"/>
     </cloud-backup>
     <device-transfer>
+        <!-- Include shared preferences by default -->
         <include domain="sharedpref" path="."/>
         <exclude domain="sharedpref" path="device.xml"/>
         <exclude domain="sharedpref" path="secure_session.xml"/>
+        
+        <!-- Include root domain to allow datastore exclusion -->
+        <include domain="root" path="."/>
         <exclude domain="root" path="datastore/doorstep_prefs.preferences_pb"/>
+        <exclude domain="root" path="no_backup"/>
     </device-transfer>
 </data-extraction-rules>
