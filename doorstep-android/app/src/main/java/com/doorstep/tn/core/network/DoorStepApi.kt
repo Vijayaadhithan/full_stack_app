@@ -588,7 +588,7 @@ interface DoorStepApi {
     @PATCH("api/products/{id}")
     suspend fun updateProductStock(
         @Path("id") productId: Int,
-        @Body request: Map<String, Any>
+        @Body request: com.doorstep.tn.shop.data.model.UpdateProductStockRequest
     ): Response<com.doorstep.tn.shop.data.model.ShopProduct>
     
     // ==================== SHOP PROMOTIONS MANAGEMENT ====================

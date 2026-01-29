@@ -474,7 +474,7 @@ function buildUserResponse(
     totalReviews: sanitized.totalReviews ?? 0,
   };
 
-  if (sanitized.role === "shop") {
+  if (sanitized.role === "shop" || sanitized.shopProfile) {
     if (sanitized.shopProfile) {
       minimal.shopProfile = {
         shopName: sanitized.shopProfile.shopName,

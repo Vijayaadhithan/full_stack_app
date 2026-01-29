@@ -276,8 +276,8 @@ data class ShopProfile(
     @Json(name = "shopAddressCity") val shopAddressCity: String? = null,
     @Json(name = "shopAddressState") val shopAddressState: String? = null,
     @Json(name = "shopAddressPincode") val shopAddressPincode: String? = null,
-    @Json(name = "shopLocationLat") val shopLocationLat: String? = null,
-    @Json(name = "shopLocationLng") val shopLocationLng: String? = null
+    @Json(name = "shopLocationLat") val shopLocationLat: Any? = null,
+    @Json(name = "shopLocationLng") val shopLocationLng: Any? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -314,6 +314,12 @@ data class CreateProductRequest(
     @Json(name = "tags") val tags: List<String> = emptyList(),
     @Json(name = "minOrderQuantity") val minOrderQuantity: Int = 1,
     @Json(name = "maxOrderQuantity") val maxOrderQuantity: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class UpdateProductStockRequest(
+    @Json(name = "stock") val stock: Int,
+    @Json(name = "isAvailable") val isAvailable: Boolean? = null
 )
 
 @JsonClass(generateAdapter = true)

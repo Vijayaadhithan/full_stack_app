@@ -132,60 +132,13 @@ fun ShopOrdersScreen(
                 containerColor = SlateBackground,
                 contentColor = ShopGreen
             ) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Board") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Orders") })
-                Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Returns") })
-                Tab(selected = selectedTab == 3, onClick = { selectedTab = 3 }, text = { Text("Khata") })
+                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Orders") })
+                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Returns") })
+                Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Khata") })
             }
 
             when (selectedTab) {
                 0 -> {
-                    if (isLoading && activeBoard == null) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = ShopGreen)
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            OrderColumn(
-                                title = "New",
-                                orders = activeBoard?.newOrders ?: emptyList(),
-                                color = OrangePrimary,
-                                onOrderClick = { showBoardStatusDialog = it },
-                                onStatusChange = { order, status ->
-                                    viewModel.updateOrderStatus(order.id, status)
-                                }
-                            )
-                            OrderColumn(
-                                title = "Packing",
-                                orders = activeBoard?.packingOrders ?: emptyList(),
-                                color = ProviderBlue,
-                                onOrderClick = { showBoardStatusDialog = it },
-                                onStatusChange = { order, status ->
-                                    viewModel.updateOrderStatus(order.id, status)
-                                }
-                            )
-                            OrderColumn(
-                                title = "Ready",
-                                orders = activeBoard?.readyOrders ?: emptyList(),
-                                color = ShopGreen,
-                                onOrderClick = { showBoardStatusDialog = it },
-                                onStatusChange = { order, status ->
-                                    viewModel.updateOrderStatus(order.id, status)
-                                }
-                            )
-                        }
-                    }
-                }
-                1 -> {
                     OrderListView(
                         orders = orders,
                         statusFilter = statusFilter,
@@ -205,7 +158,7 @@ fun ShopOrdersScreen(
                         onOpenDetails = { onNavigateToDetail(it) }
                     )
                 }
-                2 -> {
+                1 -> {
                     ReturnsListView(
                         requests = returnRequests,
                         onApprove = { id -> viewModel.approveReturnRequest(id) },

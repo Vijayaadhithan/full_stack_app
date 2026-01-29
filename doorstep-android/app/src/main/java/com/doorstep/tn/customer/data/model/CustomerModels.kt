@@ -92,6 +92,13 @@ data class ShopWorkingHours(
 )
 
 @JsonClass(generateAdapter = true)
+data class PayLaterEligibility(
+    @Json(name = "eligible") val eligible: Boolean? = null,
+    @Json(name = "isKnownCustomer") val isKnownCustomer: Boolean? = null,
+    @Json(name = "isWhitelisted") val isWhitelisted: Boolean? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class Shop(
     @Json(name = "id") val id: Int,
     @Json(name = "ownerId") val ownerId: Int? = null,
@@ -117,7 +124,8 @@ data class Shop(
     @Json(name = "totalReviews") val totalReviews: Int = 0,
     @Json(name = "catalogModeEnabled") val catalogModeEnabled: Boolean? = null,
     @Json(name = "openOrderMode") val openOrderMode: Boolean? = null,
-    @Json(name = "allowPayLater") val allowPayLater: Boolean? = null
+    @Json(name = "allowPayLater") val allowPayLater: Boolean? = null,
+    @Json(name = "payLaterEligibilityForCustomer") val payLaterEligibilityForCustomer: PayLaterEligibility? = null
 ) {
     val displayName: String
         get() = shopProfile?.shopName?.takeIf { it.isNotBlank() } ?: (name ?: "Shop")

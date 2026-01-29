@@ -649,6 +649,17 @@ fun DoorStepNavHost(
         composable(Routes.SHOP_PROFILE) {
             ShopProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
+                onSwitchRole = { newRole ->
+                    authViewModel.switchRole(newRole)
+                    val destination = when (newRole) {
+                        "customer" -> Routes.CUSTOMER_HOME
+                        "provider" -> Routes.PROVIDER_DASHBOARD
+                        else -> Routes.SHOP_DASHBOARD
+                    }
+                    navController.navigate(destination) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
                 onLogout = {
                     authViewModel.logout()
                     navController.navigate(Routes.PHONE_ENTRY) {

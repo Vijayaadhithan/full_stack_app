@@ -142,9 +142,8 @@ class ShopRepository @Inject constructor(
         stock: Int,
         isAvailable: Boolean? = null
     ): Result<ShopProduct> = try {
-        val body = mutableMapOf<String, Any>("stock" to stock)
-        isAvailable?.let { body["isAvailable"] = it }
-        val response = api.updateProductStock(productId, body)
+        val request = UpdateProductStockRequest(stock = stock, isAvailable = isAvailable)
+        val response = api.updateProductStock(productId, request)
         if (response.isSuccessful && response.body() != null) {
             Result.Success(response.body()!!)
         } else {

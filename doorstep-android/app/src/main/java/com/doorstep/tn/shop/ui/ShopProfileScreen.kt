@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -46,6 +47,7 @@ import java.util.Locale
 fun ShopProfileScreen(
     viewModel: ShopViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
+    onSwitchRole: ((String) -> Unit)? = null,  // Optional callback for role switching
     onLogout: () -> Unit = {}
 ) {
     val authViewModel: AuthViewModel = hiltViewModel()
@@ -100,8 +102,12 @@ fun ShopProfileScreen(
 
     // GPS Location state
     val context = LocalContext.current
-    var capturedLatitude by remember { mutableStateOf<Double?>(null) }
-    var capturedLongitude by remember { mutableStateOf<Double?>(null) }
+    var capturedLatitude by remember(shopProfile) { 
+        mutableStateOf(shopProfile?.shopLocationLat?.toString()?.toDoubleOrNull()) 
+    }
+    var capturedLongitude by remember(shopProfile) { 
+        mutableStateOf(shopProfile?.shopLocationLng?.toString()?.toDoubleOrNull()) 
+    }
     var isCapturingLocation by remember { mutableStateOf(false) }
 
     // Location permission launcher
@@ -213,8 +219,8 @@ fun ShopProfileScreen(
             workingTo = shopProfile?.workingHours?.to ?: "18:00"
             workingDays = shopProfile?.workingHours?.days?.toSet() ?: emptySet()
 
-            capturedLatitude = shopProfile?.shopLocationLat?.toDoubleOrNull()
-            capturedLongitude = shopProfile?.shopLocationLng?.toDoubleOrNull()
+            capturedLatitude = shopProfile?.shopLocationLat?.toString()?.toDoubleOrNull()
+            capturedLongitude = shopProfile?.shopLocationLng?.toString()?.toDoubleOrNull()
         }
     }
 
@@ -719,6 +725,48 @@ fun ShopProfileScreen(
                     }
                 }
 
+                // Role Switching Section
+                if (onSwitchRole != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateCard)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.SwapHoriz, null, tint = ProviderBlue)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Switch Role",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = WhiteText,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Change your app role to access different features",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = WhiteTextMuted
+                            )
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            val currentRole = user?.role ?: "shop"
+                            val hasCustomerProfile = true // All users can be customers
+                            val hasProviderProfile = user?.hasProviderProfile == true
+                            
+                            ShopRoleSwitchDropdown(
+                                currentRole = currentRole,
+                                hasProviderProfile = hasProviderProfile,
+                                onSwitchRole = onSwitchRole
+                            )
+                        }
+                    }
+                }
+
                 OutlinedButton(
                     onClick = onLogout,
                     modifier = Modifier.fillMaxWidth(),
@@ -1147,5 +1195,147 @@ private fun captureLocation(
         }
     } catch (e: Exception) {
         onError(e.message ?: "Location error")
+    }
+}
+
+// ─── Role Switcher ──────────────────────────────────────────────────────────
+
+private data class ShopRoleOption(
+    val key: String,
+    val label: String,
+    val color: androidx.compose.ui.graphics.Color,
+    val icon: ImageVector,
+    val available: Boolean
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShopRoleSwitchDropdown(
+    currentRole: String,
+    hasProviderProfile: Boolean,
+    onSwitchRole: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val roles = listOf(
+        ShopRoleOption(
+            key = "customer",
+            label = "Customer",
+            color = OrangePrimary,
+            icon = Icons.Default.PersonOutline,
+            available = true
+        ),
+        ShopRoleOption(
+            key = "shop",
+            label = "Shop Owner",
+            color = ShopGreen,
+            icon = Icons.Default.Store,
+            available = true  // Already in shop
+        ),
+        ShopRoleOption(
+            key = "provider",
+            label = "Service Provider",
+            color = ProviderBlue,
+            icon = Icons.Default.Build,
+            available = hasProviderProfile
+        )
+    )
+
+    val selected = roles.find { it.key == currentRole } ?: roles[1]  // Default to shop
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it }
+    ) {
+        OutlinedTextField(
+            value = selected.label,
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            leadingIcon = {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(selected.color),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = selected.icon,
+                        contentDescription = null,
+                        tint = WhiteText,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = WhiteText,
+                unfocusedTextColor = WhiteText,
+                focusedBorderColor = selected.color,
+                unfocusedBorderColor = GlassWhite,
+                focusedContainerColor = SlateBackground,
+                unfocusedContainerColor = SlateBackground
+            ),
+            shape = RoundedCornerShape(10.dp)
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(SlateCard)
+        ) {
+            roles.forEach { role ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(role.color),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = role.icon,
+                                    contentDescription = null,
+                                    tint = WhiteText,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = role.label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (role.available) WhiteText else WhiteTextMuted
+                            )
+                            if (!role.available && role.key != "shop") {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "(Not set up)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = WhiteTextMuted
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        if (role.available && role.key != currentRole) {
+                            expanded = false
+                            onSwitchRole(role.key)
+                        }
+                    },
+                    enabled = role.available && role.key != currentRole,
+                    modifier = Modifier.background(SlateCard)
+                )
+            }
+        }
     }
 }
