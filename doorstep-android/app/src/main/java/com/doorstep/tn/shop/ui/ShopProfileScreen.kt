@@ -102,11 +102,11 @@ fun ShopProfileScreen(
 
     // GPS Location state
     val context = LocalContext.current
-    var capturedLatitude by remember(shopProfile) { 
-        mutableStateOf(shopProfile?.shopLocationLat?.toString()?.toDoubleOrNull()) 
+    var capturedLatitude by remember(shopProfile, user) { 
+        mutableStateOf(resolveCoordinate(shopProfile?.shopLocationLat, user?.latitude)) 
     }
-    var capturedLongitude by remember(shopProfile) { 
-        mutableStateOf(shopProfile?.shopLocationLng?.toString()?.toDoubleOrNull()) 
+    var capturedLongitude by remember(shopProfile, user) { 
+        mutableStateOf(resolveCoordinate(shopProfile?.shopLocationLng, user?.longitude)) 
     }
     var isCapturingLocation by remember { mutableStateOf(false) }
 
@@ -219,8 +219,8 @@ fun ShopProfileScreen(
             workingTo = shopProfile?.workingHours?.to ?: "18:00"
             workingDays = shopProfile?.workingHours?.days?.toSet() ?: emptySet()
 
-            capturedLatitude = shopProfile?.shopLocationLat?.toString()?.toDoubleOrNull()
-            capturedLongitude = shopProfile?.shopLocationLng?.toString()?.toDoubleOrNull()
+            capturedLatitude = resolveCoordinate(shopProfile?.shopLocationLat, user?.latitude)
+            capturedLongitude = resolveCoordinate(shopProfile?.shopLocationLng, user?.longitude)
         }
     }
 
@@ -1169,6 +1169,16 @@ private fun buildUpiSuggestions(input: String): List<String> {
     }
 
     return upiHandles.map { handle -> "$digits$handle" }
+}
+
+private fun parseCoordinate(value: Any?): Double? = when (value) {
+    is Number -> value.toDouble()
+    is String -> value.toDoubleOrNull()
+    else -> null
+}
+
+private fun resolveCoordinate(primary: Any?, fallback: Any?): Double? {
+    return parseCoordinate(primary) ?: parseCoordinate(fallback)
 }
 
 @SuppressLint("MissingPermission")

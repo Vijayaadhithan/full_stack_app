@@ -129,13 +129,16 @@ fun ShopProductEditScreen(
                     height = dimensionHeight.toDoubleOrNull()
                 )
             } else null
+            val normalizedPrice = price.trim()
+            val normalizedMrp = mrp.trim().ifBlank { normalizedPrice }
+            val normalizedDescription = description.trim()
             viewModel.createProduct(
                 request = CreateProductRequest(
                     name = name.trim(),
-                    description = description.ifBlank { null },
+                    description = normalizedDescription,
                     category = category.trim(),
-                    price = price.trim(),
-                    mrp = mrp.ifBlank { null },
+                    price = normalizedPrice,
+                    mrp = normalizedMrp,
                     stock = stock.toIntOrNull() ?: 0,
                     lowStockThreshold = lowStockThreshold.toIntOrNull(),
                     weight = weight.toDoubleOrNull(),

@@ -155,8 +155,8 @@ data class ShopProduct(
     @Json(name = "barcode") val barcode: String? = null,
     @Json(name = "specifications") val specifications: Map<String, String>? = null,
     @Json(name = "isAvailable") val isAvailable: Boolean = true,
-    @Json(name = "tags") val tags: List<String> = emptyList(),
-    @Json(name = "images") val images: List<String> = emptyList(),
+    @Json(name = "tags") val tags: List<String>? = null,
+    @Json(name = "images") val images: List<String>? = null,
     @Json(name = "minOrderQuantity") val minOrderQuantity: Int = 1,
     @Json(name = "maxOrderQuantity") val maxOrderQuantity: Int? = null,
     @Json(name = "createdAt") val createdAt: String? = null,
@@ -165,7 +165,9 @@ data class ShopProduct(
     val priceAsDouble: Double? get() = price?.toDoubleOrNull()
     val displayPrice: String get() = price?.let { "₹$it" } ?: "Price not set"
     val isLowStock: Boolean get() = lowStockThreshold?.let { (stock ?: 0) <= it } ?: false
-    val mainImage: String? get() = images.firstOrNull()
+    val safeTags: List<String> get() = tags ?: emptyList()
+    val safeImages: List<String> get() = images ?: emptyList()
+    val mainImage: String? get() = images?.firstOrNull()
 }
 
 @JsonClass(generateAdapter = true)

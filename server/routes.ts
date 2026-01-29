@@ -2604,6 +2604,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const shopOwner = await fetchShopOwnerWithProfile(user.id, user);
       if (shopOwner && req.user) {
+        // Override allowPayLater from the shops table (shopOwner.shopProfile) 
+        // since this is the source of truth for shop settings
+        const shopModes = resolveShopModes(shopOwner.shopProfile ?? null);
+        (safeUser as Record<string, unknown>).allowPayLater = shopModes.allowPayLater;
+        (safeUser as Record<string, unknown>).catalogModeEnabled = shopModes.catalogModeEnabled;
+        (safeUser as Record<string, unknown>).openOrderMode = shopModes.openOrderMode;
+
         const requesterId =
           typeof req.user.id === "number"
             ? req.user.id
