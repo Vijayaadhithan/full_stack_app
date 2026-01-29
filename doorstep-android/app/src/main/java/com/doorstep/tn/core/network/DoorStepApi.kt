@@ -126,6 +126,12 @@ interface DoorStepApi {
     
     @GET("api/products/shop/{id}")
     suspend fun getShopProducts(@Path("id") shopId: Int): Response<List<Product>>
+
+    // Shop-owner product list (same endpoint, different model)
+    @GET("api/products/shop/{id}")
+    suspend fun getShopProductsForOwner(
+        @Path("id") shopId: Int
+    ): Response<List<com.doorstep.tn.shop.data.model.ShopProduct>>
     
     // ==================== CART ENDPOINTS ====================
     
@@ -292,6 +298,24 @@ interface DoorStepApi {
         @Path("orderId") orderId: Int,
         @Body request: CreateReturnRequest
     ): Response<Unit>
+
+    // Shop returns list - matches web GET /api/returns/shop
+    @GET("api/returns/shop")
+    suspend fun getShopReturnRequests(): Response<List<com.doorstep.tn.shop.data.model.ReturnRequest>>
+
+    // Approve return - matches web POST /api/returns/:id/approve
+    @POST("api/returns/{id}/approve")
+    suspend fun approveReturnRequest(
+        @Path("id") returnId: Int,
+        @Body body: Map<String, String>? = null
+    ): Response<com.doorstep.tn.shop.data.model.ReturnRequest>
+
+    // Reject return - matches web POST /api/returns/:id/reject
+    @POST("api/returns/{id}/reject")
+    suspend fun rejectReturnRequest(
+        @Path("id") returnId: Int,
+        @Body body: Map<String, String>? = null
+    ): Response<com.doorstep.tn.shop.data.model.ReturnRequest>
     
     // ==================== NOTIFICATION ENDPOINTS ====================
     
@@ -338,17 +362,21 @@ interface DoorStepApi {
     // Cancel order - POST /api/orders/:id/cancel
     @POST("api/orders/{id}/cancel")
     suspend fun cancelOrder(@Path("id") orderId: Int): Response<Order>
+
+    // Shop confirms payment - POST /api/orders/:id/confirm-payment
+    @POST("api/orders/{id}/confirm-payment")
+    suspend fun confirmShopPayment(@Path("id") orderId: Int): Response<com.doorstep.tn.shop.data.model.ShopOrder>
+
+    // Shop approves pay-later order - POST /api/orders/:id/approve-pay-later
+    @POST("api/orders/{id}/approve-pay-later")
+    suspend fun approvePayLater(@Path("id") orderId: Int): Response<com.doorstep.tn.shop.data.model.ShopOrder>
     
     // ==================== SHOP ENDPOINTS ====================
     
     @GET("api/orders/shop")
-    suspend fun getShopOrders(): Response<List<Order>>
-    
-    @PATCH("api/orders/{id}/status")
-    suspend fun updateOrderStatus(
-        @Path("id") orderId: Int,
-        @Body statusUpdate: Map<String, String>
-    ): Response<Order>
+    suspend fun getShopOrders(
+        @Query("status") status: String? = null
+    ): Response<List<com.doorstep.tn.shop.data.model.ShopOrder>>
     
     // ==================== PROVIDER ENDPOINTS ====================
     
@@ -434,6 +462,13 @@ interface DoorStepApi {
     // Create text/quick order - matches web POST /api/orders/text
     @POST("api/orders/text")
     suspend fun createTextOrder(@Body request: CreateTextOrderRequest): Response<TextOrderResponse>
+
+    // Quote text order - matches web POST /api/orders/:id/quote-text-order
+    @POST("api/orders/{id}/quote-text-order")
+    suspend fun quoteTextOrder(
+        @Path("id") orderId: Int,
+        @Body request: Map<String, String>
+    ): Response<com.doorstep.tn.shop.data.model.ShopOrder>
     
     // ==================== QUICK ADD PRODUCT ENDPOINT ====================
     
@@ -491,4 +526,153 @@ interface DoorStepApi {
     // Delete account - matches web POST /api/delete-account
     @POST("api/delete-account")
     suspend fun deleteAccount(): Response<Unit>
+    
+    // ==================== SHOP MANAGEMENT ENDPOINTS ====================
+    
+    // Dashboard stats - matches web GET /api/shops/dashboard-stats
+    @GET("api/shops/dashboard-stats")
+    suspend fun getShopDashboardStats(): Response<com.doorstep.tn.shop.data.model.DashboardStats>
+    
+    // Recent shop orders - matches web GET /api/orders/shop/recent
+    @GET("api/orders/shop/recent")
+    suspend fun getRecentShopOrders(): Response<List<com.doorstep.tn.shop.data.model.ShopOrder>>
+    
+    // Active orders board (Kanban view) - matches web GET /api/shops/orders/active
+    @GET("api/shops/orders/active")
+    suspend fun getActiveOrdersBoard(): Response<com.doorstep.tn.shop.data.model.ActiveBoardResponse>
+    
+    // Update order status - matches web PATCH /api/orders/:id
+    @PATCH("api/orders/{id}/status")
+    suspend fun updateShopOrderStatus(
+        @Path("id") orderId: Int,
+        @Body request: com.doorstep.tn.shop.data.model.UpdateOrderStatusRequest
+    ): Response<com.doorstep.tn.shop.data.model.ShopOrder>
+    
+    // Shop reviews - matches web GET /api/reviews/shop/:id
+    @GET("api/reviews/shop/{shopId}")
+    suspend fun getShopReviews(@Path("shopId") shopId: Int): Response<List<com.doorstep.tn.shop.data.model.ShopReview>>
+    
+    // Reply to product review - matches web POST /api/product-reviews/:id/reply
+    @POST("api/product-reviews/{id}/reply")
+    suspend fun replyToProductReview(
+        @Path("id") reviewId: Int,
+        @Body request: com.doorstep.tn.shop.data.model.ReviewReplyRequest
+    ): Response<com.doorstep.tn.shop.data.model.ShopReview>
+    
+    // ==================== SHOP PRODUCTS MANAGEMENT ====================
+    
+    // Get shop's own products - matches web GET /api/products/shop/:id
+    @GET("api/products/shop/{shopId}")
+    suspend fun getMyShopProducts(
+        @Path("shopId") shopId: Int
+    ): Response<List<com.doorstep.tn.shop.data.model.ShopProduct>>
+    
+    // Create product - matches web POST /api/products
+    @POST("api/products")
+    suspend fun createProduct(
+        @Body request: com.doorstep.tn.shop.data.model.CreateProductRequest
+    ): Response<com.doorstep.tn.shop.data.model.ShopProduct>
+    
+    // Update product - matches web PATCH /api/products/:id
+    @PATCH("api/products/{id}")
+    suspend fun updateProduct(
+        @Path("id") productId: Int,
+        @Body request: com.doorstep.tn.shop.data.model.UpdateProductRequest
+    ): Response<com.doorstep.tn.shop.data.model.ShopProduct>
+    
+    // Delete product - matches web DELETE /api/products/:id
+    @DELETE("api/products/{id}")
+    suspend fun deleteProduct(@Path("id") productId: Int): Response<Unit>
+    
+    // Update product stock - matches web PATCH /api/products/:id (stock field)
+    @PATCH("api/products/{id}")
+    suspend fun updateProductStock(
+        @Path("id") productId: Int,
+        @Body request: Map<String, Any>
+    ): Response<com.doorstep.tn.shop.data.model.ShopProduct>
+    
+    // ==================== SHOP PROMOTIONS MANAGEMENT ====================
+    
+    // Get shop promotions - matches web GET /api/promotions/shop/:id
+    @GET("api/promotions/shop/{shopId}")
+    suspend fun getShopPromotions(
+        @Path("shopId") shopId: Int
+    ): Response<List<com.doorstep.tn.shop.data.model.ShopPromotion>>
+    
+    // Create promotion - matches web POST /api/promotions
+    @POST("api/promotions")
+    suspend fun createPromotion(
+        @Body request: com.doorstep.tn.shop.data.model.CreatePromotionRequest
+    ): Response<com.doorstep.tn.shop.data.model.ShopPromotion>
+    
+    // Update promotion - matches web PATCH /api/promotions/:id
+    @PATCH("api/promotions/{id}")
+    suspend fun updatePromotion(
+        @Path("id") promotionId: Int,
+        @Body request: com.doorstep.tn.shop.data.model.UpdatePromotionRequest
+    ): Response<com.doorstep.tn.shop.data.model.ShopPromotion>
+    
+    // Delete promotion - matches web DELETE /api/promotions/:id
+    @DELETE("api/promotions/{id}")
+    suspend fun deletePromotion(@Path("id") promotionId: Int): Response<Unit>
+    
+    // ==================== SHOP WORKERS MANAGEMENT ====================
+    
+    // Get shop workers - matches web GET /api/shops/workers
+    @GET("api/shops/workers")
+    suspend fun getShopWorkers(): Response<List<com.doorstep.tn.shop.data.model.ShopWorker>>
+    
+    // Get worker responsibilities config - matches web GET /api/shops/workers/responsibilities
+    @GET("api/shops/workers/responsibilities")
+    suspend fun getWorkerResponsibilities(): Response<com.doorstep.tn.shop.data.model.WorkerResponsibilitiesResponse>
+    
+    // Check if worker number is available - matches web GET /api/shops/workers/check-number
+    @GET("api/shops/workers/check-number")
+    suspend fun checkWorkerNumber(@Query("workerNumber") workerNumber: String): Response<Map<String, Any>>
+    
+    // Add worker - matches web POST /api/shops/workers
+    @POST("api/shops/workers")
+    suspend fun addShopWorker(
+        @Body request: com.doorstep.tn.shop.data.model.AddWorkerRequest
+    ): Response<com.doorstep.tn.shop.data.model.WorkerResponse>
+    
+    // Update worker - matches web PATCH /api/shops/workers/:userId
+    @PATCH("api/shops/workers/{userId}")
+    suspend fun updateShopWorker(
+        @Path("userId") workerUserId: Int,
+        @Body request: com.doorstep.tn.shop.data.model.UpdateWorkerRequest
+    ): Response<com.doorstep.tn.shop.data.model.WorkerResponse>
+    
+    // Delete worker - matches web DELETE /api/shops/workers/:userId
+    @DELETE("api/shops/workers/{userId}")
+    suspend fun removeShopWorker(@Path("userId") workerUserId: Int): Response<Unit>
+    
+    // ==================== SHOP PROFILE MANAGEMENT ====================
+    
+    // Get current shop profile - matches web GET /api/shops/current
+    @GET("api/shops/current")
+    suspend fun getCurrentShopProfile(): Response<com.doorstep.tn.shop.data.model.ShopProfile>
+    
+    // Update shop profile - uses PATCH /api/users/:id
+    @PATCH("api/users/{id}")
+    suspend fun updateShopProfile(
+        @Path("id") userId: Int,
+        @Body request: com.doorstep.tn.shop.data.model.UpdateShopProfileRequest
+    ): Response<com.doorstep.tn.auth.data.model.UserResponse>
+    
+    // ==================== PAY-LATER WHITELIST MANAGEMENT ====================
+    
+    // Get pay-later whitelist - matches web GET /api/shops/pay-later/whitelist
+    @GET("api/shops/pay-later/whitelist")
+    suspend fun getPayLaterWhitelist(): Response<com.doorstep.tn.shop.data.model.PayLaterWhitelistResponse>
+    
+    // Add customer to pay-later whitelist - matches web POST /api/shops/pay-later/whitelist
+    @POST("api/shops/pay-later/whitelist")
+    suspend fun addToPayLaterWhitelist(
+        @Body request: com.doorstep.tn.shop.data.model.AddToPayLaterRequest
+    ): Response<Unit>
+    
+    // Remove customer from pay-later whitelist - matches web DELETE /api/shops/pay-later/whitelist/:customerId
+    @DELETE("api/shops/pay-later/whitelist/{customerId}")
+    suspend fun removeFromPayLaterWhitelist(@Path("customerId") customerId: Int): Response<Unit>
 }

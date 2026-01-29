@@ -40,6 +40,15 @@ import com.doorstep.tn.customer.ui.notifications.NotificationsScreen
 import com.doorstep.tn.customer.ui.search.UniversalSearchScreen
 import com.doorstep.tn.customer.ui.quickorder.QuickOrderScreen
 import com.doorstep.tn.shop.ui.ShopDashboardScreen
+import com.doorstep.tn.shop.ui.ShopProductsScreen
+import com.doorstep.tn.shop.ui.ShopProductEditScreen
+import com.doorstep.tn.shop.ui.ShopOrdersScreen
+import com.doorstep.tn.shop.ui.ShopOrderDetailScreen
+import com.doorstep.tn.shop.ui.ShopInventoryScreen
+import com.doorstep.tn.shop.ui.ShopPromotionsScreen
+import com.doorstep.tn.shop.ui.ShopWorkersScreen
+import com.doorstep.tn.shop.ui.ShopReviewsScreen
+import com.doorstep.tn.shop.ui.ShopProfileScreen
 import com.doorstep.tn.provider.ui.ProviderDashboardScreen
 import com.doorstep.tn.provider.ui.ProviderServicesScreen
 import com.doorstep.tn.provider.ui.ProviderBookingsScreen
@@ -109,6 +118,8 @@ object Routes {
     const val SHOP_WORKERS = "shop_workers"
     const val SHOP_PROMOTIONS = "shop_promotions"
     const val SHOP_PROFILE = "shop_profile"
+    const val SHOP_INVENTORY = "shop_inventory"
+    const val SHOP_REVIEWS = "shop_reviews"
     
     // Provider routes
     const val PROVIDER_DASHBOARD = "provider_dashboard"
@@ -572,6 +583,8 @@ fun DoorStepNavHost(
                 onNavigateToOrders = { navController.navigate(Routes.SHOP_ORDERS) },
                 onNavigateToWorkers = { navController.navigate(Routes.SHOP_WORKERS) },
                 onNavigateToPromotions = { navController.navigate(Routes.SHOP_PROMOTIONS) },
+                onNavigateToInventory = { navController.navigate(Routes.SHOP_INVENTORY) },
+                onNavigateToReviews = { navController.navigate(Routes.SHOP_REVIEWS) },
                 onNavigateToProfile = { navController.navigate(Routes.SHOP_PROFILE) },
                 onLogout = {
                     authViewModel.logout()
@@ -582,28 +595,98 @@ fun DoorStepNavHost(
             )
         }
         
+        // Shop Products
+        composable(Routes.SHOP_PRODUCTS) {
+            ShopProductsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEdit = { productId ->
+                    navController.navigate("shop_product_edit/$productId")
+                },
+                onNavigateToAdd = {
+                    navController.navigate(Routes.SHOP_PRODUCT_ADD)
+                }
+            )
+        }
+        
+        composable(Routes.SHOP_ORDERS) {
+            ShopOrdersScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { orderId ->
+                    navController.navigate("shop_order/$orderId")
+                }
+            )
+        }
+        
+        // Shop Inventory
+        composable(Routes.SHOP_INVENTORY) {
+            ShopInventoryScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        // Shop Promotions
+        composable(Routes.SHOP_PROMOTIONS) {
+            ShopPromotionsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        // Shop Workers
+        composable(Routes.SHOP_WORKERS) {
+            ShopWorkersScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        // Shop Reviews
+        composable(Routes.SHOP_REVIEWS) {
+            ShopReviewsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
         // Shop Profile
         composable(Routes.SHOP_PROFILE) {
-            ProfileScreen(
+            ShopProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
-                onSwitchRole = { newRole ->
-                    authViewModel.switchRole(newRole)
-                    val destination = when (newRole) {
-                        "provider" -> Routes.PROVIDER_DASHBOARD
-                        "customer" -> Routes.CUSTOMER_HOME
-                        else -> Routes.SHOP_DASHBOARD
-                    }
-                    navController.navigate(destination) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
                 onLogout = {
                     authViewModel.logout()
                     navController.navigate(Routes.PHONE_ENTRY) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            )
+        }
+        
+        // Shop Product Edit (with productId argument)
+        composable(
+            route = Routes.SHOP_PRODUCT_EDIT,
+            arguments = listOf(navArgument("productId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val productId = backStackEntry.arguments?.getInt("productId") ?: 0
+            ShopProductEditScreen(
+                productId = productId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        // Shop Product Add (no productId = add mode)
+        composable(Routes.SHOP_PRODUCT_ADD) {
+            ShopProductEditScreen(
+                productId = null,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        // Shop Order Detail (with orderId argument)
+        composable(
+            route = Routes.SHOP_ORDER_DETAIL,
+            arguments = listOf(navArgument("orderId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val orderId = backStackEntry.arguments?.getInt("orderId") ?: 0
+            ShopOrderDetailScreen(
+                orderId = orderId,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         

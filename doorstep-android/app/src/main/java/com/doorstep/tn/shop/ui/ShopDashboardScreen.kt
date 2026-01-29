@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,21 +18,56 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.shop.data.model.ShopOrder
+import com.doorstep.tn.shop.data.model.ShopReview
+import java.text.NumberFormat
+import java.util.Locale
 
 /**
- * Shop Owner Dashboard Screen
+ * Shop Owner Dashboard Screen with real API data
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShopDashboardScreen(
+    viewModel: ShopViewModel = hiltViewModel(),
     onNavigateToProducts: () -> Unit,
     onNavigateToOrders: () -> Unit,
     onNavigateToWorkers: () -> Unit,
     onNavigateToPromotions: () -> Unit,
+    onNavigateToInventory: () -> Unit = {},
+    onNavigateToReviews: () -> Unit = {},
     onNavigateToProfile: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val dashboardStats by viewModel.dashboardStats.collectAsState()
+    val recentOrders by viewModel.recentOrders.collectAsState()
+    val shopReviews by viewModel.shopReviews.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val successMessage by viewModel.successMessage.collectAsState()
+    
+    // Load data on first composition
+    LaunchedEffect(Unit) {
+        viewModel.loadDashboardData()
+    }
+    
+    // Show snackbar for messages
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(error) {
+        error?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
+    LaunchedEffect(successMessage) {
+        successMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSuccessMessage()
+        }
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -65,197 +100,410 @@ fun ShopDashboardScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = SlateDarker
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            // Stats Cards
-            item {
-                Text(
-                    text = "Today's Overview",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = WhiteText,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatCard(
-                        title = "Orders",
-                        value = "12",
-                        subtitle = "3 pending",
-                        icon = Icons.Default.Receipt,
-                        color = OrangePrimary,
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        title = "Revenue",
-                        value = "₹4,500",
-                        subtitle = "+23% today",
-                        icon = Icons.Default.CurrencyRupee,
-                        color = ShopGreen,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+        
+        if (isLoading && dashboardStats == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = ShopGreen)
             }
-            
-            // Quick Actions
-            item {
-                Text(
-                    text = "Quick Actions",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = WhiteText,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        ActionCard(
-                            icon = Icons.Default.Inventory,
-                            label = "Products",
-                            color = OrangePrimary,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToProducts
-                        )
-                        ActionCard(
-                            icon = Icons.Default.ShoppingCart,
-                            label = "Orders",
-                            color = ProviderBlue,
-                            badge = "3",
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToOrders
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        ActionCard(
-                            icon = Icons.Default.People,
-                            label = "Workers",
-                            color = AmberSecondary,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToWorkers
-                        )
-                        ActionCard(
-                            icon = Icons.Default.LocalOffer,
-                            label = "Promotions",
-                            color = ShopGreen,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToPromotions
-                        )
-                    }
-                }
-            }
-            
-            // Pending Orders
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                // Stats Cards
+                item {
                     Text(
-                        text = "Pending Orders",
+                        text = "Today's Overview",
                         style = MaterialTheme.typography.titleMedium,
                         color = WhiteText,
                         fontWeight = FontWeight.Bold
                     )
-                    TextButton(onClick = onNavigateToOrders) {
-                        Text("View All", color = OrangePrimary)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        val pendingOrders = dashboardStats?.pendingOrders ?: 0
+                        val ordersInProgress = dashboardStats?.ordersInProgress ?: 0
+                        StatCard(
+                            title = "Orders",
+                            value = "${(pendingOrders + ordersInProgress)}",
+                            subtitle = "$pendingOrders pending",
+                            icon = Icons.Default.Receipt,
+                            color = OrangePrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            title = "Revenue",
+                            value = formatCurrency(dashboardStats?.earningsToday ?: 0.0),
+                            subtitle = "Today",
+                            icon = Icons.Default.CurrencyRupee,
+                            color = ShopGreen,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
                 
-                // Sample pending orders
-                PendingOrderCard(
-                    orderId = "#ORD-1234",
-                    customerName = "Ramesh Kumar",
-                    itemCount = 3,
-                    total = "₹450",
-                    timeAgo = "5 min ago",
-                    onClick = onNavigateToOrders
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                PendingOrderCard(
-                    orderId = "#ORD-1235",
-                    customerName = "Priya S",
-                    itemCount = 1,
-                    total = "₹120",
-                    timeAgo = "12 min ago",
-                    onClick = onNavigateToOrders
-                )
-            }
-            
-            // Low Stock Alert
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = WarningYellow.copy(alpha = 0.1f)
-                    )
-                ) {
+                // Additional Stats Row
+                item {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        StatCard(
+                            title = "This Month",
+                            value = formatCurrency(dashboardStats?.earningsMonth ?: 0.0),
+                            subtitle = "Earnings",
+                            icon = Icons.Default.TrendingUp,
+                            color = ProviderBlue,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            title = "Products",
+                            value = "${dashboardStats?.totalProducts ?: 0}",
+                            subtitle = "${dashboardStats?.lowStockItems ?: 0} low stock",
+                            icon = Icons.Default.Inventory,
+                            color = AmberSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                
+                // Quick Actions
+                item {
+                    Text(
+                        text = "Quick Actions",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ActionCard(
+                                icon = Icons.Default.Inventory,
+                                label = "Products",
+                                color = OrangePrimary,
+                                modifier = Modifier.weight(1f),
+                                onClick = onNavigateToProducts
+                            )
+                            ActionCard(
+                                icon = Icons.Default.ShoppingCart,
+                                label = "Orders",
+                                color = ProviderBlue,
+                                badge = if ((dashboardStats?.pendingOrders ?: 0) > 0) 
+                                    "${dashboardStats?.pendingOrders}" else null,
+                                modifier = Modifier.weight(1f),
+                                onClick = onNavigateToOrders
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ActionCard(
+                                icon = Icons.Default.Inventory2,
+                                label = "Inventory",
+                                color = AmberSecondary,
+                                badge = if ((dashboardStats?.lowStockItems ?: 0) > 0)
+                                    "${dashboardStats?.lowStockItems}" else null,
+                                modifier = Modifier.weight(1f),
+                                onClick = onNavigateToInventory
+                            )
+                            ActionCard(
+                                icon = Icons.Default.LocalOffer,
+                                label = "Promotions",
+                                color = ShopGreen,
+                                modifier = Modifier.weight(1f),
+                                onClick = onNavigateToPromotions
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ActionCard(
+                                icon = Icons.Default.People,
+                                label = "Workers",
+                                color = ProviderBlue,
+                                modifier = Modifier.weight(1f),
+                                onClick = onNavigateToWorkers
+                            )
+                            ActionCard(
+                                icon = Icons.Default.Star,
+                                label = "Reviews",
+                                color = WarningYellow,
+                                badge = if (shopReviews.isNotEmpty()) "${shopReviews.size}" else null,
+                                modifier = Modifier.weight(1f),
+                                onClick = onNavigateToReviews
+                            )
+                        }
+                    }
+                }
+                
+                // Pending Orders Section
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = WarningYellow
+                        Text(
+                            text = "Recent Orders",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = WhiteText,
+                            fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Low Stock Alert",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = WarningYellow,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "5 products are running low",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = WhiteTextMuted
-                            )
-                        }
-                        TextButton(onClick = onNavigateToProducts) {
-                            Text("View", color = WarningYellow)
+                        TextButton(onClick = onNavigateToOrders) {
+                            Text("View All", color = OrangePrimary)
                         }
                     }
                 }
-            }
-            
-            // Logout
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedButton(
-                    onClick = onLogout,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = ErrorRed
+                
+                if (recentOrders.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = SlateCard)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No recent orders",
+                                    color = WhiteTextMuted
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(recentOrders.take(5)) { order ->
+                        PendingOrderCard(
+                            order = order,
+                            onClick = onNavigateToOrders
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                // Top Customers
+                item {
+                    Text(
+                        text = "Top Customers",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
                     )
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Logout,
-                        contentDescription = null
+                }
+                
+                item {
+                    val customers = dashboardStats?.customerSpendTotals ?: emptyList()
+                    if (customers.isEmpty()) {
+                        Text(
+                            text = "No customer analytics yet",
+                            color = WhiteTextMuted,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = SlateCard)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                customers.take(5).forEach { customer ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = customer.name ?: "Customer",
+                                                color = WhiteText,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                text = customer.phone ?: "",
+                                                color = WhiteTextMuted,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                        Text(
+                                            text = "₹%.2f".format(customer.totalSpent),
+                                            color = ShopGreen,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Top Items
+                item {
+                    Text(
+                        text = "Top Items",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Logout")
+                }
+                
+                item {
+                    val items = dashboardStats?.itemSalesTotals ?: emptyList()
+                    if (items.isEmpty()) {
+                        Text(
+                            text = "No sales data yet",
+                            color = WhiteTextMuted,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = SlateCard)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                items.take(5).forEach { item ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = item.name ?: "Item",
+                                                color = WhiteText,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                text = "Qty: ${item.quantity}",
+                                                color = WhiteTextMuted,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                        Text(
+                                            text = "₹%.2f".format(item.totalAmount),
+                                            color = ShopGreen,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Low Stock Alert
+                if ((dashboardStats?.lowStockItems ?: 0) > 0) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = WarningYellow.copy(alpha = 0.1f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = WarningYellow
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Low Stock Alert",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = WarningYellow,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${dashboardStats?.lowStockItems} products are running low",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = WhiteTextMuted
+                                    )
+                                }
+                                TextButton(onClick = onNavigateToInventory) {
+                                    Text("View", color = WarningYellow)
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Recent Reviews Section
+                if (shopReviews.isNotEmpty()) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Recent Reviews",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                            TextButton(onClick = onNavigateToReviews) {
+                                Text("View All", color = OrangePrimary)
+                            }
+                        }
+                    }
+                    
+                    items(shopReviews.take(3)) { review ->
+                        ReviewCard(review = review)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+                
+                // Logout
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedButton(
+                        onClick = onLogout,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = ErrorRed
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Logout")
+                    }
                 }
             }
         }
@@ -365,11 +613,7 @@ private fun ActionCard(
 
 @Composable
 private fun PendingOrderCard(
-    orderId: String,
-    customerName: String,
-    itemCount: Int,
-    total: String,
-    timeAgo: String,
+    order: ShopOrder,
     onClick: () -> Unit
 ) {
     Card(
@@ -391,39 +635,118 @@ private fun PendingOrderCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = orderId,
+                        text = "#${order.id}",
                         style = MaterialTheme.typography.titleSmall,
                         color = WhiteText,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = timeAgo,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = WhiteTextMuted
-                    )
+                    StatusChip(status = order.status)
                 }
                 Text(
-                    text = customerName,
+                    text = order.customerName,
                     style = MaterialTheme.typography.bodyMedium,
                     color = WhiteTextMuted
                 )
                 Text(
-                    text = "$itemCount items • $total",
+                    text = "${order.items.size} items • ${order.displayTotal}",
                     style = MaterialTheme.typography.bodySmall,
                     color = OrangePrimary
                 )
             }
             
-            Button(
-                onClick = onClick,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ShopGreen
-                ),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Accept")
+            if (order.isPending) {
+                Button(
+                    onClick = onClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ShopGreen
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("View")
+                }
             }
         }
     }
+}
+
+@Composable
+private fun StatusChip(status: String) {
+    val (bgColor, textColor) = when (status) {
+        "pending" -> WarningYellow.copy(alpha = 0.2f) to WarningYellow
+        "confirmed", "processing" -> ProviderBlue.copy(alpha = 0.2f) to ProviderBlue
+        "packed", "dispatched" -> AmberSecondary.copy(alpha = 0.2f) to AmberSecondary
+        "delivered" -> ShopGreen.copy(alpha = 0.2f) to ShopGreen
+        "cancelled" -> ErrorRed.copy(alpha = 0.2f) to ErrorRed
+        else -> GlassWhite to WhiteTextMuted
+    }
+    
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = bgColor
+    ) {
+        Text(
+            text = status.replaceFirstChar { it.uppercase() },
+            style = MaterialTheme.typography.labelSmall,
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun ReviewCard(review: ShopReview) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = SlateCard)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(review.rating) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = WarningYellow,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                repeat(5 - review.rating) {
+                    Icon(
+                        imageVector = Icons.Default.StarBorder,
+                        contentDescription = null,
+                        tint = WhiteTextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = review.review ?: "No comment",
+                style = MaterialTheme.typography.bodyMedium,
+                color = WhiteText,
+                maxLines = 2
+            )
+            if (review.hasReply) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "You replied: ${review.shopReply}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhiteTextMuted,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+private fun formatCurrency(amount: Double): String {
+    val formatter = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+    return formatter.format(amount)
 }
