@@ -24,6 +24,7 @@ import {
   Store,
   MapPin,
   ArrowLeft,
+  Truck,
 } from "lucide-react";
 import { useState } from "react";
 import { useParams, Link } from "wouter";
@@ -32,6 +33,8 @@ import type { PublicShop } from "@/types/public-shop";
 import { useLanguage } from "@/contexts/language-context";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { getProductImage } from "@shared/predefinedImages";
+import { useAuth } from "@/hooks/use-auth";
+import { computeDistanceKm, toCoordinates } from "@/lib/geo";
 
 const container = {
   hidden: { opacity: 0 },
@@ -80,6 +83,7 @@ export default function ShopDetails() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
@@ -344,6 +348,25 @@ export default function ShopDetails() {
     );
   }
 
+  const toNonNegativeNumber = (value: unknown) => {
+    const numericValue = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : 0;
+  };
+  const freeDeliveryRadiusKm = toNonNegativeNumber(
+    shop.shopProfile?.freeDeliveryRadiusKm ?? 0,
+  );
+  const deliveryFeeRate = toNonNegativeNumber(shop.shopProfile?.deliveryFee ?? 0);
+  const customerCoords = toCoordinates(
+    user?.latitude ?? null,
+    user?.longitude ?? null,
+  );
+  const shopCoords = toCoordinates(shop.latitude ?? null, shop.longitude ?? null);
+  const deliveryDistanceKm = computeDistanceKm(customerCoords, shopCoords);
+  const withinFreeRadius =
+    deliveryDistanceKm != null && deliveryDistanceKm <= freeDeliveryRadiusKm;
+  const showDeliveryInfo =
+    shop.deliveryAvailable || freeDeliveryRadiusKm > 0 || deliveryFeeRate > 0;
+
   return (
     <DashboardLayout>
       <Meta
@@ -420,6 +443,36 @@ export default function ShopDetails() {
             </div>
           </CardContent>
         </Card>
+
+        {showDeliveryInfo && (
+          <Card className="border-0 bg-white shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 font-medium">
+                <Truck className="h-4 w-4 text-primary" />
+                <span>Delivery information</span>
+              </div>
+              <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                <p>
+                  Free delivery radius: {freeDeliveryRadiusKm} km
+                </p>
+                <p>
+                  Delivery fee beyond radius:{" "}
+                  {deliveryFeeRate > 0 ? `₹${deliveryFeeRate.toFixed(2)}` : "Free"}
+                </p>
+                {deliveryDistanceKm != null && (
+                  <p>
+                    Your distance: {deliveryDistanceKm.toFixed(1)} km —{" "}
+                    {withinFreeRadius
+                      ? "Free delivery for your location"
+                      : deliveryFeeRate > 0
+                        ? "Delivery fee applies"
+                        : "Delivery available"}
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Products Section */}
         <div className="space-y-6">

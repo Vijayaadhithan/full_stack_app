@@ -1,5 +1,6 @@
 package com.doorstep.tn.auth.data.model
 
+import com.doorstep.tn.customer.data.model.ShopProfile
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
@@ -77,6 +78,7 @@ data class UserResponse(
     @Json(name = "catalogModeEnabled") val catalogModeEnabled: Boolean? = null,
     @Json(name = "openOrderMode") val openOrderMode: Boolean? = null,
     @Json(name = "allowPayLater") val allowPayLater: Boolean? = null,
+    @Json(name = "shopProfile") val shopProfile: ShopProfile? = null,
     @Json(name = "payLaterEligibilityForCustomer") val payLaterEligibilityForCustomer: PayLaterEligibility? = null
 )
 

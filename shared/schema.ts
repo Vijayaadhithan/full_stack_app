@@ -73,6 +73,8 @@ export type ShopProfile = {
   };
   shippingPolicy?: string;
   returnPolicy?: string;
+  freeDeliveryRadiusKm?: number;
+  deliveryFee?: number;
   catalogModeEnabled: boolean;
   openOrderMode: boolean;
   allowPayLater: boolean;
@@ -273,6 +275,11 @@ export const shops = pgTable(
     }>(),
     shippingPolicy: text("shipping_policy"),
     returnPolicy: text("return_policy"),
+    freeDeliveryRadiusKm: decimal("free_delivery_radius_km", {
+      precision: 8,
+      scale: 2,
+    }).default("0"),
+    deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0"),
     bannerImageUrl: text("banner_image_url"),
     logoImageUrl: text("logo_image_url"),
     shopAddressStreet: text("shop_address_street"),
@@ -637,6 +644,11 @@ export const orders = pgTable(
       .$type<"pending" | "verifying" | "paid" | "failed">()
       .default("pending"),
     deliveryMethod: text("delivery_method", { enum: ["delivery", "pickup"] }),
+    deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0"),
+    deliveryDistanceKm: decimal("delivery_distance_km", {
+      precision: 8,
+      scale: 2,
+    }),
     total: decimal("total").notNull(),
     shippingAddress: text("shipping_address").notNull(),
     billingAddress: text("billing_address"),
@@ -835,6 +847,8 @@ export const shopProfileSchema = z.object({
   }),
   shippingPolicy: z.string().optional().nullable(),
   returnPolicy: z.string().optional().nullable(),
+  freeDeliveryRadiusKm: z.number().min(0).max(100).optional().nullable(),
+  deliveryFee: z.number().min(0).optional().nullable(),
   catalogModeEnabled: z.boolean().optional().default(false),
   openOrderMode: z.boolean().optional().default(false),
   allowPayLater: z.boolean().optional().default(false),
@@ -1232,4 +1246,3 @@ export const productsRelations = relations(products, ({ one }) => ({
     references: [users.id],
   }),
 }));
-

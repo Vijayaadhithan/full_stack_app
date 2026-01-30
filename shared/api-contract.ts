@@ -171,6 +171,8 @@ export const orderDetailSchema = z.object({
   status: orderStatusSchema,
   paymentStatus: paymentStatusSchema.nullable(),
   deliveryMethod: z.enum(["delivery", "pickup"]).nullable(),
+  deliveryFee: z.string().nullable().optional(),
+  deliveryDistanceKm: z.number().nullable().optional(),
   total: z.string(),
   shippingAddress: z.string(),
   billingAddress: nullableString,

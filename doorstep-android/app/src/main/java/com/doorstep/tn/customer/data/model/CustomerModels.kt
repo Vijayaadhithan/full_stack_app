@@ -78,6 +78,8 @@ data class ShopProfile(
     @Json(name = "description") val description: String? = null,
     @Json(name = "businessType") val businessType: String? = null,
     @Json(name = "workingHours") val workingHours: ShopWorkingHours? = null,
+    @Json(name = "freeDeliveryRadiusKm") val freeDeliveryRadiusKm: Double? = null,
+    @Json(name = "deliveryFee") val deliveryFee: Double? = null,
     @Json(name = "catalogModeEnabled") val catalogModeEnabled: Boolean? = null,
     @Json(name = "openOrderMode") val openOrderMode: Boolean? = null,
     @Json(name = "allowPayLater") val allowPayLater: Boolean? = null,
@@ -174,6 +176,8 @@ data class Order(
     @Json(name = "paymentMethod") val paymentMethod: String? = null,
     @Json(name = "paymentStatus") val paymentStatus: String? = null,  // "pending", "verifying", "paid"
     @Json(name = "deliveryMethod") val deliveryMethod: String? = null,  // "pickup" or "delivery"
+    @Json(name = "deliveryFee") val deliveryFee: String? = null,
+    @Json(name = "deliveryDistanceKm") val deliveryDistanceKm: Double? = null,
     @Json(name = "orderType") val orderType: String? = null,  // "product_order" or "text_order"
     @Json(name = "orderText") val orderText: String? = null,  // For text/quick orders
     @Json(name = "returnRequested") val returnRequested: Boolean? = null,

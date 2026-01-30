@@ -24,7 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.auth.data.model.UserResponse
+import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.config.PlatformConfig
+import com.doorstep.tn.common.util.haversineDistanceKm
+import com.doorstep.tn.common.util.parseGeoPoint
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.customer.data.model.CartItem
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -44,6 +47,7 @@ import com.doorstep.tn.customer.ui.CustomerViewModel
 @Composable
 fun CartScreen(
     viewModel: CustomerViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToProducts: () -> Unit,
     onOrderComplete: () -> Unit
@@ -52,6 +56,7 @@ fun CartScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val activePromotions by viewModel.activePromotions.collectAsState()
     val selectedPromotion by viewModel.selectedPromotion.collectAsState()
+    val user by authViewModel.user.collectAsState()
 
     // Shop info state - fetched to check delivery options
     var shopInfo by remember { mutableStateOf<UserResponse?>(null) }
@@ -106,7 +111,34 @@ fun CartScreen(
     }
 
     val platformFee = if (PlatformConfig.PLATFORM_FEES_ENABLED) PlatformConfig.PRODUCT_ORDER_FEE else 0.0
-    val totalAmount = if (subtotal > 0) (subtotal - discountAmount + platformFee).coerceAtLeast(0.0) else 0.0
+
+    val freeDeliveryRadiusKm = shopInfo?.shopProfile?.freeDeliveryRadiusKm ?: 0.0
+    val deliveryFeeRate = shopInfo?.shopProfile?.deliveryFee ?: 0.0
+    val customerPoint = parseGeoPoint(user?.latitude, user?.longitude)
+    val shopPoint = parseGeoPoint(shopInfo?.latitude, shopInfo?.longitude)
+    val deliveryDistanceKm = if (deliveryMethod == "delivery" && customerPoint != null && shopPoint != null) {
+        haversineDistanceKm(
+            customerPoint.latitude,
+            customerPoint.longitude,
+            shopPoint.latitude,
+            shopPoint.longitude
+        )
+    } else {
+        null
+    }
+    val deliveryFeeReady = deliveryMethod == "delivery" && deliveryDistanceKm != null
+    val deliveryFeeAmount = if (deliveryFeeReady && deliveryDistanceKm!! > freeDeliveryRadiusKm) {
+        deliveryFeeRate
+    } else {
+        0.0
+    }
+    val deliveryFeeNeedsLocation =
+        deliveryMethod == "delivery" &&
+            (freeDeliveryRadiusKm > 0 || deliveryFeeRate > 0) &&
+            !deliveryFeeReady
+
+    val totalAmount =
+        if (subtotal > 0) (subtotal - discountAmount + platformFee + deliveryFeeAmount).coerceAtLeast(0.0) else 0.0
 
     val productOpenOrderEnabled = cartItems.firstOrNull()?.product?.let { product ->
         product.catalogModeEnabled == true || product.openOrderMode == true
@@ -557,6 +589,17 @@ fun CartScreen(
                                     onClick = { deliveryMethod = "delivery" }
                                 )
                             }
+
+                            if (deliveryMethod == "delivery" && deliveryDistanceKm != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Distance from shop: ${
+                                        String.format("%.1f", deliveryDistanceKm)
+                                    } km${if (freeDeliveryRadiusKm > 0) " (free within ${freeDeliveryRadiusKm} km)" else ""}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = WhiteTextMuted
+                                )
+                            }
                             
                             // If neither is available, show a message
                             if (!pickupAvailable && !deliveryAvailable) {
@@ -570,6 +613,33 @@ fun CartScreen(
                     }
                 }
                 
+                if (deliveryFeeNeedsLocation) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = ErrorRed.copy(alpha = 0.15f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = ErrorRed,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Set your location to calculate delivery fee.",
+                                    color = WhiteText
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // ==================== Payment Method Section ====================
                 item {
                     Card(
@@ -663,6 +733,25 @@ fun CartScreen(
                                 }
                             }
 
+                            if (deliveryMethod == "delivery") {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Delivery${if (freeDeliveryRadiusKm > 0) " (free within ${freeDeliveryRadiusKm} km)" else ""}",
+                                        color = WhiteTextMuted
+                                    )
+                                    val deliveryLabel = when {
+                                        deliveryFeeNeedsLocation -> "—"
+                                        deliveryFeeAmount <= 0.0 -> "Free"
+                                        else -> "₹${String.format("%.2f", deliveryFeeAmount)}"
+                                    }
+                                    Text(deliveryLabel, color = WhiteText)
+                                }
+                            }
+
                             if (PlatformConfig.PLATFORM_FEES_ENABLED &&
                                 PlatformConfig.PLATFORM_FEE_BREAKDOWN_ENABLED) {
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -721,7 +810,7 @@ fun CartScreen(
                                 }
                             )
                         },
-                        enabled = !isPlacingOrder,
+                        enabled = !isPlacingOrder && !deliveryFeeNeedsLocation,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),

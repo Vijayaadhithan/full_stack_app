@@ -29,6 +29,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.doorstep.tn.auth.ui.AuthViewModel
+import com.doorstep.tn.common.util.haversineDistanceKm
+import com.doorstep.tn.common.util.parseGeoPoint
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.customer.data.model.Product
 import com.doorstep.tn.customer.data.model.Shop
@@ -42,6 +45,7 @@ import com.doorstep.tn.customer.ui.CustomerViewModel
 fun ShopDetailScreen(
     shopId: Int,
     viewModel: CustomerViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToProduct: (shopId: Int, productId: Int) -> Unit,
     onNavigateToCart: () -> Unit,
@@ -50,6 +54,7 @@ fun ShopDetailScreen(
     val shop by viewModel.selectedShop.collectAsState()
     val products by viewModel.shopProducts.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val user by authViewModel.user.collectAsState()
     val context = LocalContext.current
     
     // Search and Filter State
@@ -114,6 +119,24 @@ fun ShopDetailScreen(
             }
         } else if (shop != null) {
             val s = shop!!
+            val freeDeliveryRadiusKm = s.shopProfile?.freeDeliveryRadiusKm ?: 0.0
+            val deliveryFeeRate = s.shopProfile?.deliveryFee ?: 0.0
+            val customerPoint = parseGeoPoint(user?.latitude, user?.longitude)
+            val shopPoint = parseGeoPoint(s.latitude, s.longitude)
+            val deliveryDistanceKm = if (customerPoint != null && shopPoint != null) {
+                haversineDistanceKm(
+                    customerPoint.latitude,
+                    customerPoint.longitude,
+                    shopPoint.latitude,
+                    shopPoint.longitude
+                )
+            } else {
+                null
+            }
+            val withinFreeRadius =
+                deliveryDistanceKm != null && deliveryDistanceKm <= freeDeliveryRadiusKm
+            val showDeliveryInfo =
+                s.deliveryAvailable || freeDeliveryRadiusKm > 0 || deliveryFeeRate > 0
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -325,6 +348,60 @@ fun ShopDetailScreen(
                     }
                 }
                 
+                if (showDeliveryInfo) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateCard)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.LocalShipping,
+                                    contentDescription = null,
+                                    tint = OrangePrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Delivery information",
+                                    color = WhiteText,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Free delivery radius: ${freeDeliveryRadiusKm} km",
+                                color = WhiteTextMuted,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "Delivery fee beyond radius: ${
+                                    if (deliveryFeeRate > 0) "₹${String.format("%.2f", deliveryFeeRate)}" else "Free"
+                                }",
+                                color = WhiteTextMuted,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            if (deliveryDistanceKm != null) {
+                                Text(
+                                    text = "Your distance: ${
+                                        String.format("%.1f", deliveryDistanceKm)
+                                    } km — ${
+                                        if (withinFreeRadius) "Free delivery for your location"
+                                        else if (deliveryFeeRate > 0) "Delivery fee applies"
+                                        else "Delivery available"
+                                    }",
+                                    color = WhiteTextMuted,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
                 // Products Header
                 Text(
                     text = "Products",

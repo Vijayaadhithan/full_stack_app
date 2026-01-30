@@ -1010,6 +1010,33 @@ private fun OrderDetailContent(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
+
+                    if (order.deliveryMethod == "delivery") {
+                        val deliveryFeeValue = order.deliveryFee?.toDoubleOrNull() ?: 0.0
+                        val deliveryFeeLabel = if (deliveryFeeValue <= 0.0) {
+                            "Free"
+                        } else {
+                            "₹${String.format("%.2f", deliveryFeeValue)}"
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Delivery fee", color = WhiteTextMuted)
+                            Text(deliveryFeeLabel, color = WhiteText)
+                        }
+                        order.deliveryDistanceKm?.let { distanceKm ->
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Delivery distance", color = WhiteTextMuted)
+                                Text("${String.format("%.1f", distanceKm)} km", color = WhiteText)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                     
                     HorizontalDivider(color = GlassWhite)
                     Spacer(modifier = Modifier.height(8.dp))

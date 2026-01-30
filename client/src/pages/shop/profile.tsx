@@ -58,6 +58,14 @@ const daysOfWeek = [
   "Sunday",
 ] as const;
 
+const toOptionalNumber = (value: unknown): number | undefined => {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return undefined;
+  }
+  return numericValue;
+};
+
 const shopProfileSchema = z.object({
   name: z.string().min(1, "Owner name is required"),
   shopName: z.string().min(1, "Shop name is required"),
@@ -69,6 +77,8 @@ const shopProfileSchema = z.object({
   upiId: z.string().optional(),
   pickupAvailable: z.boolean().optional(),
   deliveryAvailable: z.boolean().optional(),
+  freeDeliveryRadiusKm: z.number().min(0).max(100).optional(),
+  deliveryFee: z.number().min(0).optional(),
   returnsEnabled: z.boolean().optional(),
   catalogModeEnabled: z.boolean().optional(),
   openOrderMode: z.boolean().optional(),
@@ -120,6 +130,14 @@ export default function ShopProfile() {
     upiId: user?.upiId || "",
     pickupAvailable: user?.pickupAvailable ?? true,
     deliveryAvailable: user?.deliveryAvailable ?? false,
+    freeDeliveryRadiusKm:
+      toOptionalNumber(shop?.freeDeliveryRadiusKm) ??
+      toOptionalNumber(user?.shopProfile?.freeDeliveryRadiusKm) ??
+      undefined,
+    deliveryFee:
+      toOptionalNumber(shop?.deliveryFee) ??
+      toOptionalNumber(user?.shopProfile?.deliveryFee) ??
+      undefined,
     returnsEnabled: user?.returnsEnabled ?? true,
     catalogModeEnabled:
       shop?.catalogModeEnabled ??
@@ -157,6 +175,7 @@ export default function ShopProfile() {
     defaultValues: getFormDefaults(currentShop),
   });
   const upiIdValue = form.watch("upiId") || "";
+  const deliveryEnabled = form.watch("deliveryAvailable") ?? false;
   const upiSuggestions = useMemo(
     () => getUpiSuggestions(upiIdValue),
     [upiIdValue],
@@ -656,6 +675,63 @@ export default function ShopProfile() {
                         </FormItem>
                       )}
                     />
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="freeDeliveryRadiusKm"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Free delivery radius (km)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                step="0.1"
+                                min="0"
+                                value={field.value ?? ""}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  field.onChange(value === "" ? undefined : Number(value));
+                                }}
+                                disabled={!editMode || !deliveryEnabled}
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Orders within this distance get free delivery.
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="deliveryFee"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Delivery fee beyond free radius (₹)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                step="0.5"
+                                min="0"
+                                value={field.value ?? ""}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  field.onChange(value === "" ? undefined : Number(value));
+                                }}
+                                disabled={!editMode || !deliveryEnabled}
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Applied when delivery is outside the free radius.
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                     <FormField
                       control={form.control}
                       name="returnsEnabled"

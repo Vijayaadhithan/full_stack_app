@@ -3,7 +3,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Product, Promotion, PaymentMethodType } from "@shared/schema";
+import { Product, Promotion, PaymentMethodType, ShopProfile } from "@shared/schema";
 import { featureFlags, platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -28,6 +28,8 @@ import {
 import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { getVerificationError, parseApiError } from "@/lib/api-error";
+import { useAuth } from "@/hooks/use-auth";
+import { computeDistanceKm, toCoordinates } from "@/lib/geo";
 
 const container = {
   hidden: { opacity: 0 },
@@ -52,6 +54,9 @@ type ShopInfo = {
   catalogModeEnabled?: boolean;
   openOrderMode?: boolean;
   allowPayLater?: boolean;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  shopProfile?: ShopProfile | null;
   payLaterEligibilityForCustomer?: {
     eligible: boolean;
     isKnownCustomer: boolean;
@@ -61,6 +66,7 @@ type ShopInfo = {
 
 export default function Cart() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [, navigate] = useLocation();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(
@@ -250,8 +256,48 @@ export default function Cart() {
 
   const platformFee = featureFlags.platformFeesEnabled ? platformFees.productOrder : 0;
 
+  const toNonNegativeNumber = (value: unknown) => {
+    const numericValue = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : 0;
+  };
+
+  const freeDeliveryRadiusKm = toNonNegativeNumber(
+    shopInfo?.shopProfile?.freeDeliveryRadiusKm ?? 0,
+  );
+  const deliveryFeeRate = toNonNegativeNumber(
+    shopInfo?.shopProfile?.deliveryFee ?? 0,
+  );
+  const customerCoords = toCoordinates(
+    user?.latitude ?? null,
+    user?.longitude ?? null,
+  );
+  const shopCoords = toCoordinates(
+    shopInfo?.latitude ?? null,
+    shopInfo?.longitude ?? null,
+  );
+  const isDelivery = deliveryMethod === "delivery";
+  const missingCustomerLocation = isDelivery && !customerCoords;
+  const missingShopLocation = isDelivery && !!shopInfo && !shopCoords;
+  const deliveryDistanceKm = isDelivery
+    ? computeDistanceKm(customerCoords, shopCoords)
+    : null;
+  const deliveryFeeReady = isDelivery && deliveryDistanceKm != null;
+  const withinFreeRadius =
+    deliveryFeeReady && deliveryDistanceKm <= freeDeliveryRadiusKm;
+  const deliveryFeeAmount =
+    isDelivery && deliveryFeeReady
+      ? withinFreeRadius
+        ? 0
+        : deliveryFeeRate
+      : 0;
+  const deliveryFeeNeedsLocation =
+    isDelivery &&
+    (freeDeliveryRadiusKm > 0 || deliveryFeeRate > 0) &&
+    !deliveryFeeReady;
+
   // Calculate the final total after applying promotion and adding platform fee (if enabled)
-  const totalAmount = subtotal - discountAmount + platformFee;
+  const totalAmount =
+    subtotal - discountAmount + platformFee + deliveryFeeAmount;
 
   // Handle promotion selection
   const handlePromotionSelect = async (promotion: Promotion | null) => {
@@ -640,8 +686,44 @@ export default function Cart() {
                       pickupAvailable={shopInfo.pickupAvailable}
                       deliveryAvailable={shopInfo.deliveryAvailable}
                     />
+                    {deliveryMethod === "delivery" && deliveryDistanceKm != null && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Distance from shop: {deliveryDistanceKm.toFixed(1)} km
+                        {freeDeliveryRadiusKm > 0
+                          ? ` (free within ${freeDeliveryRadiusKm} km)`
+                          : ""}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
+              )}
+
+              {deliveryFeeNeedsLocation && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm flex gap-3">
+                  <Info className="h-4 w-4 text-amber-600 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-medium text-amber-900">
+                      Location required for delivery fee
+                    </p>
+                    <p className="text-amber-800">
+                      {missingCustomerLocation
+                        ? "Set your location in profile to calculate delivery fee."
+                        : missingShopLocation
+                          ? "This shop has not set its delivery location yet."
+                          : "Delivery fee cannot be calculated yet."}
+                    </p>
+                    {missingCustomerLocation && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate("/customer/profile")}
+                      >
+                        Update my location
+                      </Button>
+                    )}
+                  </div>
+                </div>
               )}
 
               {openOrderWarning && (
@@ -707,6 +789,24 @@ export default function Cart() {
                     </div>
                   )}
 
+                  {deliveryMethod === "delivery" && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>
+                        Delivery
+                        {freeDeliveryRadiusKm > 0
+                          ? ` (free within ${freeDeliveryRadiusKm} km)`
+                          : ""}
+                      </span>
+                      <span>
+                        {deliveryFeeNeedsLocation
+                          ? "—"
+                          : deliveryFeeAmount === 0
+                            ? "Free"
+                            : `₹${deliveryFeeAmount.toFixed(2)}`}
+                      </span>
+                    </div>
+                  )}
+
                   {featureFlags.platformFeesEnabled &&
                     featureFlags.platformFeeBreakdownEnabled ? (
                     <div className="flex justify-between text-muted-foreground">
@@ -748,6 +848,7 @@ export default function Cart() {
                     disabled={
                       isCheckingOut ||
                       createOrderMutation.isPending ||
+                      deliveryFeeNeedsLocation ||
                       !cartItems ||
                       cartItems.length === 0
                     }

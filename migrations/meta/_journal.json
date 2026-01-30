@@ -127,6 +127,13 @@
       "when": 1768492540029,
       "tag": "0017_cute_tyrannus",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1769788964571,
+      "tag": "0018_perfect_maginty",
+      "breakpoints": true
     }
   ]
 }

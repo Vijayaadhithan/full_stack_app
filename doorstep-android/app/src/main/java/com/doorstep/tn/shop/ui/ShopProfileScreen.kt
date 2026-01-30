@@ -90,6 +90,8 @@ fun ShopProfileScreen(
     var catalogModeEnabled by remember { mutableStateOf(false) }
     var openOrderMode by remember { mutableStateOf(false) }
     var allowPayLater by remember { mutableStateOf(false) }
+    var freeDeliveryRadiusKm by remember { mutableStateOf("") }
+    var deliveryFee by remember { mutableStateOf("") }
 
     var shippingPolicy by remember { mutableStateOf("") }
     var returnPolicy by remember { mutableStateOf("") }
@@ -211,6 +213,8 @@ fun ShopProfileScreen(
             catalogModeEnabled = shopProfile?.catalogModeEnabled ?: false
             openOrderMode = shopProfile?.openOrderMode ?: (shopProfile?.catalogModeEnabled ?: false)
             allowPayLater = shopProfile?.allowPayLater ?: false
+            freeDeliveryRadiusKm = formatOptionalDecimal(shopProfile?.freeDeliveryRadiusKm)
+            deliveryFee = formatOptionalDecimal(shopProfile?.deliveryFee)
 
             shippingPolicy = shopProfile?.shippingPolicy ?: ""
             returnPolicy = shopProfile?.returnPolicy ?: ""
@@ -260,6 +264,8 @@ fun ShopProfileScreen(
             workingHours = workingHours,
             shippingPolicy = shippingPolicy.trim().ifBlank { null },
             returnPolicy = returnPolicy.trim().ifBlank { null },
+            freeDeliveryRadiusKm = freeDeliveryRadiusKm.trim().toDoubleOrNull(),
+            deliveryFee = deliveryFee.trim().toDoubleOrNull(),
             catalogModeEnabled = catalogModeEnabled,
             openOrderMode = openOrderMode,
             allowPayLater = allowPayLater,
@@ -545,6 +551,24 @@ fun ShopProfileScreen(
                         checked = deliveryAvailable,
                         onCheckedChange = { deliveryAvailable = it },
                         enabled = isEditing
+                    )
+                    ProfileTextField(
+                        label = "Free Delivery Radius (km)",
+                        value = freeDeliveryRadiusKm,
+                        onValueChange = {
+                            freeDeliveryRadiusKm = it.filter { ch -> ch.isDigit() || ch == '.' }
+                        },
+                        enabled = isEditing && deliveryAvailable,
+                        keyboardType = KeyboardType.Decimal
+                    )
+                    ProfileTextField(
+                        label = "Delivery Fee beyond radius (₹)",
+                        value = deliveryFee,
+                        onValueChange = {
+                            deliveryFee = it.filter { ch -> ch.isDigit() || ch == '.' }
+                        },
+                        enabled = isEditing && deliveryAvailable,
+                        keyboardType = KeyboardType.Decimal
                     )
                     ProfileSwitchRow(
                         label = "Returns Enabled",
@@ -1103,6 +1127,15 @@ private val daysOfWeek = listOf(
     "Saturday",
     "Sunday"
 )
+
+private fun formatOptionalDecimal(value: Double?): String {
+    if (value == null) return ""
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        String.format(Locale.US, "%.2f", value)
+    }
+}
 
 private val indiaStates = listOf(
     "Andhra Pradesh",

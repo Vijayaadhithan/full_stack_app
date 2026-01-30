@@ -190,6 +190,12 @@ function buildShopProfileFromRecord(shop: Shop): ShopProfile {
     workingHours: shop.workingHours ?? { from: "09:00", to: "18:00", days: [] },
     shippingPolicy: shop.shippingPolicy ?? undefined,
     returnPolicy: shop.returnPolicy ?? undefined,
+    freeDeliveryRadiusKm:
+      shop.freeDeliveryRadiusKm != null
+        ? Number(shop.freeDeliveryRadiusKm)
+        : undefined,
+    deliveryFee:
+      shop.deliveryFee != null ? Number(shop.deliveryFee) : undefined,
     catalogModeEnabled: shop.catalogModeEnabled ?? false,
     openOrderMode: shop.openOrderMode ?? false,
     allowPayLater: shop.allowPayLater ?? false,
@@ -2281,6 +2287,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             workingHours: shop.workingHours || { from: "09:00", to: "18:00", days: [] },
             shippingPolicy: shop.shippingPolicy || undefined,
             returnPolicy: shop.returnPolicy || undefined,
+            freeDeliveryRadiusKm:
+              shop.freeDeliveryRadiusKm != null
+                ? Number(shop.freeDeliveryRadiusKm)
+                : undefined,
+            deliveryFee:
+              shop.deliveryFee != null ? Number(shop.deliveryFee) : undefined,
             catalogModeEnabled: shop.catalogModeEnabled ?? false,
             openOrderMode: shop.openOrderMode ?? false,
             allowPayLater: shop.allowPayLater ?? false,
@@ -2373,6 +2385,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           if (shopProfileUpdate.returnPolicy !== undefined) {
             shopUpdate.returnPolicy = shopProfileUpdate.returnPolicy;
+          }
+          if (shopProfileUpdate.freeDeliveryRadiusKm !== undefined) {
+            shopUpdate.freeDeliveryRadiusKm =
+              shopProfileUpdate.freeDeliveryRadiusKm === null
+                ? null
+                : String(shopProfileUpdate.freeDeliveryRadiusKm);
+          }
+          if (shopProfileUpdate.deliveryFee !== undefined) {
+            shopUpdate.deliveryFee =
+              shopProfileUpdate.deliveryFee === null
+                ? null
+                : String(shopProfileUpdate.deliveryFee);
           }
           if (shopProfileUpdate.catalogModeEnabled !== undefined) {
             shopUpdate.catalogModeEnabled = shopProfileUpdate.catalogModeEnabled;
@@ -2610,6 +2634,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (safeUser as Record<string, unknown>).allowPayLater = shopModes.allowPayLater;
         (safeUser as Record<string, unknown>).catalogModeEnabled = shopModes.catalogModeEnabled;
         (safeUser as Record<string, unknown>).openOrderMode = shopModes.openOrderMode;
+        if (shopOwner.shopProfile) {
+          (safeUser as Record<string, unknown>).shopProfile = shopOwner.shopProfile;
+        }
+        const shopCoords = extractUserCoordinates(shopOwner);
+        (safeUser as Record<string, unknown>).latitude = shopCoords.latitude;
+        (safeUser as Record<string, unknown>).longitude = shopCoords.longitude;
+        (safeUser as Record<string, unknown>).addressStreet = shopOwner.addressStreet ?? null;
+        (safeUser as Record<string, unknown>).addressCity = shopOwner.addressCity ?? null;
+        (safeUser as Record<string, unknown>).addressState = shopOwner.addressState ?? null;
+        (safeUser as Record<string, unknown>).addressPostalCode =
+          shopOwner.addressPostalCode ?? null;
+        (safeUser as Record<string, unknown>).addressCountry =
+          shopOwner.addressCountry ?? null;
 
         const requesterId =
           typeof req.user.id === "number"
@@ -5366,7 +5403,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Unable to determine shop for this order" });
         }
 
-        const shop = await storage.getUser(shopId);
+        const shop =
+          (await fetchShopOwnerWithProfile(shopId)) ??
+          (await storage.getUser(shopId));
         if (!shop) {
           return res.status(404).json({ message: "Shop not found" });
         }
@@ -5394,6 +5433,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
           typeof value === "number" ? value : Number(value);
         const optionalToNumber = (value: string | number | undefined) =>
           value === undefined ? undefined : toNumber(value);
+        const toNonNegativeNumber = (value: unknown) => {
+          const numericValue = typeof value === "number" ? value : Number(value);
+          if (!Number.isFinite(numericValue) || numericValue < 0) {
+            return 0;
+          }
+          return numericValue;
+        };
+
+        const customer = req.user!;
+        const freeDeliveryRadiusKm = toNonNegativeNumber(
+          shop.shopProfile?.freeDeliveryRadiusKm ?? 0,
+        );
+        const baseDeliveryFee = toNonNegativeNumber(
+          shop.shopProfile?.deliveryFee ?? 0,
+        );
+        const customerCoords = extractUserCoordinates(customer);
+        const shopCoords = extractUserCoordinates(shop);
+        let deliveryDistanceKm: number | null = null;
+        let deliveryFeeAmount = 0;
+        if (deliveryMethod === "delivery") {
+          if (
+            customerCoords.latitude != null &&
+            customerCoords.longitude != null &&
+            shopCoords.latitude != null &&
+            shopCoords.longitude != null
+          ) {
+            const computedDistance = haversineDistanceKm(
+              customerCoords.latitude,
+              customerCoords.longitude,
+              shopCoords.latitude,
+              shopCoords.longitude,
+            );
+            if (Number.isFinite(computedDistance)) {
+              deliveryDistanceKm = Number(computedDistance.toFixed(2));
+              if (computedDistance > freeDeliveryRadiusKm) {
+                deliveryFeeAmount = baseDeliveryFee;
+              }
+            }
+          } else if (freeDeliveryRadiusKm > 0 || baseDeliveryFee > 0) {
+            return res.status(400).json({
+              message:
+                "Delivery location is missing. Please set your location to calculate delivery fee.",
+            });
+          }
+        }
 
         const subtotalFromRequest = optionalToNumber(subtotal);
         const subtotalValue =
@@ -5411,7 +5495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const computedTotalRaw =
-          subtotalValue - discountValue + PLATFORM_SERVICE_FEE;
+          subtotalValue - discountValue + PLATFORM_SERVICE_FEE + deliveryFeeAmount;
         if (!Number.isFinite(computedTotalRaw)) {
           return res.status(400).json({ message: "Invalid order amount" });
         }
@@ -5475,7 +5559,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        const customer = req.user!;
         if (shopId == null) {
           return res
             .status(400)
@@ -5537,6 +5620,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             deliveryMethod,
             paymentMethod,
             total: totalAsString,
+            deliveryFee: deliveryFeeAmount.toFixed(2),
+            deliveryDistanceKm:
+              deliveryDistanceKm != null
+                ? deliveryDistanceKm.toFixed(2)
+                : null,
             orderDate: new Date(),
             shippingAddress,
             billingAddress: derivedBillingAddress || "",
@@ -6286,6 +6374,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? userMap.get(order.shopId)
           : undefined;
       const afterHydrate = performance.now();
+      const deliveryFeeValue = Number(order.deliveryFee ?? 0);
+      const deliveryFee = Number.isFinite(deliveryFeeValue)
+        ? deliveryFeeValue.toFixed(2)
+        : "0.00";
+      const deliveryDistanceValue = Number(order.deliveryDistanceKm);
+      const deliveryDistanceKm = Number.isFinite(deliveryDistanceValue)
+        ? Number(deliveryDistanceValue.toFixed(2))
+        : null;
 
       const payload = orderDetailSchema.parse({
         ...order,
@@ -6303,6 +6399,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: order.notes ?? null,
         eReceiptId: order.eReceiptId ?? null,
         eReceiptUrl: order.eReceiptUrl ?? null,
+        deliveryFee,
+        deliveryDistanceKm,
         items,
         customer: customer
           ? {

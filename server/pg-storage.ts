@@ -920,6 +920,12 @@ export class PostgresStorage implements IStorage {
           workingHours: shop.workingHours || { from: "09:00", to: "18:00", days: [] },
           shippingPolicy: shop.shippingPolicy || undefined,
           returnPolicy: shop.returnPolicy || undefined,
+          freeDeliveryRadiusKm:
+            shop.freeDeliveryRadiusKm != null
+              ? Number(shop.freeDeliveryRadiusKm)
+              : undefined,
+          deliveryFee:
+            shop.deliveryFee != null ? Number(shop.deliveryFee) : undefined,
           catalogModeEnabled: shop.catalogModeEnabled ?? false,
           openOrderMode: shop.openOrderMode ?? false,
           allowPayLater: shop.allowPayLater ?? false,

@@ -445,6 +445,10 @@ export default function OrderDetails() {
   const canChoosePayment =
     order?.paymentStatus === "pending" && order?.status === "confirmed";
   const isPayLater = order?.paymentMethod === "pay_later";
+  const deliveryFeeValue = Number(order?.deliveryFee ?? 0);
+  const deliveryFeeAmount = Number.isFinite(deliveryFeeValue)
+    ? deliveryFeeValue
+    : 0;
   const payLaterEligibility = shopInfo?.payLaterEligibilityForCustomer;
   const payLaterEnabled = Boolean(shopInfo?.allowPayLater);
   const payLaterAvailable =
@@ -797,6 +801,18 @@ export default function OrderDetails() {
                       : t("not_specified")}
                 </span>
               </div>
+              {order.deliveryMethod === "delivery" && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Delivery fee
+                  </span>
+                  <span className="font-medium">
+                    {deliveryFeeAmount > 0
+                      ? `₹${deliveryFeeAmount.toFixed(2)}`
+                      : "Free"}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">
                   {t("name_label")}
