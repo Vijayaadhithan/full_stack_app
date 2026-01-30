@@ -164,7 +164,7 @@ data class ShopProduct(
 ) {
     val priceAsDouble: Double? get() = price?.toDoubleOrNull()
     val displayPrice: String get() = price?.let { "₹$it" } ?: "Price not set"
-    val isLowStock: Boolean get() = lowStockThreshold?.let { (stock ?: 0) <= it } ?: false
+    val isLowStock: Boolean get() = (stock ?: 0) <= (lowStockThreshold ?: 5)
     val safeTags: List<String> get() = tags ?: emptyList()
     val safeImages: List<String> get() = images ?: emptyList()
     val mainImage: String? get() = images?.firstOrNull()
@@ -229,7 +229,7 @@ data class ShopReview(
     @Json(name = "rating") val rating: Int,
     @Json(name = "review") val review: String? = null,
     @Json(name = "shopReply") val shopReply: String? = null,
-    @Json(name = "images") val images: List<String> = emptyList(),
+    @Json(name = "images") val images: List<String>? = null,
     @Json(name = "createdAt") val createdAt: String? = null
 ) {
     val hasReply: Boolean get() = !shopReply.isNullOrBlank()

@@ -340,7 +340,7 @@ private fun ReviewCard(
                 )
             }
 
-            if (review.images.isNotEmpty()) {
+            if (!review.images.isNullOrEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
@@ -348,7 +348,7 @@ private fun ReviewCard(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    review.images.forEach { imageUrl ->
+                    review.images?.forEach { imageUrl ->
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(imageUrl)
