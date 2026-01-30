@@ -398,6 +398,13 @@ private fun ProductCard(
             
             // Actions
             Column {
+                IconButton(onClick = onClick) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = ShopGreen
+                    )
+                }
                 IconButton(onClick = onToggleAvailability) {
                     Icon(
                         imageVector = if (product.isAvailable) Icons.Default.Visibility else Icons.Default.VisibilityOff,

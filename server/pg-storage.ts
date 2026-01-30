@@ -2738,11 +2738,11 @@ export class PostgresStorage implements IStorage {
       readDb
         .select({ value: count() })
         .from(products)
-        .where(eq(products.shopId, shopId)),
+        .where(and(eq(products.shopId, shopId), eq(products.isDeleted, false))),
       readDb
         .select({ value: count() })
         .from(products)
-        .where(and(eq(products.shopId, shopId), lt(products.stock, 10))),
+        .where(and(eq(products.shopId, shopId), lt(products.stock, 10), eq(products.isDeleted, false))),
       readDb
         .select({ value: totalRevenueSql })
         .from(orders)

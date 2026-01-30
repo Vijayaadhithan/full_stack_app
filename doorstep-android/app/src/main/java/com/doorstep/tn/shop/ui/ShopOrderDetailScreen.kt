@@ -9,6 +9,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +41,9 @@ fun ShopOrderDetailScreen(
     val successMessage by viewModel.successMessage.collectAsState()
     
     var showStatusDialog by remember { mutableStateOf(false) }
+    var quoteTotal by remember { mutableStateOf("") }
+    
+
     
     val snackbarHostState = remember { SnackbarHostState() }
     
@@ -52,6 +58,14 @@ fun ShopOrderDetailScreen(
     
     val fullOrder = remember(orders, orderId) {
         orders.find { it.id == orderId }
+    }
+
+    // Initialize quoteTotal if order has total
+    LaunchedEffect(boardOrder, fullOrder) {
+        val currentTotal = boardOrder?.total?.toString() ?: fullOrder?.total
+        if (!currentTotal.isNullOrBlank()) {
+            quoteTotal = currentTotal.replace("₹", "")
+        }
     }
     
     LaunchedEffect(orderId) {
@@ -204,6 +218,144 @@ fun ShopOrderDetailScreen(
                     }
                 }
                 
+                // ─── Actions Section ─────────────────────────────────────────
+                
+                val statusStr = boardOrder?.status ?: fullOrder?.status
+                
+                if (statusStr != null) {
+                    val status = statusStr.lowercase()
+                    val paymentMethod = fullOrder?.paymentMethod?.lowercase() 
+                    val paymentStatus = (boardOrder?.paymentStatus ?: fullOrder?.paymentStatus)?.lowercase()
+
+                    // 1. Send/Update Bill (for Pending/Awaiting Agreement)
+                    if (status == "pending" || status == "awaiting_customer_agreement") {
+                         Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = SlateCard)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = if(status == "awaiting_customer_agreement") "Update Bill" else "Send Bill",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = WhiteText,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                OutlinedTextField(
+                                    value = quoteTotal,
+                                    onValueChange = { quoteTotal = it },
+                                    label = { Text("Total Amount (₹)") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Number,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = WhiteText,
+                                        unfocusedTextColor = WhiteText,
+                                        focusedBorderColor = ShopGreen,
+                                        unfocusedBorderColor = WhiteTextMuted,
+                                        focusedLabelColor = ShopGreen,
+                                        unfocusedLabelColor = WhiteTextMuted
+                                    )
+                                )
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                Button(
+                                    onClick = { 
+                                        viewModel.quoteTextOrder(orderId, quoteTotal)
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = ShopGreen),
+                                    enabled = quoteTotal.isNotBlank() && !isLoading
+                                ) {
+                                    Text(if(status == "awaiting_customer_agreement") "Update Bill" else "Send Bill")
+                                }
+                                
+                                if (status == "awaiting_customer_agreement") {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Waiting for customer to accept the bill.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = WarningYellow
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Payment Actions (for Confirmed orders)
+                    if (status == "confirmed") {
+                         // Pay Later Approval
+                         if (paymentMethod == "pay_later" && paymentStatus == "pending") {
+                             Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = ProviderBlue.copy(alpha = 0.2f)) // Blue tint
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "Pay Later (Khata)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = ProviderBlue,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Approve credit for this order.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteText
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(
+                                        onClick = { viewModel.approvePayLater(orderId) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = ProviderBlue),
+                                        enabled = !isLoading
+                                    ) {
+                                        Text("Approve Credit")
+                                    }
+                                }
+                            }
+                         }
+                         
+                         // Confirm Payment
+                         if (paymentStatus == "verifying" || (paymentMethod == "cash" && paymentStatus == "pending")) {
+                              Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = WarningYellow.copy(alpha = 0.2f)) // Yellow tint
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "Payment Action",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = WarningYellow,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = if (paymentMethod == "cash") "Confirm cash receipt." else "Verify payment.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteText
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(
+                                        onClick = { viewModel.confirmPayment(orderId) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = WarningYellow),
+                                         enabled = !isLoading
+                                    ) {
+                                        Text("Confirm Payment", color = SlateDarker)
+                                    }
+                                }
+                            }
+                         }
+                    }
+                }
+
                 // Customer Info
                 val customerName = boardOrder?.customerName ?: fullOrder?.customerName ?: "Unknown"
                 Card(
