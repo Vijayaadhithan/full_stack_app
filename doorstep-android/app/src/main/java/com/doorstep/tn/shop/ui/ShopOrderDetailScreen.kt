@@ -225,7 +225,8 @@ fun ShopOrderDetailScreen(
                 if (statusStr != null) {
                     val status = statusStr.lowercase()
                     val paymentMethod = fullOrder?.paymentMethod?.lowercase() 
-                    val paymentStatus = (boardOrder?.paymentStatus ?: fullOrder?.paymentStatus)?.lowercase()
+                    val rawPaymentStatus =
+                        (fullOrder?.paymentStatus ?: boardOrder?.paymentStatus)?.lowercase()
 
                     // 1. Send/Update Bill (for Pending/Awaiting Agreement)
                     if (status == "pending" || status == "awaiting_customer_agreement") {
@@ -291,7 +292,7 @@ fun ShopOrderDetailScreen(
                     // 2. Payment Actions (for Confirmed orders)
                     if (status == "confirmed") {
                          // Pay Later Approval
-                         if (paymentMethod == "pay_later" && paymentStatus == "pending") {
+                         if (paymentMethod == "pay_later" && rawPaymentStatus == "pending") {
                              Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
@@ -323,7 +324,9 @@ fun ShopOrderDetailScreen(
                          }
                          
                          // Confirm Payment
-                         if (paymentStatus == "verifying" || (paymentMethod == "cash" && paymentStatus == "pending")) {
+                         if (rawPaymentStatus == "verifying" ||
+                             (paymentMethod == "cash" && rawPaymentStatus == "pending")
+                         ) {
                               Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
@@ -547,7 +550,10 @@ fun ShopOrderDetailScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         // Payment Status
-                        val paymentStatus = boardOrder?.paymentStatus ?: fullOrder?.paymentStatus ?: "pending"
+                        val paymentStatus =
+                            fullOrder?.displayPaymentStatus
+                                ?: boardOrder?.paymentStatus
+                                ?: "pending"
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween

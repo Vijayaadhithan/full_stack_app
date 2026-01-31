@@ -77,6 +77,17 @@ data class ShopOrder(
     val totalValue: Double get() = total?.toDoubleOrNull() ?: 0.0
     val displayTotal: String get() = "₹${String.format("%.2f", totalValue)}"
     val customerName: String get() = customer?.name ?: "Unknown Customer"
+    val displayPaymentStatus: String?
+        get() {
+            val normalized = paymentStatus?.lowercase()
+            if ((normalized == null || normalized == "pending") &&
+                paymentMethod?.lowercase() == "upi" &&
+                status.lowercase() == "delivered"
+            ) {
+                return "paid"
+            }
+            return normalized
+        }
 }
 
 @JsonClass(generateAdapter = true)
@@ -126,6 +137,7 @@ data class ActiveBoardOrder(
 ) {
     val customerName: String get() = _customerName ?: "Unknown Customer"
     val displayTotal: String get() = "₹${String.format("%.2f", total)}"
+    val displayPaymentStatus: String? get() = paymentStatus
 }
 
 @JsonClass(generateAdapter = true)

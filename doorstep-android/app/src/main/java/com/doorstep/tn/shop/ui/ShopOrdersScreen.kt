@@ -352,8 +352,8 @@ private fun BoardOrderCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (order.paymentStatus != null) {
-                PaymentStatusChip(status = order.paymentStatus)
+            order.displayPaymentStatus?.let { status ->
+                PaymentStatusChip(status = status)
             }
         }
     }
@@ -372,13 +372,19 @@ private fun OrderListView(
     onApprovePayLater: (Int) -> Unit,
     onOpenDetails: (Int) -> Unit
 ) {
+    val filteredOrders = if (statusFilter == "all") {
+        orders
+    } else {
+        orders.filter { it.status == statusFilter }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         StatusFilterRow(
             selected = statusFilter,
             onSelected = onStatusFilterChange
         )
 
-        if (orders.isEmpty()) {
+        if (filteredOrders.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("No orders found", color = WhiteTextMuted)
             }
@@ -388,7 +394,7 @@ private fun OrderListView(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(orders) { order ->
+                items(filteredOrders) { order ->
                     OrderListCard(
                         order = order,
                         quoteValue = quoteTotals[order.id] ?: "",
@@ -492,8 +498,8 @@ private fun OrderListCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(order.displayTotal, color = ShopGreen, fontWeight = FontWeight.Bold)
-                if (order.paymentStatus != null) {
-                    PaymentStatusChip(status = order.paymentStatus)
+                order.displayPaymentStatus?.let { status ->
+                    PaymentStatusChip(status = status)
                 }
             }
 

@@ -84,6 +84,10 @@ class ShopViewModel @Inject constructor(
     
     private val _successMessage = MutableStateFlow<String?>(null)
     val successMessage: StateFlow<String?> = _successMessage.asStateFlow()
+
+    private val activeNewStatuses = setOf("new", "pending", "awaiting_customer_agreement")
+    private val activePackingStatuses = setOf("confirmed", "processing", "packing", "packed")
+    private val activeReadyStatuses = setOf("ready")
     
     // Store shop ID for review calls
     private var shopId: Int? = null
@@ -162,6 +166,7 @@ class ShopViewModel @Inject constructor(
             _isLoading.value = true
             when (val result = repository.updateOrderStatus(orderId, status, comments, trackingInfo)) {
                 is Result.Success -> {
+                    applyOrderUpdate(result.data)
                     _successMessage.value = "Order status updated"
                     loadActiveOrdersBoard() // Refresh
                     onSuccess()
@@ -170,6 +175,87 @@ class ShopViewModel @Inject constructor(
             }
             _isLoading.value = false
         }
+    }
+
+    private fun applyOrderUpdate(updatedOrder: ShopOrder) {
+        _orders.value = updateOrdersList(_orders.value, updatedOrder)
+        _activeBoard.value = updateActiveBoardOrder(_activeBoard.value, updatedOrder)
+    }
+
+    private fun updateOrdersList(
+        current: List<ShopOrder>,
+        updatedOrder: ShopOrder
+    ): List<ShopOrder> {
+        val index = current.indexOfFirst { it.id == updatedOrder.id }
+        if (index == -1) {
+            return current + updatedOrder
+        }
+        return current.toMutableList().apply { this[index] = updatedOrder }
+    }
+
+    private fun updateActiveBoardOrder(
+        board: ActiveBoardResponse?,
+        updatedOrder: ShopOrder
+    ): ActiveBoardResponse? {
+        if (board == null) return board
+
+        val cleanedNew = board.newOrders.filterNot { it.id == updatedOrder.id }
+        val cleanedPacking = board.packingOrders.filterNot { it.id == updatedOrder.id }
+        val cleanedReady = board.readyOrders.filterNot { it.id == updatedOrder.id }
+
+        val normalizedStatus = updatedOrder.status.lowercase()
+        val targetColumn = when {
+            activeNewStatuses.contains(normalizedStatus) -> "new"
+            activePackingStatuses.contains(normalizedStatus) -> "packing"
+            activeReadyStatuses.contains(normalizedStatus) -> "ready"
+            else -> null
+        }
+
+        val boardOrder = updatedOrder.toActiveBoardOrder()
+
+        return when (targetColumn) {
+            "new" -> ActiveBoardResponse(
+                new = cleanedNew + boardOrder,
+                packing = cleanedPacking,
+                ready = cleanedReady
+            )
+            "packing" -> ActiveBoardResponse(
+                new = cleanedNew,
+                packing = cleanedPacking + boardOrder,
+                ready = cleanedReady
+            )
+            "ready" -> ActiveBoardResponse(
+                new = cleanedNew,
+                packing = cleanedPacking,
+                ready = cleanedReady + boardOrder
+            )
+            else -> ActiveBoardResponse(
+                new = cleanedNew,
+                packing = cleanedPacking,
+                ready = cleanedReady
+            )
+        }
+    }
+
+    private fun ShopOrder.toActiveBoardOrder(): ActiveBoardOrder {
+        val totalValue = total?.toDoubleOrNull() ?: 0.0
+        return ActiveBoardOrder(
+            id = id,
+            status = status,
+            total = totalValue,
+            paymentStatus = paymentStatus,
+            deliveryMethod = deliveryMethod,
+            orderDate = orderDate,
+            _customerName = customerName,
+            items = items.map {
+                ActiveBoardOrderItem(
+                    id = it.id,
+                    productId = it.productId,
+                    name = it.name,
+                    quantity = it.quantity
+                )
+            }
+        )
     }
 
     fun confirmPayment(orderId: Int, onSuccess: () -> Unit = {}) {
