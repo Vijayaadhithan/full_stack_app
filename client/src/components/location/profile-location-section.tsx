@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import MapLink from "@/components/location/MapLink";
 import { useLanguage } from "@/contexts/language-context";
 import { useAppMode } from "@/contexts/UserContext";
+import { formatGeolocationError, getCurrentPositionWithFallback } from "@/lib/permissions";
 
 type ProfileLocationSectionProps = {
   user: Pick<User, "latitude" | "longitude" | "role"> | null;
@@ -115,28 +116,31 @@ export function ProfileLocationSection({
       return;
     }
     setIsCapturingDeviceLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
+    getCurrentPositionWithFallback()
+      .then(({ position, error }) => {
         setIsCapturingDeviceLocation(false);
+        if (!position) {
+          toast({
+            title: t("location_fetch_failed_title"),
+            description: formatGeolocationError(error),
+            variant: "destructive",
+          });
+          return;
+        }
         setLocation({
           latitude: Number(position.coords.latitude.toFixed(7)),
           longitude: Number(position.coords.longitude.toFixed(7)),
         });
-      },
-      (error) => {
+      })
+      .catch((error) => {
         setIsCapturingDeviceLocation(false);
         toast({
           title: t("location_fetch_failed_title"),
-          description: error.message,
+          description:
+            error instanceof Error ? error.message : t("location_fetch_failed_title"),
           variant: "destructive",
         });
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 30000,
-        maximumAge: 60000,
-      },
-    );
+      });
   };
 
   const handleSave = () => {

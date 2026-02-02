@@ -1,6 +1,7 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatGeolocationError, getCurrentPositionWithFallback } from "@/lib/permissions";
 
 export type Coordinates = {
   latitude: number;
@@ -180,9 +181,19 @@ export function useLocationFilter(
       return;
     }
     setIsRequestingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
+    getCurrentPositionWithFallback()
+      .then(({ position, error }) => {
         setIsRequestingLocation(false);
+        if (!position) {
+          const message = formatGeolocationError(error);
+          setLocationError(message);
+          toast({
+            title: "Unable to fetch location",
+            description: message,
+            variant: "destructive",
+          });
+          return;
+        }
         const coords = {
           latitude: Number(position.coords.latitude.toFixed(7)),
           longitude: Number(position.coords.longitude.toFixed(7)),
@@ -190,22 +201,18 @@ export function useLocationFilter(
         setLocation(coords);
         setSource("device");
         setLocationError(null);
-      },
-      (error) => {
+      })
+      .catch((error) => {
         setIsRequestingLocation(false);
-        setLocationError(error.message);
+        const message =
+          error instanceof Error ? error.message : "Unable to fetch location";
+        setLocationError(message);
         toast({
           title: "Unable to fetch location",
-          description: error.message,
+          description: message,
           variant: "destructive",
         });
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 30000,
-        maximumAge: 60000,
-      },
-    );
+      });
   }, [toast]);
 
   const handleManualSubmit = useCallback(() => {

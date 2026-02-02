@@ -171,6 +171,7 @@ data class Order(
     @Json(name = "status") val status: String,
     @Json(name = "total") val total: String,
     @Json(name = "subtotal") val subtotal: String? = null,
+    @Json(name = "discount") val discount: String? = null,
     @Json(name = "orderDate") val orderDate: String? = null,
     @Json(name = "shippingAddress") val shippingAddress: String? = null,
     @Json(name = "paymentMethod") val paymentMethod: String? = null,

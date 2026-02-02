@@ -1964,7 +1964,11 @@ export class PostgresStorage implements IStorage {
       .where(eq(products.id, id))
       .returning();
     if (!result[0]) throw new Error("Product not found");
-    return result[0];
+    const updated = result[0];
+    if (updated.shopId != null) {
+      await invalidateCache(`dashboard_stats:${updated.shopId}`);
+    }
+    return updated;
   }
 
   async getLowStockProducts(options?: {
@@ -2045,6 +2049,18 @@ export class PostgresStorage implements IStorage {
         }
       }
     });
+
+    const shopIds = new Set<number>();
+    for (const product of updated) {
+      if (product.shopId != null) {
+        shopIds.add(product.shopId);
+      }
+    }
+    await Promise.all(
+      Array.from(shopIds).map((shopId) =>
+        invalidateCache(`dashboard_stats:${shopId}`),
+      ),
+    );
 
     return updated;
   }
@@ -2716,6 +2732,7 @@ export class PostgresStorage implements IStorage {
     const itemRevenueSql = sql<number>`coalesce(sum(${orderItems.total}::double precision), 0)`;
     const itemQuantitySql = sql<number>`coalesce(sum(${orderItems.quantity}), 0)`;
     const customerSpendSql = sql<number>`coalesce(sum(${orders.total}::double precision), 0)`;
+    const fallbackThreshold = 5;
 
     const [
       pendingResult,
@@ -2748,7 +2765,14 @@ export class PostgresStorage implements IStorage {
       readDb
         .select({ value: count() })
         .from(products)
-        .where(and(eq(products.shopId, shopId), lt(products.stock, 10), eq(products.isDeleted, false))),
+        .where(
+          and(
+            eq(products.shopId, shopId),
+            eq(products.isDeleted, false),
+            isNotNull(products.stock),
+            sql`${products.stock} <= COALESCE(${products.lowStockThreshold}, ${fallbackThreshold})`,
+          ),
+        ),
       readDb
         .select({ value: totalRevenueSql })
         .from(orders)
@@ -2912,6 +2936,9 @@ export class PostgresStorage implements IStorage {
       .update(products)
       .set({ stock: newStock })
       .where(eq(products.id, productId));
+    if (product.shopId != null) {
+      await invalidateCache(`dashboard_stats:${product.shopId}`);
+    }
   }
 
   async getOrderItemsByOrder(orderId: number): Promise<OrderItem[]> {

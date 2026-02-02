@@ -386,9 +386,15 @@ private fun OrderDetailContent(
         val price = item.price.toDoubleOrNull() ?: 0.0
         price * item.quantity
     } ?: 0.0
-    val discountTotal = order.items?.sumOf { item ->
+    val orderDiscountValue = order.discount?.toDoubleOrNull() ?: 0.0
+    val itemDiscountTotal = order.items?.sumOf { item ->
         item.discount?.toDoubleOrNull() ?: 0.0
     } ?: 0.0
+    val discountTotal = if (orderDiscountValue > 0) {
+        orderDiscountValue
+    } else {
+        itemDiscountTotal
+    }
     val mrpSavings = order.items?.sumOf { item ->
         val mrp = item.mrp?.toDoubleOrNull() ?: 0.0
         val price = item.price.toDoubleOrNull() ?: 0.0

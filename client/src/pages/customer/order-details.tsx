@@ -489,10 +489,13 @@ export default function OrderDetails() {
     (sum, item) => sum + parseAmount(item.price) * item.quantity,
     0,
   );
-  const discountTotal = lineItems.reduce(
+  const orderDiscountValue = parseAmount(order?.discount);
+  const itemDiscountTotal = lineItems.reduce(
     (sum, item) => sum + parseAmount(item.discount),
     0,
   );
+  const discountTotal =
+    orderDiscountValue > 0 ? orderDiscountValue : itemDiscountTotal;
   const mrpSavings = lineItems.reduce((sum, item) => {
     const mrp = parseAmount(item.mrp);
     const rate = parseAmount(item.price);

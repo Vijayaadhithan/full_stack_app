@@ -61,6 +61,7 @@ data class ShopOrder(
     @Json(name = "notes") val notes: String? = null,
     @Json(name = "returnRequested") val returnRequested: Boolean? = null,
     @Json(name = "total") val total: String? = null,
+    @Json(name = "discount") val discount: String? = null,
     @Json(name = "orderDate") val orderDate: String? = null,
     @Json(name = "createdAt") val createdAt: String? = null,
     @Json(name = "updatedAt") val updatedAt: String? = null,

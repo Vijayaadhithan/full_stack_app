@@ -660,6 +660,7 @@ type HydratedOrderItem = {
 
 type HydratedOrder = Order & {
   items: HydratedOrderItem[];
+  discount?: string | null;
   shop?: {
     name: string | null;
     phone: string | null;
@@ -707,10 +708,28 @@ async function hydrateOrders(
           total: String(item.total),
         };
       }) ?? [];
+    const itemsSubtotal = hydratedItems.reduce((sum, item) => {
+      const priceValue = Number(item.price);
+      const lineTotal = Number.isFinite(priceValue)
+        ? priceValue * item.quantity
+        : 0;
+      return sum + lineTotal;
+    }, 0);
+    const deliveryFeeValue = Number(order.deliveryFee ?? 0);
+    const totalValue = Number(order.total ?? 0);
+    const discountValue =
+      Number.isFinite(totalValue)
+        ? itemsSubtotal + deliveryFeeValue + PLATFORM_SERVICE_FEE - totalValue
+        : 0;
+    const discount =
+      Number.isFinite(discountValue) && discountValue > 0
+        ? discountValue.toFixed(2)
+        : null;
 
     const result: HydratedOrder = {
       ...(order as Order),
       items: hydratedItems,
+      discount,
     };
 
     if (relations) {
@@ -6394,6 +6413,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deliveryDistanceKm = Number.isFinite(deliveryDistanceValue)
         ? Number(deliveryDistanceValue.toFixed(2))
         : null;
+      const itemsSubtotal = items.reduce((sum, item) => {
+        const priceValue = Number(item.price);
+        const lineTotal = Number.isFinite(priceValue)
+          ? priceValue * item.quantity
+          : 0;
+        return sum + lineTotal;
+      }, 0);
+      const totalValue = Number(order.total ?? 0);
+      const discountValue =
+        Number.isFinite(totalValue)
+          ? itemsSubtotal + deliveryFeeValue + PLATFORM_SERVICE_FEE - totalValue
+          : 0;
+      const discount =
+        Number.isFinite(discountValue) && discountValue > 0
+          ? discountValue.toFixed(2)
+          : null;
 
       const payload = orderDetailSchema.parse({
         ...order,
@@ -6412,6 +6447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         eReceiptId: order.eReceiptId ?? null,
         eReceiptUrl: order.eReceiptUrl ?? null,
         deliveryFee,
+        discount,
         deliveryDistanceKm,
         items,
         customer: customer

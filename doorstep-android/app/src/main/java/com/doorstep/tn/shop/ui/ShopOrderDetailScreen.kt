@@ -540,8 +540,14 @@ fun ShopOrderDetailScreen(
                             val price = item.price?.toDoubleOrNull() ?: 0.0
                             price * item.quantity
                         }
-                        val discountTotal = lineItems.sumOf { item ->
+                        val orderDiscountValue = fullOrder?.discount?.toDoubleOrNull() ?: 0.0
+                        val itemDiscountTotal = lineItems.sumOf { item ->
                             item.discount?.toDoubleOrNull() ?: 0.0
+                        }
+                        val discountTotal = if (orderDiscountValue > 0) {
+                            orderDiscountValue
+                        } else {
+                            itemDiscountTotal
                         }
                         val deliveryFeeValue = fullOrder?.deliveryFee?.toDoubleOrNull() ?: 0.0
 

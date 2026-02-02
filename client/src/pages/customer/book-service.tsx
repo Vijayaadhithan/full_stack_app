@@ -15,6 +15,7 @@ import { featureFlags, platformFees } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { formatGeolocationError, getCurrentPositionWithFallback } from "@/lib/permissions";
 import { motion } from "framer-motion";
 import {
   Loader2,
@@ -636,9 +637,17 @@ export default function BookService() {
     }
 
     setIsCapturingDeviceLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
+    getCurrentPositionWithFallback()
+      .then(({ position, error }) => {
         setIsCapturingDeviceLocation(false);
+        if (!position) {
+          toast({
+            title: t("location_fetch_failed_title"),
+            description: formatGeolocationError(error),
+            variant: "destructive",
+          });
+          return;
+        }
         const accuracyMeters = Number(position.coords.accuracy);
         if (Number.isFinite(accuracyMeters)) {
           setLastGpsAccuracyMeters(accuracyMeters);
@@ -656,20 +665,16 @@ export default function BookService() {
           latitude: Number(position.coords.latitude.toFixed(7)),
           longitude: Number(position.coords.longitude.toFixed(7)),
         });
-      },
-      (error) => {
+      })
+      .catch((error) => {
         setIsCapturingDeviceLocation(false);
         toast({
           title: t("location_fetch_failed_title"),
-          description: error.message,
+          description:
+            error instanceof Error ? error.message : t("location_fetch_failed_title"),
           variant: "destructive",
         });
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15_000,
-      },
-    );
+      });
   };
 
   // Calculate average rating

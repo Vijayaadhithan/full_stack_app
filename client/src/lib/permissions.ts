@@ -56,29 +56,81 @@ export const requestLocationPermission = async (): Promise<string> => {
   });
 };
 
+type GeolocationResult = {
+  position: GeolocationPosition | null;
+  error: GeolocationPositionError | null;
+};
+
+const requestPosition = (options: PositionOptions) =>
+  new Promise<GeolocationPosition>((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+
+export const formatGeolocationError = (
+  error: GeolocationPositionError | null,
+): string => {
+  if (!error) return "Unable to fetch location.";
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      return "Location permission denied. Please allow location access.";
+    case error.POSITION_UNAVAILABLE:
+      return "Location unavailable. Try enabling GPS/Wi-Fi or moving outdoors.";
+    case error.TIMEOUT:
+      return "Location request timed out. Please try again.";
+    default:
+      return error.message || "Unable to fetch location.";
+  }
+};
+
 export const getCurrentPosition = async (): Promise<GeolocationPosition | null> => {
   if (!navigator.geolocation) {
     debugWarn("Geolocation not supported");
     return null;
   }
 
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        debugLog("Current position:", position);
-        resolve(position);
-      },
-      (error) => {
-        console.error("Error getting location:", error.message);
-        resolve(null);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000,
+  const { position } = await getCurrentPositionWithFallback();
+  return position;
+};
+
+export const getCurrentPositionWithFallback = async (): Promise<GeolocationResult> => {
+  if (!navigator.geolocation) {
+    debugWarn("Geolocation not supported");
+    return { position: null, error: null };
+  }
+
+  const highAccuracyOptions: PositionOptions = {
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maximumAge: 0,
+  };
+  const fallbackOptions: PositionOptions = {
+    enableHighAccuracy: false,
+    timeout: 20000,
+    maximumAge: 300000,
+  };
+
+  try {
+    const position = await requestPosition(highAccuracyOptions);
+    debugLog("Current position (high accuracy):", position);
+    return { position, error: null };
+  } catch (error) {
+    const geoError = error as GeolocationPositionError;
+    if (
+      geoError?.code === geoError.POSITION_UNAVAILABLE ||
+      geoError?.code === geoError.TIMEOUT
+    ) {
+      try {
+        const position = await requestPosition(fallbackOptions);
+        debugLog("Current position (fallback):", position);
+        return { position, error: null };
+      } catch (fallbackError) {
+        console.error("Error getting location (fallback):", fallbackError);
+        return { position: null, error: fallbackError as GeolocationPositionError };
       }
-    );
-  });
+    }
+    console.error("Error getting location:", geoError);
+    return { position: null, error: geoError };
+  }
 };
 
 // --- Notification Permissions ---

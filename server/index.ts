@@ -394,6 +394,12 @@ app.disable("x-powered-by");
 // Trust first proxy (needed for correct client IPs behind proxies/load balancers)
 app.set("trust proxy", 1);
 app.use(helmet(helmetConfig));
+
+// Explicitly allow geolocation on same-origin. (Helmet typings may not support permissionsPolicy.)
+app.use((_req, res, next) => {
+  res.setHeader("Permissions-Policy", "geolocation=(self)");
+  next();
+});
 app.use(express.json({ limit: "500kb" }));
 app.use(
   cors({

@@ -66,6 +66,7 @@ type OrderWithDetails = Order & {
     address?: string | null;
   } | null;
   items?: OrderLineItem[];
+  discount?: string | null;
   deliveryMethod?: "delivery" | "pickup" | null;
   shippingAddress?: string | null;
   billingAddress?: string | null;
@@ -739,10 +740,13 @@ export default function ShopOrders() {
             (sum, item) => sum + parseAmount(item.price) * item.quantity,
             0,
           );
-          const discountTotal = lineItems.reduce(
+          const orderDiscountValue = parseAmount(order.discount);
+          const itemDiscountTotal = lineItems.reduce(
             (sum, item) => sum + parseAmount(item.discount),
             0,
           );
+          const discountTotal =
+            orderDiscountValue > 0 ? orderDiscountValue : itemDiscountTotal;
           const deliveryFeeValue = parseAmount(order.deliveryFee);
 
           return (
