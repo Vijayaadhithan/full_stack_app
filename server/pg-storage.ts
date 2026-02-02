@@ -655,7 +655,7 @@ export class PostgresStorage implements IStorage {
 
     const { page: rawPage, pageSize: rawPageSize, ...criteria } = effectiveFilters;
     const page = Math.max(1, Number(rawPage ?? 1));
-    const pageSize = Math.min(100, Math.max(1, Number(rawPageSize ?? 24)));
+    const pageSize = Math.min(100, Math.max(1, Number(rawPageSize ?? 36)));
     const offset = (page - 1) * pageSize;
     const limit = pageSize + 1;
 
@@ -1504,12 +1504,22 @@ export class PostgresStorage implements IStorage {
     if (!result[0]) throw new Error("Service not found");
   }
 
-  async getServices(filters?: any): Promise<Service[]> {
+  async getServices(
+    filters?: any,
+  ): Promise<{ items: Service[]; hasMore: boolean }> {
+    const effectiveFilters = filters ?? {};
+    const { page: rawPage, pageSize: rawPageSize, ...criteria } =
+      effectiveFilters;
+    const page = Math.max(1, Number(rawPage ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(rawPageSize ?? 24)));
+    const offset = (page - 1) * pageSize;
+    const limit = pageSize + 1;
+
     // Build an array of conditions starting with the non-deleted check
     const conditions = [eq(services.isDeleted, false)];
 
-    if (filters?.excludeProviderId !== undefined) {
-      conditions.push(ne(services.providerId, filters.excludeProviderId));
+    if (criteria.excludeProviderId !== undefined) {
+      conditions.push(ne(services.providerId, criteria.excludeProviderId));
     }
     let query: any = db.primary.select().from(services);
     let joinedProviders = false;
@@ -1521,20 +1531,20 @@ export class PostgresStorage implements IStorage {
       joinedProviders = true;
     };
 
-    if (filters) {
-      if (filters.category) {
+    if (criteria) {
+      if (criteria.category) {
         conditions.push(
-          sql`LOWER(${services.category}) = LOWER(${filters.category})`,
+          sql`LOWER(${services.category}) = LOWER(${criteria.category})`,
         );
       }
-      if (filters.minPrice) {
-        conditions.push(sql`${services.price} >= ${filters.minPrice}`);
+      if (criteria.minPrice) {
+        conditions.push(sql`${services.price} >= ${criteria.minPrice}`);
       }
-      if (filters.maxPrice) {
-        conditions.push(sql`${services.price} <= ${filters.maxPrice}`);
+      if (criteria.maxPrice) {
+        conditions.push(sql`${services.price} <= ${criteria.maxPrice}`);
       }
-      if (filters.searchTerm) {
-        const normalizedTerm = String(filters.searchTerm).trim();
+      if (criteria.searchTerm) {
+        const normalizedTerm = String(criteria.searchTerm).trim();
         if (normalizedTerm.length > 0) {
           const escapedPhrase = `%${escapeLikePattern(normalizedTerm)}%`;
           const phraseMatch = sql`(${services.name} ILIKE ${escapedPhrase} OR ${services.description} ILIKE ${escapedPhrase})`;
@@ -1564,42 +1574,44 @@ export class PostgresStorage implements IStorage {
           }
         }
       }
-      if (filters.providerId) {
-        conditions.push(eq(services.providerId, filters.providerId));
+      if (criteria.providerId) {
+        conditions.push(eq(services.providerId, criteria.providerId));
       }
-      if (filters.locationCity) {
+      if (criteria.locationCity) {
         ensureProviderJoin();
-        conditions.push(eq(users.addressCity, filters.locationCity));
+        conditions.push(eq(users.addressCity, criteria.locationCity));
       }
-      if (filters.locationState) {
+      if (criteria.locationState) {
         ensureProviderJoin();
-        conditions.push(eq(users.addressState, filters.locationState));
+        conditions.push(eq(users.addressState, criteria.locationState));
       }
-      if (filters.locationPostalCode) {
+      if (criteria.locationPostalCode) {
         ensureProviderJoin();
         conditions.push(
-          eq(users.addressPostalCode, filters.locationPostalCode),
+          eq(users.addressPostalCode, criteria.locationPostalCode),
         );
       }
       // Note: availabilityDate filtering would be more complex and might require checking bookings or a serviceAvailability table.
-      if (filters.availabilityDate) {
+      if (criteria.availabilityDate) {
         conditions.push(eq(services.isAvailable, true));
       }
-      if (filters.availableNow !== undefined) {
-        const desired = Boolean(filters.availableNow);
+      if (criteria.availableNow !== undefined) {
+        const desired = Boolean(criteria.availableNow);
         conditions.push(eq(services.isAvailableNow, desired));
         if (desired) {
           conditions.push(sql`${services.isAvailable} IS NOT FALSE`);
         }
       }
-      if (filters.lat !== undefined && filters.lng !== undefined) {
+      if (criteria.lat !== undefined && criteria.lng !== undefined) {
         if (!joinedProviders) {
           query = query.leftJoin(users, eq(services.providerId, users.id));
           joinedProviders = true;
         }
-        const lat = Number(filters.lat);
-        const lng = Number(filters.lng);
-        const radiusKm = Number(filters.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM);
+        const lat = Number(criteria.lat);
+        const lng = Number(criteria.lng);
+        const radiusKm = Number(
+          criteria.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM,
+        );
         const { condition, distanceExpr } = buildHaversineCondition({
           columnLat: users.latitude,
           columnLng: users.longitude,
@@ -1616,10 +1628,14 @@ export class PostgresStorage implements IStorage {
 
     conditions.push(sql`${services.providerId} NOT IN (${exclusion})`);
     query = query.where(and(...conditions));
+    query = query.limit(limit).offset(offset);
     const rows = await query;
-    return joinedProviders
+    const normalized = joinedProviders
       ? (rows as Array<{ services: Service }>).map((row) => row.services)
       : (rows as Service[]);
+    const hasMore = normalized.length > pageSize;
+    const trimmed = normalized.slice(0, pageSize);
+    return { items: trimmed, hasMore };
   }
 
   // ─── BOOKING OPERATIONS ──────────────────────────────────────────

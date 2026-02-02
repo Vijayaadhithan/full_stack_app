@@ -27,6 +27,17 @@ data class ProductsResponse(
     @Json(name = "items") val items: List<Product> = emptyList()
 )
 
+/**
+ * Paginated services response
+ */
+@JsonClass(generateAdapter = true)
+data class ServicesResponse(
+    @Json(name = "page") val page: Int = 1,
+    @Json(name = "pageSize") val pageSize: Int = 20,
+    @Json(name = "hasMore") val hasMore: Boolean = false,
+    @Json(name = "items") val items: List<Service> = emptyList()
+)
+
 // ==================== Products ====================
 
 @JsonClass(generateAdapter = true)

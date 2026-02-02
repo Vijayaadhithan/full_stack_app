@@ -148,7 +148,9 @@ export interface IStorage {
   getServicesByCategory(category: string): Promise<Service[]>;
   updateService(id: number, service: Partial<Service>): Promise<Service>;
   deleteService(id: number): Promise<void>;
-  getServices(filters?: any): Promise<Service[]>; // Added filters parameter
+  getServices(
+    filters?: any,
+  ): Promise<{ items: Service[]; hasMore: boolean }>; // Added filters parameter
 
   // Booking operations
   createBooking(booking: InsertBooking, options?: BookingCreateOptions): Promise<Booking>;

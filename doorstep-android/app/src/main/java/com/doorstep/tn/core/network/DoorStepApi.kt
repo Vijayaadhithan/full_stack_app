@@ -14,6 +14,7 @@ import com.doorstep.tn.auth.data.model.AuthProfilesResponse
 import com.doorstep.tn.customer.data.model.Product
 import com.doorstep.tn.customer.data.model.ProductsResponse
 import com.doorstep.tn.customer.data.model.Service
+import com.doorstep.tn.customer.data.model.ServicesResponse
 import com.doorstep.tn.customer.data.model.Shop
 import com.doorstep.tn.customer.data.model.Order
 import com.doorstep.tn.customer.data.model.Booking
@@ -71,7 +72,7 @@ interface DoorStepApi {
         @Query("locationCity") locationCity: String? = null,
         @Query("locationState") locationState: String? = null,
         @Query("page") page: Int = 1,
-        @Query("pageSize") pageSize: Int = 24,
+        @Query("pageSize") pageSize: Int = 36,
         @Query("lat") latitude: Double? = null,
         @Query("lng") longitude: Double? = null,
         @Query("radius") radius: Int? = null
@@ -97,10 +98,12 @@ interface DoorStepApi {
         @Query("locationCity") locationCity: String? = null,
         @Query("locationState") locationState: String? = null,
         @Query("availableNow") availableNow: Boolean? = null,
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 24,
         @Query("lat") latitude: Double? = null,
         @Query("lng") longitude: Double? = null,
         @Query("radius") radius: Int? = null
-    ): Response<List<Service>>
+    ): Response<ServicesResponse>
     
     @GET("api/services/{id}")
     suspend fun getServiceById(@Path("id") serviceId: Int): Response<Service>

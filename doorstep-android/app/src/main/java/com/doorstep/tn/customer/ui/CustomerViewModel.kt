@@ -63,6 +63,7 @@ class CustomerViewModel @Inject constructor(
     val isLoadingMore: StateFlow<Boolean> = _isLoadingMore.asStateFlow()
 
     private val _productsPage = MutableStateFlow(1)
+    val productsPage: StateFlow<Int> = _productsPage.asStateFlow()
     
     private val _selectedProduct = MutableStateFlow<Product?>(null)
     val selectedProduct: StateFlow<Product?> = _selectedProduct.asStateFlow()
@@ -70,6 +71,16 @@ class CustomerViewModel @Inject constructor(
     // Services
     private val _services = MutableStateFlow<List<Service>>(emptyList())
     val services: StateFlow<List<Service>> = _services.asStateFlow()
+
+    private val _servicesHasMore = MutableStateFlow(true)
+    val servicesHasMore: StateFlow<Boolean> = _servicesHasMore.asStateFlow()
+
+    private val _isLoadingMoreServices = MutableStateFlow(false)
+    val isLoadingMoreServices: StateFlow<Boolean> =
+        _isLoadingMoreServices.asStateFlow()
+
+    private val _servicesPage = MutableStateFlow(1)
+    val servicesPage: StateFlow<Int> = _servicesPage.asStateFlow()
     
     private val _selectedService = MutableStateFlow<Service?>(null)
     val selectedService: StateFlow<Service?> = _selectedService.asStateFlow()
@@ -160,8 +171,23 @@ class CustomerViewModel @Inject constructor(
         val radius: Int?
     )
 
+    private data class ServicesQuery(
+        val category: String?,
+        val search: String?,
+        val minPrice: Double?,
+        val maxPrice: Double?,
+        val locationCity: String?,
+        val locationState: String?,
+        val availableNow: Boolean?,
+        val latitude: Double?,
+        val longitude: Double?,
+        val radius: Int?
+    )
+
     private var currentProductsQuery: ProductsQuery? = null
-    private val productsPageSize = 24
+    private val productsPageSize = 36
+    private var currentServicesQuery: ServicesQuery? = null
+    private val servicesPageSize = 24
     
     // Customer Reviews
     private val _customerReviews = MutableStateFlow<List<com.doorstep.tn.core.network.CustomerReview>>(emptyList())
@@ -310,6 +336,14 @@ class CustomerViewModel @Inject constructor(
         loadProductsPage(query, page = nextPage, append = true)
     }
 
+    fun goToProductsPage(page: Int) {
+        val query = currentProductsQuery ?: return
+        if (page < 1 || _isLoading.value || _isLoadingMore.value) {
+            return
+        }
+        loadProductsPage(query, page = page, append = false)
+    }
+
     private fun loadProductsPage(query: ProductsQuery, page: Int, append: Boolean) {
         viewModelScope.launch {
             if (append) {
@@ -450,30 +484,67 @@ class CustomerViewModel @Inject constructor(
         longitude: Double? = null,
         radius: Int? = null
     ) {
+        val query = ServicesQuery(
+            category = category,
+            search = search,
+            minPrice = minPrice,
+            maxPrice = maxPrice,
+            locationCity = locationCity,
+            locationState = locationState,
+            availableNow = availableNow,
+            latitude = latitude,
+            longitude = longitude,
+            radius = radius
+        )
+        currentServicesQuery = query
+        _servicesPage.value = 1
+        _servicesHasMore.value = true
+        _isLoadingMoreServices.value = false
+        loadServicesPage(query, page = 1)
+    }
+
+    fun goToServicesPage(page: Int) {
+        val query = currentServicesQuery ?: return
+        if (page < 1 || (_isLoading.value || _isLoadingMoreServices.value)) {
+            return
+        }
+        loadServicesPage(query, page = page)
+    }
+
+    private fun loadServicesPage(query: ServicesQuery, page: Int) {
         viewModelScope.launch {
+            _isLoadingMoreServices.value = page != 1
             _isLoading.value = true
             _error.value = null
-            
+
             when (
                 val result = repository.getServices(
-                    category = category,
-                    search = search,
-                    minPrice = minPrice,
-                    maxPrice = maxPrice,
-                    locationCity = locationCity,
-                    locationState = locationState,
-                    availableNow = availableNow,
-                    latitude = latitude,
-                    longitude = longitude,
-                    radius = radius
+                    category = query.category,
+                    search = query.search,
+                    minPrice = query.minPrice,
+                    maxPrice = query.maxPrice,
+                    locationCity = query.locationCity,
+                    locationState = query.locationState,
+                    availableNow = query.availableNow,
+                    latitude = query.latitude,
+                    longitude = query.longitude,
+                    radius = query.radius,
+                    page = page,
+                    pageSize = servicesPageSize
                 )
             ) {
-                is Result.Success -> _services.value = result.data
+                is Result.Success -> {
+                    val response = result.data
+                    _servicesPage.value = response.page
+                    _servicesHasMore.value = response.hasMore
+                    _services.value = response.items
+                }
                 is Result.Error -> _error.value = result.message
                 is Result.Loading -> {}
             }
-            
+
             _isLoading.value = false
+            _isLoadingMoreServices.value = false
         }
     }
     

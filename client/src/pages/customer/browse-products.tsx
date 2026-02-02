@@ -21,6 +21,14 @@ import { Link } from "wouter";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -49,6 +57,8 @@ const item = {
 export default function BrowseProducts() {
   const { toast } = useToast();
   const { t } = useLanguage();
+  const pageSize = 36;
+  const [page, setPage] = useState(1);
   const locationFilter = useLocationFilter({ storageKey: "products-radius" });
   const locationQuery = locationFilter.location
     ? {
@@ -83,6 +93,15 @@ export default function BrowseProducts() {
     attributes: createAttributeDefaults(),
   }));
   const quickCategories = productFilterConfig.categories.slice(0, 4);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    filters,
+    locationFilter.location?.latitude,
+    locationFilter.location?.longitude,
+    locationFilter.radius,
+  ]);
 
   const handleFilterChange = (
     key: keyof Omit<ProductFilters, "attributes">,
@@ -132,6 +151,7 @@ export default function BrowseProducts() {
     queryKey: [
       "/api/products",
       filters,
+      page,
       locationQuery?.lat,
       locationQuery?.lng,
       locationQuery?.radius,
@@ -160,6 +180,8 @@ export default function BrowseProducts() {
           "attributes",
           JSON.stringify(Object.fromEntries(attributeEntries)),
         );
+      params.append("page", String(page));
+      params.append("pageSize", String(pageSize));
 
       const queryString = params.toString();
       const response = await apiRequest(
@@ -308,6 +330,20 @@ export default function BrowseProducts() {
 
   // Client-side filtering is no longer needed as it's done server-side
   const filteredProducts = productsResponse?.items ?? [];
+  const showPagination = Boolean(
+    productsResponse && (productsResponse.hasMore || page > 1),
+  );
+  const pageNumbers = (() => {
+    const pages = new Set<number>();
+    if (page > 1) {
+      pages.add(page - 1);
+    }
+    pages.add(page);
+    if (productsResponse?.hasMore) {
+      pages.add(page + 1);
+    }
+    return Array.from(pages).sort((a, b) => a - b);
+  })();
 
   return (
     <DashboardLayout>
@@ -619,6 +655,58 @@ export default function BrowseProducts() {
                   String(productsResponse.pageSize),
                 )}
               </p>
+            ) : null}
+            {showPagination ? (
+              <Pagination className="mt-6">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        if (page > 1) {
+                          setPage(page - 1);
+                        }
+                      }}
+                      className={
+                        page <= 1 ? "pointer-events-none opacity-50" : undefined
+                      }
+                    />
+                  </PaginationItem>
+                  {pageNumbers.map((pageNumber) => (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        href="#"
+                        isActive={pageNumber === page}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (pageNumber !== page) {
+                            setPage(pageNumber);
+                          }
+                        }}
+                      >
+                        {pageNumber}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        if (productsResponse?.hasMore) {
+                          setPage(page + 1);
+                        }
+                      }}
+                      className={
+                        productsResponse?.hasMore
+                          ? undefined
+                          : "pointer-events-none opacity-50"
+                      }
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
             ) : null}
           </>
         )}

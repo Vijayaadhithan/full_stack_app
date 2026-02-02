@@ -59,8 +59,8 @@ fun ProductsListScreen(
 ) {
     val products by viewModel.products.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val isLoadingMore by viewModel.isLoadingMore.collectAsState()
     val productsHasMore by viewModel.productsHasMore.collectAsState()
+    val productsPage by viewModel.productsPage.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val user by authViewModel.user.collectAsState()
@@ -159,12 +159,15 @@ fun ProductsListScreen(
     )
 
     val gridState = rememberLazyGridState()
-    val shouldLoadMore by remember {
-        derivedStateOf {
-            val layoutInfo = gridState.layoutInfo
-            val totalItems = layoutInfo.totalItemsCount
-            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            totalItems > 0 && lastVisible >= totalItems - 4
+    val pageNumbers = remember(productsPage, productsHasMore) {
+        buildList {
+            if (productsPage > 1) {
+                add(productsPage - 1)
+            }
+            add(productsPage)
+            if (productsHasMore) {
+                add(productsPage + 1)
+            }
         }
     }
     
@@ -199,12 +202,6 @@ fun ProductsListScreen(
         )
     }
 
-    LaunchedEffect(shouldLoadMore, productsHasMore, isLoadingMore, isLoading) {
-        if (shouldLoadMore && productsHasMore && !isLoadingMore && !isLoading) {
-            viewModel.loadMoreProducts()
-        }
-    }
-    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -428,17 +425,13 @@ fun ProductsListScreen(
                                 }
                             )
                         }
-                        if (isLoadingMore) {
-                            item(span = { GridItemSpan(2) }) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(color = OrangePrimary)
-                                }
-                            }
+                        item(span = { GridItemSpan(2) }) {
+                            ProductsPaginationRow(
+                                currentPage = productsPage,
+                                hasMore = productsHasMore,
+                                pageNumbers = pageNumbers,
+                                onSelectPage = { viewModel.goToProductsPage(it) }
+                            )
                         }
                     }
                 }
@@ -464,6 +457,47 @@ fun ProductsListScreen(
             },
             onDismiss = { showFilters = false }
         )
+    }
+}
+
+@Composable
+private fun ProductsPaginationRow(
+    currentPage: Int,
+    hasMore: Boolean,
+    pageNumbers: List<Int>,
+    onSelectPage: (Int) -> Unit
+) {
+    if (currentPage <= 1 && !hasMore) return
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            onClick = { onSelectPage(currentPage - 1) },
+            enabled = currentPage > 1
+        ) {
+            Text("Prev")
+        }
+        pageNumbers.forEach { page ->
+            TextButton(
+                onClick = { onSelectPage(page) },
+                enabled = page != currentPage
+            ) {
+                Text(
+                    text = page.toString(),
+                    fontWeight = if (page == currentPage) FontWeight.Bold else FontWeight.Normal
+                )
+            }
+        }
+        TextButton(
+            onClick = { onSelectPage(currentPage + 1) },
+            enabled = hasMore
+        ) {
+            Text("Next")
+        }
     }
 }
 

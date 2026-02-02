@@ -1147,6 +1147,8 @@ const servicesQuerySchema = z
       .min(MIN_NEARBY_RADIUS_KM)
       .max(MAX_NEARBY_RADIUS_KM)
       .optional(),
+    page: z.coerce.number().int().positive().optional(),
+    pageSize: z.coerce.number().int().positive().max(100).optional(),
   })
   .strict()
   .refine(
@@ -3235,12 +3237,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         locationState,
         locationPostalCode,
         availabilityDate,
+        page = 1,
+        pageSize = 36,
         lat,
         lng,
         radius,
       } = parsedQuery.data;
 
-      const filters: Record<string, unknown> = {};
+      const normalizedPage = Math.max(1, Number(page));
+      const normalizedPageSize = Math.min(100, Math.max(1, Number(pageSize)));
+
+      const filters: Record<string, unknown> = {
+        page: normalizedPage,
+        pageSize: normalizedPageSize,
+      };
       if (category) filters.category = category.toLowerCase();
       if (minPrice !== undefined) filters.minPrice = minPrice;
       if (maxPrice !== undefined) filters.maxPrice = maxPrice;
@@ -3264,7 +3274,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filters.excludeProviderId = currentUserId;
       }
 
-      const services = await storage.getServices(filters);
+      const { items: services, hasMore } = await storage.getServices(filters);
       logger.info("Filtered services:", services); // Debug log
 
       const serviceIds = services.map((service) => service.id);
@@ -3342,7 +3352,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      res.json(servicesWithDetails);
+      res.json({
+        page: normalizedPage,
+        pageSize: normalizedPageSize,
+        hasMore,
+        items: servicesWithDetails,
+      });
     } catch (error) {
       logger.error("Error fetching services:", error);
       res

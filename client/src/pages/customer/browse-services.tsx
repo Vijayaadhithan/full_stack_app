@@ -22,6 +22,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -110,6 +118,8 @@ type ServiceWithProvider = Service & {
 export default function BrowseServices() {
   const { toast } = useToast();
   const locationFilter = useLocationFilter({ storageKey: "services-radius" });
+  const pageSize = 24;
+  const [page, setPage] = useState(1);
   const locationQuery = locationFilter.location
     ? {
       lat: locationFilter.location.latitude,
@@ -131,14 +141,31 @@ export default function BrowseServices() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+  useEffect(() => {
+    setPage(1);
+  }, [
+    filters,
+    locationFilter.location?.latitude,
+    locationFilter.location?.longitude,
+    locationFilter.radius,
+  ]);
+
+  type ServiceListResponse = {
+    page: number;
+    pageSize: number;
+    hasMore: boolean;
+    items: ServiceWithProvider[];
+  };
+
   const {
-    data: services,
+    data: servicesResponse,
     isLoading,
     error,
-  } = useQuery<ServiceWithProvider[]>({
+  } = useQuery<ServiceListResponse>({
     queryKey: [
       "/api/services",
       filters,
+      page,
       locationQuery?.lat,
       locationQuery?.lng,
       locationQuery?.radius,
@@ -162,6 +189,8 @@ export default function BrowseServices() {
         params.append("lng", locationQuery.lng.toString());
         params.append("radius", locationQuery.radius.toString());
       }
+      params.append("page", String(page));
+      params.append("pageSize", String(pageSize));
 
       const queryString = params.toString();
       const response = await apiRequest(
@@ -189,7 +218,21 @@ export default function BrowseServices() {
   }, [error, toast]);
 
   // Client-side filtering is no longer needed
-  const filteredServices = services;
+  const filteredServices = servicesResponse?.items ?? [];
+  const showPagination = Boolean(
+    servicesResponse && (servicesResponse.hasMore || page > 1),
+  );
+  const pageNumbers = (() => {
+    const pages = new Set<number>();
+    if (page > 1) {
+      pages.add(page - 1);
+    }
+    pages.add(page);
+    if (servicesResponse?.hasMore) {
+      pages.add(page + 1);
+    }
+    return Array.from(pages).sort((a, b) => a - b);
+  })();
 
   return (
     <DashboardLayout>
@@ -381,47 +424,101 @@ export default function BrowseServices() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredServices.map((service) => {
-              const distance = computeDistance(
-                locationFilter.location,
-                service.provider,
-              );
-              return (
-                <motion.div key={service.id} variants={item}>
-                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex flex-col gap-4">
-                        <div>
-                          <h3 className="font-semibold">{service.name}</h3>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {service.description}
-                          </p>
-                          {distance !== null ? (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {distance.toFixed(1)} km away
+          <>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredServices.map((service) => {
+                const distance = computeDistance(
+                  locationFilter.location,
+                  service.provider,
+                );
+                return (
+                  <motion.div key={service.id} variants={item}>
+                    <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                      <CardContent className="p-6">
+                        <div className="flex flex-col gap-4">
+                          <div>
+                            <h3 className="font-semibold">{service.name}</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {service.description}
                             </p>
-                          ) : null}
-                        </div>
-
-                        <div className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4" />
-                            <span>{service.duration} mins</span>
+                            {distance !== null ? (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {distance.toFixed(1)} km away
+                              </p>
+                            ) : null}
                           </div>
-                          <span className="font-semibold">₹{service.price}</span>
-                        </div>
 
-                        <Link href={`/customer/service-details/${service.id}`}>
-                          <Button className="w-full">View Details</Button>
-                        </Link>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              <span>{service.duration} mins</span>
+                            </div>
+                            <span className="font-semibold">₹{service.price}</span>
+                          </div>
+
+                          <Link href={`/customer/service-details/${service.id}`}>
+                            <Button className="w-full">View Details</Button>
+                          </Link>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </div>
+            {showPagination ? (
+              <Pagination className="mt-6">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        if (page > 1) {
+                          setPage(page - 1);
+                        }
+                      }}
+                      className={
+                        page <= 1 ? "pointer-events-none opacity-50" : undefined
+                      }
+                    />
+                  </PaginationItem>
+                  {pageNumbers.map((pageNumber) => (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        href="#"
+                        isActive={pageNumber === page}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (pageNumber !== page) {
+                            setPage(pageNumber);
+                          }
+                        }}
+                      >
+                        {pageNumber}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        if (servicesResponse?.hasMore) {
+                          setPage(page + 1);
+                        }
+                      }}
+                      className={
+                        servicesResponse?.hasMore
+                          ? undefined
+                          : "pointer-events-none opacity-50"
+                      }
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            ) : null}
+          </>
         )}
       </motion.div>
     </DashboardLayout>

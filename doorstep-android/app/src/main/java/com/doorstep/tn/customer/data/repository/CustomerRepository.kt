@@ -24,7 +24,7 @@ class CustomerRepository @Inject constructor(
 ) {
     // In-memory caches with 5-minute TTL (Layer 1 - fastest)
     private val productsCache = MemoryCache<String, ProductsResponse>(maxSize = 50)
-    private val servicesCache = MemoryCache<String, List<Service>>(maxSize = 50)
+    private val servicesCache = MemoryCache<String, ServicesResponse>(maxSize = 50)
     private val shopsCache = MemoryCache<String, List<Shop>>(maxSize = 50)
     private val productDetailCache = MemoryCache<Int, Product>(maxSize = 100)
     private val serviceDetailCache = MemoryCache<Int, Service>(maxSize = 100)
@@ -71,7 +71,7 @@ class CustomerRepository @Inject constructor(
         longitude: Double? = null,
         radius: Int? = null,
         page: Int = 1,
-        pageSize: Int = 24
+        pageSize: Int = 36
     ): Result<ProductsResponse> {
         // Generate cache key from parameters
         val cacheKey = "products_${search}_${category}_${minPrice}_${maxPrice}_${attributes}_${shopId}_${locationCity}_${locationState}_${latitude}_${longitude}_${radius}_${page}"
@@ -260,9 +260,11 @@ class CustomerRepository @Inject constructor(
         availableNow: Boolean? = null,
         latitude: Double? = null,
         longitude: Double? = null,
-        radius: Int? = null
-    ): Result<List<Service>> {
-        val cacheKey = "services_${category}_${search}_${minPrice}_${maxPrice}_${locationCity}_${locationState}_${availableNow}_${latitude}_${longitude}_${radius}"
+        radius: Int? = null,
+        page: Int = 1,
+        pageSize: Int = 24
+    ): Result<ServicesResponse> {
+        val cacheKey = "services_${category}_${search}_${minPrice}_${maxPrice}_${locationCity}_${locationState}_${availableNow}_${latitude}_${longitude}_${radius}_${page}"
         
         // Layer 1: In-memory cache
         servicesCache.get(cacheKey)?.let { return Result.Success(it) }
@@ -277,19 +279,28 @@ class CustomerRepository @Inject constructor(
                 locationCity = locationCity,
                 locationState = locationState,
                 availableNow = availableNow,
+                page = page,
+                pageSize = pageSize,
                 latitude = latitude,
                 longitude = longitude,
                 radius = radius
             )
             if (response.isSuccessful && response.body() != null) {
-                val services = response.body()!!
-                servicesCache.put(cacheKey, services)
-                cacheRepository.cacheServices(services, cacheKey)
-                Result.Success(services)
+                val body = response.body()!!
+                servicesCache.put(cacheKey, body)
+                cacheRepository.cacheServices(body.items, cacheKey)
+                Result.Success(body)
             } else {
                 val cachedServices = cacheRepository.getCachedServices().firstOrNull()
                 if (!cachedServices.isNullOrEmpty()) {
-                    Result.Success(cachedServices)
+                    Result.Success(
+                        ServicesResponse(
+                            page = page,
+                            pageSize = pageSize,
+                            hasMore = false,
+                            items = cachedServices
+                        )
+                    )
                 } else {
                     Result.Error(response.message(), response.code())
                 }
@@ -297,7 +308,14 @@ class CustomerRepository @Inject constructor(
         } catch (e: Exception) {
             val cachedServices = cacheRepository.getCachedServices().firstOrNull()
             if (!cachedServices.isNullOrEmpty()) {
-                Result.Success(cachedServices)
+                Result.Success(
+                    ServicesResponse(
+                        page = page,
+                        pageSize = pageSize,
+                        hasMore = false,
+                        items = cachedServices
+                    )
+                )
             } else {
                 Result.Error(e.message ?: "Failed to load services")
             }

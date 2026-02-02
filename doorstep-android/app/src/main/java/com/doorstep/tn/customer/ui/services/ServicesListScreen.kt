@@ -56,6 +56,8 @@ fun ServicesListScreen(
 ) {
     val services by viewModel.services.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val servicesHasMore by viewModel.servicesHasMore.collectAsState()
+    val servicesPage by viewModel.servicesPage.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val user by authViewModel.user.collectAsState()
     
@@ -130,6 +132,17 @@ fun ServicesListScreen(
     var locationCityFilter by remember { mutableStateOf("") }
     var locationStateFilter by remember { mutableStateOf("") }
     var showFilters by remember { mutableStateOf(false) }
+    val pageNumbers = remember(servicesPage, servicesHasMore) {
+        buildList {
+            if (servicesPage > 1) {
+                add(servicesPage - 1)
+            }
+            add(servicesPage)
+            if (servicesHasMore) {
+                add(servicesPage + 1)
+            }
+        }
+    }
     
     val categories = listOf(
         Triple("All Services", null, Icons.Default.Apps),
@@ -429,6 +442,14 @@ fun ServicesListScreen(
                                 onClick = { onNavigateToService(service.id) }
                             )
                         }
+                        item {
+                            ServicesPaginationRow(
+                                currentPage = servicesPage,
+                                hasMore = servicesHasMore,
+                                pageNumbers = pageNumbers,
+                                onSelectPage = { viewModel.goToServicesPage(it) }
+                            )
+                        }
                     }
                 }
             }
@@ -449,6 +470,47 @@ fun ServicesListScreen(
             },
             onDismiss = { showFilters = false }
         )
+    }
+}
+
+@Composable
+private fun ServicesPaginationRow(
+    currentPage: Int,
+    hasMore: Boolean,
+    pageNumbers: List<Int>,
+    onSelectPage: (Int) -> Unit
+) {
+    if (currentPage <= 1 && !hasMore) return
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            onClick = { onSelectPage(currentPage - 1) },
+            enabled = currentPage > 1
+        ) {
+            Text("Prev")
+        }
+        pageNumbers.forEach { page ->
+            TextButton(
+                onClick = { onSelectPage(page) },
+                enabled = page != currentPage
+            ) {
+                Text(
+                    text = page.toString(),
+                    fontWeight = if (page == currentPage) FontWeight.Bold else FontWeight.Normal
+                )
+            }
+        }
+        TextButton(
+            onClick = { onSelectPage(currentPage + 1) },
+            enabled = hasMore
+        ) {
+            Text("Next")
+        }
     }
 }
 
