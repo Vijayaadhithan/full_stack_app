@@ -145,6 +145,8 @@ const orderItemSchema = z.object({
   name: z.string(),
   quantity: z.number(),
   price: z.string(),
+  mrp: z.string().nullable().optional(),
+  discount: z.string().nullable().optional(),
   total: z.string(),
 });
 

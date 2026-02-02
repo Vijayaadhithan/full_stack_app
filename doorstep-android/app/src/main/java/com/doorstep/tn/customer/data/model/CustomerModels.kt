@@ -202,8 +202,11 @@ data class OrderShop(
 data class OrderItem(
     @Json(name = "id") val id: Int,
     @Json(name = "productId") val productId: Int? = null,
+    @Json(name = "name") val name: String? = null,
     @Json(name = "quantity") val quantity: Int,
     @Json(name = "price") val price: String,
+    @Json(name = "mrp") val mrp: String? = null,
+    @Json(name = "discount") val discount: String? = null,
     @Json(name = "total") val total: String,
     @Json(name = "product") val product: Product? = null
 )

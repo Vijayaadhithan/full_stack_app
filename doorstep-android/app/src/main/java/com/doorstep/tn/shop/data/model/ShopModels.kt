@@ -51,6 +51,7 @@ data class ShopOrder(
     @Json(name = "paymentStatus") val paymentStatus: String? = null,
     @Json(name = "paymentMethod") val paymentMethod: String? = null,
     @Json(name = "deliveryMethod") val deliveryMethod: String? = null,
+    @Json(name = "deliveryFee") val deliveryFee: String? = null,
     @Json(name = "orderType") val orderType: String? = null,
     @Json(name = "orderText") val orderText: String? = null,
     @Json(name = "shippingAddress") val shippingAddress: String? = null,
@@ -108,6 +109,8 @@ data class ShopOrderItem(
     @Json(name = "name") val name: String,
     @Json(name = "quantity") val quantity: Int = 1,
     @Json(name = "price") val price: String? = null,
+    @Json(name = "mrp") val mrp: String? = null,
+    @Json(name = "discount") val discount: String? = null,
     @Json(name = "total") val total: String? = null
 )
 

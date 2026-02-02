@@ -218,6 +218,396 @@ fun ShopOrderDetailScreen(
                     }
                 }
                 
+                // Customer Info
+                val customerName = boardOrder?.customerName ?: fullOrder?.customerName ?: "Unknown"
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = ShopGreen
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Customer",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            text = customerName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = WhiteText
+                        )
+                        
+                        fullOrder?.customer?.phone?.let { phone ->
+                            Text(
+                                text = phone,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = WhiteTextMuted
+                            )
+                        }
+                        
+                        fullOrder?.shippingAddress?.let { address ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Delivery: $address",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = WhiteTextMuted
+                            )
+                        }
+                    }
+                }
+                
+                // Order Items
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.ShoppingBag,
+                                contentDescription = null,
+                                tint = ShopGreen
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Order Items",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Item",
+                                modifier = Modifier.weight(2f),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WhiteTextMuted
+                            )
+                            Text(
+                                text = "Qty",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WhiteTextMuted,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                            )
+                            Text(
+                                text = "MRP",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WhiteTextMuted,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                            )
+                            Text(
+                                text = "Rate",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WhiteTextMuted,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                            )
+                            Text(
+                                text = "Total",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WhiteTextMuted,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Prefer fullOrder items if available (has price info)
+                        val boardItems = boardOrder?.items ?: emptyList()
+                        val fullItems = fullOrder?.items ?: emptyList()
+                        
+                        when {
+                            fullItems.isNotEmpty() -> {
+                                fullItems.forEachIndexed { index, item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = item.name,
+                                            modifier = Modifier.weight(2f),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = WhiteText
+                                        )
+                                        Text(
+                                            text = "${item.quantity}",
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteText,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        )
+                                        Text(
+                                            text = formatCurrency(item.mrp),
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteText,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        )
+                                        Text(
+                                            text = formatCurrency(item.price),
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteText,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        )
+                                        Text(
+                                            text = formatCurrency(item.total),
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = ShopGreen,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        )
+                                    }
+                                    if (index < fullItems.lastIndex) {
+                                        HorizontalDivider(color = GlassWhite)
+                                    }
+                                }
+                            }
+                            boardItems.isNotEmpty() -> {
+                                boardItems.forEachIndexed { index, item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = item.name,
+                                            modifier = Modifier.weight(2f),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = WhiteText
+                                        )
+                                        Text(
+                                            text = "${item.quantity}",
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteText,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        )
+                                        Text(
+                                            text = "--",
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteTextMuted,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        )
+                                        Text(
+                                            text = "--",
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteTextMuted,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        )
+                                        Text(
+                                            text = "--",
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = WhiteTextMuted,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        )
+                                    }
+                                    if (index < boardItems.lastIndex) {
+                                        HorizontalDivider(color = GlassWhite)
+                                    }
+                                }
+                            }
+                            else -> {
+                                val orderText = fullOrder?.orderText
+                                if (!orderText.isNullOrBlank()) {
+                                    Text(
+                                        text = "Order Notes: $orderText",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteText
+                                    )
+                                } else {
+                                    Text(
+                                        text = "No items to display",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = WhiteTextMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Payment & Total
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = SlateCard)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Payment,
+                                contentDescription = null,
+                                tint = ShopGreen
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Payment Details",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Payment Status
+                        val paymentStatus =
+                            fullOrder?.displayPaymentStatus
+                                ?: boardOrder?.paymentStatus
+                                ?: "pending"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Payment Status", color = WhiteTextMuted)
+                            PaymentStatusBadge(status = paymentStatus)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Payment Method
+                        val paymentMethod = fullOrder?.paymentMethod ?: "N/A"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Method", color = WhiteTextMuted)
+                            Text(paymentMethod.uppercase(), color = WhiteText)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        fullOrder?.paymentReference?.let { reference ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Reference", color = WhiteTextMuted)
+                                Text(reference, color = WhiteText)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        
+                        // Delivery Method
+                        val deliveryMethod = boardOrder?.deliveryMethod ?: fullOrder?.deliveryMethod ?: "N/A"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Delivery", color = WhiteTextMuted)
+                            Text(deliveryMethod.replaceFirstChar { it.uppercase() }, color = WhiteText)
+                        }
+
+                        val lineItems = fullOrder?.items ?: emptyList()
+                        val itemsSubtotal = lineItems.sumOf { item ->
+                            val price = item.price?.toDoubleOrNull() ?: 0.0
+                            price * item.quantity
+                        }
+                        val discountTotal = lineItems.sumOf { item ->
+                            item.discount?.toDoubleOrNull() ?: 0.0
+                        }
+                        val deliveryFeeValue = fullOrder?.deliveryFee?.toDoubleOrNull() ?: 0.0
+
+                        if (lineItems.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Subtotal", color = WhiteTextMuted)
+                                Text(formatCurrency(String.format("%.2f", itemsSubtotal)), color = WhiteText)
+                            }
+                        }
+
+                        if (deliveryMethod == "delivery") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Delivery fee", color = WhiteTextMuted)
+                                Text(
+                                    if (deliveryFeeValue <= 0.0) "Free" else "₹${String.format("%.2f", deliveryFeeValue)}",
+                                    color = WhiteText
+                                )
+                            }
+                        }
+
+                        if (discountTotal > 0) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Promotion", color = WhiteTextMuted)
+                                Text("-₹${String.format("%.2f", discountTotal)}", color = WhiteText)
+                            }
+                        }
+                        
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = GlassWhite
+                        )
+                        
+                        // Total
+                        val totalAmount = boardOrder?.displayTotal ?: fullOrder?.displayTotal ?: "₹0.00"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Total",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = WhiteText,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = totalAmount,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = ShopGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
                 // ─── Actions Section ─────────────────────────────────────────
                 
                 val statusStr = boardOrder?.status ?: fullOrder?.status
@@ -358,271 +748,6 @@ fun ShopOrderDetailScreen(
                          }
                     }
                 }
-
-                // Customer Info
-                val customerName = boardOrder?.customerName ?: fullOrder?.customerName ?: "Unknown"
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = SlateCard)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = ShopGreen
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Customer",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = WhiteText,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Text(
-                            text = customerName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = WhiteText
-                        )
-                        
-                        fullOrder?.customer?.phone?.let { phone ->
-                            Text(
-                                text = phone,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = WhiteTextMuted
-                            )
-                        }
-                        
-                        fullOrder?.shippingAddress?.let { address ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Delivery: $address",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = WhiteTextMuted
-                            )
-                        }
-                    }
-                }
-                
-                // Order Items
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = SlateCard)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.ShoppingBag,
-                                contentDescription = null,
-                                tint = ShopGreen
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Order Items",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = WhiteText,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        // Prefer fullOrder items if available (has price info)
-                        val boardItems = boardOrder?.items ?: emptyList()
-                        val fullItems = fullOrder?.items ?: emptyList()
-                        
-                        when {
-                            fullItems.isNotEmpty() -> {
-                                fullItems.forEachIndexed { index, item ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 8.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = item.name,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = WhiteText
-                                            )
-                                            Text(
-                                                text = "Qty: ${item.quantity}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = WhiteTextMuted
-                                            )
-                                        }
-                                        val itemTotal = item.total?.toDoubleOrNull() ?: 0.0
-                                        Text(
-                                            text = "₹%.2f".format(itemTotal),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = ShopGreen,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                    if (index < fullItems.lastIndex) {
-                                        HorizontalDivider(color = GlassWhite)
-                                    }
-                                }
-                            }
-                            boardItems.isNotEmpty() -> {
-                                boardItems.forEachIndexed { index, item ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 8.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = item.name,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = WhiteText
-                                            )
-                                            Text(
-                                                text = "Qty: ${item.quantity}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = WhiteTextMuted
-                                            )
-                                        }
-                                    }
-                                    if (index < boardItems.lastIndex) {
-                                        HorizontalDivider(color = GlassWhite)
-                                    }
-                                }
-                            }
-                            else -> {
-                                val orderText = fullOrder?.orderText
-                                if (!orderText.isNullOrBlank()) {
-                                    Text(
-                                        text = "Order Notes: $orderText",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = WhiteText
-                                    )
-                                } else {
-                                    Text(
-                                        text = "No items to display",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = WhiteTextMuted
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Payment & Total
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = SlateCard)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Payment,
-                                contentDescription = null,
-                                tint = ShopGreen
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Payment Details",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = WhiteText,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        // Payment Status
-                        val paymentStatus =
-                            fullOrder?.displayPaymentStatus
-                                ?: boardOrder?.paymentStatus
-                                ?: "pending"
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Payment Status", color = WhiteTextMuted)
-                            PaymentStatusBadge(status = paymentStatus)
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        // Payment Method
-                        val paymentMethod = fullOrder?.paymentMethod ?: "N/A"
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Method", color = WhiteTextMuted)
-                            Text(paymentMethod.uppercase(), color = WhiteText)
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        fullOrder?.paymentReference?.let { reference ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Reference", color = WhiteTextMuted)
-                                Text(reference, color = WhiteText)
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        
-                        // Delivery Method
-                        val deliveryMethod = boardOrder?.deliveryMethod ?: fullOrder?.deliveryMethod ?: "N/A"
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Delivery", color = WhiteTextMuted)
-                            Text(deliveryMethod.replaceFirstChar { it.uppercase() }, color = WhiteText)
-                        }
-                        
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = GlassWhite
-                        )
-                        
-                        // Total
-                        val totalAmount = boardOrder?.displayTotal ?: fullOrder?.displayTotal ?: "₹0.00"
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Total",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = WhiteText,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = totalAmount,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = ShopGreen,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
                 
                 // Spacer for FAB
                 Spacer(modifier = Modifier.height(80.dp))
@@ -696,6 +821,11 @@ private fun PaymentStatusBadge(status: String) {
             color = color
         )
     }
+}
+
+private fun formatCurrency(value: String?, fallback: String = "--"): String {
+    val numeric = value?.toDoubleOrNull()
+    return if (numeric == null) fallback else "₹${"%.2f".format(numeric)}"
 }
 
 @Composable

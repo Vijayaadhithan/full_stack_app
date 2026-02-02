@@ -469,6 +469,39 @@ export default function OrderDetails() {
     order?.paymentStatus === "pending" &&
     order.status !== "cancelled" &&
     !["dispatched", "shipped", "delivered", "returned"].includes(order.status);
+  const lineItems = order?.items ?? [];
+  const parseAmount = (
+    value: string | number | null | undefined,
+  ) => {
+    if (value == null || value === "") return 0;
+    const numeric = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+  const formatCurrency = (
+    value: string | number | null | undefined,
+  ) => {
+    if (value == null || value === "") return "--";
+    const numeric = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(numeric)) return "--";
+    return `₹${numeric.toFixed(2)}`;
+  };
+  const itemsSubtotal = lineItems.reduce(
+    (sum, item) => sum + parseAmount(item.price) * item.quantity,
+    0,
+  );
+  const discountTotal = lineItems.reduce(
+    (sum, item) => sum + parseAmount(item.discount),
+    0,
+  );
+  const mrpSavings = lineItems.reduce((sum, item) => {
+    const mrp = parseAmount(item.mrp);
+    const rate = parseAmount(item.price);
+    if (mrp > rate && item.quantity > 0) {
+      return sum + (mrp - rate) * item.quantity;
+    }
+    return sum;
+  }, 0);
+  const totalSavings = mrpSavings + discountTotal;
 
   const whatsappHref = (() => {
     if (!order) return null;
@@ -875,42 +908,122 @@ export default function OrderDetails() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{t("order_items")}</CardTitle>
+            <CardTitle>{t("receipt_title")}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {order?.orderType === "text_order" ? (
+          <CardContent className="space-y-4">
+            {order?.orderType === "text_order" &&
+            lineItems.length === 0 ? (
               <div className="rounded-md border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
                 {order.orderText?.trim().length
                   ? order.orderText
                   : t("no_items_provided")}
               </div>
-            ) : (
-              order?.items?.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex justify-between items-center"
-                >
-                  <p>
-                    {item.name} × {item.quantity}
-                  </p>
-                  {order?.status === "delivered" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        item.productId &&
-                        setSelectedProduct({
-                          id: item.productId,
-                          name: item.name,
-                        })
-                      }
-                    >
-                      {t("leave_review")}
-                    </Button>
-                  )}
+            ) : lineItems.length > 0 ? (
+              <div className="overflow-x-auto">
+                <div className="min-w-[520px] space-y-2">
+                  <div className="grid grid-cols-12 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="col-span-5">{t("receipt_item")}</div>
+                    <div className="col-span-2 text-right">{t("receipt_qty")}</div>
+                    <div className="col-span-2 text-right">{t("mrp")}</div>
+                    <div className="col-span-2 text-right">{t("receipt_rate")}</div>
+                    <div className="col-span-1 text-right">{t("receipt_total")}</div>
+                  </div>
+                  <div className="divide-y rounded-md border bg-muted/20">
+                    {lineItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm"
+                      >
+                        <div className="col-span-5 font-medium">
+                          {item.name}
+                        </div>
+                        <div className="col-span-2 text-right">
+                          {item.quantity}
+                        </div>
+                        <div className="col-span-2 text-right">
+                          {formatCurrency(item.mrp)}
+                        </div>
+                        <div className="col-span-2 text-right">
+                          {formatCurrency(item.price)}
+                        </div>
+                        <div className="col-span-1 text-right">
+                          {formatCurrency(item.total)}
+                        </div>
+                        {order?.status === "delivered" && item.productId ? (
+                          <div className="col-span-12 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setSelectedProduct({
+                                  id: item.productId!,
+                                  name: item.name,
+                                })
+                              }
+                            >
+                              {t("leave_review")}
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t("no_items_provided")}
+              </p>
             )}
+
+            <div className="space-y-2 border-t pt-3 text-sm">
+              {lineItems.length > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    {t("receipt_subtotal")}
+                  </span>
+                  <span className="font-medium">
+                    {formatCurrency(itemsSubtotal)}
+                  </span>
+                </div>
+              )}
+              {order?.deliveryMethod === "delivery" && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    {t("receipt_delivery_fee")}
+                  </span>
+                  <span className="font-medium">
+                    {deliveryFeeAmount > 0
+                      ? formatCurrency(deliveryFeeAmount)
+                      : t("receipt_free")}
+                  </span>
+                </div>
+              )}
+              {discountTotal > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    {t("receipt_promotion")}
+                  </span>
+                  <span className="font-medium">
+                    -{formatCurrency(discountTotal)}
+                  </span>
+                </div>
+              )}
+              {totalSavings > 0 && (
+                <div className="flex justify-between rounded-md bg-emerald-50 px-3 py-2 text-emerald-700">
+                  <span className="font-medium">
+                    {t("receipt_you_saved")}
+                  </span>
+                  <span className="font-semibold">
+                    {formatCurrency(totalSavings)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between text-base font-semibold">
+                <span>{t("receipt_total")}</span>
+                <span>{formatCurrency(order?.total)}</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

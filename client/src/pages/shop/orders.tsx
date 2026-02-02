@@ -45,6 +45,17 @@ import { Order, ReturnRequest } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
 //const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+type OrderLineItem = {
+  id: number;
+  productId: number | null;
+  name: string;
+  quantity: number;
+  price: string;
+  mrp?: string | null;
+  discount?: string | null;
+  total: string;
+};
+
 type OrderWithDetails = Order & {
   customer?: {
     name: string;
@@ -54,14 +65,7 @@ type OrderWithDetails = Order & {
     longitude?: number | null;
     address?: string | null;
   } | null;
-  items: {
-    id: number;
-    productId: number;
-    name: string;
-    quantity: number;
-    price: number;
-    total: number;
-  }[];
+  items?: OrderLineItem[];
   deliveryMethod?: "delivery" | "pickup" | null;
   shippingAddress?: string | null;
   billingAddress?: string | null;
@@ -162,9 +166,25 @@ export default function ShopOrders() {
   );
   const [viewMode, setViewMode] = useState<"board" | "list">("board");
 
-  const formatCurrency = (value: number | null | undefined) => {
+  const parseAmount = (
+    value: string | number | null | undefined,
+  ) => {
+    if (value == null || value === "") return 0;
     const numeric = typeof value === "number" ? value : Number(value);
-    if (!Number.isFinite(numeric)) return "₹0.00";
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+  const formatCurrency = (
+    value: string | number | null | undefined,
+  ) => {
+    const numeric = parseAmount(value);
+    return `₹${numeric.toFixed(2)}`;
+  };
+  const formatCurrencyOptional = (
+    value: string | number | null | undefined,
+  ) => {
+    if (value == null || value === "") return "--";
+    const numeric = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(numeric)) return "--";
     return `₹${numeric.toFixed(2)}`;
   };
   const statusOptions = [
@@ -714,6 +734,16 @@ export default function ShopOrders() {
               ? String(order.total ?? "")
               : "";
           const quoteValue = textOrderQuoteTotals[order.id] ?? quoteDefault;
+          const lineItems = order.items ?? [];
+          const itemsSubtotal = lineItems.reduce(
+            (sum, item) => sum + parseAmount(item.price) * item.quantity,
+            0,
+          );
+          const discountTotal = lineItems.reduce(
+            (sum, item) => sum + parseAmount(item.discount),
+            0,
+          );
+          const deliveryFeeValue = parseAmount(order.deliveryFee);
 
           return (
             <Card key={order.id}>
@@ -811,8 +841,9 @@ export default function ShopOrders() {
                   )}
                 </div>
 
-                <div className="space-y-3">
-                  {order.orderType === "text_order" ? (
+                <div className="space-y-4">
+                  {order.orderType === "text_order" &&
+                  lineItems.length === 0 ? (
                     <div>
                       <h4 className="font-medium mb-2">Quick Order (Text)</h4>
                       <div className="rounded-md border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
@@ -821,27 +852,89 @@ export default function ShopOrders() {
                           : "No items provided."}
                       </div>
                     </div>
-                  ) : (
+                  ) : lineItems.length > 0 ? (
                     <div>
-                      <h4 className="font-medium mb-2">{t("order_items")}</h4>
-                      <div className="space-y-2">
-                        {order.items?.map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex justify-between items-center"
-                          >
-                            <div>
-                              <p className="font-medium">{item.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {item.quantity} × ₹{item.price}
-                              </p>
-                            </div>
-                            <p className="font-semibold">₹{item.total}</p>
+                      <h4 className="font-medium mb-2">{t("receipt_title")}</h4>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[520px] space-y-2">
+                          <div className="grid grid-cols-12 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            <div className="col-span-5">{t("receipt_item")}</div>
+                            <div className="col-span-2 text-right">{t("receipt_qty")}</div>
+                            <div className="col-span-2 text-right">{t("mrp")}</div>
+                            <div className="col-span-2 text-right">{t("receipt_rate")}</div>
+                            <div className="col-span-1 text-right">{t("receipt_total")}</div>
                           </div>
-                        ))}
+                          <div className="divide-y rounded-md border bg-muted/20">
+                            {lineItems.map((item) => (
+                              <div
+                                key={item.id}
+                                className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm"
+                              >
+                                <div className="col-span-5 font-medium">
+                                  {item.name}
+                                </div>
+                                <div className="col-span-2 text-right">
+                                  {item.quantity}
+                                </div>
+                                <div className="col-span-2 text-right">
+                                  {formatCurrencyOptional(item.mrp)}
+                                </div>
+                                <div className="col-span-2 text-right">
+                                  {formatCurrency(item.price)}
+                                </div>
+                                <div className="col-span-1 text-right">
+                                  {formatCurrency(item.total)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No items provided.
+                    </p>
                   )}
+
+                  <div className="space-y-2 border-t pt-3 text-sm">
+                    {lineItems.length > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {t("receipt_subtotal")}
+                        </span>
+                        <span className="font-medium">
+                          {formatCurrency(itemsSubtotal)}
+                        </span>
+                      </div>
+                    )}
+                    {order.deliveryMethod === "delivery" && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {t("receipt_delivery_fee")}
+                        </span>
+                        <span className="font-medium">
+                          {deliveryFeeValue > 0
+                            ? formatCurrency(deliveryFeeValue)
+                            : t("receipt_free")}
+                        </span>
+                      </div>
+                    )}
+                    {discountTotal > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {t("receipt_promotion")}
+                        </span>
+                        <span className="font-medium">
+                          -{formatCurrency(discountTotal)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-base font-semibold">
+                      <span>{t("receipt_total")}</span>
+                      <span>{formatCurrency(order.total)}</span>
+                    </div>
+                  </div>
 
                   {(isShopOwner || can("orders:update")) &&
                     canQuoteOrder && (

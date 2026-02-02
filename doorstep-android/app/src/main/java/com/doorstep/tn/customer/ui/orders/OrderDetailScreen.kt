@@ -381,6 +381,22 @@ private fun OrderDetailContent(
     val canReorder = order.orderType != "text_order" && reorderItems.isNotEmpty()
     val canCancel = order.paymentStatus == "pending" &&
         order.status.lowercase() !in listOf("cancelled", "dispatched", "shipped", "delivered", "returned")
+
+    val itemsSubtotal = order.items?.sumOf { item ->
+        val price = item.price.toDoubleOrNull() ?: 0.0
+        price * item.quantity
+    } ?: 0.0
+    val discountTotal = order.items?.sumOf { item ->
+        item.discount?.toDoubleOrNull() ?: 0.0
+    } ?: 0.0
+    val mrpSavings = order.items?.sumOf { item ->
+        val mrp = item.mrp?.toDoubleOrNull() ?: 0.0
+        val price = item.price.toDoubleOrNull() ?: 0.0
+        val diff = mrp - price
+        if (diff > 0) diff * item.quantity else 0.0
+    } ?: 0.0
+    val totalSavings = mrpSavings + discountTotal
+    val deliveryFeeValue = order.deliveryFee?.toDoubleOrNull() ?: 0.0
     
     // Format date with IST timezone conversion
     val formattedDate = order.orderDate?.let {
@@ -1000,19 +1016,18 @@ private fun OrderDetailContent(
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     // Subtotal
-                    order.subtotal?.let { subtotal ->
+                    if (!order.items.isNullOrEmpty()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Subtotal", color = WhiteTextMuted)
-                            Text("₹$subtotal", color = WhiteText)
+                            Text(formatCurrency(String.format("%.2f", itemsSubtotal)), color = WhiteText)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
                     if (order.deliveryMethod == "delivery") {
-                        val deliveryFeeValue = order.deliveryFee?.toDoubleOrNull() ?: 0.0
                         val deliveryFeeLabel = if (deliveryFeeValue <= 0.0) {
                             "Free"
                         } else {
@@ -1034,6 +1049,35 @@ private fun OrderDetailContent(
                                 Text("Delivery distance", color = WhiteTextMuted)
                                 Text("${String.format("%.1f", distanceKm)} km", color = WhiteText)
                             }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    if (discountTotal > 0) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Promotion", color = WhiteTextMuted)
+                            Text("-₹${String.format("%.2f", discountTotal)}", color = WhiteText)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    if (totalSavings > 0) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(SuccessGreen.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("You Saved", color = SuccessGreen, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "₹${String.format("%.2f", totalSavings)}",
+                                color = SuccessGreen,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -1565,43 +1609,59 @@ private fun OrderItemCard(
             
             Spacer(modifier = Modifier.width(12.dp))
             
-            // Product Info
+            // Product Info + Receipt Columns
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.product?.name ?: "Product #${item.productId}",
+                    text = item.name ?: item.product?.name ?: "Product #${item.productId}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = WhiteText,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = "₹${item.price} × ${item.quantity}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = WhiteTextMuted
-                )
-            }
-            
-            // Leave Review or Total
-            if (showReview && item.productId != null) {
-                OutlinedButton(
-                    onClick = onLeaveReview,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = OrangePrimary
-                    )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Leave Review", style = MaterialTheme.typography.labelSmall)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Qty", style = MaterialTheme.typography.labelSmall, color = WhiteTextMuted)
+                        Text("${item.quantity}", style = MaterialTheme.typography.bodySmall, color = WhiteText)
+                    }
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                        Text("MRP", style = MaterialTheme.typography.labelSmall, color = WhiteTextMuted)
+                        Text(formatCurrency(item.mrp), style = MaterialTheme.typography.bodySmall, color = WhiteText)
+                    }
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                        Text("Rate", style = MaterialTheme.typography.labelSmall, color = WhiteTextMuted)
+                        Text(formatCurrency(item.price), style = MaterialTheme.typography.bodySmall, color = WhiteText)
+                    }
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                        Text("Total", style = MaterialTheme.typography.labelSmall, color = WhiteTextMuted)
+                        Text(formatCurrency(item.total), style = MaterialTheme.typography.bodySmall, color = OrangePrimary)
+                    }
                 }
-            } else {
-                Text(
-                    text = "₹${item.total}",
-                    color = OrangePrimary,
-                    fontWeight = FontWeight.Bold
-                )
+
+                if (showReview && item.productId != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onLeaveReview,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = OrangePrimary
+                        )
+                    ) {
+                        Text("Leave Review", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
         }
     }
+}
+
+private fun formatCurrency(value: String?, fallback: String = "--"): String {
+    val numeric = value?.toDoubleOrNull()
+    return if (numeric == null) fallback else "₹${"%.2f".format(numeric)}"
 }
 
 @Composable

@@ -653,6 +653,8 @@ type HydratedOrderItem = {
   name: string;
   quantity: number;
   price: string;
+  mrp: string | null;
+  discount: string | null;
   total: string;
 };
 
@@ -691,14 +693,20 @@ async function hydrateOrders(
   return orders.map((order) => {
     const relations = orderMap.get(order.id);
     const hydratedItems =
-      relations?.items.map<HydratedOrderItem>((item) => ({
-        id: item.id,
-        productId: item.productId,
-        name: item.product?.name ?? "",
-        quantity: item.quantity,
-        price: item.price,
-        total: item.total,
-      })) ?? [];
+      relations?.items.map<HydratedOrderItem>((item) => {
+        const mrpValue = item.product?.mrp ?? null;
+        const discountValue = item.discount ?? null;
+        return {
+          id: item.id,
+          productId: item.productId,
+          name: item.product?.name ?? "",
+          quantity: item.quantity,
+          price: String(item.price),
+          mrp: mrpValue != null ? String(mrpValue) : null,
+          discount: discountValue != null ? String(discountValue) : null,
+          total: String(item.total),
+        };
+      }) ?? [];
 
     const result: HydratedOrder = {
       ...(order as Order),
@@ -6341,12 +6349,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           item.productId !== null
             ? productMap.get(item.productId) ?? null
             : null;
+        const mrpValue = product?.mrp ?? null;
+        const discountValue = item.discount ?? null;
         return {
           id: item.id,
           productId: item.productId,
           name: product?.name ?? "",
           quantity: item.quantity,
           price: String(item.price),
+          mrp: mrpValue != null ? String(mrpValue) : null,
+          discount: discountValue != null ? String(discountValue) : null,
           total: String(item.total),
         };
       });
