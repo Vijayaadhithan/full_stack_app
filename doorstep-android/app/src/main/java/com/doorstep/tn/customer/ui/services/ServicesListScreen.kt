@@ -37,6 +37,10 @@ import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.ui.BookingTypeSelector
 import com.doorstep.tn.common.ui.LocationFilterDropdown
+import com.doorstep.tn.common.config.SERVICE_CATEGORIES
+import com.doorstep.tn.common.config.ServiceCategoryOption
+import com.doorstep.tn.common.config.serviceCategoryIcon
+import com.doorstep.tn.common.config.serviceCategoryLabel
 import com.doorstep.tn.common.util.fetchCurrentLocation
 import com.doorstep.tn.common.util.haversineDistanceKm
 import com.doorstep.tn.common.util.parseGeoPoint
@@ -58,7 +62,7 @@ fun ServicesListScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val servicesHasMore by viewModel.servicesHasMore.collectAsState()
     val servicesPage by viewModel.servicesPage.collectAsState()
-    val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val selectedCategory by viewModel.selectedServiceCategory.collectAsState()
     val user by authViewModel.user.collectAsState()
     
     // Location filter state
@@ -145,14 +149,17 @@ fun ServicesListScreen(
     }
     
     val categories = listOf(
-        Triple("All Services", null, Icons.Default.Apps),
-        Triple("Carpentry", "carpentry", Icons.Default.Handyman),
-        Triple("Beauty", "beauty_salon", Icons.Default.Face),
-        Triple("Vehicle", "motor_repair", Icons.Default.TwoWheeler),
-        Triple("AC Repair", "appliance_repair", Icons.Default.AcUnit),
-        Triple("Plumbing", "plumbing", Icons.Default.Plumbing),
-        Triple("Electrical", "electrical_work", Icons.Default.ElectricalServices)
-    )
+        "all",
+        "carpentry",
+        "beauty_salon",
+        "motor_repair",
+        "plumbing",
+        "electrical_work"
+    ).map { value ->
+        val label = if (value == "all") "All Services" else serviceCategoryLabel(value)
+        val categoryValue = if (value == "all") null else value
+        Triple(label, categoryValue, serviceCategoryIcon(value))
+    }
     
     LaunchedEffect(
         selectedCategory,
@@ -339,7 +346,7 @@ fun ServicesListScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .width(72.dp)
-                            .clickable { viewModel.updateCategory(categoryValue) }
+                            .clickable { viewModel.updateServiceCategory(categoryValue) }
                     ) {
                         Box(
                             modifier = Modifier
@@ -462,11 +469,14 @@ fun ServicesListScreen(
             initialMaxPrice = maxPriceFilter,
             initialCity = locationCityFilter,
             initialState = locationStateFilter,
-            onApply = { minPrice, maxPrice, city, state ->
+            initialCategory = selectedCategory,
+            categories = SERVICE_CATEGORIES,
+            onApply = { minPrice, maxPrice, city, state, category ->
                 minPriceFilter = minPrice
                 maxPriceFilter = maxPrice
                 locationCityFilter = city
                 locationStateFilter = state
+                viewModel.updateServiceCategory(category)
             },
             onDismiss = { showFilters = false }
         )
@@ -514,19 +524,24 @@ private fun ServicesPaginationRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ServiceFiltersDialog(
     initialMinPrice: String,
     initialMaxPrice: String,
     initialCity: String,
     initialState: String,
-    onApply: (String, String, String, String) -> Unit,
+    initialCategory: String?,
+    categories: List<ServiceCategoryOption>,
+    onApply: (String, String, String, String, String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     var minPrice by remember(initialMinPrice) { mutableStateOf(initialMinPrice) }
     var maxPrice by remember(initialMaxPrice) { mutableStateOf(initialMaxPrice) }
     var city by remember(initialCity) { mutableStateOf(initialCity) }
     var state by remember(initialState) { mutableStateOf(initialState) }
+    var selectedCategory by remember(initialCategory) { mutableStateOf(initialCategory) }
+    var categoryExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -557,6 +572,40 @@ private fun ServiceFiltersDialog(
                     label = { Text("State") },
                     singleLine = true
                 )
+                ExposedDropdownMenuBox(
+                    expanded = categoryExpanded,
+                    onExpandedChange = { categoryExpanded = it }
+                ) {
+                    val displayLabel = if (selectedCategory == null) {
+                        serviceCategoryLabel("all")
+                    } else {
+                        serviceCategoryLabel(selectedCategory)
+                    }
+                    OutlinedTextField(
+                        value = displayLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Category") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = categoryExpanded,
+                        onDismissRequest = { categoryExpanded = false }
+                    ) {
+                        categories.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.label) },
+                                onClick = {
+                                    selectedCategory = if (option.value == "all") null else option.value
+                                    categoryExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = "City/State filters apply when nearby search is disabled.",
                     style = MaterialTheme.typography.bodySmall,
@@ -567,7 +616,7 @@ private fun ServiceFiltersDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onApply(minPrice.trim(), maxPrice.trim(), city.trim(), state.trim())
+                    onApply(minPrice.trim(), maxPrice.trim(), city.trim(), state.trim(), selectedCategory)
                     onDismiss()
                 }
             ) {

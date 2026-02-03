@@ -96,6 +96,7 @@ export default defineConfig(async ({ mode }) => {
     build: {
       outDir: path.resolve(__dirname, "dist/public"),
       emptyOutDir: true,
+      chunkSizeWarningLimit: 700,
       rollupOptions: {
         output: {
           manualChunks: (id: string) => {
@@ -117,6 +118,12 @@ export default defineConfig(async ({ mode }) => {
               if (id.includes('@radix-ui')) {
                 return 'vendor-ui';
               }
+            }
+            if (id.includes('shared/predefinedImages')) {
+              return 'category-assets';
+            }
+            if (id.includes('client/src/components/ui/category-icon')) {
+              return 'category-ui';
             }
             return undefined;
           },

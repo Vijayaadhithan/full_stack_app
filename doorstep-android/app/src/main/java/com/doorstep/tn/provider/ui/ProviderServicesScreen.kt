@@ -22,21 +22,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.config.SERVICE_CATEGORIES
+import com.doorstep.tn.common.config.serviceCategoryLabel
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import com.doorstep.tn.provider.data.model.CreateServiceRequest
 import com.doorstep.tn.provider.data.model.ProviderService
 import com.doorstep.tn.provider.data.model.UpdateServiceRequest
-
-/**
- * Service categories matching web implementation
- */
-val SERVICE_CATEGORIES = listOf(
-    "Beauty & Wellness" to "Beauty & Wellness",
-    "Home Services" to "Home Services",
-    "Professional Services" to "Professional Services",
-    "Health & Fitness" to "Health & Fitness",
-    "Education & Training" to "Education & Training"
-)
 
 /**
  * Provider Services Screen - List and manage services
@@ -79,12 +70,15 @@ fun ProviderServicesScreen(
     }
 
     val categoryOptions = remember(services) {
-        val options = SERVICE_CATEGORIES.toMutableList()
+        val options = SERVICE_CATEGORIES
+            .filter { it.value != "all" }
+            .map { it.label to it.value }
+            .toMutableList()
         services.mapNotNull { it.category }
             .distinct()
             .filter { category -> options.none { it.second.equals(category, ignoreCase = true) } }
             .forEach { category ->
-                options.add(category to category)
+                options.add(serviceCategoryLabel(category) to category)
             }
         options
     }
@@ -715,8 +709,11 @@ private fun AddEditServiceDialog(
     
     var name by remember { mutableStateOf(service?.name ?: "") }
     var description by remember { mutableStateOf(service?.description ?: "") }
+    val defaultCategory = remember {
+        SERVICE_CATEGORIES.firstOrNull { it.value != "all" }?.value ?: ""
+    }
     var selectedCategory by remember {
-        mutableStateOf(service?.category ?: SERVICE_CATEGORIES.firstOrNull()?.second ?: "")
+        mutableStateOf(service?.category ?: defaultCategory)
     }
     var price by remember { mutableStateOf(service?.price ?: "") }
     var duration by remember { mutableStateOf((service?.duration ?: 30).toString()) }
@@ -842,8 +839,8 @@ private fun AddEditServiceDialog(
                                 onExpandedChange = { categoryExpanded = it }
                             ) {
                                 OutlinedTextField(
-                                    value = SERVICE_CATEGORIES.find { it.second == selectedCategory }?.first
-                                        ?: selectedCategory.ifBlank { "Select" },
+                                    value = SERVICE_CATEGORIES.find { it.value == selectedCategory }?.label
+                                        ?: serviceCategoryLabel(selectedCategory).ifBlank { "Select" },
                                     onValueChange = {},
                                     readOnly = true,
                                     label = { Text("Category *") },
@@ -860,15 +857,17 @@ private fun AddEditServiceDialog(
                                     expanded = categoryExpanded,
                                     onDismissRequest = { categoryExpanded = false }
                                 ) {
-                                    SERVICE_CATEGORIES.forEach { (displayName, value) ->
-                                        DropdownMenuItem(
-                                            text = { Text(displayName) },
-                                            onClick = {
-                                                selectedCategory = value
-                                                categoryExpanded = false
-                                            }
-                                        )
-                                    }
+                                    SERVICE_CATEGORIES
+                                        .filter { it.value != "all" }
+                                        .forEach { option ->
+                                            DropdownMenuItem(
+                                                text = { Text(option.label) },
+                                                onClick = {
+                                                    selectedCategory = option.value
+                                                    categoryExpanded = false
+                                                }
+                                            )
+                                        }
                                 }
                             }
 

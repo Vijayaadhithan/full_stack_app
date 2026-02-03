@@ -17,6 +17,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.config.PRODUCT_CATEGORIES
+import com.doorstep.tn.common.config.productCategoryLabel
 import com.doorstep.tn.shop.data.model.CreateProductRequest
 import com.doorstep.tn.shop.data.model.ShopProduct
 import com.doorstep.tn.shop.data.model.UpdateProductRequest
@@ -44,6 +46,7 @@ fun ShopProductEditScreen(
     var name by remember(existingProduct) { mutableStateOf(existingProduct?.name ?: "") }
     var description by remember(existingProduct) { mutableStateOf(existingProduct?.description ?: "") }
     var category by remember(existingProduct) { mutableStateOf(existingProduct?.category ?: "") }
+    var categoryExpanded by remember { mutableStateOf(false) }
     var price by remember(existingProduct) { mutableStateOf(existingProduct?.price ?: "") }
     var mrp by remember(existingProduct) { mutableStateOf(existingProduct?.mrp ?: "") }
     var stock by remember(existingProduct) { mutableStateOf(existingProduct?.stock?.toString() ?: "0") }
@@ -88,7 +91,7 @@ fun ShopProductEditScreen(
     fun saveProduct() {
         if (name.isBlank() || category.isBlank() || price.isBlank()) return
         
-        if (isEditMode && productId != null) {
+        if (productId != null) {
             val dimensions = if (dimensionLength.isNotBlank() || dimensionWidth.isNotBlank() || dimensionHeight.isNotBlank()) {
                 com.doorstep.tn.shop.data.model.ProductDimensions(
                     length = dimensionLength.toDoubleOrNull(),
@@ -240,14 +243,36 @@ fun ShopProductEditScreen(
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    OutlinedTextField(
-                        value = category,
-                        onValueChange = { category = it },
-                        label = { Text("Category *") },
-                        singleLine = true,
-                        isError = category.isBlank(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    ExposedDropdownMenuBox(
+                        expanded = categoryExpanded,
+                        onExpandedChange = { categoryExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = productCategoryLabel(category).ifBlank { "Select" },
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Category *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                            isError = category.isBlank(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = categoryExpanded,
+                            onDismissRequest = { categoryExpanded = false }
+                        ) {
+                            PRODUCT_CATEGORIES.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.label) },
+                                    onClick = {
+                                        category = option.value
+                                        categoryExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     

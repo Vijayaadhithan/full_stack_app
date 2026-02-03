@@ -25,6 +25,7 @@ import android.widget.Toast
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.config.productCategoryLabel
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import kotlin.math.max
 import kotlin.math.min
@@ -192,7 +193,7 @@ fun ProductDetailScreen(
                             color = OrangePrimary.copy(alpha = 0.2f)
                         ) {
                             Text(
-                                text = category,
+                                text = productCategoryLabel(category),
                                 color = OrangePrimary,
                                 style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

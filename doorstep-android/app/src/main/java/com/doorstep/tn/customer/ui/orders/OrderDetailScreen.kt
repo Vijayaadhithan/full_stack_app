@@ -1342,8 +1342,10 @@ private fun ReturnRequestDialog(
                                 ) {
                                     IconButton(
                                         onClick = {
-                                            if (isSelected && selectedQuantity != null && selectedQuantity > 1) {
-                                                selectedQuantities[productId] = selectedQuantity - 1
+                                            selectedQuantity?.let { quantity ->
+                                                if (quantity > 1) {
+                                                    selectedQuantities[productId] = quantity - 1
+                                                }
                                             }
                                         },
                                         enabled = isSelected && (selectedQuantity ?: 1) > 1
@@ -1364,8 +1366,10 @@ private fun ReturnRequestDialog(
                                     )
                                     IconButton(
                                         onClick = {
-                                            if (isSelected && selectedQuantity != null && selectedQuantity < maxQuantity) {
-                                                selectedQuantities[productId] = selectedQuantity + 1
+                                            selectedQuantity?.let { quantity ->
+                                                if (quantity < maxQuantity) {
+                                                    selectedQuantities[productId] = quantity + 1
+                                                }
                                             }
                                         },
                                         enabled = isSelected && (selectedQuantity ?: 0) < maxQuantity

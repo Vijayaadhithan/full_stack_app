@@ -4,6 +4,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -40,6 +47,7 @@ import {
 import { LocationFilterPopover } from "@/components/location/location-filter-popover";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { getServiceImage, serviceCategoryImages, getGradientCSS } from "@shared/predefinedImages";
+import { serviceFilterConfig } from "@shared/config";
 
 const container = {
   hidden: { opacity: 0 },
@@ -295,6 +303,24 @@ export default function BrowseServices() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-80 p-4 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="category">Category</Label>
+                  <Select
+                    value={filters.category}
+                    onValueChange={(value) => handleFilterChange("category", value)}
+                  >
+                    <SelectTrigger id="category">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {serviceFilterConfig.categories.map((category) => (
+                        <SelectItem key={category.value} value={category.value}>
+                          {category.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="minPrice">Min Price (₹)</Label>
                   <Input

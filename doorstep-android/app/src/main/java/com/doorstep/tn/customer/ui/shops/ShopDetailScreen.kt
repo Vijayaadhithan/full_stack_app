@@ -33,6 +33,7 @@ import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.util.haversineDistanceKm
 import com.doorstep.tn.common.util.parseGeoPoint
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.config.productCategoryLabel
 import com.doorstep.tn.customer.data.model.Product
 import com.doorstep.tn.customer.data.model.Shop
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -63,7 +64,9 @@ fun ShopDetailScreen(
     
     // Derive unique categories from products
     val categories = remember(products) {
-        products.mapNotNull { it.category }.distinct().sorted()
+        products.mapNotNull { it.category }
+            .distinct()
+            .sortedBy { productCategoryLabel(it) }
     }
     
     // Compute filtered products
@@ -466,7 +469,7 @@ fun ShopDetailScreen(
                                 FilterChip(
                                     selected = selectedCategory == category,
                                     onClick = { selectedCategory = if (selectedCategory == category) null else category },
-                                    label = { Text(category) },
+                                    label = { Text(productCategoryLabel(category)) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = OrangePrimary,
                                         selectedLabelColor = WhiteText,

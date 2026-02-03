@@ -60,6 +60,10 @@ import crypto from "crypto";
 import { performance } from "node:perf_hooks";
 import { formatIndianDisplay, toIndianTime, fromIndianTime } from "@shared/date-utils"; // Import IST utility
 import {
+  normalizeProductCategory,
+  normalizeServiceCategory,
+} from "./utils/category";
+import {
   DEFAULT_NEARBY_RADIUS_KM,
   MIN_NEARBY_RADIUS_KM,
   MAX_NEARBY_RADIUS_KM,
@@ -2754,8 +2758,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (typeof shopContextId !== "number") {
           return res.status(403).json({ message: "Unable to resolve shop context" });
         }
+        const normalizedCategory =
+          normalizeProductCategory(result.data.category) ?? result.data.category;
         const product = await storage.createProduct({
           ...result.data,
+          category: normalizedCategory,
           shopId: shopContextId,
         });
 
@@ -2828,13 +2835,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           (typeof parsed.data.price === "number"
             ? parsed.data.price.toFixed(2)
             : parsed.data.price);
+        const fallbackCategory = parsed.data.category ?? "uncategorized";
+        const normalizedCategory =
+          normalizeProductCategory(fallbackCategory) ?? fallbackCategory;
         const payload = insertProductSchema.parse({
           name: parsed.data.name,
           description: "Quick add item",
           price: basePrice,
           mrp: typeof baseMrp === "number" ? baseMrp.toFixed(2) : baseMrp,
           stock: shopModes.catalogModeEnabled ? 0 : 1,
-          category: parsed.data.category ?? "uncategorized",
+          category: normalizedCategory,
           images: parsed.data.image ? [parsed.data.image] : [],
           isAvailable: true,
           shopId: shopContextId,
@@ -3004,6 +3014,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
+        if (typeof updateData.category === "string") {
+          updateData.category =
+            normalizeProductCategory(updateData.category) ?? updateData.category;
+        }
+
         // The storage.updateProduct method expects Partial<Product>
         const updatedProduct = await storage.updateProduct(
           productId,
@@ -3064,8 +3079,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json(formatValidationError(result.error));
         }
 
+        const normalizedCategory =
+          normalizeServiceCategory(result.data.category) ?? result.data.category;
         const serviceData = {
           ...result.data,
+          category: normalizedCategory,
           providerId: req.user!.id,
           isAvailable: true, // Default to available
         };
@@ -3192,9 +3210,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "No service fields provided" });
         }
 
+        const updateData: Record<string, unknown> = { ...parsedBody.data };
+        if (typeof updateData.category === "string") {
+          updateData.category =
+            normalizeServiceCategory(updateData.category) ?? updateData.category;
+        }
+
         const updatedService = await storage.updateService(
           serviceId,
-          parsedBody.data,
+          updateData,
         );
         logger.info(
           "[API] /api/services/:id PATCH - Updated service:",

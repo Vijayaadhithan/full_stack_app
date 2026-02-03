@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.config.serviceCategoryLabel
 import com.doorstep.tn.customer.ui.CustomerViewModel
 
 /**
@@ -74,6 +75,14 @@ fun ServiceDetailScreen(
             }
         } else if (service != null) {
             val s = service!!
+            val reviews by viewModel.serviceReviews.collectAsState()
+            val reviewCount = if (reviews.isNotEmpty()) reviews.size else s.reviewCount
+            val computedRating = if (reviews.isNotEmpty()) {
+                reviews.map { it.rating.toDouble() }.average()
+            } else {
+                s.rating
+            }
+            val ratingText = String.format("%.1f", computedRating ?: 0.0)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -125,12 +134,13 @@ fun ServiceDetailScreen(
                 ) {
                     // Category Badge
                     s.category?.let { category ->
+                        val label = serviceCategoryLabel(category)
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = ProviderBlue.copy(alpha = 0.15f)
                         ) {
                             Text(
-                                text = category.uppercase(),
+                                text = label.uppercase(),
                                 color = ProviderBlue,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
@@ -308,7 +318,7 @@ fun ServiceDetailScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "${s.rating ?: 0.0} • ${s.reviewCount} reviews",
+                                        text = "$ratingText • $reviewCount reviews",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = WhiteTextMuted
                                     )
@@ -359,7 +369,7 @@ fun ServiceDetailScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     
                     Text(
-                        text = "${s.rating ?: 0.0}/5 • ${s.reviewCount}",
+                        text = "$ratingText/5 • $reviewCount",
                         style = MaterialTheme.typography.bodyMedium,
                         color = WhiteTextMuted
                     )
@@ -372,13 +382,13 @@ fun ServiceDetailScreen(
                             Icon(
                                 imageVector = Icons.Default.Star,
                                 contentDescription = null,
-                                tint = if (index < (s.rating?.toInt() ?: 0)) AmberSecondary else SlateCard,
+                                tint = if (index < (computedRating?.toInt() ?: 0)) AmberSecondary else SlateCard,
                                 modifier = Modifier.size(28.dp)
                             )
                         }
                     }
                     
-                    if (s.reviewCount == 0) {
+                    if (reviewCount == 0) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "No reviews yet. Be the first to review!",
@@ -389,8 +399,6 @@ fun ServiceDetailScreen(
                 }
                 
                 // Reviews List
-                val reviews by viewModel.serviceReviews.collectAsState()
-                
                 if (reviews.isNotEmpty()) {
                     Column(
                         modifier = Modifier

@@ -41,6 +41,7 @@ import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.ui.LocationFilterDropdown
 import com.doorstep.tn.common.util.fetchCurrentLocation
 import com.doorstep.tn.common.util.parseGeoPoint
+import com.doorstep.tn.common.config.PRODUCT_CATEGORIES
 import com.doorstep.tn.customer.data.model.Product
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import org.json.JSONObject
@@ -62,7 +63,7 @@ fun ProductsListScreen(
     val productsHasMore by viewModel.productsHasMore.collectAsState()
     val productsPage by viewModel.productsPage.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
-    val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val selectedCategory by viewModel.selectedProductCategory.collectAsState()
     val user by authViewModel.user.collectAsState()
 
     var appliedSearch by remember { mutableStateOf("") }
@@ -149,14 +150,7 @@ fun ProductsListScreen(
         }
     }
     
-    val categories = listOf(
-        "All" to null,
-        "Groceries" to "groceries",
-        "Electronics" to "electronics",
-        "Clothing" to "readymade",
-        "Home" to "hardware",
-        "Beauty" to "beauty"
-    )
+    val categories = listOf("All" to null) + PRODUCT_CATEGORIES.map { it.label to it.value }
 
     val gridState = rememberLazyGridState()
     val pageNumbers = remember(productsPage, productsHasMore) {
@@ -354,7 +348,7 @@ fun ProductsListScreen(
                     Tab(
                         selected = isSelected,
                         onClick = { 
-                            viewModel.updateCategory(categoryValue)
+                            viewModel.updateProductCategory(categoryValue)
                         }
                     ) {
                         Surface(

@@ -24,6 +24,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.config.productCategoryLabel
 import com.doorstep.tn.shop.data.model.ShopProduct
 import com.doorstep.tn.shop.data.model.UpdateProductRequest
 
@@ -77,7 +78,9 @@ fun ShopProductsScreen(
     }
     
     // Get unique categories
-    val categories = products.mapNotNull { it.category }.distinct()
+    val categories = products.mapNotNull { it.category }
+        .distinct()
+        .sortedBy { productCategoryLabel(it) }
     
     Scaffold(
         topBar = {
@@ -192,7 +195,7 @@ fun ShopProductsScreen(
                             onClick = { 
                                 selectedCategory = if (selectedCategory == category) null else category 
                             },
-                            label = { Text(category) },
+                            label = { Text(productCategoryLabel(category)) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = ShopGreen,
                                 selectedLabelColor = WhiteText
@@ -373,7 +376,7 @@ private fun ProductCard(
                 }
                 if (product.category != null) {
                     Text(
-                        text = product.category,
+                        text = productCategoryLabel(product.category),
                         style = MaterialTheme.typography.bodySmall,
                         color = WhiteTextMuted
                     )

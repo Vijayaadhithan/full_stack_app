@@ -433,7 +433,7 @@ private fun PromotionFormDialog(
                 onClick = {
                     if (name.isNotBlank() && discountValue.isNotBlank() && shopId != null) {
                         val expiryValue = expiryDays.toIntOrNull()
-                        if (isEditMode && initialPromotion != null) {
+                        if (initialPromotion != null) {
                             val updateRequest = UpdatePromotionRequest(
                                 name = name.trim(),
                                 description = description.ifBlank { null },

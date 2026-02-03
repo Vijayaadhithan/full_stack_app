@@ -79,7 +79,10 @@ import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { getVerificationError, parseApiError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
-import { SERVICE_CATEGORY_OPTIONS } from "@/lib/service-categories";
+import {
+  SERVICE_CATEGORY_OPTIONS,
+  getServiceCategoryLabel,
+} from "@/lib/service-categories";
 import { z } from "zod";
 
 type BookingProximityInfo = {
@@ -1688,7 +1691,7 @@ export default function ProviderDashboard() {
                                     key={option.value}
                                     value={option.value}
                                   >
-                                    {t(option.labelKey)}
+                                    {getServiceCategoryLabel(option.value, t)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

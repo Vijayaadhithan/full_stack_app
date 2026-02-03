@@ -155,8 +155,11 @@ class CustomerViewModel @Inject constructor(
     private val _productSearchQuery = MutableStateFlow("")
     val productSearchQuery: StateFlow<String> = _productSearchQuery.asStateFlow()
     
-    private val _selectedCategory = MutableStateFlow<String?>(null)
-    val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
+    private val _selectedProductCategory = MutableStateFlow<String?>(null)
+    val selectedProductCategory: StateFlow<String?> = _selectedProductCategory.asStateFlow()
+
+    private val _selectedServiceCategory = MutableStateFlow<String?>(null)
+    val selectedServiceCategory: StateFlow<String?> = _selectedServiceCategory.asStateFlow()
 
     private data class ProductsQuery(
         val search: String?,
@@ -466,8 +469,12 @@ class CustomerViewModel @Inject constructor(
         _productSearchQuery.value = query
     }
     
-    fun updateCategory(category: String?) {
-        _selectedCategory.value = category
+    fun updateProductCategory(category: String?) {
+        _selectedProductCategory.value = category
+    }
+
+    fun updateServiceCategory(category: String?) {
+        _selectedServiceCategory.value = category
     }
     
     // ==================== Service Actions ====================

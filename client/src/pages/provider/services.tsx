@@ -57,7 +57,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { SERVICE_CATEGORY_OPTIONS } from "@/lib/service-categories";
+import {
+  SERVICE_CATEGORY_OPTIONS,
+  getServiceCategoryLabel,
+} from "@/lib/service-categories";
 import { z } from "zod";
 import { useLocation } from "wouter";
 
@@ -273,16 +276,21 @@ export default function ProviderServices() {
   const categoryOptions: CategoryOption[] = useMemo(() => {
     const baseOptions = SERVICE_CATEGORY_OPTIONS.map((option) => ({
       value: option.value,
-      label: t(option.labelKey),
+      label: getServiceCategoryLabel(option.value, t),
     }));
-    const optionMap = new Map(baseOptions.map((option) => [option.value, option]));
+    const optionMap = new Map(
+      baseOptions.map((option) => [option.value.toLowerCase(), option]),
+    );
 
     services?.forEach((service) => {
       if (!service.category) return;
-      if (!optionMap.has(service.category)) {
-        optionMap.set(service.category, {
-          value: service.category,
-          label: service.category,
+      const normalized = service.category.trim();
+      if (!normalized) return;
+      const key = normalized.toLowerCase();
+      if (!optionMap.has(key)) {
+        optionMap.set(key, {
+          value: normalized,
+          label: getServiceCategoryLabel(normalized, t),
         });
       }
     });
@@ -572,7 +580,7 @@ export default function ProviderServices() {
                                     key={option.value}
                                     value={option.value}
                                   >
-                                    {t(option.labelKey)}
+                                    {getServiceCategoryLabel(option.value, t)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

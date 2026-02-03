@@ -19,6 +19,7 @@ import { apiClient } from "@/lib/apiClient";
 import { useLanguage } from "@/contexts/language-context";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { getServiceImage } from "@shared/predefinedImages";
+import { getServiceCategoryLabel } from "@/lib/service-categories";
 
 export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
@@ -72,6 +73,7 @@ export default function ServiceDetails() {
   const providerName = service.provider?.name ?? t("provider_label");
   const providerInitial = providerName.charAt(0).toUpperCase();
   const categoryImage = getServiceImage(service.category);
+  const categoryLabel = getServiceCategoryLabel(service.category, t);
   const providerAddress = [
     service.provider?.addressStreet,
     service.provider?.addressCity,
@@ -115,7 +117,7 @@ export default function ServiceDetails() {
               </div>
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {t("service_category")}: {service.category}
+                  {t("service_category")}: {categoryLabel || service.category}
                 </div>
                 <div className="space-y-2">
                   <h1 className="text-2xl font-bold">{service.name}</h1>
