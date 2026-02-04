@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AdminProvider } from "@/hooks/use-admin";
 import { LanguageProvider } from "@/contexts/language-context";
-import { UserProvider } from "@/contexts/UserContext";
+import { UserProvider, useUserContext } from "@/contexts/UserContext";
 import { ProtectedRoute } from "./lib/protected-route";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import RouteErrorBoundary from "@/components/RouteErrorBoundary";
@@ -14,6 +14,7 @@ import { PushNotificationManager } from "@/components/PushNotificationManager";
 import React, { Suspense, lazy } from "react";
 import { useClientPerformanceMetrics } from "@/hooks/use-client-performance-metrics";
 import { useRealtimeUpdates } from "@/hooks/use-realtime-updates";
+import { Loader2 } from "lucide-react";
 
 // Import all pages...
 const AuthPage = lazy(() => import("@/pages/auth-page"));
@@ -85,6 +86,21 @@ function RealtimeBridge() {
   const { user } = useAuth();
   useRealtimeUpdates(!!user);
   return null;
+}
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+  const { isLoadingProfiles } = useUserContext();
+
+  if (isLoading || (user && isLoadingProfiles)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-border" />
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 function Router() {
@@ -211,26 +227,28 @@ function App() {
       <LanguageProvider>
         <AuthProvider>
           <UserProvider>
-            <ClientPerformanceMetricsTracker />
-            <RealtimeBridge />
-            <PermissionRequester />
-            <PushNotificationManager />
-            <AdminProvider>
-              <ErrorBoundary>
-                <Suspense
-                  fallback={
-                    <div className="flex min-h-screen items-center justify-center">
-                      Loading...
-                    </div>
-                  }
-                >
-                  <RouteErrorBoundary routeName="App">
-                    <Router />
-                  </RouteErrorBoundary>
-                </Suspense>
-              </ErrorBoundary>
-              <Toaster />
-            </AdminProvider>
+            <AuthGate>
+              <ClientPerformanceMetricsTracker />
+              <RealtimeBridge />
+              <PermissionRequester />
+              <PushNotificationManager />
+              <AdminProvider>
+                <ErrorBoundary>
+                  <Suspense
+                    fallback={
+                      <div className="flex min-h-screen items-center justify-center">
+                        Loading...
+                      </div>
+                    }
+                  >
+                    <RouteErrorBoundary routeName="App">
+                      <Router />
+                    </RouteErrorBoundary>
+                  </Suspense>
+                </ErrorBoundary>
+                <Toaster />
+              </AdminProvider>
+            </AuthGate>
           </UserProvider>
         </AuthProvider>
       </LanguageProvider>

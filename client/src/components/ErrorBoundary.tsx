@@ -1,4 +1,5 @@
 import React from "react";
+import { attemptModuleReloadOnce, isModuleLoadError } from "@/lib/module-load-recovery";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -25,6 +26,12 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    if (isModuleLoadError(error) && attemptModuleReloadOnce()) {
+      if (typeof window !== "undefined") {
+        window.location.reload();
+        return;
+      }
+    }
     console.error("Unhandled error captured by ErrorBoundary", error, errorInfo);
   }
 

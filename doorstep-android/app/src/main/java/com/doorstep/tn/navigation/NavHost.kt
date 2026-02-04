@@ -4,6 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -151,8 +156,14 @@ fun DoorStepNavHost(
     navController: NavHostController = rememberNavController(),
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
+    val isAuthReady by authViewModel.isAuthReady.collectAsState()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
     val userRole by authViewModel.userRole.collectAsState()
+
+    if (!isAuthReady) {
+        AuthLoadingScreen()
+        return
+    }
     
     val startDestination = if (isLoggedIn) {
         when (userRole) {
@@ -785,5 +796,15 @@ fun DoorStepNavHost(
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun AuthLoadingScreen() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator()
     }
 }

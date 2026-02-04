@@ -20,6 +20,7 @@ type PublicUser = Omit<SelectUser, "password" | "pin">;
 
 type AuthContextType = {
   user: PublicUser | null;
+  isLoading: boolean;
   isFetching: boolean;
   error: Error | null;
   loginMutation: UseMutationResult<PublicUser, Error, LoginData>;
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const {
     data: user,
     error,
+    isLoading,
     isFetching,
   } = useQuery<PublicUser | undefined, Error>({
     queryKey: ["/api/user"],
@@ -192,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user: user ?? null,
+        isLoading,
         isFetching,
         error,
         loginMutation,

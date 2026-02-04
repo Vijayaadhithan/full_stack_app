@@ -18,13 +18,14 @@ export default function AuthPage() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [language, setLanguage] = useState<"en" | "ta">("en");
 
+  const shouldRedirect =
+    user &&
+    !authIsFetching &&
+    !loginMutation.isPending &&
+    !registerMutation.isPending;
+
   useEffect(() => {
-    if (
-      !authIsFetching &&
-      user &&
-      !loginMutation.isPending &&
-      !registerMutation.isPending
-    ) {
+    if (shouldRedirect) {
       const targetPath = user.role === "worker" ? "/shop" : `/${user.role || "customer"}`;
       setLocation(targetPath);
     }
@@ -34,7 +35,16 @@ export default function AuthPage() {
     loginMutation.isPending,
     registerMutation.isPending,
     setLocation,
+    shouldRedirect,
   ]);
+
+  if (shouldRedirect) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    );
+  }
 
   if (showForgotPassword) {
     return (

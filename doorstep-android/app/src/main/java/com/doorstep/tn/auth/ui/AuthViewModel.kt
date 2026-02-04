@@ -46,6 +46,9 @@ class AuthViewModel @Inject constructor(
     
     private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    private val _isAuthReady = MutableStateFlow(false)
+    val isAuthReady: StateFlow<Boolean> = _isAuthReady.asStateFlow()
     
     private val _userRole = MutableStateFlow<String?>(null)
     val userRole: StateFlow<String?> = _userRole.asStateFlow()
@@ -98,25 +101,29 @@ class AuthViewModel @Inject constructor(
     init {
         // Check if user is already logged in
         viewModelScope.launch {
-            val prefs = context.dataStore.data.first()
-            val migrated = SecureUserStore.migrateFromDataStore(context, prefs)
-            if (migrated) {
-                SecureUserStore.clearLegacyDataStore(context)
-            }
-            SecureUserStore.migrateLegacyFcmPrefs(context)
-            _isLoggedIn.value = prefs[PreferenceKeys.IS_LOGGED_IN] ?: false
-            _userRole.value = SecureUserStore.getUserRole(context)
-            _userName.value = SecureUserStore.getUserName(context)
-            _language.value = prefs[PreferenceKeys.LANGUAGE] ?: "en"
-            
-            // Load last used phone number
-            SecureUserStore.getLastPhone(context)?.let {
-                _phone.value = it
-            }
-            
-            // If logged in, load user data from API
-            if (_isLoggedIn.value) {
-                loadCurrentUser()
+            try {
+                val prefs = context.dataStore.data.first()
+                val migrated = SecureUserStore.migrateFromDataStore(context, prefs)
+                if (migrated) {
+                    SecureUserStore.clearLegacyDataStore(context)
+                }
+                SecureUserStore.migrateLegacyFcmPrefs(context)
+                _isLoggedIn.value = prefs[PreferenceKeys.IS_LOGGED_IN] ?: false
+                _userRole.value = SecureUserStore.getUserRole(context)
+                _userName.value = SecureUserStore.getUserName(context)
+                _language.value = prefs[PreferenceKeys.LANGUAGE] ?: "en"
+                
+                // Load last used phone number
+                SecureUserStore.getLastPhone(context)?.let {
+                    _phone.value = it
+                }
+                
+                // If logged in, load user data from API
+                if (_isLoggedIn.value) {
+                    loadCurrentUser()
+                }
+            } finally {
+                _isAuthReady.value = true
             }
         }
     }

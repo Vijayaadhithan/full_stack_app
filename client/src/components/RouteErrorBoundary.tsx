@@ -1,5 +1,6 @@
 import React from "react";
 import { useLocation } from "wouter";
+import { attemptModuleReloadOnce, isModuleLoadError } from "@/lib/module-load-recovery";
 
 interface RouteErrorBoundaryProps {
     children: React.ReactNode;
@@ -71,6 +72,13 @@ function ErrorFallback({
     onRetry: () => void;
 }) {
     const [, setLocation] = useLocation();
+    const shouldAttemptReload = isModuleLoadError(error);
+
+    React.useEffect(() => {
+        if (shouldAttemptReload && attemptModuleReloadOnce()) {
+            window.location.reload();
+        }
+    }, [shouldAttemptReload]);
 
     const handleGoHome = () => {
         setLocation("/");
