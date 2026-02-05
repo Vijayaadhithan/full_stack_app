@@ -674,18 +674,26 @@ class AuthViewModel @Inject constructor(
                         deviceInfo = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
                     )
                     if (response is Result.Success) {
-                        android.util.Log.d("AuthViewModel", "FCM token synced successfully")
+                        if (com.doorstep.tn.BuildConfig.DEBUG) {
+                            android.util.Log.d("AuthViewModel", "FCM token synced successfully")
+                        }
                         SecureUserStore.setFcmNeedsSync(context, false)
                     } else {
-                        android.util.Log.w("AuthViewModel", "Failed to sync FCM token")
+                        if (com.doorstep.tn.BuildConfig.DEBUG) {
+                            android.util.Log.w("AuthViewModel", "Failed to sync FCM token")
+                        }
                         SecureUserStore.setFcmNeedsSync(context, true)
                     }
                 } else {
                     // No token yet, it will be registered when onNewToken() is called
-                    android.util.Log.d("AuthViewModel", "No FCM token stored yet, will sync when available")
+                    if (com.doorstep.tn.BuildConfig.DEBUG) {
+                        android.util.Log.d("AuthViewModel", "No FCM token stored yet, will sync when available")
+                    }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("AuthViewModel", "Error syncing FCM token", e)
+                if (com.doorstep.tn.BuildConfig.DEBUG) {
+                    android.util.Log.e("AuthViewModel", "Error syncing FCM token", e)
+                }
                 SecureUserStore.setFcmNeedsSync(context, true)
             }
         }

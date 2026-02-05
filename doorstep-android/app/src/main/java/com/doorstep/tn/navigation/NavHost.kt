@@ -16,6 +16,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.doorstep.tn.BuildConfig
 import com.doorstep.tn.MainActivity
 import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.auth.ui.PhoneEntryScreen
@@ -180,14 +181,19 @@ fun DoorStepNavHost(
     LaunchedEffect(isLoggedIn) {
         if (isLoggedIn) {
             MainActivity.pendingNotificationRoute?.let { route ->
-                android.util.Log.d("NavHost", "Navigating to pending notification route: $route")
+                val safeRoute = resolveSafeNotificationRoute(route, userRole)
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.d("NavHost", "Navigating to pending notification route")
+                }
                 try {
-                    navController.navigate(route) {
+                    navController.navigate(safeRoute) {
                         // Don't pop the start destination
                         launchSingleTop = true
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("NavHost", "Failed to navigate to notification route: $route", e)
+                    if (BuildConfig.DEBUG) {
+                        android.util.Log.e("NavHost", "Failed to navigate to notification route", e)
+                    }
                 }
                 MainActivity.clearPendingNotificationRoute()
             }
@@ -796,6 +802,64 @@ fun DoorStepNavHost(
                 }
             )
         }
+    }
+}
+
+private fun resolveSafeNotificationRoute(route: String, userRole: String?): String {
+    val trimmed = route.trim()
+    if (trimmed.isEmpty() || trimmed.contains("..")) {
+        return fallbackRouteForRole(userRole)
+    }
+
+    val base = trimmed.substringBefore("?")
+    val role = userRole ?: "customer"
+    val allowedExact = when (role) {
+        "shop", "worker" -> setOf(
+            Routes.SHOP_DASHBOARD,
+            Routes.SHOP_ORDERS
+        )
+        "provider" -> setOf(
+            Routes.PROVIDER_DASHBOARD,
+            Routes.PROVIDER_BOOKINGS,
+            Routes.PROVIDER_NOTIFICATIONS
+        )
+        else -> setOf(
+            Routes.CUSTOMER_HOME,
+            Routes.CUSTOMER_BOOKINGS,
+            Routes.CUSTOMER_ORDERS,
+            Routes.CUSTOMER_NOTIFICATIONS
+        )
+    }
+
+    val allowedPrefixes = when (role) {
+        "shop", "worker" -> listOf(
+            Routes.SHOP_ORDER_DETAIL.substringBefore("{")
+        )
+        "provider" -> listOf(
+            Routes.PROVIDER_BOOKING_DETAIL.substringBefore("{")
+        )
+        else -> listOf(
+            Routes.CUSTOMER_ORDER_DETAIL.substringBefore("{")
+        )
+    }
+
+    val isAllowed = allowedExact.contains(base) || allowedPrefixes.any { prefix ->
+        base.startsWith(prefix) && hasNumericId(base, prefix)
+    }
+    return if (isAllowed) trimmed else fallbackRouteForRole(userRole)
+}
+
+private fun hasNumericId(route: String, prefix: String): Boolean {
+    val idPart = route.removePrefix(prefix)
+    if (idPart.isBlank()) return false
+    return idPart.all { it.isDigit() }
+}
+
+private fun fallbackRouteForRole(userRole: String?): String {
+    return when (userRole) {
+        "shop", "worker" -> Routes.SHOP_DASHBOARD
+        "provider" -> Routes.PROVIDER_NOTIFICATIONS
+        else -> Routes.CUSTOMER_NOTIFICATIONS
     }
 }
 

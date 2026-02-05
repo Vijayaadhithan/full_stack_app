@@ -47,11 +47,11 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
-            Log.d(TAG, "Notification permission granted")
+            logDebug("Notification permission granted")
             // Get FCM token after permission is granted
             refreshFcmToken()
         } else {
-            Log.w(TAG, "Notification permission denied")
+            logWarn("Notification permission denied")
         }
     }
     
@@ -95,18 +95,16 @@ class MainActivity : ComponentActivity() {
         val relatedBookingId = intent.getStringExtra("relatedBookingId")
         val relatedOrderId = intent.getStringExtra("relatedOrderId")
         
-        Log.d(TAG, "Handling notification intent: clickUrl=$clickUrl, type=$notificationType, relatedId=$relatedId, bookingId=$relatedBookingId, orderId=$relatedOrderId")
+        logDebug("Handling notification intent")
         
         if (clickUrl != null) {
             // Convert web URL to Android route
             pendingNotificationRoute = convertClickUrlToRoute(clickUrl, notificationType, relatedId ?: relatedBookingId ?: relatedOrderId)
-            Log.d(TAG, "Pending navigation route: $pendingNotificationRoute")
-            Log.i(TAG, "Notification route resolved: $pendingNotificationRoute")
+            logDebug("Pending navigation route set from clickUrl")
         } else if (notificationType != null) {
             // Fallback: use type to determine route
             pendingNotificationRoute = getRouteFromType(notificationType, relatedId ?: relatedBookingId ?: relatedOrderId)
-            Log.d(TAG, "Fallback navigation route: $pendingNotificationRoute")
-            Log.i(TAG, "Notification route fallback: $pendingNotificationRoute")
+            logDebug("Pending navigation route set from type")
         }
     }
     
@@ -200,24 +198,24 @@ class MainActivity : ComponentActivity() {
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED -> {
-                    Log.d(TAG, "Notification permission already granted")
+                    logDebug("Notification permission already granted")
                     // Refresh FCM token to ensure it's registered
                     refreshFcmToken()
                 }
                 shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) -> {
                     // Show an explanation to the user if needed
-                    Log.d(TAG, "Should show rationale for notification permission")
+                    logDebug("Should show rationale for notification permission")
                     requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
                 else -> {
                     // Request the permission
-                    Log.d(TAG, "Requesting notification permission")
+                    logDebug("Requesting notification permission")
                     requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
         } else {
             // For Android 12 and below, permission is granted at install time
-            Log.d(TAG, "Android < 13, notification permission granted by default")
+            logDebug("Android < 13, notification permission granted by default")
             refreshFcmToken()
         }
     }
@@ -228,17 +226,33 @@ class MainActivity : ComponentActivity() {
     private fun refreshFcmToken() {
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) {
-                Log.w(TAG, "Fetching FCM registration token failed", task.exception)
+                logWarn("Fetching FCM registration token failed", task.exception)
                 return@addOnCompleteListener
             }
             
             // Get new FCM registration token
             val token = task.result
-            Log.d(TAG, "FCM Token obtained in MainActivity")
+            logDebug("FCM token obtained in MainActivity")
             
             // Store token for later sync with backend
             SecureUserStore.setFcmToken(this, token)
             SecureUserStore.setFcmNeedsSync(this, true)
+        }
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, message)
+        }
+    }
+
+    private fun logWarn(message: String, throwable: Throwable? = null) {
+        if (BuildConfig.DEBUG) {
+            if (throwable != null) {
+                Log.w(TAG, message, throwable)
+            } else {
+                Log.w(TAG, message)
+            }
         }
     }
 }

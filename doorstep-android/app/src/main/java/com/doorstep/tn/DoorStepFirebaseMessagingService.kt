@@ -16,6 +16,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -47,13 +48,18 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
         createNotificationChannel()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceScope.cancel()
+    }
+
     /**
      * Called when a new FCM token is generated or refreshed
      * We need to send this token to our backend to enable push notifications
      */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "New FCM token received")
+        logDebug("New FCM token received")
         
         // Store token locally for later registration after login
         SecureUserStore.setFcmToken(this, token)
@@ -69,14 +75,12 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
      */
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        Log.d(TAG, "Message received from: ${message.from}")
+        logDebug("Message received from FCM")
 
         // Check if message contains a notification payload
         message.notification?.let { notification ->
             val title = notification.title ?: "DoorStep"
             val body = notification.body ?: ""
-            
-            Log.d(TAG, "Notification: $title - $body")
             
             // Show notification (for foreground messages)
             showNotification(title, body, message.data)
@@ -84,11 +88,7 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
 
         // Handle data-only messages if needed
         if (message.data.isNotEmpty()) {
-            Log.d(TAG, "Data payload: ${message.data}")
-            Log.i(
-                TAG,
-                "Push data keys=${message.data.keys} type=${message.data["type"]} relatedId=${message.data["relatedId"]} clickUrl=${message.data["clickUrl"]}"
-            )
+            logDebug("Push data keys=${message.data.keys}")
             handleDataMessage(message.data)
         }
     }
@@ -107,15 +107,15 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
                     )
                 )
                 if (response.isSuccessful) {
-                    Log.d(TAG, "FCM token registered with backend successfully")
+                    logDebug("FCM token registered with backend successfully")
                     // Mark token as synced
                     SecureUserStore.setFcmNeedsSync(this@DoorStepFirebaseMessagingService, false)
                 } else {
-                    Log.w(TAG, "Failed to register FCM token: ${response.code()}")
+                    logWarn("Failed to register FCM token: ${response.code()}")
                     SecureUserStore.setFcmNeedsSync(this@DoorStepFirebaseMessagingService, true)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error registering FCM token", e)
+                logError("Error registering FCM token", e)
                 SecureUserStore.setFcmNeedsSync(this@DoorStepFirebaseMessagingService, true)
                 // Token will be synced later when user logs in
             }
@@ -185,7 +185,7 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
         val type = data["type"]
         val relatedId = data["relatedId"]
         
-        Log.d(TAG, "Handling data message: type=$type, relatedId=$relatedId")
+        logDebug("Handling data message: type=$type")
         
         // For data-only messages, show a notification based on the type
         when (type) {
@@ -208,6 +208,28 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
                 data["title"]?.let { title ->
                     showNotification(title, data["body"] ?: "", data)
                 }
+            }
+        }
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, message)
+        }
+    }
+
+    private fun logWarn(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.w(TAG, message)
+        }
+    }
+
+    private fun logError(message: String, throwable: Throwable? = null) {
+        if (BuildConfig.DEBUG) {
+            if (throwable != null) {
+                Log.e(TAG, message, throwable)
+            } else {
+                Log.e(TAG, message)
             }
         }
     }

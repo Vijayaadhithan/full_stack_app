@@ -74,7 +74,7 @@ class AuthInterceptor(
         val method = originalRequest.method.uppercase()
         val requiresCsrf = !CSRF_SAFE_METHODS.contains(method)
 
-        var sessionCookie = SecureSessionStore.getSessionCookie(appContext)
+        var sessionCookie = normalizeSessionCookie(SecureSessionStore.getSessionCookie(appContext))
         var csrfToken = SecureSessionStore.getCsrfToken(appContext)
         val signingSecret = SecureSessionStore.getOrCreateSigningSecret(appContext)
         val signedAuthHeader = buildSignedAuthHeader(originalRequest, signingSecret)
@@ -109,10 +109,9 @@ class AuthInterceptor(
         var response = chain.proceed(requestBuilder.build())
         
         // Save session cookie from response
-        response.headers("Set-Cookie").forEach { cookie ->
-            if (cookie.startsWith("connect.sid")) {
-                SecureSessionStore.setSessionCookie(appContext, cookie)
-            }
+        extractSessionCookie(response.headers("Set-Cookie"))?.let { cookie ->
+            SecureSessionStore.setSessionCookie(appContext, cookie)
+            sessionCookie = cookie
         }
         
         // Check if response contains CSRF token in header
@@ -142,10 +141,9 @@ class AuthInterceptor(
                     .build()
 
                 response = chain.proceed(retryRequest)
-                response.headers("Set-Cookie").forEach { cookie ->
-                    if (cookie.startsWith("connect.sid")) {
-                        SecureSessionStore.setSessionCookie(appContext, cookie)
-                    }
+                extractSessionCookie(response.headers("Set-Cookie"))?.let { cookie ->
+                    SecureSessionStore.setSessionCookie(appContext, cookie)
+                    sessionCookie = cookie
                 }
                 response.header("X-CSRF-Token")?.let { newCsrfToken ->
                     SecureSessionStore.setCsrfToken(appContext, newCsrfToken)
@@ -177,8 +175,7 @@ class AuthInterceptor(
             val bodyString = it.body?.string() ?: return null
             val token = JSONObject(bodyString).optString("csrfToken", "").trim()
             if (token.isBlank()) return null
-            val cookie = it.headers("Set-Cookie")
-                .firstOrNull { header -> header.startsWith("connect.sid") }
+            val cookie = extractSessionCookie(it.headers("Set-Cookie"))
             return CsrfFetchResult(token, cookie)
         }
     }
@@ -195,5 +192,21 @@ class AuthInterceptor(
         mac.init(SecretKeySpec(secret, "HmacSHA256"))
         val raw = mac.doFinal(payload.toByteArray(Charsets.UTF_8))
         return Base64.encodeToString(raw, Base64.NO_WRAP or Base64.URL_SAFE)
+    }
+
+    private fun normalizeSessionCookie(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val trimmed = raw.substringBefore(";").trim()
+        return if (trimmed.startsWith("connect.sid=") && trimmed.length > "connect.sid=".length) {
+            trimmed
+        } else {
+            null
+        }
+    }
+
+    private fun extractSessionCookie(headers: List<String>): String? {
+        return headers.asSequence()
+            .map { it.substringBefore(";").trim() }
+            .firstOrNull { it.startsWith("connect.sid=") && it.length > "connect.sid=".length }
     }
 }
