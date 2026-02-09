@@ -1,6 +1,11 @@
 import type { IStorage } from "../storage";
 import logger from "../logger";
-import { registerJobHandler, addRepeatableJob, getJobQueue } from "../jobQueue";
+import {
+  registerJobHandler,
+  addRepeatableJob,
+  getJobQueue,
+  addJob,
+} from "../jobQueue";
 import { withJobLock } from "../services/jobLock.service";
 
 export let lastRun: Date | null = null;
@@ -58,12 +63,36 @@ export function startBookingExpirationJob(storage: IStorage): void {
     .then((jobs) => {
       const exists = jobs.some((j) => j.name === JOB_TYPE);
       if (!exists) {
-        addRepeatableJob(JOB_TYPE, {}, schedule, { timezone });
+        void addRepeatableJob(JOB_TYPE, {}, schedule, {
+          timezone,
+          source: "scheduler",
+        }).catch((err) => {
+          logger.error(
+            { err },
+            "[BookingExpirationJob] Failed to schedule repeatable job",
+          );
+        });
       } else {
         logger.debug("[BookingExpirationJob] Already scheduled, skipping");
       }
+    })
+    .catch((err) => {
+      logger.error(
+        { err },
+        "[BookingExpirationJob] Failed to inspect existing repeatable jobs",
+      );
     });
 
-  // Run immediately on startup
-  processBookingExpiration(storage);
+  // Enqueue immediate startup run (goes through BullMQ worker path)
+  void addJob(
+    JOB_TYPE,
+    { trigger: "startup" },
+    { source: "startup" },
+  ).catch((err) => {
+    logger.error(
+      { err },
+      "[BookingExpirationJob] Failed to enqueue startup run; falling back to inline execution",
+    );
+    void processBookingExpiration(storage);
+  });
 }

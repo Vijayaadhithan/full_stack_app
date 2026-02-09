@@ -96,6 +96,7 @@ import {
 } from "./security/roleAccess";
 import { createCsrfProtection } from "./security/csrfProtection";
 import { formatValidationError } from "./utils/zod";
+import { resolveTraceContextFromHeaders } from "./tracing";
 //import { registerShopRoutes } from "./routes/shops"; // Import shop routes
 import {
   serviceDetailSchema,
@@ -1310,15 +1311,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use((req, res, next) => {
     const request = req as RequestWithAuth;
     const category = resolveLogCategory(request);
-    const headerRequestId = req.headers["x-request-id"];
-    const providedId = Array.isArray(headerRequestId)
-      ? headerRequestId[0]
-      : headerRequestId;
-    const fallbackRequestId = crypto.randomUUID();
-    const requestId =
-      typeof providedId === "string" && providedId.trim().length > 0
-        ? providedId.trim()
-        : fallbackRequestId;
+    const traceContext = resolveTraceContextFromHeaders(
+      req.headers,
+      crypto.randomUUID(),
+    );
+    const {
+      requestId,
+      correlationId,
+      traceId,
+      spanId,
+      parentSpanId,
+      traceFlags,
+      traceparent,
+    } = traceContext;
+    const apiVersion =
+      typeof (res.locals as { apiVersion?: unknown }).apiVersion === "string"
+        ? ((res.locals as { apiVersion?: string }).apiVersion as string)
+        : "v1";
     const userId = request.user?.id ?? request.session?.adminId ?? undefined;
     const userRole = request.user?.role ?? undefined;
     const adminId = request.session?.adminId ?? undefined;
@@ -1326,6 +1335,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const startedAt = process.hrtime.bigint();
     if (!res.headersSent) {
       res.setHeader("x-request-id", requestId);
+      res.setHeader("x-correlation-id", correlationId);
+      res.setHeader("x-trace-id", traceId);
+      res.setHeader("traceparent", traceparent);
     }
     const userAgentHeader = req.headers["user-agent"];
 
@@ -1355,6 +1367,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       {
         request: {
           requestId,
+          correlationId,
+          traceId,
+          spanId,
+          parentSpanId,
+          traceFlags,
+          traceparent,
           method: req.method,
           path: req.originalUrl,
           ip: req.ip,
@@ -1362,6 +1380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId,
           userRole,
           adminId,
+          apiVersion,
         },
         log: {
           category,
@@ -1369,6 +1388,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userRole,
           adminId,
           requestId,
+          correlationId,
+          traceId,
+          spanId,
+          parentSpanId,
+          traceparent,
         },
       },
     );

@@ -107,6 +107,7 @@ import {
   normalizeCoordinate,
   DEFAULT_NEARBY_RADIUS_KM,
 } from "./utils/geo";
+import { enqueuePushNotificationDispatch } from "./jobs/pushNotificationDispatchJob";
 // Import date utilities for storage/display handling
 
 interface BlockedTimeSlot {
@@ -274,6 +275,14 @@ function buildProductCacheKey(filters?: Record<string, unknown>): string {
 }
 
 const EARTH_RADIUS_KM = 6371;
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+function buildContainsLikePattern(value: string): string {
+  return `%${escapeLikePattern(value)}%`;
+}
 
 function buildHaversineCondition({
   columnLat,
@@ -690,9 +699,13 @@ export class PostgresStorage implements IStorage {
         conditions.push(eq(products.shopId, criteria.shopId));
       }
       if (criteria.tags && criteria.tags.length > 0) {
-        conditions.push(
-          sql`${products.tags} @> ARRAY[${criteria.tags.join(",")}]`,
-        );
+        const normalizedTags = (criteria.tags as unknown[])
+          .map((tag) => String(tag).trim())
+          .filter((tag) => tag.length > 0);
+
+        for (const tag of normalizedTags) {
+          conditions.push(sql`${products.tags} @> ARRAY[${tag}]::text[]`);
+        }
       }
       if (criteria.attributes) {
         for (const key in criteria.attributes) {
@@ -1523,8 +1536,6 @@ export class PostgresStorage implements IStorage {
     }
     let query: any = db.primary.select().from(services);
     let joinedProviders = false;
-    const escapeLikePattern = (value: string) =>
-      value.replace(/[%_]/g, (char) => `\\${char}`);
     const ensureProviderJoin = () => {
       if (joinedProviders) return;
       query = query.leftJoin(users, eq(services.providerId, users.id));
@@ -1546,14 +1557,14 @@ export class PostgresStorage implements IStorage {
       if (criteria.searchTerm) {
         const normalizedTerm = String(criteria.searchTerm).trim();
         if (normalizedTerm.length > 0) {
-          const escapedPhrase = `%${escapeLikePattern(normalizedTerm)}%`;
-          const phraseMatch = sql`(${services.name} ILIKE ${escapedPhrase} OR ${services.description} ILIKE ${escapedPhrase})`;
+          const escapedPhrase = buildContainsLikePattern(normalizedTerm);
+          const phraseMatch = sql`(${services.name} ILIKE ${escapedPhrase} ESCAPE '\\' OR ${services.description} ILIKE ${escapedPhrase} ESCAPE '\\')`;
           const wordClauses = normalizedTerm
             .split(/\s+/)
             .filter((word) => word.length > 0)
             .map((word) => {
-              const escapedWord = `%${escapeLikePattern(word)}%`;
-              return sql`(${services.name} ILIKE ${escapedWord} OR ${services.description} ILIKE ${escapedWord})`;
+              const escapedWord = buildContainsLikePattern(word);
+              return sql`(${services.name} ILIKE ${escapedWord} ESCAPE '\\' OR ${services.description} ILIKE ${escapedWord} ESCAPE '\\')`;
             });
 
           if (wordClauses.length > 0) {
@@ -2992,17 +3003,50 @@ export class PostgresStorage implements IStorage {
     notifyNotificationChange(newNotification?.userId);
 
     // Send push notification via FCM if user has registered tokens
-    if (newNotification?.userId) {
-      this.sendPushNotificationAsync(
-        newNotification.userId,
-        newNotification.title,
-        newNotification.message,
-        newNotification.type,
-        newNotification.relatedBookingId,
-      );
+    const notificationUserId = newNotification?.userId;
+    if (typeof notificationUserId === "number") {
+      void enqueuePushNotificationDispatch({
+        userId: notificationUserId,
+        title: newNotification.title,
+        body: newNotification.message,
+        type: newNotification.type,
+        relatedId: newNotification.relatedBookingId,
+      }).catch((err) => {
+        logger.error(
+          {
+            err,
+            userId: notificationUserId,
+            notificationId: newNotification.id,
+          },
+          "Failed to enqueue push notification job; falling back to inline dispatch",
+        );
+        void this.dispatchPushNotificationJob({
+          userId: notificationUserId,
+          title: newNotification.title,
+          body: newNotification.message,
+          type: newNotification.type,
+          relatedId: newNotification.relatedBookingId,
+        });
+      });
     }
 
     return newNotification;
+  }
+
+  async dispatchPushNotificationJob(payload: {
+    userId: number;
+    title: string;
+    body: string;
+    type: string;
+    relatedId?: number | null;
+  }): Promise<void> {
+    await this.sendPushNotificationAsync(
+      payload.userId,
+      payload.title,
+      payload.body,
+      payload.type,
+      payload.relatedId,
+    );
   }
 
   /**
@@ -4056,6 +4100,7 @@ export class PostgresStorage implements IStorage {
   async globalSearch(params: GlobalSearchParams): Promise<GlobalSearchResult[]> {
     const { query, lat, lng, limit, excludeUserId } = params;
     const normalizedQuery = query.trim().toLowerCase();
+    const containsPattern = buildContainsLikePattern(normalizedQuery);
 
     // If location is provided, we use it for distance sorting
     const hasLocation = lat !== undefined && lng !== undefined;
@@ -4080,7 +4125,7 @@ export class PostgresStorage implements IStorage {
 
     // Relevance scoring helper
     const relevanceExpr = (nameCol: any, descCol: any, distExpr: any) => sql`
-      CASE WHEN LOWER(${nameCol}::text || ' ' || COALESCE(${descCol}::text, '')) LIKE ${'%' + normalizedQuery + '%'} THEN 4 ELSE 0 END
+      CASE WHEN LOWER(${nameCol}::text || ' ' || COALESCE(${descCol}::text, '')) LIKE ${containsPattern} ESCAPE '\\' THEN 4 ELSE 0 END
       + CASE 
           WHEN ${distExpr} IS NULL THEN 0
           WHEN ${distExpr} < 1 THEN 2
@@ -4111,7 +4156,7 @@ export class PostgresStorage implements IStorage {
       .where(
         and(
           eq(services.isDeleted, false),
-          sql`LOWER(${services.name}::text || ' ' || COALESCE(${services.description}::text, '')) LIKE ${'%' + normalizedQuery + '%'}`,
+          sql`LOWER(${services.name}::text || ' ' || COALESCE(${services.description}::text, '')) LIKE ${containsPattern} ESCAPE '\\'`,
           // Exclude user's own services
           excludeUserId !== undefined ? ne(services.providerId, excludeUserId) : undefined
         )
@@ -4150,7 +4195,7 @@ export class PostgresStorage implements IStorage {
       .where(
         and(
           eq(products.isDeleted, false),
-          sql`LOWER(${products.name}::text || ' ' || COALESCE(${products.description}::text, '')) LIKE ${'%' + normalizedQuery + '%'}`,
+          sql`LOWER(${products.name}::text || ' ' || COALESCE(${products.description}::text, '')) LIKE ${containsPattern} ESCAPE '\\'`,
           // Exclude user's own products (products from their shop)
           excludeUserId !== undefined ? ne(products.shopId, excludeUserId) : undefined
         )
@@ -4175,7 +4220,7 @@ export class PostgresStorage implements IStorage {
       .leftJoin(users, eq(shops.ownerId, users.id))
       .where(
         and(
-          sql`LOWER(${shops.shopName}::text || ' ' || COALESCE(${shops.description}::text, '')) LIKE ${'%' + normalizedQuery + '%'}`,
+          sql`LOWER(${shops.shopName}::text || ' ' || COALESCE(${shops.description}::text, '')) LIKE ${containsPattern} ESCAPE '\\'`,
           // Exclude user's own shop
           excludeUserId !== undefined ? ne(shops.ownerId, excludeUserId) : undefined
         )

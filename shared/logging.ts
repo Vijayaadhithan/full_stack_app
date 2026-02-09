@@ -11,4 +11,11 @@ export type LogContext = {
   userRole?: string;
   adminId?: string;
   requestId?: string;
+  correlationId?: string;
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  traceparent?: string;
+  jobId?: string;
+  jobType?: string;
 };

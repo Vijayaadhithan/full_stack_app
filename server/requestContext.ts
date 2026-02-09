@@ -3,6 +3,12 @@ import type { LogContext } from "@shared/logging";
 
 export type RequestMetadata = {
   requestId?: string;
+  correlationId?: string;
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  traceFlags?: string;
+  traceparent?: string;
   method?: string;
   path?: string;
   ip?: string;
@@ -12,6 +18,9 @@ export type RequestMetadata = {
   adminId?: string;
   sessionId?: string;
   tenantId?: string | number;
+  apiVersion?: string;
+  jobId?: string | number;
+  jobType?: string;
   [key: string]: unknown;
 };
 

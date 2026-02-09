@@ -24,6 +24,8 @@ import { reportError } from "./monitoring/errorReporter";
 import { trackRequestStart } from "./monitoring/metrics";
 import { startLowStockDigestJob } from "./jobs/lowStockDigestJob";
 import { initializeWorker } from "./jobQueue";
+import { registerPushNotificationDispatchJob } from "./jobs/pushNotificationDispatchJob";
+import { getRequestMetadata } from "./requestContext";
 
 config();
 
@@ -272,6 +274,9 @@ const LOGGABLE_HEADERS = [
   "content-type",
   "content-length",
   "x-request-id",
+  "x-correlation-id",
+  "x-trace-id",
+  "traceparent",
   "x-forwarded-for",
 ];
 const MAX_SANITIZE_DEPTH = 3;
@@ -395,12 +400,51 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet(helmetConfig));
 
+const API_BASE_PREFIX = "/api";
+const API_VERSION = "v1";
+const VERSIONED_API_PREFIX = `${API_BASE_PREFIX}/${API_VERSION}`;
+const UNSUPPORTED_API_VERSION_PATTERN = /^\/api\/v[0-9]+(?:\/|$)/i;
+
 // Explicitly allow geolocation on same-origin. (Helmet typings may not support permissionsPolicy.)
 app.use((_req, res, next) => {
   res.setHeader("Permissions-Policy", "geolocation=(self)");
   next();
 });
-app.use(express.json({ limit: "500kb" }));
+app.use((req, res, next) => {
+  const requestPath = req.path;
+
+  if (
+    requestPath === VERSIONED_API_PREFIX ||
+    requestPath.startsWith(`${VERSIONED_API_PREFIX}/`)
+  ) {
+    req.url = req.url.replace(/^\/api\/v1(?=\/|$)/i, API_BASE_PREFIX);
+    (res.locals as { apiVersion?: string }).apiVersion = API_VERSION;
+    res.setHeader("x-api-version", API_VERSION);
+    return next();
+  }
+
+  if (UNSUPPORTED_API_VERSION_PATTERN.test(requestPath)) {
+    const requestedVersion = requestPath.split("/")[2] ?? "unknown";
+    return res.status(400).json({
+      message: `Unsupported API version '${requestedVersion}'. Supported versions: ${API_VERSION}.`,
+    });
+  }
+
+  if (requestPath === API_BASE_PREFIX || requestPath.startsWith(`${API_BASE_PREFIX}/`)) {
+    (res.locals as { apiVersion?: string }).apiVersion = API_VERSION;
+    res.setHeader("x-api-version", API_VERSION);
+    res.setHeader("Deprecation", "true");
+    const sunset = process.env.API_LEGACY_SUNSET_DATE?.trim();
+    if (sunset) {
+      res.setHeader("Sunset", sunset);
+    }
+    res.append("Link", `</api/${API_VERSION}>; rel="successor-version"`);
+  }
+
+  next();
+});
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(
   cors({
     origin: allowAllOrigins
@@ -472,12 +516,13 @@ app.get("/api/health", (_req, res) => {
 
 // Initialize scheduled jobs
 export async function startServer(port?: number) {
-  // Initialize BullMQ worker for job processing
+  // Register handlers before starting worker so pending jobs always have processors.
   if (process.env.NODE_ENV !== "test") {
-    initializeWorker();
+    registerPushNotificationDispatchJob(dbStorage);
     startBookingExpirationJob(dbStorage);
     startPaymentReminderJob(dbStorage);
     startLowStockDigestJob(dbStorage);
+    initializeWorker();
   }
 
   const server = await registerRoutesPromise;
@@ -518,6 +563,7 @@ export async function startServer(port?: number) {
     const message = resolveErrorMessage(err);
     const errorId = randomUUID();
     const isClientError = status >= 400 && status < 500;
+    const requestMeta = getRequestMetadata();
 
     const errorForLog = err instanceof Error ? err : new Error(message);
     logger.error(
@@ -527,11 +573,29 @@ export async function startServer(port?: number) {
         status,
         path: req.originalUrl,
         method: req.method,
+        requestId: requestMeta?.requestId,
+        correlationId: requestMeta?.correlationId,
+        traceId: requestMeta?.traceId,
+        spanId: requestMeta?.spanId,
       },
       "Unhandled request error",
     );
 
     if (isProduction) {
+      const tags: Record<string, string> = {};
+      if (
+        typeof requestMeta?.requestId === "string" &&
+        requestMeta.requestId.trim().length > 0
+      ) {
+        tags.requestId = requestMeta.requestId;
+      }
+      if (
+        typeof requestMeta?.traceId === "string" &&
+        requestMeta.traceId.trim().length > 0
+      ) {
+        tags.traceId = requestMeta.traceId;
+      }
+
       const requestContext = {
         method: req.method,
         url: req.originalUrl,
@@ -546,6 +610,13 @@ export async function startServer(port?: number) {
         errorId,
         status,
         request: requestContext,
+        tags: Object.keys(tags).length > 0 ? tags : undefined,
+        extras: {
+          correlationId: requestMeta?.correlationId,
+          spanId: requestMeta?.spanId,
+          parentSpanId: requestMeta?.parentSpanId,
+          traceparent: requestMeta?.traceparent,
+        },
       }).catch((reportingError) => {
         logger.error(
           {

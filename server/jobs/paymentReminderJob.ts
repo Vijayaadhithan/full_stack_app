@@ -1,6 +1,10 @@
 import type { IStorage } from "../storage";
 import logger from "../logger";
-import { registerJobHandler, addRepeatableJob } from "../jobQueue";
+import {
+  registerJobHandler,
+  addRepeatableJob,
+  getJobQueue,
+} from "../jobQueue";
 import { withJobLock } from "../services/jobLock.service";
 
 export let lastRun: Date | null = null;
@@ -114,9 +118,27 @@ export function startPaymentReminderJob(storage: IStorage): void {
   const schedule = process.env.PAYMENT_REMINDER_CRON || "30 * * * *"; // hourly at :30
   const timezone = process.env.CRON_TZ || "Asia/Kolkata";
 
-  addRepeatableJob(JOB_TYPE, {}, schedule, { timezone }).catch(err => {
-    logger.error("Failed to schedule payment reminder job:", err);
-  });
+  getJobQueue()
+    .getRepeatableJobs()
+    .then((jobs) => {
+      const exists = jobs.some((j) => j.name === JOB_TYPE);
+      if (!exists) {
+        void addRepeatableJob(JOB_TYPE, {}, schedule, {
+          timezone,
+          source: "scheduler",
+        }).catch((err) => {
+          logger.error(
+            { err },
+            "[PaymentReminderJob] Failed to schedule repeatable job",
+          );
+        });
+      } else {
+        logger.debug("[PaymentReminderJob] Already scheduled, skipping");
+      }
+    })
+    .catch((err) => {
+      logger.error("Failed to schedule payment reminder job:", err);
+    });
 
   logger.info("Payment reminder job scheduled");
 }
