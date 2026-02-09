@@ -203,12 +203,12 @@ ADMIN_EMAIL=your_admin_email@example.com
 ADMIN_PASSWORD=YourSecureAdminPassword
 
 # Firebase (copy these from your current .env)
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=4
-VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN=YOUR_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_PROJECT_ID=YOUR_FIREBASE_PROJECT_ID
+VITE_FIREBASE_STORAGE_BUCKET=YOUR_FIREBASE_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID=YOUR_FIREBASE_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID=YOUR_FIREBASE_APP_ID
 
 # Job Scheduling
 BOOKING_EXPIRATION_CRON=0 * * * *
@@ -234,7 +234,7 @@ Copy the output and put it in `SESSION_SECRET` above.
 
 From **your Mac terminal**:
 ```bash
-scp /Users/vjaadhi2799/Downloads/vaasal-d888a-firebase-adminsdk-fbsvc-05917515c2.json root@YOUR_VPS_IP:/var/www/doorstep-api/firebase-service-account.json
+scp /path/to/your-firebase-service-account.json root@YOUR_VPS_IP:/var/www/doorstep-api/firebase-service-account.json
 ```
 
 Then add to `.env` on VPS:
@@ -405,12 +405,12 @@ Add these variables:
 | Variable Name | Value |
 |---------------|-------|
 | `VITE_API_URL` | `https://api.doorsteptn.in` |
-| `VITE_FIREBASE_API_KEY` | `AIzaSyDs4MJm55Aelkvfgh4cC9Yj6KHbyK-yFdY` |
-| `VITE_FIREBASE_AUTH_DOMAIN` | `vaasal-d888a.firebaseapp.com` |
-| `VITE_FIREBASE_PROJECT_ID` | `vaasal-d888a` |
-| `VITE_FIREBASE_STORAGE_BUCKET` | `vaasal-d888a.firebasestorage.app` |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `490481415278` |
-| `VITE_FIREBASE_APP_ID` | `1:490481415278:web:92e6ac583ad95eb7d3627f` |
+| `VITE_FIREBASE_API_KEY` | `YOUR_FIREBASE_API_KEY` |
+| `VITE_FIREBASE_AUTH_DOMAIN` | `YOUR_FIREBASE_AUTH_DOMAIN` |
+| `VITE_FIREBASE_PROJECT_ID` | `YOUR_FIREBASE_PROJECT_ID` |
+| `VITE_FIREBASE_STORAGE_BUCKET` | `YOUR_FIREBASE_STORAGE_BUCKET` |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `YOUR_FIREBASE_MESSAGING_SENDER_ID` |
+| `VITE_FIREBASE_APP_ID` | `YOUR_FIREBASE_APP_ID` |
 
 ## Step 6: Deploy
 

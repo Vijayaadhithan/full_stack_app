@@ -8,19 +8,33 @@
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js');
 
-// Initialize Firebase with your config
-// These values are replaced at build time or use defaults
-firebase.initializeApp({
-    apiKey: "AIzaSyDs4MJm55Aelkvfgh4cC9Yj6KHbyK-yFdY",
-    authDomain: "vaasal-d888a.firebaseapp.com",
-    projectId: "vaasal-d888a",
-    storageBucket: "vaasal-d888a.firebasestorage.app",
-    messagingSenderId: "490481415278",
-    appId: "1:490481415278:web:92e6ac583ad95eb7d3627f"
-});
+const swUrl = new URL(self.location.href);
+const firebaseConfig = {
+    apiKey: swUrl.searchParams.get("apiKey") || "",
+    authDomain: swUrl.searchParams.get("authDomain") || "",
+    projectId: swUrl.searchParams.get("projectId") || "",
+    storageBucket: swUrl.searchParams.get("storageBucket") || "",
+    messagingSenderId: swUrl.searchParams.get("messagingSenderId") || "",
+    appId: swUrl.searchParams.get("appId") || "",
+};
 
-// Get messaging instance
-const messaging = firebase.messaging();
+const hasFirebaseConfig = Boolean(
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId,
+);
+
+let messaging = null;
+if (hasFirebaseConfig) {
+    try {
+        firebase.initializeApp(firebaseConfig);
+        messaging = firebase.messaging();
+    } catch (error) {
+        console.error("[firebase-messaging-sw.js] Firebase init failed:", error);
+    }
+} else {
+    console.warn("[firebase-messaging-sw.js] Missing Firebase config. Background notifications disabled.");
+}
 
 const isDebug = /^(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)$/.test(
     self.location.hostname,
@@ -33,43 +47,45 @@ const debugLog = (...args) => {
 };
 
 // Handle background messages
-messaging.onBackgroundMessage((payload) => {
-    debugLog("[firebase-messaging-sw.js] Received background message:", payload);
-    console.info("[firebase-messaging-sw.js] Payload summary", {
-        type: payload.data?.type,
-        relatedId: payload.data?.relatedId,
-        hasTitle: Boolean(payload.notification?.title || payload.data?.title),
-        hasBody: Boolean(payload.notification?.body || payload.data?.body),
+if (messaging) {
+    messaging.onBackgroundMessage((payload) => {
+        debugLog("[firebase-messaging-sw.js] Received background message:", payload);
+        console.info("[firebase-messaging-sw.js] Payload summary", {
+            type: payload.data?.type,
+            relatedId: payload.data?.relatedId,
+            hasTitle: Boolean(payload.notification?.title || payload.data?.title),
+            hasBody: Boolean(payload.notification?.body || payload.data?.body),
+        });
+
+        const notificationTitle =
+            payload.notification?.title ||
+            payload.data?.title ||
+            'DoorStep';
+        const notificationBody = payload.notification?.body || payload.data?.body || '';
+        const notificationData = {
+            ...(payload.data || {}),
+            title: payload.data?.title || notificationTitle,
+            body: payload.data?.body || notificationBody,
+        };
+
+        const notificationOptions = {
+            body: notificationBody,
+            icon: '/icon-192.png',
+            badge: '/icon-192.png',
+            tag: payload.data?.type || 'notification',
+            data: notificationData,
+            actions: [
+                {
+                    action: 'open',
+                    title: 'Open'
+                }
+            ],
+            requireInteraction: true
+        };
+
+        self.registration.showNotification(notificationTitle, notificationOptions);
     });
-
-    const notificationTitle =
-        payload.notification?.title ||
-        payload.data?.title ||
-        'DoorStep';
-    const notificationBody = payload.notification?.body || payload.data?.body || '';
-    const notificationData = {
-        ...(payload.data || {}),
-        title: payload.data?.title || notificationTitle,
-        body: payload.data?.body || notificationBody,
-    };
-
-    const notificationOptions = {
-        body: notificationBody,
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
-        tag: payload.data?.type || 'notification',
-        data: notificationData,
-        actions: [
-            {
-                action: 'open',
-                title: 'Open'
-            }
-        ],
-        requireInteraction: true
-    };
-
-    self.registration.showNotification(notificationTitle, notificationOptions);
-});
+}
 
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {
