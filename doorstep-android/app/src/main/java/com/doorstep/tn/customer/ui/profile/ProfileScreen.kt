@@ -2,7 +2,9 @@ package com.doorstep.tn.customer.ui.profile
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.doorstep.tn.BuildConfig
 import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -837,9 +840,28 @@ fun ProfileScreen(
                     }
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
+            OutlinedButton(
+                onClick = {
+                    val url = BuildConfig.PRIVACY_POLICY_URL
+                    if (url.isNotBlank()) {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary),
+                border = BorderStroke(1.dp, OrangePrimary)
+            ) {
+                Icon(Icons.Default.Policy, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Privacy Policy")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Logout Button
             OutlinedButton(
                 onClick = onLogout,

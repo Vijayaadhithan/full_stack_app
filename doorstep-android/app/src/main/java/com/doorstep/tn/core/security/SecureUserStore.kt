@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+import androidx.security.crypto.MasterKey
 import com.doorstep.tn.core.datastore.PreferenceKeys
 import com.doorstep.tn.core.datastore.dataStore
 
@@ -20,6 +20,7 @@ object SecureUserStore {
     private const val KEY_USER_ROLE = "user_role"
     private const val KEY_USER_PHONE = "user_phone"
     private const val KEY_LAST_PHONE = "last_phone"
+    private const val KEY_PENDING_USER_ROLE = "pending_user_role"
 
     private const val KEY_FCM_TOKEN = "fcm_token"
     private const val KEY_FCM_NEEDS_SYNC = "fcm_token_needs_sync"
@@ -35,11 +36,13 @@ object SecureUserStore {
             if (again != null) {
                 again
             } else {
-                val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+                val masterKey = MasterKey.Builder(context.applicationContext)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
                 val created = EncryptedSharedPreferences.create(
-                    PREFS_NAME,
-                    masterKeyAlias,
                     context.applicationContext,
+                    PREFS_NAME,
+                    masterKey,
                     EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
                 )
@@ -75,6 +78,13 @@ object SecureUserStore {
         setString(getPrefs(context), KEY_USER_ROLE, role)
     }
 
+    fun getPendingUserRole(context: Context): String? =
+        getPrefs(context).getString(KEY_PENDING_USER_ROLE, null)
+
+    fun setPendingUserRole(context: Context, role: String?) {
+        setString(getPrefs(context), KEY_PENDING_USER_ROLE, role)
+    }
+
     fun getUserPhone(context: Context): String? = getPrefs(context).getString(KEY_USER_PHONE, null)
 
     fun setUserPhone(context: Context, phone: String?) {
@@ -93,6 +103,7 @@ object SecureUserStore {
             .remove(KEY_USER_NAME)
             .remove(KEY_USER_ROLE)
             .remove(KEY_USER_PHONE)
+            .remove(KEY_PENDING_USER_ROLE)
             .apply()
     }
 

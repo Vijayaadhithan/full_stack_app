@@ -133,15 +133,28 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = authRepository.getCurrentUser()) {
                 is Result.Success -> {
-                    _currentUser.value = result.data
+                    val pendingRole = SecureUserStore.getPendingUserRole(context)
+                    val effectiveRole = pendingRole ?: result.data.role
+
+                    _currentUser.value = result.data.copy(role = effectiveRole)
                     _userName.value = result.data.name
-                    _userRole.value = result.data.role
+                    _userRole.value = effectiveRole
                     SecureUserStore.setUserId(context, result.data.id.toString())
                     SecureUserStore.setUserName(context, result.data.name)
-                    SecureUserStore.setUserRole(context, result.data.role)
+                    SecureUserStore.setUserRole(context, effectiveRole)
                     SecureUserStore.setUserPhone(context, result.data.phone)
                     _hasShopProfile.value = result.data.hasShopProfile == true
                     _hasProviderProfile.value = result.data.hasProviderProfile == true
+                    if (pendingRole != null) {
+                        if (pendingRole == result.data.role) {
+                            SecureUserStore.setPendingUserRole(context, null)
+                        } else {
+                            when (authRepository.updateUserRole(result.data.id, pendingRole)) {
+                                is Result.Success -> SecureUserStore.setPendingUserRole(context, null)
+                                else -> {}
+                            }
+                        }
+                    }
                     syncFcmToken()
                 }
                 is Result.Error -> {
@@ -312,15 +325,6 @@ class AuthViewModel @Inject constructor(
     }
     
     /**
-     * Send OTP via Firebase (fallback without Activity - shows error)
-     */
-    private fun sendOtp(onSuccess: () -> Unit) {
-        // This is called when Activity is not available
-        // In practice, we should always have access to Activity via the UI
-        _error.value = "Please use the app's login screen to send OTP"
-    }
-    
-    /**
      * Verify OTP entered by user
      */
     fun verifyOtp(onSuccess: () -> Unit) {
@@ -469,26 +473,25 @@ class AuthViewModel @Inject constructor(
     fun switchRole(newRole: String) {
         viewModelScope.launch {
             val userId = _currentUser.value?.id
-            
-            try {
-                // Update role in backend API (uses PATCH /api/users/{id})
-                if (userId != null) {
-                    authRepository.updateUserRole(userId, newRole)
+
+            // Optimistically update local role for immediate navigation.
+            SecureUserStore.setUserRole(context, newRole)
+            _userRole.value = newRole
+            _currentUser.value = _currentUser.value?.copy(role = newRole)
+
+            if (userId == null) {
+                SecureUserStore.setPendingUserRole(context, newRole)
+                _error.value = "Role updated locally, but couldn't sync to server yet. We'll retry automatically."
+                return@launch
+            }
+
+            when (val result = authRepository.updateUserRole(userId, newRole)) {
+                is Result.Success -> SecureUserStore.setPendingUserRole(context, null)
+                is Result.Error -> {
+                    SecureUserStore.setPendingUserRole(context, newRole)
+                    _error.value = "Couldn't sync role change. We'll retry automatically."
                 }
-                
-                // Update local storage
-                SecureUserStore.setUserRole(context, newRole)
-                
-                // Update state
-                _userRole.value = newRole
-                
-                // Update user object
-                _currentUser.value = _currentUser.value?.copy(role = newRole)
-            } catch (e: Exception) {
-                // If API fails, still update locally for immediate navigation
-                SecureUserStore.setUserRole(context, newRole)
-                _userRole.value = newRole
-                _currentUser.value = _currentUser.value?.copy(role = newRole)
+                is Result.Loading -> {}
             }
         }
     }

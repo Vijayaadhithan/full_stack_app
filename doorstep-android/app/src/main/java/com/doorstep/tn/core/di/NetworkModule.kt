@@ -4,6 +4,7 @@ import android.content.Context
 import com.doorstep.tn.BuildConfig
 import com.doorstep.tn.core.network.AuthInterceptor
 import com.doorstep.tn.core.network.DoorStepApi
+import com.doorstep.tn.core.network.FlexibleStringAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
@@ -66,6 +67,7 @@ object NetworkModule {
     @Singleton
     fun provideMoshi(): Moshi {
         return Moshi.Builder()
+            .add(FlexibleStringAdapter())
             .add(KotlinJsonAdapterFactory())
             .build()
     }

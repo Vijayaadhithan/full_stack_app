@@ -12,6 +12,16 @@ val apiCertPins = (project.findProperty("API_CERT_PINS") as String?)
     ?.takeIf { it.isNotEmpty() }
     ?: System.getenv("API_CERT_PINS")?.trim()?.takeIf { it.isNotEmpty() }
 
+val versionCodeOverride = (project.findProperty("VERSION_CODE") as String?)
+    ?.trim()
+    ?.toIntOrNull()
+    ?: System.getenv("VERSION_CODE")?.trim()?.toIntOrNull()
+
+val versionNameOverride = (project.findProperty("VERSION_NAME") as String?)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("VERSION_NAME")?.trim()?.takeIf { it.isNotEmpty() }
+
 fun escapeBuildConfig(value: String): String {
     return value.replace("\\", "\\\\").replace("\"", "\\\"")
 }
@@ -24,13 +34,14 @@ android {
         applicationId = "com.doorstep.tn"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = versionCodeOverride ?: 1
+        versionName = versionNameOverride ?: "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
         // API Base URL
         buildConfigField("String", "API_BASE_URL", "\"https://api.doorsteptn.in\"")
+        buildConfigField("String", "PRIVACY_POLICY_URL", "\"https://doorsteptn.in/privacy-policy\"")
         val resolvedPins = apiCertPins ?: ""
         val escapedPins = escapeBuildConfig(resolvedPins)
         buildConfigField("String", "API_CERT_PINS", "\"$escapedPins\"")
@@ -73,6 +84,9 @@ android {
 
 tasks.matching { it.name.contains("Release") }.configureEach {
     doFirst {
+        if (versionCodeOverride == null) {
+            throw GradleException("VERSION_CODE must be set for release builds (e.g., -PVERSION_CODE=2 or env VERSION_CODE=2).")
+        }
         if (apiCertPins.isNullOrBlank()) {
             throw GradleException("API_CERT_PINS must be set for release builds.")
         }

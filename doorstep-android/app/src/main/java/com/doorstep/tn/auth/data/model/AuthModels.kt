@@ -1,5 +1,6 @@
 package com.doorstep.tn.auth.data.model
 
+import com.doorstep.tn.customer.data.model.PayLaterEligibility
 import com.doorstep.tn.customer.data.model.ShopProfile
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
@@ -46,8 +47,8 @@ data class RuralRegisterRequest(
  * User response from API
  */
 @JsonClass(generateAdapter = true)
-data class UserResponse(
-    @Json(name = "id") val id: Int,
+	data class UserResponse(
+	    @Json(name = "id") val id: Int,
     @Json(name = "name") val name: String?,
     @Json(name = "phone") val phone: String?,
     @Json(name = "email") val email: String? = null,
@@ -78,20 +79,13 @@ data class UserResponse(
     @Json(name = "catalogModeEnabled") val catalogModeEnabled: Boolean? = null,
     @Json(name = "openOrderMode") val openOrderMode: Boolean? = null,
     @Json(name = "allowPayLater") val allowPayLater: Boolean? = null,
-    @Json(name = "shopProfile") val shopProfile: ShopProfile? = null,
-    @Json(name = "payLaterEligibilityForCustomer") val payLaterEligibilityForCustomer: PayLaterEligibility? = null
-)
+	    @Json(name = "shopProfile") val shopProfile: ShopProfile? = null,
+	    @Json(name = "payLaterEligibilityForCustomer") val payLaterEligibilityForCustomer: PayLaterEligibility? = null
+	)
 
-@JsonClass(generateAdapter = true)
-data class PayLaterEligibility(
-    @Json(name = "eligible") val eligible: Boolean? = null,
-    @Json(name = "isKnownCustomer") val isKnownCustomer: Boolean? = null,
-    @Json(name = "isWhitelisted") val isWhitelisted: Boolean? = null
-)
-
-/**
- * Shop/provider profile availability for role switching
- */
+	/**
+	 * Shop/provider profile availability for role switching
+	 */
 @JsonClass(generateAdapter = true)
 data class AuthProfilesResponse(
     @Json(name = "hasShop") val hasShop: Boolean = false,

@@ -448,13 +448,6 @@ fun DoorStepNavHost(
             )
         }
         
-        // My Reviews Screen
-        composable(Routes.CUSTOMER_REVIEWS) {
-            MyReviewsScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        
         // Notifications Screen
         composable(Routes.CUSTOMER_NOTIFICATIONS) {
             NotificationsScreen(

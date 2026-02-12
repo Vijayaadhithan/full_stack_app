@@ -19,7 +19,7 @@ ksp = "2.0.0-1.0.24"
 googleServices = "4.4.2"
 coroutines = "1.9.0"
 playServicesLocation = "21.3.0"
-securityCrypto = "1.0.0"
+securityCrypto = "1.1.0-alpha06"
 
 [libraries]
 # Core Android

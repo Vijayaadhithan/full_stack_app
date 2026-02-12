@@ -218,7 +218,7 @@ private fun CachedShop.toShop(): Shop {
         ),
         phone = phone,
         profilePicture = images,
-        averageRating = rating,
+        averageRating = rating?.toString(),
         pickupAvailable = true,
         deliveryAvailable = false
     )
