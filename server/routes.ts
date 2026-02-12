@@ -5607,6 +5607,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
+        const parsePromotionDate = (
+          value: Date | string | null | undefined,
+        ): Date | null => {
+          if (value == null) return null;
+          const parsed = value instanceof Date ? value : new Date(value);
+          return Number.isNaN(parsed.getTime()) ? null : parsed;
+        };
+
         // If a promotion is applied, verify it's valid
         if (promotionId) {
           const promotionResult = await db.primary
@@ -5628,10 +5636,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Verify promotion is active and not expired
           const now = new Date();
+          const nowTs = now.getTime();
+          const promotionStartDate = parsePromotionDate(promotion.startDate);
+          const promotionEndDate = parsePromotionDate(promotion.endDate);
           if (
             !promotion.isActive ||
-            promotion.startDate > now ||
-            (promotion.endDate && promotion.endDate < now)
+            (promotionStartDate != null &&
+              promotionStartDate.getTime() > nowTs) ||
+            (promotionEndDate != null && promotionEndDate.getTime() < nowTs)
           ) {
             return res
               .status(400)

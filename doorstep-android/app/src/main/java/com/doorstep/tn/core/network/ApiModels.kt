@@ -378,7 +378,7 @@ data class PromotionValidationResponse(
 data class Promotion(
     @Json(name = "id") val id: Int,
     @Json(name = "shopId") val shopId: Int,
-    @Json(name = "code") val code: String,
+    @Json(name = "code") val code: String? = null,
     @Json(name = "name") val name: String,
     @Json(name = "description") val description: String? = null,
     @Json(name = "type") val type: String, // "percentage" or "fixed_amount"

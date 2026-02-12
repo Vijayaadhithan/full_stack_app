@@ -1,8 +1,8 @@
 import { Express, type Request } from "express";
 import { z } from "zod";
-import { eq, and, gte, lte, isNull, or } from "drizzle-orm"; // Added 'or'
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { promotions, shopWorkers } from "@shared/schema";
+import { promotions, shopWorkers, shops } from "@shared/schema";
 import logger from "../logger";
 import {
   requireShopOrWorkerPermission,
@@ -128,6 +128,76 @@ const promotionRedeemSchema = z
   .strict();
 
 const PROMOTION_QUERY_KEYS = ["/api/promotions/shop", "/api/promotions/active"] as const;
+
+type PromotionRow = typeof promotions.$inferSelect;
+
+function toFiniteNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) return null;
+  return numericValue;
+}
+
+function toValidDate(value: unknown): Date | null {
+  if (value == null) return null;
+  const parsed = value instanceof Date ? value : new Date(value as string | number);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function isPromotionWithinSchedule(
+  promotion: Pick<PromotionRow, "startDate" | "endDate">,
+  now = new Date(),
+): boolean {
+  const nowTs = now.getTime();
+  const startDate = toValidDate(promotion.startDate);
+  if (startDate && startDate.getTime() > nowTs) {
+    return false;
+  }
+  const endDate = toValidDate(promotion.endDate);
+  if (endDate && endDate.getTime() < nowTs) {
+    return false;
+  }
+  return true;
+}
+
+function hasPromotionUsageRemaining(
+  promotion: Pick<PromotionRow, "usageLimit" | "usedCount">,
+): boolean {
+  if (!promotion.usageLimit || promotion.usageLimit <= 0) {
+    return true;
+  }
+  return (promotion.usedCount ?? 0) < promotion.usageLimit;
+}
+
+function normalizePromotionResponse(promotion: PromotionRow) {
+  return {
+    ...promotion,
+    value: toFiniteNumber(promotion.value) ?? 0,
+    minPurchase: toFiniteNumber(promotion.minPurchase),
+    maxDiscount: toFiniteNumber(promotion.maxDiscount),
+  };
+}
+
+async function resolvePromotionLookupShopIds(shopId: number): Promise<number[]> {
+  const ids = new Set<number>([shopId]);
+  try {
+    const [shopRecord] = await db.primary
+      .select({ ownerId: shops.ownerId })
+      .from(shops)
+      .where(eq(shops.id, shopId))
+      .limit(1);
+    if (shopRecord?.ownerId) {
+      ids.add(shopRecord.ownerId);
+    }
+  } catch (error) {
+    logger.warn(
+      { err: error, shopId },
+      "Failed to resolve shop owner fallback for promotion lookup",
+    );
+  }
+  return Array.from(ids);
+}
 
 async function notifyPromotionSubscribers(shopId: number | null | undefined) {
   if (process.env.NODE_ENV === "test") {
@@ -271,7 +341,7 @@ export function registerPromotionRoutes(app: Express) {
           .returning();
 
         void notifyPromotionSubscribers(shopContextId);
-        res.status(201).json(promotion[0]);
+        res.status(201).json(normalizePromotionResponse(promotion[0]));
       } catch (error) {
         logger.error("Error creating promotion:", error);
         res
@@ -326,7 +396,7 @@ export function registerPromotionRoutes(app: Express) {
           .select()
           .from(promotions)
           .where(eq(promotions.shopId, shopContextId));
-        res.json(allPromotions);
+        res.json(allPromotions.map(normalizePromotionResponse));
       } catch (error) {
         logger.error("Error fetching promotions:", error);
         res
@@ -491,7 +561,7 @@ export function registerPromotionRoutes(app: Express) {
         }
 
         void notifyPromotionSubscribers(shopContextId);
-        res.json(updatedPromotion);
+        res.json(normalizePromotionResponse(updatedPromotion));
       } catch (error) {
         logger.error("Error updating promotion:", error);
         res
@@ -589,7 +659,7 @@ export function registerPromotionRoutes(app: Express) {
         }
 
         void notifyPromotionSubscribers(shopContextId);
-        res.json(updatedPromotion);
+        res.json(normalizePromotionResponse(updatedPromotion));
       } catch (error) {
         logger.error("Error updating promotion status:", error);
         res
@@ -703,27 +773,24 @@ export function registerPromotionRoutes(app: Express) {
             .json(formatValidationError(parsedParams.error));
         }
         const requestedShopId = parsedParams.data.shopId;
-        const shopId = requestedShopId;
+        const shopIds = await resolvePromotionLookupShopIds(requestedShopId);
         const now = new Date();
 
-        // Get all active and non-expired promotions for the shop
-        const activePromotions = await db.primary
+        // Query by active flag and shop context, then evaluate date window in JS to avoid timezone edge cases.
+        const promotionsForShop = await db.primary
           .select()
           .from(promotions)
           .where(
             and(
-              eq(promotions.shopId, shopId),
+              inArray(promotions.shopId, shopIds),
               eq(promotions.isActive, true),
-              lte(promotions.startDate, now),
-              or(isNull(promotions.endDate), gte(promotions.endDate, now)),
             ),
           );
 
-        // Filter out promotions that have reached their usage limit
-        const validPromotions = activePromotions.filter((promo) => {
-          // Add null check for usedCount
-          return !promo.usageLimit || (promo.usedCount || 0) < promo.usageLimit;
-        });
+        const validPromotions = promotionsForShop
+          .filter((promotion) => isPromotionWithinSchedule(promotion, now))
+          .filter(hasPromotionUsageRemaining)
+          .map(normalizePromotionResponse);
 
         res.json(validPromotions);
       } catch (error) {
@@ -791,53 +858,47 @@ export function registerPromotionRoutes(app: Express) {
 
         const {
           code,
-          shopId,
+          shopId: requestedShopId,
           cartItems: rawCartItems,
           subtotal,
         } = result.data;
         const cartItems = [...rawCartItems];
+        const normalizedCode = code.trim().toLowerCase();
+        const shopIds = await resolvePromotionLookupShopIds(requestedShopId);
+        const now = new Date();
 
-        // Find the promotion by code and shop
-        const promotion = await db.primary
+        // Find active promotions for this shop, then match code case-insensitively.
+        const promotionsForShop = await db.primary
           .select()
           .from(promotions)
           .where(
             and(
-              eq(promotions.code, code),
-              eq(promotions.shopId, shopId),
+              inArray(promotions.shopId, shopIds),
               eq(promotions.isActive, true),
-              and(
-                lte(promotions.startDate, new Date()),
-                or(
-                  isNull(promotions.endDate),
-                  gte(promotions.endDate, new Date()),
-                ),
-              ),
             ),
           );
 
-        if (!promotion.length) {
+        const promoDetails = promotionsForShop.find((promotion) => {
+          const promotionCode = promotion.code?.trim().toLowerCase();
+          return (
+            promotionCode === normalizedCode &&
+            isPromotionWithinSchedule(promotion, now)
+          );
+        });
+
+        if (!promoDetails) {
           return res
             .status(404)
             .json({ message: "Invalid or expired promotion code" });
         }
 
-        const promoDetails = promotion[0];
-
-        // Check usage limit (add null check)
-        if (
-          promoDetails.usageLimit &&
-          (promoDetails.usedCount || 0) >= promoDetails.usageLimit
-        ) {
+        if (!hasPromotionUsageRemaining(promoDetails)) {
           return res
             .status(400)
             .json({ message: "This promotion has reached its usage limit" });
         }
 
-        // Check minimum purchase requirement (convert promoDetails.minPurchase to number)
-        const minPurchaseValue = promoDetails.minPurchase
-          ? parseFloat(promoDetails.minPurchase)
-          : 0;
+        const minPurchaseValue = toFiniteNumber(promoDetails.minPurchase) ?? 0;
         if (minPurchaseValue > 0 && subtotal < minPurchaseValue) {
           return res.status(400).json({
             message: `Minimum purchase of ₹${minPurchaseValue} required for this promotion`,
@@ -878,9 +939,8 @@ export function registerPromotionRoutes(app: Express) {
           0,
         );
 
-        // Calculate discount (convert promoDetails.value to number)
         let discountAmount = 0;
-        const promoValue = parseFloat(promoDetails.value);
+        const promoValue = toFiniteNumber(promoDetails.value) ?? 0;
         if (promoDetails.type === "percentage") {
           discountAmount = (applicableSubtotal * promoValue) / 100;
         } else {
@@ -888,10 +948,7 @@ export function registerPromotionRoutes(app: Express) {
           discountAmount = promoValue;
         }
 
-        // Apply max discount cap if specified (convert promoDetails.maxDiscount to number)
-        const maxDiscountValue = promoDetails.maxDiscount
-          ? parseFloat(promoDetails.maxDiscount)
-          : null;
+        const maxDiscountValue = toFiniteNumber(promoDetails.maxDiscount);
         if (maxDiscountValue !== null && discountAmount > maxDiscountValue) {
           discountAmount = maxDiscountValue;
         }
@@ -901,7 +958,7 @@ export function registerPromotionRoutes(app: Express) {
 
         res.json({
           valid: true,
-          promotion: promoDetails,
+          promotion: normalizePromotionResponse(promoDetails),
           discountAmount,
           finalTotal: subtotal - discountAmount,
         });
@@ -983,19 +1040,14 @@ export function registerPromotionRoutes(app: Express) {
         const now = new Date();
         if (
           !promotion.isActive ||
-          promotion.startDate > now ||
-          (promotion.endDate && promotion.endDate < now)
+          !isPromotionWithinSchedule(promotion, now)
         ) {
           return res
             .status(400)
             .json({ message: "Promotion is not active or has expired" });
         }
 
-        // Check usage limit (add null check)
-        if (
-          promotion.usageLimit &&
-          (promotion.usedCount || 0) >= promotion.usageLimit
-        ) {
+        if (!hasPromotionUsageRemaining(promotion)) {
           return res
             .status(400)
             .json({ message: "This promotion has reached its usage limit" });

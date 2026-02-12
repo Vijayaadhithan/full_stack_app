@@ -451,6 +451,7 @@ fun CartScreen(
                                     activePromotions.forEach { promo ->
                                         // Filter out invalid ones based on min amount
                                         val isEligible = promo.minOrderAmount == null || subtotal >= promo.minOrderAmount
+                                        val promotionLabel = promo.code?.takeIf { it.isNotBlank() } ?: promo.name
                                         
                                         // Calculate uses remaining
                                         val usesRemaining = if (promo.usageLimit != null) {
@@ -498,7 +499,7 @@ fun CartScreen(
                                             )
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = promo.code,
+                                                    text = promotionLabel,
                                                     style = MaterialTheme.typography.titleSmall,
                                                     color = if (isEligible) WhiteText else WhiteTextMuted,
                                                     fontWeight = FontWeight.Bold
@@ -723,12 +724,22 @@ fun CartScreen(
 
                             // Discount
                             if (discountAmount > 0) {
+                                val discountLabel =
+                                    selectedPromotion?.code?.takeIf { it.isNotBlank() }
+                                        ?: selectedPromotion?.name
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Discount (${selectedPromotion?.code})", color = SuccessGreen)
+                                    Text(
+                                        text = if (discountLabel != null) {
+                                            "Discount ($discountLabel)"
+                                        } else {
+                                            "Discount"
+                                        },
+                                        color = SuccessGreen
+                                    )
                                     Text("-₹${String.format("%.2f", discountAmount)}", color = SuccessGreen)
                                 }
                             }
