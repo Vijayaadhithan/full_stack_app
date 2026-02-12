@@ -6,6 +6,7 @@
     <color name="orange_dark">#FFEA580C</color>
     <color name="amber_secondary">#FFF59E0B</color>
     <color name="amber_light">#FFFBBF24</color>
+    <color name="ic_launcher_background">#FFF97316</color>
     
     <!-- Background colors -->
     <color name="slate_background">#FF1E293B</color>

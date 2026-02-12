@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -166,7 +167,7 @@ fun ShopDashboardScreen(
                             title = "This Month",
                             value = formatCurrency(dashboardStats?.earningsMonth ?: 0.0),
                             subtitle = "Earnings",
-                            icon = Icons.Default.TrendingUp,
+                            icon = Icons.AutoMirrored.Filled.TrendingUp,
                             color = ProviderBlue,
                             modifier = Modifier.weight(1f)
                         )
@@ -696,6 +697,7 @@ private fun StatusChip(status: String) {
 
 @Composable
 private fun ReviewCard(review: ShopReview) {
+    val clampedRating = review.rating.coerceIn(0, 5)
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -709,7 +711,7 @@ private fun ReviewCard(review: ShopReview) {
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                repeat(review.rating) {
+                repeat(clampedRating) {
                     Icon(
                         imageVector = Icons.Default.Star,
                         contentDescription = null,
@@ -717,7 +719,7 @@ private fun ReviewCard(review: ShopReview) {
                         modifier = Modifier.size(16.dp)
                     )
                 }
-                repeat(5 - review.rating) {
+                repeat(5 - clampedRating) {
                     Icon(
                         imageVector = Icons.Default.StarBorder,
                         contentDescription = null,

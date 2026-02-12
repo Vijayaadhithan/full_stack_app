@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,6 +48,7 @@ import java.util.Locale
 fun ShopProfileScreen(
     viewModel: ShopViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
+    onNavigateToPrivacyPolicy: () -> Unit,
     onSwitchRole: ((String) -> Unit)? = null,  // Optional callback for role switching
     onLogout: () -> Unit = {}
 ) {
@@ -792,11 +794,23 @@ fun ShopProfileScreen(
                 }
 
                 OutlinedButton(
+                    onClick = onNavigateToPrivacyPolicy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary),
+                    border = BorderStroke(1.dp, OrangePrimary)
+                ) {
+                    Icon(Icons.Default.Policy, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Privacy Policy")
+                }
+
+                OutlinedButton(
                     onClick = onLogout,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
                 ) {
-                    Icon(Icons.Default.Logout, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Logout")
                 }

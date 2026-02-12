@@ -2,6 +2,7 @@ package com.doorstep.tn.core.security
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -11,6 +12,7 @@ import java.security.SecureRandom
  * Encrypted storage for session cookies, CSRF tokens, and mobile signing secret.
  */
 object SecureSessionStore {
+    private const val TAG = "SecureSessionStore"
     private const val PREFS_NAME = "secure_session"
     private const val KEY_SESSION_COOKIE = "session_cookie"
     private const val KEY_CSRF_TOKEN = "csrf_token"
@@ -18,6 +20,25 @@ object SecureSessionStore {
 
     @Volatile
     private var cachedPrefs: SharedPreferences? = null
+
+    private fun createEncryptedPrefs(appContext: Context): SharedPreferences {
+        val masterKey = MasterKey.Builder(appContext)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            appContext,
+            PREFS_NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
+
+    private fun clearCorruptedEncryptedPrefs(appContext: Context) {
+        appContext.deleteSharedPreferences(PREFS_NAME)
+        appContext.deleteSharedPreferences("__androidx_security_crypto_encrypted_prefs_key_keyset__")
+        appContext.deleteSharedPreferences("__androidx_security_crypto_encrypted_prefs_value_keyset__")
+    }
 
     private fun getPrefs(context: Context): SharedPreferences {
         val existing = cachedPrefs
@@ -27,16 +48,19 @@ object SecureSessionStore {
             if (again != null) {
                 again
             } else {
-                val masterKey = MasterKey.Builder(context.applicationContext)
-                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                    .build()
-                val created = EncryptedSharedPreferences.create(
-                    context.applicationContext,
-                    PREFS_NAME,
-                    masterKey,
-                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-                )
+                val appContext = context.applicationContext
+                val created = try {
+                    createEncryptedPrefs(appContext)
+                } catch (firstError: Exception) {
+                    Log.e(TAG, "Encrypted prefs init failed, clearing and recreating", firstError)
+                    clearCorruptedEncryptedPrefs(appContext)
+                    try {
+                        createEncryptedPrefs(appContext)
+                    } catch (secondError: Exception) {
+                        Log.e(TAG, "Encrypted prefs recreation failed, using local fallback", secondError)
+                        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    }
+                }
                 cachedPrefs = created
                 created
             }

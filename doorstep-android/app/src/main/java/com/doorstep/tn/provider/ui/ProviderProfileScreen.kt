@@ -12,6 +12,7 @@ fun ProviderProfileScreen(
     customerViewModel: CustomerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToReviews: () -> Unit,
+    onNavigateToPrivacyPolicy: () -> Unit,
     onSwitchRole: ((String) -> Unit)? = null,
     onLogout: () -> Unit
 ) {
@@ -22,6 +23,7 @@ fun ProviderProfileScreen(
         reviewsLabel = "Provider Reviews",
         onNavigateBack = onNavigateBack,
         onNavigateToReviews = onNavigateToReviews,
+        onNavigateToPrivacyPolicy = onNavigateToPrivacyPolicy,
         onSwitchRole = onSwitchRole,
         onLogout = onLogout
     )

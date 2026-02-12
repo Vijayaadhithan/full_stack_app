@@ -25,6 +25,7 @@ import com.doorstep.tn.auth.ui.PinEntryScreen
 import com.doorstep.tn.auth.ui.ProfileSetupScreen
 import com.doorstep.tn.auth.ui.PinSetupScreen
 import com.doorstep.tn.auth.ui.ForgotPinScreen
+import com.doorstep.tn.common.ui.PrivacyPolicyScreen
 import com.doorstep.tn.customer.ui.CustomerHomeScreen
 import com.doorstep.tn.customer.ui.products.ProductsListScreen
 import com.doorstep.tn.customer.ui.products.ProductDetailScreen
@@ -138,6 +139,9 @@ object Routes {
     const val PROVIDER_REVIEWS = "provider_reviews"
     const val PROVIDER_NOTIFICATIONS = "provider_notifications"
     const val PROVIDER_PROFILE = "provider_profile"
+
+    // Common routes
+    const val PRIVACY_POLICY = "privacy_policy"
     
     // Helper functions
     fun productDetail(shopId: Int, productId: Int) = "customer_shop/$shopId/product/$productId"
@@ -412,6 +416,7 @@ fun DoorStepNavHost(
             ProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
+                onNavigateToPrivacyPolicy = { navController.navigate(Routes.PRIVACY_POLICY) },
                 onSwitchRole = { newRole ->
                     // Update role in AuthViewModel and navigate to new dashboard
                     authViewModel.switchRole(newRole)
@@ -659,6 +664,7 @@ fun DoorStepNavHost(
         composable(Routes.SHOP_PROFILE) {
             ShopProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
+                onNavigateToPrivacyPolicy = { navController.navigate(Routes.PRIVACY_POLICY) },
                 onSwitchRole = { newRole ->
                     authViewModel.switchRole(newRole)
                     val destination = when (newRole) {
@@ -776,6 +782,7 @@ fun DoorStepNavHost(
             ProviderProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToReviews = { navController.navigate(Routes.PROVIDER_REVIEWS) },
+                onNavigateToPrivacyPolicy = { navController.navigate(Routes.PRIVACY_POLICY) },
                 onSwitchRole = { newRole ->
                     authViewModel.switchRole(newRole)
                     val destination = when (newRole) {
@@ -793,6 +800,12 @@ fun DoorStepNavHost(
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            )
+        }
+
+        composable(Routes.PRIVACY_POLICY) {
+            PrivacyPolicyScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }

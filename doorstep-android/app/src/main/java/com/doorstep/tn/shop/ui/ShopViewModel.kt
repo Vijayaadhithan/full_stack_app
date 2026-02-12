@@ -106,28 +106,32 @@ class ShopViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
-            
-            // Load dashboard stats
-            when (val result = repository.getDashboardStats()) {
-                is Result.Success -> _dashboardStats.value = result.data
-                is Result.Error -> _error.value = result.message
-            }
-            
-            // Load recent orders
-            when (val result = repository.getRecentOrders()) {
-                is Result.Success -> _recentOrders.value = result.data
-                is Result.Error -> { /* Silent fail for secondary data */ }
-            }
-            
-            // Load reviews if shopId is set
-            shopId?.let { id ->
-                when (val result = repository.getShopReviews(id)) {
-                    is Result.Success -> _shopReviews.value = result.data
+
+            try {
+                // Load dashboard stats
+                when (val result = repository.getDashboardStats()) {
+                    is Result.Success -> _dashboardStats.value = result.data
+                    is Result.Error -> _error.value = result.message
+                }
+
+                // Load recent orders
+                when (val result = repository.getRecentOrders()) {
+                    is Result.Success -> _recentOrders.value = result.data
                     is Result.Error -> { /* Silent fail for secondary data */ }
                 }
+
+                // Load reviews if shopId is set
+                shopId?.let { id ->
+                    when (val result = repository.getShopReviews(id)) {
+                        is Result.Success -> _shopReviews.value = result.data
+                        is Result.Error -> { /* Silent fail for secondary data */ }
+                    }
+                }
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Failed to load dashboard"
+            } finally {
+                _isLoading.value = false
             }
-            
-            _isLoading.value = false
         }
     }
     

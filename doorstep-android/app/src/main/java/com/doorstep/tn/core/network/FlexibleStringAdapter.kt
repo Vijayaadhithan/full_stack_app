@@ -1,6 +1,8 @@
 package com.doorstep.tn.core.network
 
 import com.squareup.moshi.FromJson
+import com.squareup.moshi.JsonReader
+import com.squareup.moshi.JsonWriter
 import com.squareup.moshi.ToJson
 
 /**
@@ -12,13 +14,29 @@ class FlexibleStringAdapter {
     
     @FromJson
     @FlexibleString
-    fun fromJson(value: Any?): String? {
-        return value?.toString()
+    fun fromJson(reader: JsonReader): String? {
+        return when (reader.peek()) {
+            JsonReader.Token.NULL -> {
+                reader.nextNull<Any>()
+                null
+            }
+            JsonReader.Token.STRING -> reader.nextString()
+            JsonReader.Token.NUMBER -> reader.nextString()
+            JsonReader.Token.BOOLEAN -> reader.nextBoolean().toString()
+            else -> {
+                reader.skipValue()
+                null
+            }
+        }
     }
     
     @ToJson
-    fun toJson(@FlexibleString value: String?): String? {
-        return value
+    fun toJson(writer: JsonWriter, @FlexibleString value: String?) {
+        if (value == null) {
+            writer.nullValue()
+        } else {
+            writer.value(value)
+        }
     }
 }
 
