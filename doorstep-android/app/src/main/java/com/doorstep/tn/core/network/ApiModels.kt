@@ -214,6 +214,7 @@ data class AppNotification(
     @Json(name = "message") val message: String,
     @Json(name = "isRead") val isRead: Boolean = false,
     @Json(name = "relatedBookingId") val relatedBookingId: Int? = null,
+    @Json(name = "relatedOrderId") val relatedOrderId: Int? = null,
     @Json(name = "createdAt") val createdAt: String? = null
 )
 

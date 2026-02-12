@@ -1,6 +1,7 @@
 package com.doorstep.tn.shop.data.repository
 
 import com.doorstep.tn.core.network.DoorStepApi
+import com.doorstep.tn.core.network.FcmTokenUnregisterRequest
 import com.doorstep.tn.shop.data.model.*
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -463,7 +464,14 @@ class ShopRepository @Inject constructor(
 
     // ─── Account ──────────────────────────────────────────────────────────────
 
-    suspend fun deleteAccount(): Result<Unit> = try {
+    suspend fun deleteAccount(fcmToken: String? = null): Result<Unit> = try {
+        if (!fcmToken.isNullOrBlank()) {
+            try {
+                api.unregisterFcmToken(FcmTokenUnregisterRequest(fcmToken))
+            } catch (_: Exception) {
+                // Best-effort cleanup; proceed with account deletion.
+            }
+        }
         val response = api.deleteAccount()
         if (response.isSuccessful) {
             Result.Success(Unit)

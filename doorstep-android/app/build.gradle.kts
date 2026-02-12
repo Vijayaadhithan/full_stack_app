@@ -82,7 +82,16 @@ android {
     }
 }
 
-tasks.matching { it.name.contains("Release") }.configureEach {
+fun String.requiresReleaseConfigValidation(): Boolean {
+    val lower = lowercase()
+    val isAssembleRelease = lower.startsWith("assemble") && lower.endsWith("release")
+    val isBundleRelease = lower.startsWith("bundle") && lower.endsWith("release")
+    val isPublishRelease = lower.startsWith("publish") && lower.contains("release")
+    return isAssembleRelease || isBundleRelease || isPublishRelease
+}
+
+tasks.configureEach {
+    if (!name.requiresReleaseConfigValidation()) return@configureEach
     doFirst {
         if (versionCodeOverride == null) {
             throw GradleException("VERSION_CODE must be set for release builds (e.g., -PVERSION_CODE=2 or env VERSION_CODE=2).")

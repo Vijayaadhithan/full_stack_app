@@ -27,6 +27,18 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
+private val bookingNotificationTypes = setOf(
+    "booking", "booking_request", "booking_update",
+    "booking_confirmed", "booking_rejected", "booking_cancelled_by_customer",
+    "booking_rescheduled_request", "booking_rescheduled_by_provider",
+    "booking_accepted", "booking_completed", "payment_submitted",
+    "payment_confirmed", "new_booking", "service", "service_request"
+)
+
+private val orderNotificationTypes = setOf(
+    "order", "shop", "new_order", "order_shipped", "order_delivered", "return"
+)
+
 /**
  * Notifications Screen - matches web app's notifications functionality
  * Shows user notifications with read/unread status
@@ -199,7 +211,7 @@ fun NotificationsScreen(
                                             navigateToBookings(entityId)
                                         }
                                         // Order-related types - navigate to orders
-                                        "order", "shop" -> {
+                                        "order", "shop", "new_order", "order_shipped", "order_delivered" -> {
                                             if (entityId != null) {
                                                 onNavigateToOrder(entityId)
                                             } else {
@@ -208,7 +220,11 @@ fun NotificationsScreen(
                                         }
                                         // Return types - navigate to orders (returns are under orders)
                                         "return" -> {
-                                            onNavigateToOrders()
+                                            if (entityId != null) {
+                                                onNavigateToOrder(entityId)
+                                            } else {
+                                                onNavigateToOrders()
+                                            }
                                         }
                                         // Promotion and system - no specific navigation
                                         "promotion", "system" -> {
@@ -216,7 +232,7 @@ fun NotificationsScreen(
                                         }
                                         // Default fallback - try booking if ID available
                                         else -> {
-                                            navigateToBookings(notification.relatedBookingId)
+                                            navigateToBookings(entityId)
                                         }
                                     }
                                 }
@@ -233,15 +249,35 @@ fun NotificationsScreen(
 }
 
 private fun extractEntityId(notification: AppNotification): Int? {
-    notification.relatedBookingId?.let { return it }
+    if (notification.type in orderNotificationTypes) {
+        notification.relatedOrderId?.let { return it }
+        notification.relatedBookingId?.let { return it }
+    } else if (notification.type in bookingNotificationTypes) {
+        notification.relatedBookingId?.let { return it }
+        notification.relatedOrderId?.let { return it }
+    } else {
+        notification.relatedOrderId?.let { return it }
+        notification.relatedBookingId?.let { return it }
+    }
 
     val haystack = "${notification.title} ${notification.message}"
-    val patterns = listOf(
-        Regex("""ID:\s*(\d+)""", RegexOption.IGNORE_CASE),
+    val orderPatterns = listOf(
         Regex("""\border\s*#\s*(\d+)""", RegexOption.IGNORE_CASE),
+        Regex("""\border\s+id[:\s#-]*(\d+)""", RegexOption.IGNORE_CASE)
+    )
+    val bookingPatterns = listOf(
         Regex("""\bbooking\s*#\s*(\d+)""", RegexOption.IGNORE_CASE),
+        Regex("""\bbooking\s+id[:\s#-]*(\d+)""", RegexOption.IGNORE_CASE)
+    )
+    val commonPatterns = listOf(
+        Regex("""ID:\s*(\d+)""", RegexOption.IGNORE_CASE),
         Regex("""#\s*(\d+)""")
     )
+    val patterns = when {
+        notification.type in orderNotificationTypes -> orderPatterns + bookingPatterns + commonPatterns
+        notification.type in bookingNotificationTypes -> bookingPatterns + orderPatterns + commonPatterns
+        else -> orderPatterns + bookingPatterns + commonPatterns
+    }
 
     for (pattern in patterns) {
         val match = pattern.find(haystack)
@@ -261,7 +297,7 @@ private fun NotificationCard(
     // Emoji icon matching web's getNotificationIcon function
     val emoji = when (notification.type) {
         "booking", "booking_request", "booking_update", "booking_confirmed", "booking_rescheduled_request" -> "📅"
-        "order", "shop" -> "📦"
+        "order", "shop", "new_order", "order_shipped", "order_delivered" -> "📦"
         "return" -> "↩️"
         "service", "service_request" -> "🛠️"
         "promotion" -> "🎁"
@@ -273,7 +309,7 @@ private fun NotificationCard(
     val iconColor = when (notification.type) {
         "booking", "booking_request", "booking_confirmed" -> ProviderBlue
         "booking_rejected", "booking_cancelled_by_customer" -> ErrorRed
-        "order", "shop" -> OrangePrimary
+        "order", "shop", "new_order", "order_shipped", "order_delivered", "return" -> OrangePrimary
         "promotion" -> SuccessGreen
         else -> WhiteTextMuted
     }

@@ -439,6 +439,7 @@ class AuthViewModel @Inject constructor(
      */
     fun logout() {
         viewModelScope.launch {
+            unregisterFcmTokenBeforeLogout()
             authRepository.logout()
             firebaseAuth.signOut()
             SecureSessionStore.clearSession(context)
@@ -614,6 +615,30 @@ class AuthViewModel @Inject constructor(
     }
     
     // ==================== Private Helpers ====================
+
+    private suspend fun unregisterFcmTokenBeforeLogout() {
+        val storedToken = SecureUserStore.getFcmToken(context)
+        if (storedToken.isNullOrBlank()) {
+            return
+        }
+
+        when (authRepository.unregisterFcmToken(storedToken)) {
+            is Result.Success -> {
+                SecureUserStore.setFcmNeedsSync(context, false)
+                if (com.doorstep.tn.BuildConfig.DEBUG) {
+                    android.util.Log.d("AuthViewModel", "FCM token unregistered successfully")
+                }
+            }
+            is Result.Error -> {
+                // Keep token local so we can retry cleanup if needed.
+                SecureUserStore.setFcmNeedsSync(context, true)
+                if (com.doorstep.tn.BuildConfig.DEBUG) {
+                    android.util.Log.w("AuthViewModel", "Failed to unregister FCM token on logout")
+                }
+            }
+            is Result.Loading -> Unit
+        }
+    }
     
     private suspend fun saveUserSession(user: UserResponse) {
         context.dataStore.edit { prefs ->

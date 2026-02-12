@@ -639,7 +639,8 @@ class ShopViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             _isLoading.value = true
-            when (val result = repository.deleteAccount()) {
+            val fcmToken = SecureUserStore.getFcmToken(context)
+            when (val result = repository.deleteAccount(fcmToken = fcmToken)) {
                 is Result.Success -> {
                     _successMessage.value = "Account deleted"
                     onSuccess()

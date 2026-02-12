@@ -1,8 +1,13 @@
 package com.doorstep.tn.common.ui
 
 import android.annotation.SuppressLint
+import android.net.Uri
+import android.net.http.SslError
+import android.os.Build
+import android.webkit.SslErrorHandler
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +51,20 @@ fun PrivacyPolicyScreen(
     onNavigateBack: () -> Unit
 ) {
     val url = BuildConfig.PRIVACY_POLICY_URL.trim()
+    val allowedUri = remember(url) { runCatching { Uri.parse(url) }.getOrNull() }
+    val allowedHost = allowedUri?.host?.lowercase()
+    val canonicalUrl = allowedUri?.toString().orEmpty()
+    val isValidUrl = allowedUri?.scheme.equals("https", ignoreCase = true) &&
+        !allowedHost.isNullOrBlank()
+    val isAllowedHost: (String?) -> Boolean = { host ->
+        val normalizedHost = host?.lowercase()
+        if (normalizedHost.isNullOrBlank() || allowedHost.isNullOrBlank()) {
+            false
+        } else {
+            normalizedHost == allowedHost || normalizedHost.endsWith(".$allowedHost")
+        }
+    }
+
     var isLoading by remember { mutableStateOf(url.isNotBlank()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
@@ -91,6 +110,22 @@ fun PrivacyPolicyScreen(
             return@Scaffold
         }
 
+        if (!isValidUrl) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Privacy policy URL must use HTTPS.",
+                    color = ErrorRed,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -123,11 +158,29 @@ fun PrivacyPolicyScreen(
                         webViewRef = this
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        settings.javaScriptCanOpenWindowsAutomatically = false
+                        settings.setSupportMultipleWindows(false)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            settings.safeBrowsingEnabled = true
+                        }
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(
                                 view: WebView?,
                                 request: WebResourceRequest?
-                            ): Boolean = false
+                            ): Boolean {
+                                val targetUri = request?.url ?: return true
+                                val isAllowedTarget = targetUri.scheme.equals("https", ignoreCase = true) &&
+                                    isAllowedHost(targetUri.host)
+                                if (!isAllowedTarget) {
+                                    errorMessage = "External links are blocked in this screen."
+                                }
+                                return !isAllowedTarget
+                            }
 
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                 isLoading = true
@@ -149,14 +202,26 @@ fun PrivacyPolicyScreen(
                                         ?: "Failed to load privacy policy."
                                 }
                             }
+
+                            override fun onReceivedSslError(
+                                view: WebView?,
+                                handler: SslErrorHandler?,
+                                error: SslError?
+                            ) {
+                                handler?.cancel()
+                                isLoading = false
+                                errorMessage = "Secure connection error while loading privacy policy."
+                            }
                         }
-                        loadUrl(url)
+                        loadUrl(canonicalUrl)
                     }
                 },
                 update = { webView ->
-                    val currentUrl = webView.url
-                    if (currentUrl.isNullOrBlank()) {
-                        webView.loadUrl(url)
+                    val currentUri = runCatching { Uri.parse(webView.url) }.getOrNull()
+                    val isCurrentAllowed = currentUri?.scheme.equals("https", ignoreCase = true) &&
+                        isAllowedHost(currentUri?.host)
+                    if (!isCurrentAllowed) {
+                        webView.loadUrl(canonicalUrl)
                     }
                 }
             )

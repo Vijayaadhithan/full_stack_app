@@ -5,6 +5,7 @@ import com.doorstep.tn.auth.data.repository.Result
 import com.doorstep.tn.core.cache.CacheRepository
 import com.doorstep.tn.core.cache.MemoryCache
 import com.doorstep.tn.core.network.DoorStepApi
+import com.doorstep.tn.core.network.FcmTokenUnregisterRequest
 import com.doorstep.tn.core.network.ServiceBookingSlot
 import com.doorstep.tn.customer.data.model.*
 import kotlinx.coroutines.flow.firstOrNull
@@ -1155,8 +1156,15 @@ class CustomerRepository @Inject constructor(
     // ==================== ACCOUNT MANAGEMENT ====================
     
     // Delete account - matches web POST /api/delete-account
-    suspend fun deleteAccount(): Result<Unit> {
+    suspend fun deleteAccount(fcmToken: String? = null): Result<Unit> {
         return try {
+            if (!fcmToken.isNullOrBlank()) {
+                try {
+                    api.unregisterFcmToken(FcmTokenUnregisterRequest(fcmToken))
+                } catch (_: Exception) {
+                    // Best-effort cleanup; proceed with account deletion.
+                }
+            }
             val response = api.deleteAccount()
             if (response.isSuccessful) {
                 Result.Success(Unit)

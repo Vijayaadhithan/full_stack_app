@@ -77,18 +77,18 @@ class DoorStepFirebaseMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
         logDebug("Message received from FCM")
 
-        // Check if message contains a notification payload
-        message.notification?.let { notification ->
-            val title = notification.title ?: "DoorStep"
-            val body = notification.body ?: ""
-            
-            // Show notification (for foreground messages)
-            showNotification(title, body, message.data)
-        }
-
-        // Handle data-only messages if needed
         if (message.data.isNotEmpty()) {
             logDebug("Push data keys=${message.data.keys}")
+        }
+
+        // For mixed payload messages, show a single foreground notification.
+        val notificationPayload = message.notification
+        if (notificationPayload != null) {
+            val title = notificationPayload.title ?: message.data["title"] ?: "DoorStep"
+            val body = notificationPayload.body ?: message.data["body"] ?: ""
+            showNotification(title, body, message.data)
+        } else if (message.data.isNotEmpty()) {
+            // Handle data-only messages if needed
             handleDataMessage(message.data)
         }
     }

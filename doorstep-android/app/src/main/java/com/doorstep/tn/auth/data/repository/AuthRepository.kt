@@ -13,6 +13,7 @@ import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.auth.data.model.AuthProfilesResponse
 import com.doorstep.tn.core.network.DoorStepApi
 import com.doorstep.tn.core.network.FcmTokenRequest
+import com.doorstep.tn.core.network.FcmTokenUnregisterRequest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -248,6 +249,22 @@ class AuthRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Failed to register FCM token")
+        }
+    }
+
+    /**
+     * Unregister FCM token (best-effort during logout/delete-account).
+     */
+    suspend fun unregisterFcmToken(token: String): Result<Unit> {
+        return try {
+            val response = api.unregisterFcmToken(FcmTokenUnregisterRequest(token))
+            if (response.isSuccessful || response.code() == 404) {
+                Result.Success(Unit)
+            } else {
+                Result.Error("Failed to unregister FCM token", response.code())
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Failed to unregister FCM token")
         }
     }
 }
