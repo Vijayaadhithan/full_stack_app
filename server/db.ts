@@ -68,23 +68,34 @@ export const db = {
   replica: replicaDb,
 };
 
-export async function testConnection() {
+export async function testConnection(options?: { quiet?: boolean }) {
+  const quiet = options?.quiet === true;
   if (process.env.NODE_ENV === "test" || process.env.USE_IN_MEMORY_DB === "true") {
-    logger.debug(
-      "Skipping database connectivity check in test mode or when using in-memory storage.",
-    );
+    if (!quiet) {
+      logger.debug(
+        "Skipping database connectivity check in test mode or when using in-memory storage.",
+      );
+    }
     return true;
   }
   try {
     await primaryClient`SELECT 1`;
-    logger.info("✅ Primary database connection successful");
+    if (!quiet) {
+      logger.info("✅ Primary database connection successful");
+    }
     if (replicaClient !== primaryClient) {
       await replicaClient`SELECT 1`;
-      logger.info("✅ Replica database connection successful");
+      if (!quiet) {
+        logger.info("✅ Replica database connection successful");
+      }
     }
     return true;
   } catch (error) {
-    logger.error("❌ Database connection failed:", error);
+    if (!quiet) {
+      logger.error("❌ Database connection failed:", error);
+    } else {
+      logger.warn({ err: error }, "Database connectivity probe failed");
+    }
     return false;
   }
 }

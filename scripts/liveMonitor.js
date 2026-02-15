@@ -14,10 +14,10 @@ const resolveMonitorUrl = () => {
 
   const appBase = process.env.APP_BASE_URL?.trim();
   if (appBase) {
-    return `${normalize(appBase)}/api/health`;
+    return `${normalize(appBase)}/api/health/ready`;
   }
 
-  return "http://localhost:5000/api/health";
+  return "http://localhost:5000/api/health/ready";
 };
 
 const url = resolveMonitorUrl();

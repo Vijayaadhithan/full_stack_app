@@ -213,6 +213,7 @@ Configure with `FIREBASE_SERVICE_ACCOUNT_JSON` environment variable.
 | Feature | Endpoint/Config |
 |---------|-----------------|
 | Health Check | `GET /api/health` |
+| Readiness Check | `GET /api/health/ready` |
 | Detailed Health | `GET /api/admin/health-status` (admin only) |
 | Logs | Pino → `logs/app.log` |
 | Metrics | `/api/admin/monitoring/summary` |
@@ -518,6 +519,9 @@ pm2 save
 ```bash
 # Basic health check
 curl http://localhost:5000/api/health
+
+# Readiness check (DB + Redis + BullMQ)
+curl http://localhost:5000/api/health/ready
 
 # Continuous monitoring script
 npm run monitor

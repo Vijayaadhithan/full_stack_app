@@ -236,7 +236,8 @@ npm run dev:client
 | http://localhost:5173/worker-login | Worker login |
 | http://localhost:5000/api | API endpoints |
 | http://localhost:5000/api/docs | Swagger UI |
-| http://localhost:5000/api/health | Health check |
+| http://localhost:5000/api/health | Liveness check |
+| http://localhost:5000/api/health/ready | Readiness check (DB + Redis + BullMQ) |
 
 ### LAN / Device Testing
 
@@ -284,8 +285,11 @@ See `.env_example` and `docs/environment-reference.md` for the full list.
 
 ### Public Endpoints (No Auth)
 ```bash
-# Health check
+# Liveness check
 curl http://localhost:5000/api/health
+
+# Readiness check
+curl http://localhost:5000/api/health/ready
 
 # Browse products
 curl http://localhost:5000/api/products
@@ -384,6 +388,9 @@ pm2 startup
 pm2 save
 ```
 
+PM2 production settings for graceful shutdown/readiness are already included in
+`ecosystem.config.js` (`kill_timeout`, `listen_timeout`, restart backoff, and readiness/shutdown env defaults).
+
 ### Required Production Config
 
 ```env
@@ -397,6 +404,7 @@ ALLOWED_ORIGINS=https://yourdomain.com
 ```
 
 See `docs/deployment-runbook.md` for the full checklist.
+Systemd and Kubernetes probe templates are available under `deploy/systemd/` and `deploy/k8s/`.
 
 ---
 

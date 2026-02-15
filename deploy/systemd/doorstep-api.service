@@ -1,0 +1,29 @@
+[Unit]
+Description=Doorstep API
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=doorstep
+Group=doorstep
+WorkingDirectory=/opt/doorstep
+EnvironmentFile=/opt/doorstep/.env
+Environment=NODE_ENV=production
+Environment=READINESS_TIMEOUT_MS=2000
+Environment=SHUTDOWN_TIMEOUT_MS=15000
+ExecStart=/usr/bin/node dist/index.js
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 20); do curl -fsS "http://127.0.0.1:${PORT:-5000}/api/health/ready" >/dev/null && exit 0; sleep 1; done; exit 1'
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+KillMode=mixed
+LimitNOFILE=65535
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

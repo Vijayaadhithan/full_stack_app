@@ -4,7 +4,8 @@ import logger from "./logger";
 import { getRequestMetadata, runWithRequestContext } from "./requestContext";
 import { resolveTraceContextFromSeed } from "./tracing";
 
-const QUEUE_NAME = "background-jobs";
+const QUEUE_NAME =
+  process.env.BULLMQ_QUEUE_NAME?.trim() || "background-jobs";
 
 let queue: Queue | null = null;
 let worker: Worker | null = null;

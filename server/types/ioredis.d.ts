@@ -13,7 +13,14 @@ declare module "ioredis" {
       ...args: Array<string | number>
     ): Promise<[string, string[]]>;
     del(...keys: string[]): Promise<number>;
+    ping(): Promise<string>;
+    publish(channel: string, message: string): Promise<number>;
+    subscribe(channel: string, cb?: (err: unknown) => void): Promise<number>;
     connect(): Promise<void>;
-    on(event: "error" | "end", listener: (err?: unknown) => void): void;
+    quit(): Promise<void>;
+    disconnect(): void;
+    on(event: "error" | "end" | "connect" | "close", listener: (err?: unknown) => void): void;
+    on(event: "reconnecting", listener: (delay: number) => void): void;
+    on(event: "message", listener: (channel: string, message: string) => void): void;
   }
 }

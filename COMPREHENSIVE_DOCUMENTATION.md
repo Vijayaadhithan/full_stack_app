@@ -1225,6 +1225,7 @@ All non-GET requests require a CSRF token:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/health` | Server health check |
+| GET | `/api/health/ready` | Readiness check (DB + Redis + BullMQ) |
 | GET | `/api/csrf-token` | Get CSRF token |
 | GET | `/api/shops` | List all shops |
 | GET | `/api/shops/:shopId` | Get shop details |
@@ -1866,13 +1867,16 @@ pm2 startup
 - [ ] Set up HTTPS (either in Node or via reverse proxy)
 - [ ] Configure backup strategy for PostgreSQL
 - [ ] Set up log rotation for `logs/app.log`
-- [ ] Configure monitoring alerts for `/api/health`
+- [ ] Configure monitoring alerts for `/api/health/ready`
 
 ### 13.5 Health Monitoring
 
 ```bash
 # Basic health check
 curl http://localhost:5000/api/health
+
+# Readiness check
+curl http://localhost:5000/api/health/ready
 
 # Detailed health (requires admin session)
 curl -b admin_cookies.txt http://localhost:5000/api/admin/health-status

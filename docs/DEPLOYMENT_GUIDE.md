@@ -340,7 +340,7 @@ ufw enable
 
 ## Step 14: Test Backend
 
-Open in browser: `https://api.doorsteptn.in/api/health`
+Open in browser: `https://api.doorsteptn.in/api/health` and `https://api.doorsteptn.in/api/health/ready`
 
 You should see:
 ```json
@@ -497,6 +497,7 @@ export const API_URL = import.meta.env.VITE_API_URL || '';
 | URL | What It Should Show |
 |-----|---------------------|
 | `https://api.doorsteptn.in/api/health` | JSON health status |
+| `https://api.doorsteptn.in/api/health/ready` | Readiness JSON (DB + Redis + BullMQ) |
 | `https://doorsteptn.in` | Your app homepage |
 | `https://www.doorsteptn.in` | Your app homepage |
 

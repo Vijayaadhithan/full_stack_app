@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Server as HttpServer } from "node:http";
 import { Server as HttpsServer } from "https";
 import { getNetworkConfig } from "../config/network";
 // Import your email service here
@@ -23,9 +24,16 @@ import { ensureDefaultAdmin } from "./bootstrap";
 import { reportError } from "./monitoring/errorReporter";
 import { trackRequestStart } from "./monitoring/metrics";
 import { startLowStockDigestJob } from "./jobs/lowStockDigestJob";
-import { initializeWorker } from "./jobQueue";
+import { closeJobQueue, getJobQueue, initializeWorker } from "./jobQueue";
 import { registerPushNotificationDispatchJob } from "./jobs/pushNotificationDispatchJob";
 import { getRequestMetadata } from "./requestContext";
+import {
+  closeRedisConnection as closeQueueRedisConnection,
+  getRedisConnection,
+} from "./queue/connection";
+import { closeRealtimeConnections } from "./realtime";
+import { closeConnection as closeDatabaseConnection, testConnection } from "./db";
+import { closeRedisConnection as closeCacheRedisConnection } from "./services/cache.service";
 
 config();
 
@@ -235,6 +243,139 @@ function logAccessibleAddresses(port: number, scheme: "http" | "https") {
   }
 
   logger.info({ urls: Array.from(urls) }, "Local network URLs for this server");
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function isTruthyEnv(value: string | undefined): boolean {
+  const normalized = value ? value.trim().toLowerCase() : "";
+  return (
+    normalized === "true" ||
+    normalized === "1" ||
+    normalized === "yes" ||
+    normalized === "on"
+  );
+}
+
+const READINESS_TIMEOUT_MS = parsePositiveInt(
+  process.env.READINESS_TIMEOUT_MS,
+  2_000,
+);
+const SHUTDOWN_TIMEOUT_MS = parsePositiveInt(
+  process.env.SHUTDOWN_TIMEOUT_MS,
+  15_000,
+);
+let shutdownInProgress = false;
+let shutdownHooksInstalled = false;
+
+function isRedisExpectedForRuntime(): boolean {
+  if ((process.env.NODE_ENV ?? "").toLowerCase() === "test") {
+    return false;
+  }
+  return !isTruthyEnv(process.env.DISABLE_REDIS);
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    timer.unref();
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function closeHttpServer(server: HttpServer | HttpsServer): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((err?: Error) => {
+      if (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "ERR_SERVER_NOT_RUNNING") {
+          resolve();
+          return;
+        }
+        reject(err);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function runGracefulShutdown(
+  signal: NodeJS.Signals,
+  server: HttpServer | HttpsServer,
+): Promise<void> {
+  if (shutdownInProgress) {
+    logger.warn({ signal }, "Shutdown already in progress");
+    return;
+  }
+  shutdownInProgress = true;
+  logger.info({ signal }, "Shutdown signal received; draining resources");
+
+  const forceExitTimer = setTimeout(() => {
+    logger.error(
+      { signal, shutdownTimeoutMs: SHUTDOWN_TIMEOUT_MS },
+      "Forced shutdown after timeout",
+    );
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS + 2_000);
+  forceExitTimer.unref();
+
+  const shutdownTasks: Array<{ name: string; run: () => Promise<void> }> = [
+    { name: "http-server", run: () => closeHttpServer(server) },
+    { name: "job-queue", run: () => closeJobQueue() },
+    { name: "queue-redis", run: () => closeQueueRedisConnection() },
+    { name: "realtime-redis", run: () => closeRealtimeConnections() },
+    { name: "cache-redis", run: () => closeCacheRedisConnection() },
+    { name: "database", run: () => closeDatabaseConnection() },
+  ];
+
+  let shutdownFailed = false;
+  for (const task of shutdownTasks) {
+    try {
+      await withTimeout(task.run(), SHUTDOWN_TIMEOUT_MS, task.name);
+      logger.info({ resource: task.name }, "Shutdown step completed");
+    } catch (err) {
+      shutdownFailed = true;
+      logger.error({ err, resource: task.name }, "Shutdown step failed");
+    }
+  }
+
+  clearTimeout(forceExitTimer);
+  logger.info(
+    { signal, shutdownFailed },
+    "Shutdown sequence complete",
+  );
+  process.exit(shutdownFailed ? 1 : 0);
+}
+
+function installGracefulShutdownHooks(server: HttpServer | HttpsServer): void {
+  if (shutdownHooksInstalled) return;
+  shutdownHooksInstalled = true;
+
+  process.once("SIGINT", () => {
+    void runGracefulShutdown("SIGINT", server);
+  });
+  process.once("SIGTERM", () => {
+    void runGracefulShutdown("SIGTERM", server);
+  });
 }
 
 const helmetConfig: HelmetOptions = {
@@ -514,6 +655,77 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+/**
+ * @openapi
+ * /api/health/ready:
+ *   get:
+ *     summary: Readiness check
+ *     responses:
+ *       200:
+ *         description: Service can accept traffic
+ *       503:
+ *         description: One or more dependencies are unavailable
+ */
+app.get("/api/health/ready", async (_req, res) => {
+  const checks: Record<string, { ok: boolean; detail?: string }> = {};
+  let ready = true;
+
+  try {
+    const databaseReady = await withTimeout(
+      testConnection({ quiet: true }),
+      READINESS_TIMEOUT_MS,
+      "database-readiness",
+    );
+    checks.database = {
+      ok: databaseReady,
+      detail: databaseReady ? "reachable" : "unreachable",
+    };
+    if (!databaseReady) ready = false;
+  } catch (err) {
+    ready = false;
+    checks.database = { ok: false, detail: "unreachable" };
+    logger.warn({ err }, "Database readiness probe failed");
+  }
+
+  if (isRedisExpectedForRuntime()) {
+    try {
+      await withTimeout(
+        getRedisConnection().ping(),
+        READINESS_TIMEOUT_MS,
+        "redis-readiness",
+      );
+      checks.redis = { ok: true, detail: "reachable" };
+    } catch (err) {
+      ready = false;
+      checks.redis = { ok: false, detail: "unreachable" };
+      logger.warn({ err }, "Redis readiness probe failed");
+    }
+
+    try {
+      const queue = getJobQueue();
+      await withTimeout(
+        queue.waitUntilReady(),
+        READINESS_TIMEOUT_MS,
+        "bullmq-readiness",
+      );
+      checks.bullmq = { ok: true, detail: "ready" };
+    } catch (err) {
+      ready = false;
+      checks.bullmq = { ok: false, detail: "not-ready" };
+      logger.warn({ err }, "BullMQ readiness probe failed");
+    }
+  } else {
+    checks.redis = { ok: true, detail: "disabled" };
+    checks.bullmq = { ok: true, detail: "disabled" };
+  }
+
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "not_ready",
+    timestamp: Date.now(),
+    checks,
+  });
+});
+
 // Initialize scheduled jobs
 export async function startServer(port?: number) {
   // Register handlers before starting worker so pending jobs always have processors.
@@ -671,6 +883,7 @@ export async function startServer(port?: number) {
       resolve();
     });
   });
+  installGracefulShutdownHooks(server);
   return server;
 }
 

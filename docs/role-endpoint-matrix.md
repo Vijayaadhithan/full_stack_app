@@ -5,6 +5,7 @@ This matrix summarizes common endpoints by role. It is not exhaustive. Use Swagg
 ## Public (no auth)
 
 - GET /api/health
+- GET /api/health/ready
 - GET /api/shops
 - GET /api/shops/:shopId
 - GET /api/shops/:shopId/products/:productId

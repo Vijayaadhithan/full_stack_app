@@ -54,6 +54,33 @@ pm2 save
 pm2 startup
 ```
 
+PM2 defaults in this repo include:
+
+- `kill_timeout=20000` (supports graceful shutdown)
+- `listen_timeout=10000`
+- `max_memory_restart=1G`
+- exponential restart backoff + capped restarts
+
+## 5.1 Systemd (Alternative to PM2)
+
+Template:
+
+- `deploy/systemd/doorstep-api.service`
+
+Install:
+
+```bash
+sudo cp deploy/systemd/doorstep-api.service /etc/systemd/system/doorstep-api.service
+sudo systemctl daemon-reload
+sudo systemctl enable doorstep-api
+sudo systemctl start doorstep-api
+sudo systemctl status doorstep-api
+```
+
+The unit performs a post-start readiness validation against:
+
+- `GET /api/health/ready`
+
 ## 5. Reverse Proxy (Optional)
 
 If you terminate TLS with Nginx or a cloud load balancer:
@@ -65,8 +92,31 @@ If you terminate TLS with Nginx or a cloud load balancer:
 ## 6. Health Checks and Validation
 
 - Basic liveness: `GET /api/health`
+- Readiness (for load balancers / orchestration): `GET /api/health/ready`
 - Admin health: `GET /api/admin/health-status` (requires admin login)
 - Logs: `GET /api/admin/logs` or `tail -f logs/app.log`
+
+Nginx template in this repo maps `/healthz` to readiness:
+
+- `deploy/nginx-load-balancer.conf`
+
+## 6.1 Kubernetes Probe Settings
+
+Template:
+
+- `deploy/k8s/doorstep-api.yaml`
+
+Probe strategy:
+
+- `startupProbe`: `/api/health` every 5s, `failureThreshold: 24`
+- `readinessProbe`: `/api/health/ready` every 10s
+- `livenessProbe`: `/api/health` every 20s
+
+Apply:
+
+```bash
+kubectl apply -f deploy/k8s/doorstep-api.yaml
+```
 
 ## 7. Redis Requirements
 

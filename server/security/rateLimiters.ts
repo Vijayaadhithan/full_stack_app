@@ -9,6 +9,8 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 const defaultSensitiveConfig: Partial<Options> = {
   standardHeaders: true,
   legacyHeaders: false,
+  // Keep auth and critical endpoints available if Redis store is temporarily down.
+  passOnStoreError: true,
 };
 
 const disableRateLimiters =
