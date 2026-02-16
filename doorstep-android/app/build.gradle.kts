@@ -22,6 +22,26 @@ val versionNameOverride = (project.findProperty("VERSION_NAME") as String?)
     ?.takeIf { it.isNotEmpty() }
     ?: System.getenv("VERSION_NAME")?.trim()?.takeIf { it.isNotEmpty() }
 
+val releaseKeystoreFile = (project.findProperty("RELEASE_KEYSTORE_FILE") as String?)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("RELEASE_KEYSTORE_FILE")?.trim()?.takeIf { it.isNotEmpty() }
+
+val releaseStorePassword = (project.findProperty("RELEASE_KEYSTORE_PASSWORD") as String?)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("RELEASE_KEYSTORE_PASSWORD")?.trim()?.takeIf { it.isNotEmpty() }
+
+val releaseKeyAlias = (project.findProperty("RELEASE_KEY_ALIAS") as String?)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("RELEASE_KEY_ALIAS")?.trim()?.takeIf { it.isNotEmpty() }
+
+val releaseKeyPassword = (project.findProperty("RELEASE_KEY_PASSWORD") as String?)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("RELEASE_KEY_PASSWORD")?.trim()?.takeIf { it.isNotEmpty() }
+
 fun escapeBuildConfig(value: String): String {
     return value.replace("\\", "\\\\").replace("\"", "\\\"")
 }
@@ -47,6 +67,17 @@ android {
         buildConfigField("String", "API_CERT_PINS", "\"$escapedPins\"")
     }
 
+    signingConfigs {
+        create("release") {
+            if (!releaseKeystoreFile.isNullOrBlank()) {
+                storeFile = file(releaseKeystoreFile)
+            }
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -56,6 +87,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -98,6 +130,20 @@ tasks.configureEach {
         }
         if (apiCertPins.isNullOrBlank()) {
             throw GradleException("API_CERT_PINS must be set for release builds.")
+        }
+        val missingSigningConfig = listOf(
+            "RELEASE_KEYSTORE_FILE" to releaseKeystoreFile,
+            "RELEASE_KEYSTORE_PASSWORD" to releaseStorePassword,
+            "RELEASE_KEY_ALIAS" to releaseKeyAlias,
+            "RELEASE_KEY_PASSWORD" to releaseKeyPassword
+        ).filter { it.second.isNullOrBlank() }.map { it.first }
+        if (missingSigningConfig.isNotEmpty()) {
+            throw GradleException(
+                "Release signing is not configured. Missing: ${missingSigningConfig.joinToString(", ")}"
+            )
+        }
+        if (!file(releaseKeystoreFile!!).exists()) {
+            throw GradleException("Release keystore file not found: $releaseKeystoreFile")
         }
     }
 }

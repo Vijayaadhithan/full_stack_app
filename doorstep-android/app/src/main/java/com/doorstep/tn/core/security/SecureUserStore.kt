@@ -66,8 +66,11 @@ object SecureUserStore {
                     try {
                         createEncryptedPrefs(appContext)
                     } catch (secondError: Exception) {
-                        Log.e(TAG, "Encrypted prefs recreation failed, using local fallback", secondError)
-                        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        Log.e(TAG, "Encrypted prefs recreation failed", secondError)
+                        throw IllegalStateException(
+                            "Secure storage initialization failed for user store.",
+                            secondError
+                        )
                     }
                 }
                 cachedPrefs = created

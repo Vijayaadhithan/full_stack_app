@@ -150,7 +150,7 @@ fun LocationFilterDropdown(
                                     }
                                 }
                                 Text(
-                                    text = "${String.format("%.3f", currentLat)}, ${String.format("%.3f", currentLng)}",
+                                    text = "${String.format(java.util.Locale.getDefault(), "%.3f", currentLat)}, ${String.format(java.util.Locale.getDefault(), "%.3f", currentLng)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = WhiteText,
                                     fontWeight = FontWeight.Medium

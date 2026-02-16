@@ -183,24 +183,31 @@ fun DoorStepNavHost(
     
     // Handle pending notification navigation after login
     LaunchedEffect(isLoggedIn) {
-        if (isLoggedIn) {
-            MainActivity.pendingNotificationRoute?.let { route ->
-                val safeRoute = resolveSafeNotificationRoute(route, userRole)
-                if (BuildConfig.DEBUG) {
-                    android.util.Log.d("NavHost", "Navigating to pending notification route")
-                }
-                try {
-                    navController.navigate(safeRoute) {
-                        // Don't pop the start destination
-                        launchSingleTop = true
-                    }
-                } catch (e: Exception) {
-                    if (BuildConfig.DEBUG) {
-                        android.util.Log.e("NavHost", "Failed to navigate to notification route", e)
-                    }
-                }
-                MainActivity.clearPendingNotificationRoute()
+        if (!isLoggedIn) {
+            MainActivity.clearPendingNotificationRoute()
+            navController.navigate(Routes.PHONE_ENTRY) {
+                popUpTo(0) { inclusive = true }
+                launchSingleTop = true
             }
+            return@LaunchedEffect
+        }
+
+        MainActivity.pendingNotificationRoute?.let { route ->
+            val safeRoute = resolveSafeNotificationRoute(route, userRole)
+            if (BuildConfig.DEBUG) {
+                android.util.Log.d("NavHost", "Navigating to pending notification route")
+            }
+            try {
+                navController.navigate(safeRoute) {
+                    // Don't pop the start destination
+                    launchSingleTop = true
+                }
+            } catch (e: Exception) {
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.e("NavHost", "Failed to navigate to notification route", e)
+                }
+            }
+            MainActivity.clearPendingNotificationRoute()
         }
     }
     

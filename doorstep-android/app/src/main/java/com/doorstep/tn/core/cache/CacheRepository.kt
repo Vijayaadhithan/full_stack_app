@@ -219,8 +219,8 @@ private fun CachedShop.toShop(): Shop {
         phone = phone,
         profilePicture = images,
         averageRating = rating?.toString(),
-        pickupAvailable = true,
-        deliveryAvailable = false
+        pickupAvailable = pickupAvailable,
+        deliveryAvailable = deliveryAvailable
     )
 }
 
@@ -234,6 +234,8 @@ private fun Shop.toCachedShop(): CachedShop {
         category = null, // Not available in Shop model
         images = profileImage,
         rating = rating,
+        pickupAvailable = pickupAvailable,
+        deliveryAvailable = deliveryAvailable,
         isOpen = isOpen
     )
 }

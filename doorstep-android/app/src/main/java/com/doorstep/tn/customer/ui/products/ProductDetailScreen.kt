@@ -348,7 +348,7 @@ fun ProductDetailScreen(
                     if (reviews.isNotEmpty()) {
                         val averageRating = reviews.map { it.rating }.average()
                         Text(
-                            text = String.format("%.1f/5 • %d reviews", averageRating, reviews.size),
+                            text = String.format(java.util.Locale.getDefault(), "%.1f/5 • %d reviews", averageRating, reviews.size),
                             style = MaterialTheme.typography.bodyMedium,
                             color = WhiteTextMuted
                         )

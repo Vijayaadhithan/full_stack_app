@@ -195,7 +195,7 @@ private fun ReviewMetricsGrid(stats: ProviderReviewStats) {
         ) {
             ReviewMetricCard(
                 title = "Average rating",
-                value = if (stats.average == 0.0) "0.0" else String.format("%.1f", stats.average),
+                value = if (stats.average == 0.0) "0.0" else String.format(java.util.Locale.getDefault(), "%.1f", stats.average),
                 modifier = Modifier.weight(1f)
             )
             ReviewMetricCard(

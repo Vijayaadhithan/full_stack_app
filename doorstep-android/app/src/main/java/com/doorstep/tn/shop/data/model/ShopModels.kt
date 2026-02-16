@@ -77,7 +77,7 @@ data class ShopOrder(
     val isCancelled: Boolean get() = status == "cancelled"
     
     val totalValue: Double get() = total?.toDoubleOrNull() ?: 0.0
-    val displayTotal: String get() = "₹${String.format("%.2f", totalValue)}"
+    val displayTotal: String get() = "₹${String.format(java.util.Locale.getDefault(), "%.2f", totalValue)}"
     val customerName: String get() = customer?.name ?: "Unknown Customer"
     val displayPaymentStatus: String?
         get() {
@@ -140,7 +140,7 @@ data class ActiveBoardOrder(
     @Json(name = "items") val items: List<ActiveBoardOrderItem> = emptyList()
 ) {
     val customerName: String get() = _customerName ?: "Unknown Customer"
-    val displayTotal: String get() = "₹${String.format("%.2f", total)}"
+    val displayTotal: String get() = "₹${String.format(java.util.Locale.getDefault(), "%.2f", total)}"
     val displayPaymentStatus: String? get() = paymentStatus
 }
 

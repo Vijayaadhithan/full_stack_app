@@ -433,7 +433,7 @@ fun ServicesListScreen(
                                         providerLng
                                     )
                                     if (distanceKm.isFinite()) {
-                                        String.format("%.1f km away", distanceKm)
+                                        String.format(java.util.Locale.getDefault(), "%.1f km away", distanceKm)
                                     } else {
                                         null
                                     }

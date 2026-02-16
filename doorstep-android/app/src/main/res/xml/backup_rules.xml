@@ -11,6 +11,7 @@
     <!-- Exclude sensitive shared preferences -->
     <exclude domain="sharedpref" path="device.xml"/>
     <exclude domain="sharedpref" path="secure_session.xml"/>
+    <exclude domain="sharedpref" path="secure_user.xml"/>
     
     <!-- Include root domain to allow datastore exclusion, then exclude sensitive datastore files -->
     <include domain="root" path="."/>

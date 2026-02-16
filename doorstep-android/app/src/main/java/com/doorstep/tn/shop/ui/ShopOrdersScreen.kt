@@ -46,7 +46,7 @@ fun ShopOrdersScreen(
     val error by viewModel.error.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
 
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     var statusFilter by remember { mutableStateOf("all") }
     var showBoardStatusDialog by remember { mutableStateOf<ActiveBoardOrder?>(null) }
     var showOrderStatusDialog by remember { mutableStateOf<ShopOrder?>(null) }

@@ -61,6 +61,8 @@ data class CachedShop(
     val category: String?,
     val images: String?, // JSON array stored as string
     val rating: Double?,
+    val pickupAvailable: Boolean = false,
+    val deliveryAvailable: Boolean = false,
     val isOpen: Boolean = true,
     val cachedAt: Long = System.currentTimeMillis()
 )

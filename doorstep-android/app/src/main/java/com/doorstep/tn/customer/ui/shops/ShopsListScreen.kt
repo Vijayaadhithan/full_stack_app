@@ -304,7 +304,7 @@ fun ShopsListScreen(
                                         shopLng
                                     )
                                     if (distanceKm.isFinite()) {
-                                        String.format("%.1f km away", distanceKm)
+                                        String.format(java.util.Locale.getDefault(), "%.1f km away", distanceKm)
                                     } else {
                                         null
                                     }
@@ -509,7 +509,7 @@ private fun ShopCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = String.format("%.1f", shop.rating),
+                            text = String.format(java.util.Locale.getDefault(), "%.1f", shop.rating),
                             style = MaterialTheme.typography.bodySmall,
                             color = AmberSecondary
                         )

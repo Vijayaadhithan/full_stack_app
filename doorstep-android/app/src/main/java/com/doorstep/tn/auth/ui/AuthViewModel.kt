@@ -158,8 +158,13 @@ class AuthViewModel @Inject constructor(
                     syncFcmToken()
                 }
                 is Result.Error -> {
-                    // User session may be invalid, logged out
-                    _error.value = result.message
+                    // Clear stale local session if backend marks this cookie/session invalid.
+                    if (result.code == 401 || result.code == 403) {
+                        clearLocalAuthState()
+                        _error.value = "Session expired. Please log in again."
+                    } else {
+                        _error.value = result.message
+                    }
                 }
                 is Result.Loading -> {}
             }
@@ -615,6 +620,25 @@ class AuthViewModel @Inject constructor(
     }
     
     // ==================== Private Helpers ====================
+
+    private suspend fun clearLocalAuthState() {
+        firebaseAuth.signOut()
+        SecureSessionStore.clearSession(context)
+        SecureUserStore.clearUser(context)
+        context.dataStore.edit { prefs ->
+            prefs[PreferenceKeys.IS_LOGGED_IN] = false
+            prefs.remove(PreferenceKeys.USER_ID)
+            prefs.remove(PreferenceKeys.USER_NAME)
+            prefs.remove(PreferenceKeys.USER_ROLE)
+            prefs.remove(PreferenceKeys.USER_PHONE)
+        }
+        _isLoggedIn.value = false
+        _userRole.value = null
+        _userName.value = null
+        _currentUser.value = null
+        _hasShopProfile.value = false
+        _hasProviderProfile.value = false
+    }
 
     private suspend fun unregisterFcmTokenBeforeLogout() {
         val storedToken = SecureUserStore.getFcmToken(context)

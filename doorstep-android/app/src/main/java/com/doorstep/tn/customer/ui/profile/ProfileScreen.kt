@@ -490,7 +490,7 @@ fun ProfileScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Location Captured", color = SuccessGreen, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                 Text(
-                                    "${String.format("%.6f", capturedLatitude)}, ${String.format("%.6f", capturedLongitude)}", 
+                                    "${String.format(java.util.Locale.getDefault(), "%.6f", capturedLatitude)}, ${String.format(java.util.Locale.getDefault(), "%.6f", capturedLongitude)}", 
                                     color = WhiteTextMuted, 
                                     style = MaterialTheme.typography.bodySmall
                                 )

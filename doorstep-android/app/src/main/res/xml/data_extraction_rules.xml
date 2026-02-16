@@ -10,6 +10,7 @@
         <include domain="sharedpref" path="."/>
         <exclude domain="sharedpref" path="device.xml"/>
         <exclude domain="sharedpref" path="secure_session.xml"/>
+        <exclude domain="sharedpref" path="secure_user.xml"/>
         
         <!-- Include root domain to allow datastore exclusion -->
         <include domain="root" path="."/>
@@ -21,6 +22,7 @@
         <include domain="sharedpref" path="."/>
         <exclude domain="sharedpref" path="device.xml"/>
         <exclude domain="sharedpref" path="secure_session.xml"/>
+        <exclude domain="sharedpref" path="secure_user.xml"/>
         
         <!-- Include root domain to allow datastore exclusion -->
         <include domain="root" path="."/>

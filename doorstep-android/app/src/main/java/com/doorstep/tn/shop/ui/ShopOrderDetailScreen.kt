@@ -558,7 +558,7 @@ fun ShopOrderDetailScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text("Subtotal", color = WhiteTextMuted)
-                                Text(formatCurrency(String.format("%.2f", itemsSubtotal)), color = WhiteText)
+                                Text(formatCurrency(String.format(java.util.Locale.getDefault(), "%.2f", itemsSubtotal)), color = WhiteText)
                             }
                         }
 
@@ -570,7 +570,7 @@ fun ShopOrderDetailScreen(
                             ) {
                                 Text("Delivery fee", color = WhiteTextMuted)
                                 Text(
-                                    if (deliveryFeeValue <= 0.0) "Free" else "₹${String.format("%.2f", deliveryFeeValue)}",
+                                    if (deliveryFeeValue <= 0.0) "Free" else "₹${String.format(java.util.Locale.getDefault(), "%.2f", deliveryFeeValue)}",
                                     color = WhiteText
                                 )
                             }
@@ -583,7 +583,7 @@ fun ShopOrderDetailScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text("Promotion", color = WhiteTextMuted)
-                                Text("-₹${String.format("%.2f", discountTotal)}", color = WhiteText)
+                                Text("-₹${String.format(java.util.Locale.getDefault(), "%.2f", discountTotal)}", color = WhiteText)
                             }
                         }
                         

@@ -919,7 +919,7 @@ private fun InlineSearchResultRow(
     }
 
     val distanceLabel = result.distance?.let { dist ->
-        if (dist.isFinite()) String.format("%.1f km away", dist) else null
+        if (dist.isFinite()) String.format(java.util.Locale.getDefault(), "%.1f km away", dist) else null
     }
 
     val typeLabel = when (result.type) {

@@ -82,7 +82,7 @@ fun ServiceDetailScreen(
             } else {
                 s.rating
             }
-            val ratingText = String.format("%.1f", computedRating ?: 0.0)
+            val ratingText = String.format(java.util.Locale.getDefault(), "%.1f", computedRating ?: 0.0)
             Column(
                 modifier = Modifier
                     .fillMaxSize()

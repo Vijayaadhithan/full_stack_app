@@ -595,7 +595,7 @@ fun CartScreen(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = "Distance from shop: ${
-                                        String.format("%.1f", deliveryDistanceKm)
+                                        String.format(java.util.Locale.getDefault(), "%.1f", deliveryDistanceKm)
                                     } km${if (freeDeliveryRadiusKm > 0) " (free within ${freeDeliveryRadiusKm} km)" else ""}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = WhiteTextMuted
@@ -719,7 +719,7 @@ fun CartScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text("Subtotal", color = WhiteTextMuted)
-                                Text("₹${String.format("%.2f", subtotal)}", color = WhiteText)
+                                Text("₹${String.format(java.util.Locale.getDefault(), "%.2f", subtotal)}", color = WhiteText)
                             }
 
                             // Discount
@@ -740,7 +740,7 @@ fun CartScreen(
                                         },
                                         color = SuccessGreen
                                     )
-                                    Text("-₹${String.format("%.2f", discountAmount)}", color = SuccessGreen)
+                                    Text("-₹${String.format(java.util.Locale.getDefault(), "%.2f", discountAmount)}", color = SuccessGreen)
                                 }
                             }
 
@@ -757,7 +757,7 @@ fun CartScreen(
                                     val deliveryLabel = when {
                                         deliveryFeeNeedsLocation -> "—"
                                         deliveryFeeAmount <= 0.0 -> "Free"
-                                        else -> "₹${String.format("%.2f", deliveryFeeAmount)}"
+                                        else -> "₹${String.format(java.util.Locale.getDefault(), "%.2f", deliveryFeeAmount)}"
                                     }
                                     Text(deliveryLabel, color = WhiteText)
                                 }
@@ -771,7 +771,7 @@ fun CartScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text("Platform Service Fee", color = WhiteTextMuted)
-                                    Text("₹${String.format("%.2f", platformFee)}", color = WhiteText)
+                                    Text("₹${String.format(java.util.Locale.getDefault(), "%.2f", platformFee)}", color = WhiteText)
                                 }
                             }
                             
@@ -790,7 +790,7 @@ fun CartScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    "₹${String.format("%.2f", totalAmount)}",
+                                    "₹${String.format(java.util.Locale.getDefault(), "%.2f", totalAmount)}",
                                     color = OrangePrimary,
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.titleMedium
@@ -972,7 +972,7 @@ private fun CartItemCard(
             // Price and Delete
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "₹${String.format("%.2f", (item.product.price.toDoubleOrNull() ?: 0.0) * item.quantity)}",
+                    text = "₹${String.format(java.util.Locale.getDefault(), "%.2f", (item.product.price.toDoubleOrNull() ?: 0.0) * item.quantity)}",
                     style = MaterialTheme.typography.titleMedium,
                     color = OrangePrimary,
                     fontWeight = FontWeight.Bold

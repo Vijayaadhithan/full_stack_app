@@ -641,7 +641,7 @@ private fun SearchResultCard(
                     
                     result.distance?.let { dist ->
                         Text(
-                            text = "${String.format("%.1f", dist)} km",
+                            text = "${String.format(java.util.Locale.getDefault(), "%.1f", dist)} km",
                             style = MaterialTheme.typography.labelSmall,
                             color = WhiteTextMuted
                         )

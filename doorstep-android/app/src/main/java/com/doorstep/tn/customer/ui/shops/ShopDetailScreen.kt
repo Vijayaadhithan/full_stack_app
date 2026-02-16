@@ -236,7 +236,7 @@ fun ShopDetailScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = String.format("%.1f", s.rating),
+                                        text = String.format(java.util.Locale.getDefault(), "%.1f", s.rating),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = AmberSecondary
                                     )
@@ -382,7 +382,7 @@ fun ShopDetailScreen(
                             )
                             Text(
                                 text = "Delivery fee beyond radius: ${
-                                    if (deliveryFeeRate > 0) "₹${String.format("%.2f", deliveryFeeRate)}" else "Free"
+                                    if (deliveryFeeRate > 0) "₹${String.format(java.util.Locale.getDefault(), "%.2f", deliveryFeeRate)}" else "Free"
                                 }",
                                 color = WhiteTextMuted,
                                 style = MaterialTheme.typography.bodySmall
@@ -390,7 +390,7 @@ fun ShopDetailScreen(
                             if (deliveryDistanceKm != null) {
                                 Text(
                                     text = "Your distance: ${
-                                        String.format("%.1f", deliveryDistanceKm)
+                                        String.format(java.util.Locale.getDefault(), "%.1f", deliveryDistanceKm)
                                     } km — ${
                                         if (withinFreeRadius) "Free delivery for your location"
                                         else if (deliveryFeeRate > 0) "Delivery fee applies"

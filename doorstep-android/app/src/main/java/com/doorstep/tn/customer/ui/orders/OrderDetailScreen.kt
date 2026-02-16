@@ -1028,7 +1028,7 @@ private fun OrderDetailContent(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Subtotal", color = WhiteTextMuted)
-                            Text(formatCurrency(String.format("%.2f", itemsSubtotal)), color = WhiteText)
+                            Text(formatCurrency(String.format(java.util.Locale.getDefault(), "%.2f", itemsSubtotal)), color = WhiteText)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -1037,7 +1037,7 @@ private fun OrderDetailContent(
                         val deliveryFeeLabel = if (deliveryFeeValue <= 0.0) {
                             "Free"
                         } else {
-                            "₹${String.format("%.2f", deliveryFeeValue)}"
+                            "₹${String.format(java.util.Locale.getDefault(), "%.2f", deliveryFeeValue)}"
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1053,7 +1053,7 @@ private fun OrderDetailContent(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text("Delivery distance", color = WhiteTextMuted)
-                                Text("${String.format("%.1f", distanceKm)} km", color = WhiteText)
+                                Text("${String.format(java.util.Locale.getDefault(), "%.1f", distanceKm)} km", color = WhiteText)
                             }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1065,7 +1065,7 @@ private fun OrderDetailContent(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Promotion", color = WhiteTextMuted)
-                            Text("-₹${String.format("%.2f", discountTotal)}", color = WhiteText)
+                            Text("-₹${String.format(java.util.Locale.getDefault(), "%.2f", discountTotal)}", color = WhiteText)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -1080,7 +1080,7 @@ private fun OrderDetailContent(
                         ) {
                             Text("You Saved", color = SuccessGreen, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "₹${String.format("%.2f", totalSavings)}",
+                                "₹${String.format(java.util.Locale.getDefault(), "%.2f", totalSavings)}",
                                 color = SuccessGreen,
                                 fontWeight = FontWeight.Bold
                             )

@@ -519,7 +519,7 @@ fun BookServiceScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "${String.format("%.1f", s.rating ?: 0.0)} (${s.reviewCount} reviews)",
+                                text = "${String.format(java.util.Locale.getDefault(), "%.1f", s.rating ?: 0.0)} (${s.reviewCount} reviews)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = WhiteTextMuted
                             )
@@ -1031,7 +1031,7 @@ fun BookServiceScreen(
                             priceAmount > 0.0
                         ) {
                             Text(
-                                text = "Platform Service Fee: ₹${String.format("%.2f", platformFee)}",
+                                text = "Platform Service Fee: ₹${String.format(java.util.Locale.getDefault(), "%.2f", platformFee)}",
                                 color = WhiteTextMuted
                             )
                         }
