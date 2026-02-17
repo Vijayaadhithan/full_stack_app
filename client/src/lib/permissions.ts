@@ -255,7 +255,7 @@ export const scheduleLocalNotification = async (): Promise<void> => {
   if (Notification.permission === "granted") {
     new Notification("Test Notification", {
       body: "This is a test notification!",
-      icon: "/favicon.ico",
+      icon: "/favicon.png",
     });
   }
 };
