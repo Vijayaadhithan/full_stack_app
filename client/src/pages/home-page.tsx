@@ -14,9 +14,8 @@ import {
 
 import { Button } from "@/components/ui/button";
 import doorstepLogo from "@/assets/doorstep-ds-logo.png";
+import HeroVisuals from "@/components/HeroVisuals";
 
-// Lazy load hero visuals - only loads on desktop
-const LazyHeroVisuals = lazy(() => import("@/components/HeroVisuals"));
 const LazyHomePageBelowFold = lazy(() => import("@/pages/home-page-below-fold"));
 
 // Detect if user prefers reduced motion or is on mobile
@@ -359,25 +358,8 @@ export default function HomePage() {
           <div className="grid gap-16 lg:grid-cols-2 items-center">
             {heroContent}
 
-            {/* Hero Visual - Lazy loaded, hidden on mobile */}
-            {!reduceMotion && (
-              <Suspense fallback={
-                <div className="relative hidden lg:block">
-                  <div className="relative z-10 grid grid-cols-2 gap-5">
-                    <div className="space-y-5 pt-12">
-                      <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 animate-pulse"><div className="h-12 w-12 rounded-xl bg-slate-800 mb-4" /><div className="h-5 w-24 bg-slate-800 rounded mb-2" /><div className="h-4 w-32 bg-slate-800/60 rounded" /></div>
-                      <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 animate-pulse"><div className="h-12 w-12 rounded-xl bg-slate-800 mb-4" /><div className="h-5 w-24 bg-slate-800 rounded mb-2" /><div className="h-4 w-32 bg-slate-800/60 rounded" /></div>
-                    </div>
-                    <div className="space-y-5">
-                      <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 animate-pulse"><div className="h-12 w-12 rounded-xl bg-slate-800 mb-4" /><div className="h-5 w-24 bg-slate-800 rounded mb-2" /><div className="h-4 w-32 bg-slate-800/60 rounded" /></div>
-                      <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 animate-pulse"><div className="h-12 w-12 rounded-xl bg-slate-800 mb-4" /><div className="h-5 w-24 bg-slate-800 rounded mb-2" /><div className="h-4 w-32 bg-slate-800/60 rounded" /></div>
-                    </div>
-                  </div>
-                </div>
-              }>
-                <LazyHeroVisuals />
-              </Suspense>
-            )}
+            {/* Hero visual is rendered eagerly on desktop for better LCP */}
+            {!reduceMotion && <HeroVisuals />}
           </div>
         </section>
 

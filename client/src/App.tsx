@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AdminProvider } from "@/hooks/use-admin";
 import { LanguageProvider } from "@/contexts/language-context";
-import { UserProvider, useUserContext } from "@/contexts/UserContext";
+import { UserProvider } from "@/contexts/UserContext";
 import { ProtectedRoute } from "./lib/protected-route";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import RouteErrorBoundary from "@/components/RouteErrorBoundary";
@@ -15,6 +15,7 @@ import React, { Suspense, lazy } from "react";
 import { useClientPerformanceMetrics } from "@/hooks/use-client-performance-metrics";
 import { useRealtimeUpdates } from "@/hooks/use-realtime-updates";
 import { Loader2 } from "lucide-react";
+import HomePage from "@/pages/home-page";
 
 // Import all pages...
 const AuthPage = lazy(() => import("@/pages/auth-page"));
@@ -67,7 +68,6 @@ const AdminBookingsPage = lazy(() => import("@/pages/admin/AdminBookings"));
 const AdminHealth = lazy(() => import("@/pages/admin/AdminHealth"));
 const AdminMonitoring = lazy(() => import("@/pages/admin/AdminMonitoring"));
 
-const HomePage = lazy(() => import("@/pages/home-page"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
 const TermsOfService = lazy(() => import("@/pages/terms-of-service"));
@@ -89,10 +89,9 @@ function RealtimeBridge() {
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
-  const { isLoadingProfiles } = useUserContext();
+  const { isLoading } = useAuth();
 
-  if (isLoading || (user && isLoadingProfiles)) {
+  if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-border" />

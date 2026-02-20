@@ -101,7 +101,7 @@ export default function ServiceDetails() {
         }}
       />
       <motion.div
-        initial={{ opacity: 0 }}
+        initial={false}
         animate={{ opacity: 1 }}
         className="max-w-5xl mx-auto space-y-6 p-6"
       >

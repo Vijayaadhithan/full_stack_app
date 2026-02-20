@@ -1,6 +1,65 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import * as LucideIcons from 'lucide-react';
+import {
+    Activity,
+    Apple,
+    Armchair,
+    Bike,
+    BookOpen,
+    Briefcase,
+    Bug,
+    Camera,
+    Car,
+    Carrot,
+    ChefHat,
+    CircleDot,
+    Construction,
+    Cookie,
+    Droplet,
+    Droplets,
+    Fan,
+    Flame,
+    Flower2,
+    GraduationCap,
+    Grid3x3,
+    Hammer,
+    Hand,
+    Heart,
+    Keyboard,
+    Laptop,
+    Leaf,
+    Milk,
+    Monitor,
+    Music,
+    Package,
+    Paintbrush,
+    Pencil,
+    Pill,
+    PipetteIcon,
+    Scissors,
+    Shirt,
+    ShirtIcon,
+    ShoppingBasket,
+    Shovel,
+    Smartphone,
+    Sparkle,
+    Sparkles,
+    Sprout,
+    Star,
+    Store,
+    Tent,
+    ToyBrick,
+    Tractor,
+    Truck,
+    Tv,
+    User,
+    UtensilsCrossed,
+    Video,
+    Wheat,
+    Wrench,
+    Zap,
+    type LucideIcon,
+} from 'lucide-react';
 import {
     type CategoryImage,
     type ShopBanner,
@@ -45,6 +104,67 @@ const labelSizeClasses = {
     xl: 'text-lg',
 };
 
+const ICON_COMPONENTS: Record<string, LucideIcon> = {
+    Activity,
+    Apple,
+    Armchair,
+    Bike,
+    BookOpen,
+    Brick: Construction,
+    Briefcase,
+    Bug,
+    Camera,
+    Car,
+    Carrot,
+    ChefHat,
+    CircleDot,
+    Construction,
+    Cookie,
+    Droplet,
+    Droplets,
+    Fan,
+    Flame,
+    Flower2,
+    GraduationCap,
+    Grid3x3,
+    Hammer,
+    Hand,
+    Heart,
+    Keyboard,
+    Laptop,
+    Leaf,
+    Milk,
+    Monitor,
+    Music,
+    Package,
+    Paintbrush,
+    Pencil,
+    Pill,
+    PipetteIcon,
+    Scissors,
+    Shirt,
+    ShirtIcon,
+    ShoppingBasket,
+    Shovel,
+    Smartphone,
+    Sparkle,
+    Sparkles,
+    Sprout,
+    Star,
+    Store,
+    Tent,
+    ToyBrick,
+    Tractor,
+    Truck,
+    Tv,
+    User,
+    UtensilsCrossed,
+    Video,
+    Wheat,
+    Wrench,
+    Zap,
+};
+
 /**
  * CategoryIcon - A beautiful, performant icon component for categories
  * 
@@ -64,8 +184,7 @@ export function CategoryIcon({
     showTamilLabel = false,
     className,
 }: CategoryIconProps) {
-    // Get the icon component from Lucide
-    const IconComponent = (LucideIcons as any)[category.icon] || LucideIcons.Package;
+    const IconComponent = ICON_COMPONENTS[category.icon] ?? Package;
 
     return (
         <div
@@ -211,7 +330,7 @@ export function ShopBannerPreview({
     showLabel = true,
     className,
 }: ShopBannerPreviewProps) {
-    const IconComponent = (LucideIcons as any)[banner.icon] || LucideIcons.Store;
+    const IconComponent = ICON_COMPONENTS[banner.icon] ?? Store;
 
     // Generate pattern overlay
     const getPatternStyle = (pattern: ShopBanner['pattern']): React.CSSProperties => {
@@ -300,7 +419,7 @@ export function ProductCategoryBadge({
     category: CategoryImage;
     className?: string;
 }) {
-    const IconComponent = (LucideIcons as any)[category.icon] || LucideIcons.Package;
+    const IconComponent = ICON_COMPONENTS[category.icon] ?? Package;
 
     return (
         <span

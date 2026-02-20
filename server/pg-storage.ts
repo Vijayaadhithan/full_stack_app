@@ -1197,9 +1197,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getService(id: number): Promise<Service | undefined> {
-    logger.info("Getting service with ID:", id);
     const result = await db.primary.select().from(services).where(eq(services.id, id));
-    logger.info("Found service:", result[0]);
     return result[0];
   }
   async getServicesByIds(ids: number[]): Promise<Service[]> {
@@ -1243,11 +1241,18 @@ export class PostgresStorage implements IStorage {
   // Get booking requests with status for a customer
   async getBookingRequestsWithStatusForCustomer(
     customerId: number,
+    options?: { limit?: number; offset?: number },
   ): Promise<Booking[]> {
+    const limit = Math.min(250, Math.max(1, options?.limit ?? 100));
+    const offset = Math.max(0, options?.offset ?? 0);
+
     return await db.primary
       .select()
       .from(bookings)
-      .where(eq(bookings.customerId, customerId));
+      .where(eq(bookings.customerId, customerId))
+      .orderBy(desc(bookings.bookingDate))
+      .limit(limit)
+      .offset(offset);
   }
 
 
@@ -1456,7 +1461,13 @@ export class PostgresStorage implements IStorage {
   }
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
-  async getBookingHistoryForCustomer(customerId: number): Promise<Booking[]> {
+  async getBookingHistoryForCustomer(
+    customerId: number,
+    options?: { limit?: number; offset?: number },
+  ): Promise<Booking[]> {
+    const limit = Math.min(250, Math.max(1, options?.limit ?? 100));
+    const offset = Math.max(0, options?.offset ?? 0);
+
     return await db.primary
       .select()
       .from(bookings)
@@ -1465,7 +1476,10 @@ export class PostgresStorage implements IStorage {
           eq(bookings.customerId, customerId),
           ne(bookings.status, "pending"),
         ),
-      );
+      )
+      .orderBy(desc(bookings.bookingDate))
+      .limit(limit)
+      .offset(offset);
   }
 
   // Removed duplicate processExpiredBookings implementation to avoid conflicts.

@@ -553,7 +553,7 @@ export default function OrderDetails() {
   return (
     <DashboardLayout>
       <motion.div
-        initial={{ opacity: 0 }}
+        initial={false}
         animate={{ opacity: 1 }}
         className="max-w-4xl mx-auto space-y-6"
       >

@@ -382,7 +382,7 @@ export default function ShopDetails() {
       />
       <motion.div
         variants={container}
-        initial="hidden"
+        initial={false}
         animate="show"
         className="max-w-7xl mx-auto space-y-6 p-6"
       >

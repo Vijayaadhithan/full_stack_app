@@ -13,10 +13,22 @@ export function ProtectedRoute({
   component: React.ComponentType<any>;
   roles?: UserRole[];
 }) {
-  const { user, isFetching } = useAuth();
+  const { user, isLoading } = useAuth();
   const { profiles, isLoadingProfiles, appMode } = useUserContext();
+  const userRole = user?.role || "customer";
+  const hasRoleAccessWithoutProfiles =
+    !!user &&
+    (!roles ||
+      roles.length === 0 ||
+      roles.includes(userRole) ||
+      roles.includes("customer"));
+  const requiresProfilesForAccessCheck =
+    !!user &&
+    isLoadingProfiles &&
+    !!roles?.some((role) => role === "shop" || role === "provider") &&
+    !hasRoleAccessWithoutProfiles;
 
-  if (isFetching || isLoadingProfiles) {
+  if (isLoading || requiresProfilesForAccessCheck) {
     return (
       <Route path={path}>
         <div className="flex items-center justify-center min-h-screen">
@@ -42,8 +54,6 @@ export function ProtectedRoute({
   // 4. All users can access /customer routes
 
   if (roles && roles.length > 0) {
-    const userRole = user.role || "customer";
-
     // Check if user has permission for these roles
     let hasAccess = roles.includes(userRole);
 

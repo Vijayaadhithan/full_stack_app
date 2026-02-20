@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,12 +7,17 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { User } from "@shared/schema";
-import { LocationPicker, Coordinates } from "./location-picker";
+import type { Coordinates } from "./location-picker";
 import { cn } from "@/lib/utils";
 import MapLink from "@/components/location/MapLink";
 import { useLanguage } from "@/contexts/language-context";
 import { useAppMode } from "@/contexts/UserContext";
 import { formatGeolocationError, getCurrentPositionWithFallback } from "@/lib/permissions";
+
+const LazyLocationPicker = lazy(async () => {
+  const module = await import("./location-picker");
+  return { default: module.LocationPicker };
+});
 
 type ProfileLocationSectionProps = {
   user: Pick<User, "latitude" | "longitude" | "role"> | null;
@@ -73,6 +78,7 @@ export function ProfileLocationSection({
 
   const [location, setLocation] = useState<Coordinates | null>(initialLocation);
   const [isCapturingDeviceLocation, setIsCapturingDeviceLocation] = useState(false);
+  const [isMapVisible, setIsMapVisible] = useState(false);
   const { toast } = useToast();
   const { appMode } = useAppMode();
 
@@ -165,7 +171,33 @@ export function ProfileLocationSection({
         <p className="text-sm text-muted-foreground">{resolvedDescription}</p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <LocationPicker value={location} onChange={setLocation} />
+        {!isMapVisible ? (
+          <div className="rounded-lg border bg-muted/40 p-4">
+            <p className="text-sm text-muted-foreground">
+              {t("location_select_first_description")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3"
+              onClick={() => setIsMapVisible(true)}
+            >
+              <MapPin className="mr-2 h-4 w-4" />
+              {t("view_on_map")}
+            </Button>
+          </div>
+        ) : (
+          <Suspense
+            fallback={
+              <div
+                className="w-full rounded-xl border border-dashed border-muted bg-muted/40 animate-pulse"
+                style={{ height: 320 }}
+              />
+            }
+          >
+            <LazyLocationPicker value={location} onChange={setLocation} />
+          </Suspense>
+        )}
         <div className="flex flex-wrap gap-3">
           <Button
             type="button"

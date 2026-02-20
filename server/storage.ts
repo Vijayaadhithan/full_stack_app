@@ -174,8 +174,14 @@ export interface IStorage {
     providerId: number,
     options?: { page: number; limit: number },
   ): Promise<{ data: Booking[]; total: number; totalPages: number }>; // Added
-  getBookingHistoryForCustomer(customerId: number): Promise<Booking[]>; // Added
-  getBookingRequestsWithStatusForCustomer(customerId: number): Promise<Booking[]>;
+  getBookingHistoryForCustomer(
+    customerId: number,
+    options?: { limit?: number; offset?: number },
+  ): Promise<Booking[]>; // Added
+  getBookingRequestsWithStatusForCustomer(
+    customerId: number,
+    options?: { limit?: number; offset?: number },
+  ): Promise<Booking[]>;
   getBookingsWithRelations(ids: number[]): Promise<BookingWithRelations[]>;
   processExpiredBookings(): Promise<void>; // Added
 

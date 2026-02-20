@@ -85,7 +85,7 @@ export default function Orders() {
     <DashboardLayout>
       <motion.div
         variants={containerVariants}
-        initial="hidden"
+        initial={false}
         animate="show"
         className="max-w-5xl mx-auto space-y-6 p-6"
       >

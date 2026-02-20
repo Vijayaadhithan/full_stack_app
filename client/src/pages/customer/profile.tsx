@@ -140,7 +140,7 @@ export default function CustomerProfile() {
   return (
     <DashboardLayout>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         className="max-w-4xl mx-auto space-y-6"
       >

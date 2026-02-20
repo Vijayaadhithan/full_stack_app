@@ -246,7 +246,7 @@ export default function BrowseServices() {
     <DashboardLayout>
       <motion.div
         variants={container}
-        initial="hidden"
+        initial={false}
         animate="show"
         className="space-y-6 p-6"
       >

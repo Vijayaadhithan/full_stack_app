@@ -1182,6 +1182,13 @@ const statusQuerySchema = z
   })
   .strict();
 
+const customerBookingListQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().positive().max(250).optional(),
+    offset: z.coerce.number().int().nonnegative().optional(),
+  })
+  .strict();
+
 const servicesAvailabilityQuerySchema = z
   .object({
     date: dateStringSchema,
@@ -1299,7 +1306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         next();
       })
       : createCsrfProtection({
-        ignoreMethods: ["GET", "HEAD", "OPTIONS"],
+        ignoreMethods: ["GET", "HEAD", "OPTIONS", "PROPFIND"],
         // Exempt analytics endpoint - sendBeacon doesn't preserve session cookies for CSRF
         // Exempt FCM endpoints - they are protected by requireAuth and cause CSRF timing issues in Chrome
         ignorePaths: ["/api/performance-metrics", "/api/fcm/register", "/api/fcm/unregister"],
@@ -1975,10 +1982,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       try {
+        const parsedQuery = customerBookingListQuerySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+          return res.status(400).json(formatValidationError(parsedQuery.error));
+        }
+
+        const { limit, offset } = parsedQuery.data;
         const customerId = req.user!.id;
         const start = performance.now();
-        const bookingRequests =
-          await storage.getBookingRequestsWithStatusForCustomer(customerId);
+        const bookingRequests = await storage.getBookingRequestsWithStatusForCustomer(
+          customerId,
+          { limit, offset },
+        );
         const prepElapsed = performance.now();
 
         const bookingsWithDetails =
@@ -1992,6 +2007,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hydrateMs: (hydrateElapsed - prepElapsed).toFixed(2),
             totalMs: (hydrateElapsed - start).toFixed(2),
             bookingCount: bookingRequests.length,
+            limit: limit ?? 100,
+            offset: offset ?? 0,
           },
           "Fetched customer booking requests",
         );
@@ -2018,10 +2035,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["customer"]),
     async (req, res) => {
       try {
+        const parsedQuery = customerBookingListQuerySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+          return res.status(400).json(formatValidationError(parsedQuery.error));
+        }
+
+        const { limit, offset } = parsedQuery.data;
         const customerId = req.user!.id;
         const start = performance.now();
-        const bookingHistory =
-          await storage.getBookingHistoryForCustomer(customerId);
+        const bookingHistory = await storage.getBookingHistoryForCustomer(
+          customerId,
+          { limit, offset },
+        );
         const prepElapsed = performance.now();
 
         const bookingsWithDetails =
@@ -2035,6 +2060,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hydrateMs: (hydrateElapsed - prepElapsed).toFixed(2),
             totalMs: (hydrateElapsed - start).toFixed(2),
             bookingCount: bookingHistory.length,
+            limit: limit ?? 100,
+            offset: offset ?? 0,
           },
           "Fetched customer booking history",
         );
@@ -2561,26 +2588,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json(formatValidationError(parsedQuery.error));
       }
 
-      const filters = Object.fromEntries(
-        Object.entries(parsedQuery.data).filter(([, value]) => value !== undefined),
-      );
-
       // Exclude own shop if user is logged in
       const currentUserId = (req.user?.id as number) || undefined;
       const queryFilters = {
-        ...filters,
+        locationCity: parsedQuery.data.locationCity,
+        locationState: parsedQuery.data.locationState,
         excludeOwnerId: currentUserId,
       };
 
-      logger.info({ currentUserId, queryFilters }, "[/api/shops] Fetching shops with filters");
+      logger.debug(
+        {
+          currentUserId,
+          hasLocationCity: Boolean(queryFilters.locationCity),
+          hasLocationState: Boolean(queryFilters.locationState),
+        },
+        "[/api/shops] Fetching shops with filters",
+      );
       const shops = await storage.getShops(queryFilters);
-      logger.info({ shopCount: shops.length, shopRoles: shops.map(s => ({ id: s.id, role: s.role })) }, "[/api/shops] Shops returned from storage");
+      logger.debug(
+        { shopCount: shops.length },
+        "[/api/shops] Shops returned from storage",
+      );
 
       const publicShops = shops
         .filter((shop): shop is User => Boolean(shop && shop.role === "shop"))
         .map((shop) => buildPublicShopResponse(shop as User));
 
-      logger.info({ filteredCount: publicShops.length }, "[/api/shops] Shops after role filter");
+      logger.debug(
+        { filteredCount: publicShops.length },
+        "[/api/shops] Shops after role filter",
+      );
       res.json(publicShops);
     } catch (error) {
       logger.error("Error fetching shops:", error);
@@ -3323,7 +3360,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { items: services, hasMore } = await storage.getServices(filters);
-      logger.info("Filtered services:", services); // Debug log
+      logger.debug(
+        {
+          page: normalizedPage,
+          pageSize: normalizedPageSize,
+          returnedCount: services.length,
+          hasMore,
+          hasSearchTerm: Boolean(searchTerm),
+          hasGeoFilter: lat !== undefined && lng !== undefined,
+        },
+        "[/api/services] Returning filtered services",
+      );
 
       const serviceIds = services.map((service) => service.id);
       const providerIds = new Set(
@@ -3468,10 +3515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const serviceId = getValidatedParam(req, "id");
-        logger.info(
-          "[API] /api/services/:id - Received request for service ID: %d",
-          serviceId,
-        );
+        logger.debug({ serviceId }, "[API] /api/services/:id - Request received");
 
         const cacheKey = `service_detail_${serviceId}`;
         const cached = await getCache<ServiceDetail>(cacheKey);
@@ -3481,10 +3525,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const service = await storage.getService(serviceId);
-        logger.info("[API] /api/services/:id - Service from storage:", service);
 
         if (!service) {
-          logger.info("[API] /api/services/:id - Service not found in storage");
+          logger.debug(
+            { serviceId },
+            "[API] /api/services/:id - Service not found in storage",
+          );
           return res.status(404).json({ message: "Service not found" });
         }
 
@@ -3493,7 +3539,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? await storage.getUser(service.providerId)
             : null;
         if (!provider) {
-          logger.info("[API] /api/services/:id - Provider not found");
+          logger.debug(
+            { serviceId, providerId: service.providerId },
+            "[API] /api/services/:id - Provider not found",
+          );
           return res
             .status(404)
             .json({ message: "Service provider not found" });

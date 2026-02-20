@@ -677,7 +677,7 @@ export default function Bookings() {
           hidden: { opacity: 0 },
           show: { opacity: 1, transition: { staggerChildren: 0.1 } },
         }}
-        initial="hidden"
+        initial={false}
         animate="show"
         className="max-w-4xl mx-auto space-y-6"
       >

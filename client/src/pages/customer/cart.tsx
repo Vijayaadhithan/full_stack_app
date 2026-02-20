@@ -442,7 +442,7 @@ export default function Cart() {
       <DashboardLayout>
         <motion.div
           variants={container}
-          initial="hidden"
+          initial={false}
           animate="show"
           className="max-w-4xl mx-auto space-y-6"
         >

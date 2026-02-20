@@ -485,7 +485,7 @@ export default function CustomerDashboard() {
   return (
     <DashboardLayout>
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
         className="space-y-6 p-6"
@@ -505,7 +505,7 @@ export default function CustomerDashboard() {
           </h2>
           <motion.div
             variants={tileContainerVariants}
-            initial="hidden"
+            initial={false}
             animate="show"
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
           >

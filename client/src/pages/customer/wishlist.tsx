@@ -152,7 +152,7 @@ export default function Wishlist() {
     <DashboardLayout>
       <motion.div
         variants={container}
-        initial="hidden"
+        initial={false}
         animate="show"
         className="max-w-4xl mx-auto space-y-6"
       >

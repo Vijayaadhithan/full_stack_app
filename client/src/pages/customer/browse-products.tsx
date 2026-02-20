@@ -349,7 +349,7 @@ export default function BrowseProducts() {
     <DashboardLayout>
       <motion.div
         variants={container}
-        initial="hidden"
+        initial={false}
         animate="show"
         className="max-w-7xl mx-auto space-y-6"
       >
