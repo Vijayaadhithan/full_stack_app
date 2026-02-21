@@ -62,6 +62,7 @@ android {
         // API Base URL
         buildConfigField("String", "API_BASE_URL", "\"https://api.doorsteptn.in\"")
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"https://doorsteptn.in/privacy-policy\"")
+        buildConfigField("String", "ACCOUNT_DELETION_URL", "\"https://doorsteptn.in/account-deletion\"")
         val resolvedPins = apiCertPins ?: ""
         val escapedPins = escapeBuildConfig(resolvedPins)
         buildConfigField("String", "API_CERT_PINS", "\"$escapedPins\"")

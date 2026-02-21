@@ -70,6 +70,7 @@ const AdminMonitoring = lazy(() => import("@/pages/admin/AdminMonitoring"));
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
+const AccountDeletion = lazy(() => import("@/pages/account-deletion"));
 const TermsOfService = lazy(() => import("@/pages/terms-of-service"));
 const NotificationRedirect = lazy(() => import("@/pages/notification-redirect"));
 // Email-based pages removed (verify-email, reset-password) - using phone OTP instead
@@ -212,6 +213,7 @@ function Router() {
       <ProtectedRoute path="/shop/workers" component={ShopWorkers} roles={["shop"]} />
       {/* Legal Pages */}
       <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/account-deletion" component={AccountDeletion} />
       <Route path="/terms-of-service" component={TermsOfService} />
       {/* Email-based routes removed (reset-password, verify-email) - using phone OTP instead */}
       <Route path="/" component={HomePage} />

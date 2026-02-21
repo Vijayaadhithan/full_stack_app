@@ -164,6 +164,40 @@ const staticAssetsDir = process.env.CLIENT_DIST_DIR
   ? path.resolve(process.env.CLIENT_DIST_DIR)
   : path.resolve(process.cwd(), "dist", "public");
 let staticAssetsMounted = false;
+const IMMUTABLE_ASSET_PATTERN = /^assets\/.+-[A-Za-z0-9_-]{8,}\.[^/]+$/;
+
+function getStaticCacheControl(filePath: string): string {
+  const relativePath = path
+    .relative(staticAssetsDir, filePath)
+    .split(path.sep)
+    .join("/");
+
+  if (relativePath === "index.html") {
+    return "public, max-age=0, must-revalidate";
+  }
+
+  if (IMMUTABLE_ASSET_PATTERN.test(relativePath)) {
+    return "public, max-age=31536000, immutable";
+  }
+
+  if (
+    relativePath === "site.webmanifest" ||
+    relativePath === "firebase-messaging-sw.js"
+  ) {
+    return "public, max-age=0, must-revalidate";
+  }
+
+  if (
+    relativePath.endsWith(".png") ||
+    relativePath.endsWith(".svg") ||
+    relativePath.endsWith(".webp") ||
+    relativePath.endsWith(".ico")
+  ) {
+    return "public, max-age=86400, must-revalidate";
+  }
+
+  return "public, max-age=3600, must-revalidate";
+}
 
 function mountStaticAssets() {
   if (staticAssetsMounted) return;
@@ -193,7 +227,15 @@ function mountStaticAssets() {
 
   logger.info({ staticAssetsDir }, "Serving static client assets");
 
-  app.use(express.static(staticAssetsDir));
+  app.use(
+    express.static(staticAssetsDir, {
+      etag: true,
+      lastModified: true,
+      setHeaders: (res, filePath) => {
+        res.setHeader("Cache-Control", getStaticCacheControl(filePath));
+      },
+    }),
+  );
   app.get("*", (req, res, next) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
       return next();
@@ -204,6 +246,7 @@ function mountStaticAssets() {
       return next();
     }
 
+    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
     res.sendFile(indexHtmlPath);
   });
 

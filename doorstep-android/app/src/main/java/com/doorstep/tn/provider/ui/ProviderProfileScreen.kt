@@ -13,6 +13,7 @@ fun ProviderProfileScreen(
     onNavigateBack: () -> Unit,
     onNavigateToReviews: () -> Unit,
     onNavigateToPrivacyPolicy: () -> Unit,
+    onNavigateToAccountDeletionHelp: () -> Unit,
     onSwitchRole: ((String) -> Unit)? = null,
     onLogout: () -> Unit
 ) {
@@ -24,6 +25,7 @@ fun ProviderProfileScreen(
         onNavigateBack = onNavigateBack,
         onNavigateToReviews = onNavigateToReviews,
         onNavigateToPrivacyPolicy = onNavigateToPrivacyPolicy,
+        onNavigateToAccountDeletionHelp = onNavigateToAccountDeletionHelp,
         onSwitchRole = onSwitchRole,
         onLogout = onLogout
     )

@@ -49,7 +49,7 @@ export default function PrivacyPolicy() {
                                 <Shield className="h-8 w-8" />
                             </div>
                             <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Privacy Policy</h1>
-                            <p className="text-slate-400">Last updated: January 2026</p>
+                            <p className="text-slate-400">Last updated: February 20, 2026</p>
                         </div>
 
                         {/* Content */}
@@ -60,9 +60,11 @@ export default function PrivacyPolicy() {
                                     <ul>
                                         <li>Name, phone number, and email address when you create an account</li>
                                         <li>Address and location data to provide local services</li>
+                                        <li>Precise location (GPS) when you grant location permission in the app</li>
                                         <li>Payment information when you make purchases</li>
                                         <li>Communication data between you and service providers/shops</li>
                                         <li>Feedback and reviews you submit</li>
+                                        <li>Device and app data needed for authentication and notifications (for example, OTP/PIN login state and push notification token)</li>
                                     </ul>
                                 </Section>
 
@@ -71,8 +73,10 @@ export default function PrivacyPolicy() {
                                     <ul>
                                         <li>Provide, maintain, and improve our services</li>
                                         <li>Connect you with local service providers and shops</li>
+                                        <li>Show nearby shops/services and support map/location workflows</li>
                                         <li>Process transactions and send related information</li>
                                         <li>Send you technical notices and support messages</li>
+                                        <li>Send service/order related push notifications</li>
                                         <li>Respond to your comments and questions</li>
                                         <li>Personalize and improve your experience</li>
                                     </ul>
@@ -82,7 +86,7 @@ export default function PrivacyPolicy() {
                                     <p>We may share your information in the following situations:</p>
                                     <ul>
                                         <li>With service providers and shops when you book services or make purchases</li>
-                                        <li>With third-party vendors who assist in our operations</li>
+                                        <li>With third-party vendors who assist in our operations (for example, notification delivery and phone verification infrastructure)</li>
                                         <li>When required by law or to protect our rights</li>
                                         <li>In connection with a merger or acquisition</li>
                                     </ul>
@@ -108,6 +112,12 @@ export default function PrivacyPolicy() {
                                         <li>Opt-out of promotional communications</li>
                                         <li>Export your data in a portable format</li>
                                     </ul>
+                                    <p>
+                                        Account deletion details and request options are available at{" "}
+                                        <Link href="/account-deletion" className="text-purple-300 hover:text-purple-200">
+                                            /account-deletion
+                                        </Link>.
+                                    </p>
                                 </Section>
 
                                 <Section title="6. Cookies and Tracking">
@@ -119,21 +129,32 @@ export default function PrivacyPolicy() {
                                     </ul>
                                 </Section>
 
-                                <Section title="7. Children's Privacy">
+                                <Section title="7. Data Retention">
+                                    <p>
+                                        We retain personal data only as long as needed to provide services, comply with legal
+                                        obligations, resolve disputes, and prevent abuse.
+                                    </p>
+                                    <p>
+                                        When you delete your account, we remove account data from active systems. Limited data
+                                        may be retained only where required by law or compliance obligations.
+                                    </p>
+                                </Section>
+
+                                <Section title="8. Children's Privacy">
                                     <p>Our services are not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13. If we learn that we have collected such information, we will delete it promptly.</p>
                                 </Section>
 
-                                <Section title="8. Changes to This Policy">
+                                <Section title="9. Changes to This Policy">
                                     <p>We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last updated" date.</p>
                                 </Section>
 
-                                <Section title="9. Contact Us">
+                                <Section title="10. Contact Us">
                                     <p>If you have any questions about this Privacy Policy, please contact us at:</p>
                                     <ul>
                                         <li>Email: vjaadhi2799@gmail.com</li>
                                         <li>Email: vigneshwaran2513@gmail.com</li>
                                         <li>Phone: +91 97895 46741</li>
-                                        <li>Phone: +91 95097 53683</li>
+                                        <li>Phone: +91 95970 53683</li>
                                     </ul>
                                 </Section>
                             </div>

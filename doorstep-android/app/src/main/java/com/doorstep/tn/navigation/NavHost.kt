@@ -25,6 +25,7 @@ import com.doorstep.tn.auth.ui.PinEntryScreen
 import com.doorstep.tn.auth.ui.ProfileSetupScreen
 import com.doorstep.tn.auth.ui.PinSetupScreen
 import com.doorstep.tn.auth.ui.ForgotPinScreen
+import com.doorstep.tn.common.ui.AccountDeletionScreen
 import com.doorstep.tn.common.ui.PrivacyPolicyScreen
 import com.doorstep.tn.customer.ui.CustomerHomeScreen
 import com.doorstep.tn.customer.ui.products.ProductsListScreen
@@ -142,6 +143,7 @@ object Routes {
 
     // Common routes
     const val PRIVACY_POLICY = "privacy_policy"
+    const val ACCOUNT_DELETION = "account_deletion"
     
     // Helper functions
     fun productDetail(shopId: Int, productId: Int) = "customer_shop/$shopId/product/$productId"
@@ -220,7 +222,9 @@ fun DoorStepNavHost(
             PhoneEntryScreen(
                 viewModel = authViewModel,
                 onNavigateToPin = { navController.navigate(Routes.PIN_ENTRY) },
-                onNavigateToOtp = { navController.navigate(Routes.OTP_VERIFY) }
+                onNavigateToOtp = { navController.navigate(Routes.OTP_VERIFY) },
+                onNavigateToPrivacyPolicy = { navController.navigate(Routes.PRIVACY_POLICY) },
+                onNavigateToAccountDeletion = { navController.navigate(Routes.ACCOUNT_DELETION) }
             )
         }
         
@@ -424,6 +428,7 @@ fun DoorStepNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToReviews = { navController.navigate(Routes.CUSTOMER_REVIEWS) },
                 onNavigateToPrivacyPolicy = { navController.navigate(Routes.PRIVACY_POLICY) },
+                onNavigateToAccountDeletionHelp = { navController.navigate(Routes.ACCOUNT_DELETION) },
                 onSwitchRole = { newRole ->
                     // Update role in AuthViewModel and navigate to new dashboard
                     authViewModel.switchRole(newRole)
@@ -672,6 +677,7 @@ fun DoorStepNavHost(
             ShopProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToPrivacyPolicy = { navController.navigate(Routes.PRIVACY_POLICY) },
+                onNavigateToAccountDeletionHelp = { navController.navigate(Routes.ACCOUNT_DELETION) },
                 onSwitchRole = { newRole ->
                     authViewModel.switchRole(newRole)
                     val destination = when (newRole) {
@@ -790,6 +796,7 @@ fun DoorStepNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToReviews = { navController.navigate(Routes.PROVIDER_REVIEWS) },
                 onNavigateToPrivacyPolicy = { navController.navigate(Routes.PRIVACY_POLICY) },
+                onNavigateToAccountDeletionHelp = { navController.navigate(Routes.ACCOUNT_DELETION) },
                 onSwitchRole = { newRole ->
                     authViewModel.switchRole(newRole)
                     val destination = when (newRole) {
@@ -812,6 +819,12 @@ fun DoorStepNavHost(
 
         composable(Routes.PRIVACY_POLICY) {
             PrivacyPolicyScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.ACCOUNT_DELETION) {
+            AccountDeletionScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

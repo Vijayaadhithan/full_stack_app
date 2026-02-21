@@ -300,6 +300,9 @@ export default function HomePageBelowFold({ reduceMotion }: { reduceMotion: bool
                   <Link href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link>
                 </li>
                 <li>
+                  <Link href="/account-deletion" className="hover:text-white transition-colors">Account Deletion</Link>
+                </li>
+                <li>
                   <Link href="/terms-of-service" className="hover:text-white transition-colors">Terms of Service</Link>
                 </li>
                 <li>

@@ -51,6 +51,7 @@ fun ProfileScreen(
     onNavigateBack: () -> Unit,
     onNavigateToReviews: () -> Unit,
     onNavigateToPrivacyPolicy: () -> Unit,
+    onNavigateToAccountDeletionHelp: () -> Unit,
     onSwitchRole: ((String) -> Unit)? = null,  // Optional callback for role switching
     onLogout: () -> Unit
 ) {
@@ -851,6 +852,20 @@ fun ProfileScreen(
                 Icon(Icons.Default.Policy, null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Privacy Policy")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = onNavigateToAccountDeletionHelp,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary),
+                border = BorderStroke(1.dp, OrangePrimary)
+            ) {
+                Icon(Icons.Default.DeleteForever, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Account Deletion Help")
             }
 
             Spacer(modifier = Modifier.height(16.dp))

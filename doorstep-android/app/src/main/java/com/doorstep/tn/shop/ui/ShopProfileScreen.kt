@@ -49,6 +49,7 @@ fun ShopProfileScreen(
     viewModel: ShopViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToPrivacyPolicy: () -> Unit,
+    onNavigateToAccountDeletionHelp: () -> Unit,
     onSwitchRole: ((String) -> Unit)? = null,  // Optional callback for role switching
     onLogout: () -> Unit = {}
 ) {
@@ -803,6 +804,18 @@ fun ShopProfileScreen(
                     Icon(Icons.Default.Policy, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Privacy Policy")
+                }
+
+                OutlinedButton(
+                    onClick = onNavigateToAccountDeletionHelp,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangePrimary),
+                    border = BorderStroke(1.dp, OrangePrimary)
+                ) {
+                    Icon(Icons.Default.DeleteForever, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Account Deletion Help")
                 }
 
                 OutlinedButton(

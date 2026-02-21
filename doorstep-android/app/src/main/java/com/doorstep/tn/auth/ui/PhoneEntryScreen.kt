@@ -36,7 +36,9 @@ import com.doorstep.tn.common.ui.TimeBasedGreeting
 fun PhoneEntryScreen(
     viewModel: AuthViewModel,
     onNavigateToPin: () -> Unit,
-    onNavigateToOtp: () -> Unit
+    onNavigateToOtp: () -> Unit,
+    onNavigateToPrivacyPolicy: () -> Unit,
+    onNavigateToAccountDeletion: () -> Unit
 ) {
     val context = LocalContext.current
     val activity = context as? android.app.Activity
@@ -312,6 +314,34 @@ fun PhoneEntryScreen(
                             text = t.trusted,
                             color = TempleGold
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onNavigateToPrivacyPolicy) {
+                            Text(
+                                text = "Privacy Policy",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = WhiteTextMuted
+                            )
+                        }
+                        Text(
+                            text = "•",
+                            color = WhiteTextSubtle,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        TextButton(onClick = onNavigateToAccountDeletion) {
+                            Text(
+                                text = "Account Deletion",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = WhiteTextMuted
+                            )
+                        }
                     }
                 }
             }
