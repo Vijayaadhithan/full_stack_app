@@ -1,13 +1,13 @@
 # DoorStep TN — Complete API Endpoints Reference
 
-> **Last Updated**: February 22, 2026 · **Total Endpoints**: 166
+> **Last Updated**: February 22, 2026 · **Total Endpoints**: 166 runtime `/api/*` routes (+ `/api/docs` middleware endpoint)
 >
 > **Base URL (dev)**: `http://localhost:5000`
 > **Base URL (prod)**: `https://doorsteptn.in`
 >
 > **Authentication**: Cookie-session based. All state-changing requests (POST/PATCH/PUT/DELETE) require a valid `x-csrf-token` header sourced from `GET /api/csrf-token`.
 >
-> **Source**: Code-verified from `server/routes.ts`, `server/auth.ts`, `server/routes/admin.ts`, `server/routes/workers.ts`, `server/routes/promotions.ts`, `server/routes/bookings.ts`, `server/routes/orders.ts`.
+> **Source**: Code-verified from `server/routes.ts`, `server/auth.ts`, `server/routes/admin.ts`, `server/routes/workers.ts`, `server/routes/promotions.ts`, `server/routes/bookings.ts`, `server/routes/orders.ts`, `server/index.ts`.
 
 ---
 
@@ -242,7 +242,6 @@ Browse shops, retrieve shop data, and access shop-specific metrics. Most shop li
 | `GET` | `/api/shops/:shopId/products/:productId` | Public | Returns cached product detail scoped to a specific shop-product pair. Useful for deep-linking to a product within a shop. |
 | `GET` | `/api/shops/current` | Yes | Get the authenticated owner's own shop record from the `shops` table. Used by the shop dashboard to load the owner's own shop context. |
 | `GET` | `/api/shops/dashboard-stats` | Yes (shop/worker) | Dashboard KPI: total orders, revenue, active products, pending orders. Accessible to shop owners and workers in a shop context. |
-| `GET` | `/api/shops/:shopId/pay-later-eligibility/:customerId` | Yes | Check if a specific customer is eligible for pay-later at a specific shop. Checks whitelist membership and prior successful order history. |
 
 **Public Shop Response Shape**
 ```json
@@ -291,7 +290,6 @@ Full-text and geo-spatial discovery across the entire platform.
 | `GET` | `/api/search` | Public | Alias for `/api/search/global` — identical handler and response contract. |
 | `GET` | `/api/search/nearby` | Yes | Haversine-formula radius search for nearby shops using user or shop coordinates. Query: `?lat=&lng=&radius=` (radius in km, default 10, max 100). Returns distance-annotated shop list. |
 | `GET` | `/api/recommendations/buy-again` | Yes (customer) | Personalized "buy again" / "rebook" recommendations built from the customer's recent successful orders and complete bookings. |
-| `GET` | `/api/waitlist` | Yes (customer) | Get the current customer's waitlist entries for fully-booked services. |
 | `POST` | `/api/waitlist` | Yes (customer) | Join a service waitlist for a preferred date. Body: `{ serviceId, preferredDate }`. Customer receives notification when a slot opens. |
 
 ---
@@ -347,7 +345,6 @@ Customer-side cart and wishlist management. Cart is per-customer and cleared on 
 | `GET` | `/api/cart` | Yes (customer) | Get all items in customer's current cart. |
 | `POST` | `/api/cart` | Yes (customer) | Add or update a cart line item. Body: `{ productId, quantity }`. Quantity is updated if product already exists in cart. |
 | `DELETE` | `/api/cart/:productId` | Yes (customer) | Remove a single product from the cart by product ID. |
-| `DELETE` | `/api/cart` | Yes (customer) | Clear the entire cart at once (used after order placement). |
 
 ### Wishlist
 
@@ -379,7 +376,6 @@ Create and manage service listings offered by providers (e.g., plumbers, tutors,
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `GET` | `/api/services/:id/availability` | Public | Check available time slots for a service on a specific date. Query: `?date=YYYY-MM-DD`. Returns computed availability excluding booked and blocked slots. |
 | `GET` | `/api/services/:id/bookings` | Yes | Returns computed slot availability for a service. Functionally equivalent to the availability endpoint. |
 | `GET` | `/api/bookings/service/:id` | Yes | Legacy alias for `/api/services/:id/bookings`. |
 | `GET` | `/api/services/:id/blocked-slots` | Yes | List all blocked time ranges configured for a service. |
@@ -430,7 +426,7 @@ Customers leave reviews for purchased products. Shop owners can reply.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `GET` | `/api/product-reviews/product/:id` | Public | Get all reviews for a product. Also available as alias at `GET /api/reviews/product/:id`. |
+| `GET` | `/api/reviews/product/:id` | Public | Get all reviews for a product. |
 | `GET` | `/api/reviews/shop/:id` | Public | Get all product reviews aggregated under a shop (by shop/owner ID). |
 | `GET` | `/api/product-reviews/customer` | Yes (customer) | Get all product reviews written by the currently authenticated customer. |
 | `POST` | `/api/product-reviews` | Yes (customer) | Create a product review. Must be tied to a customer-owned order. Body: `{ productId, orderId, rating (1–5), review?, images? }` |
@@ -525,7 +521,6 @@ Full product order lifecycle from placement through delivery, payment verificati
 | `GET` | `/api/orders/shop` | Yes (shop/worker `orders:read`) | Shop order feed with optional `?status=` filter and customer enrichment. |
 | `GET` | `/api/orders/shop/recent` | Yes (shop/worker `orders:read`) | Most recent orders optimized for the operational dashboard. |
 | `GET` | `/api/shops/orders/active` | Yes (shop/worker `orders:read`) | **Kanban active-order board** grouped into lanes: `{ new: [...], packing: [...], ready: [...] }`. Designed for the shop's live operations screen. |
-| `GET` | `/api/orders/shop/:orderId` | Yes (shop/worker `orders:read`) | Specific shop order detail view. |
 | `PATCH` | `/api/orders/:id/status` | Yes (shop/worker `orders:update`) | Update order lifecycle state with notifications and optional SMS for key transitions. |
 | `POST` | `/api/orders/:id/quote-text-order` | Yes (shop/worker `orders:update`) | For text orders: shop sets the final quoted bill and requests customer agreement. Body: `{ finalBill, items }` |
 | `POST` | `/api/orders/:id/approve-pay-later` | Yes (shop/worker `orders:update`) | Approve a pay-later order after eligibility and state checks. |
@@ -670,7 +665,6 @@ In-app notification management for all user roles.
 | `GET` | `/api/notifications` | Yes | Get paginated notifications for the authenticated user. |
 | `PATCH` | `/api/notifications/:id/read` | Yes | Mark a single notification as read by notification ID. |
 | `PATCH` | `/api/notifications/mark-all-read` | Yes | Mark all notifications as read. Body: `{ role? }` — optionally filter by role context. |
-| `GET` | `/api/notifications/unread-count` | Yes | Get the count of unread notifications for the badge indicator. |
 | `DELETE` | `/api/notifications/:id` | Yes | Delete a single notification by ID. |
 
 **Notification Trigger Events:**

@@ -301,6 +301,23 @@ The platform uses **23+ tables**:
 
 ---
 
+## 10. Coverage Confirmation
+
+This overview covers all requested dimensions:
+
+- What the application is (`Section 1`)
+- What problem it solves (`Section 2`)
+- How it is different from similar apps (`Sections 3 and 6`)
+- Advantages compared to alternatives (`Section 6`, with competitor comparisons)
+
+Related deep-dive and API references:
+
+- `docs/API_ENDPOINTS_REFERENCE.md` (complete endpoint guide)
+- `docs/api-endpoints-reference.md` (code-verified endpoint matrix with source mapping)
+- `docs/application-strategy-analysis.md` (long-form product and strategy analysis)
+
+---
+
 *DoorStep TN — Bringing digital commerce to every doorstep in Tamil Nadu.*
 
 *Version 2.0 · February 2026*
