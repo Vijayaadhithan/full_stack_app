@@ -1220,166 +1220,23 @@ All non-GET requests require a CSRF token:
 
 ## 8. API Endpoints Reference
 
-### 8.1 Public Endpoints (No Auth Required)
+The API surface has grown beyond what is practical to maintain inline in this file. To avoid stale endpoint tables, the canonical reference is now maintained in:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Server health check |
-| GET | `/api/health/ready` | Readiness check (DB + Redis + BullMQ) |
-| GET | `/api/csrf-token` | Get CSRF token |
-| GET | `/api/shops` | List all shops |
-| GET | `/api/shops/:shopId` | Get shop details |
-| GET | `/api/shops/:shopId/products/:productId` | Get product in shop |
-| GET | `/api/products` | Search products |
-| GET | `/api/services` | Search services |
-| GET | `/api/services/:id` | Get service details |
-| GET | `/api/search/global` | Global search |
+- `docs/api-endpoints-reference.md` (code-verified from current backend routes)
 
-### 8.2 Authentication Endpoints
+As of February 22, 2026, the backend exposes **166 runtime `/api/*` endpoints**, including:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/register` | Standard registration |
-| POST | `/api/login` | Standard login |
-| POST | `/api/logout` | End session |
-| GET | `/api/user` | Get current user |
-| POST | `/api/delete-account` | Delete user account |
-| POST | `/api/auth/check-user` | Check if phone exists |
-| POST | `/api/auth/rural-register` | Register with phone + PIN |
-| POST | `/api/auth/login-pin` | Login with phone + PIN |
-| POST | `/api/auth/reset-pin` | Reset PIN with Firebase token |
-| POST | `/api/auth/worker-login` | Worker login |
-| POST | `/api/auth/forgot-password-otp` | Request password reset OTP |
-| POST | `/api/auth/verify-reset-otp` | Verify reset OTP |
-| POST | `/api/auth/reset-password` | Set new password |
-| GET | `/api/auth/profiles` | Get user's profiles |
-| POST | `/api/auth/create-shop` | Create shop profile |
-| POST | `/api/auth/create-provider` | Create provider profile |
+- Platform core endpoints (health, readiness, CSRF, route discovery)
+- Authentication and identity flows (standard, rural PIN, worker, admin)
+- Discovery and shop/profile endpoints
+- Product, cart, wishlist, and review flows
+- Service, booking, scheduling, and dispute flows
+- Order lifecycle, returns, and pay-later operations
+- Promotions and worker management
+- Realtime notification, FCM token, and telemetry endpoints
+- Full admin console operations
 
-### 8.3 Customer Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/bookings` | Create service booking |
-| GET | `/api/bookings/customer/requests` | Pending bookings |
-| GET | `/api/bookings/customer/history` | Booking history |
-| POST | `/api/orders` | Create product order |
-| POST | `/api/orders/text` | Create text-based order |
-| GET | `/api/orders/customer` | Customer order history |
-| POST | `/api/orders/:orderId/return` | Request return |
-| PATCH | `/api/orders/:orderId/cancel` | Cancel order |
-| GET | `/api/cart` | Get cart contents |
-| POST | `/api/cart` | Add to cart |
-| PATCH | `/api/cart/:productId` | Update cart item |
-| DELETE | `/api/cart/:productId` | Remove from cart |
-| DELETE | `/api/cart` | Clear cart |
-| GET | `/api/wishlist` | Get wishlist |
-| POST | `/api/wishlist` | Add to wishlist |
-| DELETE | `/api/wishlist/:productId` | Remove from wishlist |
-| POST | `/api/reviews` | Create service review |
-| POST | `/api/products/:productId/reviews` | Create product review |
-| POST | `/api/promotions/validate` | Validate promo code |
-| POST | `/api/promotions/:id/apply` | Apply promotion |
-
-### 8.4 Provider Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/services` | Create service |
-| PATCH | `/api/services/:id` | Update service |
-| DELETE | `/api/services/:id` | Delete service |
-| GET | `/api/services/provider/:id` | Get provider's services |
-| GET | `/api/bookings/provider/pending` | Pending bookings |
-| GET | `/api/bookings/provider/history` | Booking history |
-| PATCH | `/api/bookings/:id/status` | Update booking status |
-| PATCH | `/api/bookings/:id/provider-complete` | Mark booking complete |
-| POST | `/api/services/:id/block-time` | Block time slot |
-| GET | `/api/services/:id/blocked-slots` | Get blocked slots |
-| DELETE | `/api/services/:id/blocked-slots/:slotId` | Remove blocked slot |
-| GET | `/api/services/:id/availability` | Check availability |
-| PATCH | `/api/services/:id/toggle-availability` | Toggle availability |
-
-### 8.5 Shop Owner Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/products` | Create product |
-| POST | `/api/products/quick-add` | Quick add product |
-| PATCH | `/api/products/:id` | Update product |
-| DELETE | `/api/products/:id` | Delete product |
-| PATCH | `/api/products/bulk-update` | Bulk update products |
-| GET | `/api/orders/shop` | Shop orders |
-| GET | `/api/orders/shop/recent` | Recent orders |
-| GET | `/api/shops/orders/active` | Active order board |
-| PATCH | `/api/orders/:id/status` | Update order status |
-| PATCH | `/api/orders/:id/approve-pay-later` | Approve pay-later |
-| GET | `/api/returns/shop` | Shop return requests |
-| POST | `/api/returns/:id/approve` | Approve return |
-| POST | `/api/returns/:id/reject` | Reject return |
-| POST | `/api/promotions` | Create promotion |
-| PATCH | `/api/promotions/:id` | Update promotion |
-| PATCH | `/api/promotions/:id/status` | Toggle promotion |
-| DELETE | `/api/promotions/:id` | Delete promotion |
-| GET | `/api/promotions/shop/:id` | Shop promotions |
-| GET | `/api/shops/pay-later/whitelist` | Get pay-later whitelist |
-| POST | `/api/shops/pay-later/whitelist` | Add to whitelist |
-| DELETE | `/api/shops/pay-later/whitelist/:customerId` | Remove from whitelist |
-
-### 8.6 Worker Management Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/shops/workers/responsibilities` | List responsibility presets |
-| GET | `/api/shops/workers` | List shop workers |
-| POST | `/api/shops/workers` | Create worker |
-| GET | `/api/shops/workers/:id` | Get worker details |
-| PATCH | `/api/shops/workers/:id` | Update worker |
-| DELETE | `/api/shops/workers/:id` | Remove worker |
-| GET | `/api/shops/workers/:id/activity` | Worker activity log |
-
-### 8.7 Admin Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/admin/login` | Admin login |
-| POST | `/api/admin/logout` | Admin logout |
-| GET | `/api/admin/me` | Current admin info |
-| GET | `/api/admin/health-status` | Detailed health |
-| GET | `/api/admin/logs` | Application logs |
-| GET | `/api/admin/monitoring/summary` | Metrics summary |
-| GET | `/api/admin/platform-users` | List all users |
-| GET | `/api/admin/platform-users/:userId` | Get user details |
-| PATCH | `/api/admin/platform-users/:userId/suspend` | Suspend user |
-| PATCH | `/api/admin/platform-users/:userId/unsuspend` | Unsuspend user |
-| PATCH | `/api/admin/platform-users/:userId/verify` | Verify user |
-| DELETE | `/api/admin/platform-users/:userId` | Delete user |
-| GET | `/api/admin/transactions` | Platform transactions |
-| GET | `/api/admin/all-orders` | All orders |
-| GET | `/api/admin/all-bookings` | All bookings |
-| GET | `/api/admin/all-services` | All services |
-| GET | `/api/admin/all-products` | All products |
-| GET | `/api/admin/roles` | List admin roles |
-| POST | `/api/admin/roles` | Create admin role |
-| GET | `/api/admin/accounts` | List admin accounts |
-| POST | `/api/admin/accounts` | Create admin account |
-| PATCH | `/api/admin/accounts/:id/status` | Toggle admin status |
-| GET | `/api/admin/audit-logs` | Audit trail |
-| GET | `/api/admin/notifications/settings` | Notification settings |
-| PATCH | `/api/admin/notifications/settings` | Update settings |
-
-### 8.8 User Profile & Notifications
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/events` | SSE event stream |
-| GET | `/api/notifications` | Get notifications |
-| PATCH | `/api/notifications/:id/read` | Mark as read |
-| DELETE | `/api/notifications/:id` | Delete notification |
-| POST | `/api/profile/location` | Update location |
-| PATCH | `/api/profile` | Update profile |
-| POST | `/api/upload` | Upload file |
-| POST | `/api/users/upload-qr` | Upload UPI QR code |
-| POST | `/api/performance-metrics` | Submit client metrics |
+For endpoint-level details (access control, behavior notes, and source file references), use `docs/api-endpoints-reference.md` as the source of truth.
 
 ---
 

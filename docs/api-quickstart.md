@@ -2,6 +2,8 @@
 
 This quickstart shows how to authenticate, call key endpoints, and use CSRF tokens with curl. Examples assume the API is running at http://localhost:5000.
 
+For the full, code-verified endpoint catalog (166 runtime `/api/*` routes with behavior notes), see `docs/api-endpoints-reference.md`.
+
 ## Base URL and Swagger
 
 - API base URL: http://localhost:5000
@@ -217,4 +219,4 @@ curl -N -b cookies.txt http://localhost:5000/api/events
 
 ## More endpoints
 
-Use the Swagger UI or `GET /api` (requires auth) to discover all routes.
+Use the Swagger UI, `GET /api` (requires auth), or `docs/api-endpoints-reference.md` for the full route list.

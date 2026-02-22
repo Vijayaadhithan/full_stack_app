@@ -307,6 +307,9 @@ curl "http://localhost:5000/api/search/global?q=phone"
 ### OpenAPI/Swagger
 Visit http://localhost:5000/api/docs for interactive API documentation.
 
+### Code-Verified Endpoint Reference
+Use [`docs/api-endpoints-reference.md`](docs/api-endpoints-reference.md) for the complete API catalog (166 runtime `/api/*` endpoints with access rules and behavior notes, verified from source code).
+
 ---
 
 ## Mobile Apps
@@ -445,6 +448,8 @@ k6 run load-test.js
 | [`docs/environment-reference.md`](docs/environment-reference.md) | All environment variables |
 | [`docs/api-quickstart.md`](docs/api-quickstart.md) | cURL examples for API testing |
 | [`docs/role-endpoint-matrix.md`](docs/role-endpoint-matrix.md) | Role-based endpoint access |
+| [`docs/api-endpoints-reference.md`](docs/api-endpoints-reference.md) | Complete endpoint catalog with detailed behavior notes |
+| [`docs/application-strategy-analysis.md`](docs/application-strategy-analysis.md) | In-depth product/problem/advantage analysis |
 | [`docs/deployment-runbook.md`](docs/deployment-runbook.md) | Production deployment guide |
 | [`docs/mobile-and-cloud-setup.md`](docs/mobile-and-cloud-setup.md) | Android and Firebase setup |
 | [`docs/remote-access.md`](docs/remote-access.md) | LAN and public access options |

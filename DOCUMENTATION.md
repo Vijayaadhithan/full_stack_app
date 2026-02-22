@@ -188,6 +188,9 @@ npm run dev:client  # Frontend on :5173
 | Realtime | `/api/events` SSE stream |
 | Documentation | `/api/docs` Swagger UI |
 
+Exhaustive code-verified endpoint catalog:
+- `docs/api-endpoints-reference.md` (166 runtime `/api/*` endpoints as of February 22, 2026)
+
 ### 4.5 Background Jobs
 
 | Job | Schedule | Description |
@@ -592,6 +595,8 @@ k6 run load-test.js
 | `docs/environment-reference.md` | Complete environment variables |
 | `docs/api-quickstart.md` | cURL examples for API testing |
 | `docs/role-endpoint-matrix.md` | Role-based endpoint access |
+| `docs/api-endpoints-reference.md` | Complete endpoint catalog with detailed behavior notes |
+| `docs/application-strategy-analysis.md` | In-depth analysis of product positioning and competitive advantages |
 | `docs/deployment-runbook.md` | Production deployment guide |
 | `docs/mobile-and-cloud-setup.md` | Android and Firebase setup |
 | `docs/remote-access.md` | LAN and public access options |
