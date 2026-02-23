@@ -28,16 +28,17 @@ async function canReachRedis(url: string): Promise<boolean> {
   }
 }
 
+const redisDisabled = isTruthyEnv(process.env.DISABLE_REDIS);
+
 describe("jobQueue integration", () => {
+  if (redisDisabled) {
+    return;
+  }
+
   it(
     "processes a BullMQ job end-to-end with metadata",
     { timeout: 20_000 },
     async (t) => {
-      if (isTruthyEnv(process.env.DISABLE_REDIS)) {
-        t.skip("DISABLE_REDIS is enabled");
-        return;
-      }
-
       const redisUrl = process.env.REDIS_URL?.trim() || "redis://localhost:6379";
       if (!(await canReachRedis(redisUrl))) {
         t.skip(`Redis is unreachable at ${redisUrl}`);

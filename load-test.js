@@ -186,7 +186,6 @@ function verifyCustomerProfile(account) {
       addressPostalCode: "600001",
       addressCountry: "India",
       language: "en",
-      verificationStatus: "verified",
     },
     "customer-profile",
   );
@@ -209,7 +208,6 @@ function verifyProviderProfile(account) {
       experience: "5 years running simulated sessions",
       workingHours: providerWorkingHours(),
       languages: "English,Hindi",
-      verificationStatus: "verified",
     },
     "provider-profile",
   );
@@ -231,7 +229,6 @@ function verifyShopProfile(account) {
       pickupAvailable: true,
       deliveryAvailable: true,
       returnsEnabled: true,
-      verificationStatus: "verified",
     },
     "shop-profile",
   );

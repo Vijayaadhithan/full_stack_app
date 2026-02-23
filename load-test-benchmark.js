@@ -247,7 +247,7 @@ export function setup() {
     const shopUser = response.json();
     console.log(`✅ Registered shop user: ${shopCredentials.username} (ID: ${shopUser.id})`);
 
-    // Update shop profile to verified status
+    // Update shop profile (verification is computed server-side from completeness)
     csrfToken = fetchCsrfToken(shopSession, "shop-profile");
     const shopProfilePayload = {
         name: `Load Test Shop ${shopSuffix}`,
@@ -273,7 +273,6 @@ export function setup() {
         pickupAvailable: true,
         deliveryAvailable: true,
         returnsEnabled: true,
-        verificationStatus: "verified",
     };
 
     response = http.patch(
@@ -386,18 +385,17 @@ export function setup() {
         customerUser = response.json();
         console.log(`✅ Registered customer user: ${customerCredentials.username} (ID: ${customerUser.id})`);
 
-        // Update customer profile to verified status (required for some actions)
+        // Update customer profile (verification is computed server-side from completeness)
         // Note: Re-using shop session for the initial setup steps for simplicity in maintaining cookies,
         // but for the customer update we might need to login as customer or just use the open endpoint if available.
         // Actually, the previous register call logged us in as the new customer in that jar.
-        // Let's enable verification.
+        // Keep to allowed self-profile fields for PATCH /api/users/:id.
 
         csrfToken = fetchCsrfToken(shopSession, "customer-profile");
         const customerProfilePayload = {
             name: `Load Test Customer ${customerSuffix}`,
             phone: customerRegPayload.phone,
             email: customerRegPayload.email,
-            verificationStatus: "verified",
         };
 
         response = http.patch(
@@ -411,9 +409,9 @@ export function setup() {
         );
 
         if (response.status === 200) {
-            console.log(`✅ Customer profile verified`);
+            console.log(`✅ Customer profile updated`);
         } else {
-            console.warn(`⚠️ Customer profile verification failed: ${response.status}`);
+            console.warn(`⚠️ Customer profile update failed: ${response.status}`);
         }
 
     } else {
