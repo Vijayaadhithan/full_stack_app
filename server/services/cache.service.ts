@@ -23,6 +23,16 @@ let redisClient: RedisClient | null = null;
 let connectPromise: Promise<RedisClient | null> | null = null;
 let loggedMissingUrl = false;
 let loggedMissingModule = false;
+let loggedRedisDisabled = false;
+
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+const redisDisabled =
+  isTruthyEnv(process.env.DISABLE_REDIS) ||
+  (process.env.NODE_ENV ?? "").trim().toLowerCase() === "test";
 
 // ─── LOCAL CACHE FALLBACK ─────────────────────────────────────────────
 // Simple in-memory cache with TTL for when Redis is unavailable
@@ -96,6 +106,14 @@ async function getRedisClient(): Promise<RedisClient | null> {
     return connectPromise;
   }
 
+  if (redisDisabled) {
+    if (!loggedRedisDisabled) {
+      logger.info("Redis cache disabled in test/disabled mode; using local cache");
+      loggedRedisDisabled = true;
+    }
+    return null;
+  }
+
   if (!redisUrl) {
     if (!loggedMissingUrl) {
       logger.warn("REDIS_URL not configured; Redis cache disabled.");
@@ -113,7 +131,10 @@ async function getRedisClient(): Promise<RedisClient | null> {
     try {
       const client = new Redis(redisUrl, {
         lazyConnect: true,
-        maxRetriesPerRequest: 3,
+        maxRetriesPerRequest: 1,
+        retryStrategy: () => null,
+        enableOfflineQueue: false,
+        connectTimeout: 1000,
       });
 
       client.on("error", (err: unknown) => {

@@ -322,6 +322,19 @@ export class PostgresStorage implements IStorage {
   sessionStore: session.Store;
 
   constructor() {
+    const isTestEnv = (process.env.NODE_ENV ?? "").toLowerCase() === "test";
+    const useInMemoryDb = (process.env.USE_IN_MEMORY_DB ?? "").toLowerCase() === "true";
+    const forceInMemorySessions =
+      (process.env.USE_IN_MEMORY_SESSION_STORE ?? "").toLowerCase() === "true";
+
+    if (isTestEnv || useInMemoryDb || forceInMemorySessions) {
+      this.sessionStore = new session.MemoryStore();
+      logger.info(
+        "Using in-memory session store for test/in-memory mode",
+      );
+      return;
+    }
+
     const PgStore = pgSession(session);
     const connectionString = process.env.DATABASE_URL?.trim();
     if (!connectionString) {
@@ -1040,11 +1053,15 @@ export class PostgresStorage implements IStorage {
     }
 
     if (updateData.email !== undefined) {
-      const normalized = normalizeEmail(updateData.email);
-      if (!normalized) {
-        throw new Error("Invalid email");
+      if (updateData.email === null) {
+        normalizedUpdate.email = null;
+      } else {
+        const normalized = normalizeEmail(updateData.email);
+        if (!normalized) {
+          throw new Error("Invalid email");
+        }
+        normalizedUpdate.email = normalized;
       }
-      normalizedUpdate.email = normalized;
     }
 
     if (updateData.phone !== undefined) {
@@ -1074,8 +1091,15 @@ export class PostgresStorage implements IStorage {
         const combinedData = { ...existingUser, ...normalizedUpdate };
         let completedFields = 0;
         let totalProfileFields = 0;
-        // Diagnostic logging to inspect calculation inputs
-        logger.info("[updateUser] Combined data for user", id, combinedData);
+        // Avoid logging full profile payloads (contains PII); keep only high-level telemetry.
+        logger.debug(
+          {
+            userId: id,
+            role: existingUser.role,
+            updatedFields: Object.keys(normalizedUpdate),
+          },
+          "[updateUser] Recomputing profile completeness",
+        );
         if (existingUser.role === "customer") {
           // For customer: name, phone, and address/landmark
           // Email is optional for rural-first auth users
@@ -2556,7 +2580,8 @@ export class PostgresStorage implements IStorage {
 
     const createdOrder = await db.primary.transaction(async (tx) => {
       const shopModes = await loadShopModes(order.shopId);
-      const enforceStock = !(shopModes.catalogModeEnabled || shopModes.openOrderMode);
+      const trackInventory = !shopModes.catalogModeEnabled;
+      const enforceStock = trackInventory && !shopModes.openOrderMode;
       const productIds = Array.from(
         new Set(items.map((item) => item.productId)),
       );
@@ -2588,6 +2613,10 @@ export class PostgresStorage implements IStorage {
       for (const [productId, quantity] of Array.from(
         quantityByProduct.entries(),
       )) {
+        if (!trackInventory) {
+          continue;
+        }
+
         if (enforceStock) {
           const updateResult = await tx
             .update(products)
@@ -2598,7 +2627,15 @@ export class PostgresStorage implements IStorage {
           if (updateResult.length === 0) {
             throw new Error(`Insufficient stock for product ID ${productId}`);
           }
+          continue;
         }
+
+        await tx
+          .update(products)
+          .set({
+            stock: sql`CASE WHEN ${products.stock} IS NULL THEN NULL ELSE GREATEST(${products.stock} - ${quantity}, 0) END`,
+          })
+          .where(eq(products.id, productId));
       }
 
       const orderToInsert = {
@@ -3402,16 +3439,19 @@ export class PostgresStorage implements IStorage {
     return { data: mappedData, total, totalPages };
   }
 
-  async markNotificationAsRead(id: number): Promise<void> {
+  async markNotificationAsRead(id: number, userId: number): Promise<void> {
     const updated = await db.primary
       .update(notifications)
       .set({ isRead: true })
-      .where(eq(notifications.id, id))
+      .where(
+        and(eq(notifications.id, id), eq(notifications.userId, userId)),
+      )
       .returning({ userId: notifications.userId });
 
-    if (updated[0]) {
-      notifyNotificationChange(updated[0].userId);
+    if (!updated[0]) {
+      throw new Error("Notification not found");
     }
+    notifyNotificationChange(updated[0].userId);
   }
 
   async markAllNotificationsAsRead(userId: number): Promise<void> {
@@ -3424,15 +3464,18 @@ export class PostgresStorage implements IStorage {
     notifyNotificationChange(userId);
   }
 
-  async deleteNotification(id: number): Promise<void> {
+  async deleteNotification(id: number, userId: number): Promise<void> {
     const deleted = await db.primary
       .delete(notifications)
-      .where(eq(notifications.id, id))
+      .where(
+        and(eq(notifications.id, id), eq(notifications.userId, userId)),
+      )
       .returning({ userId: notifications.userId });
 
-    if (deleted[0]) {
-      notifyNotificationChange(deleted[0].userId);
+    if (!deleted[0]) {
+      throw new Error("Notification not found");
     }
+    notifyNotificationChange(deleted[0].userId);
   }
 
   // ─── FCM TOKEN OPERATIONS (for Push Notifications) ─────────────────
@@ -3464,10 +3507,12 @@ export class PostgresStorage implements IStorage {
       .where(eq(fcmTokens.userId, userId));
   }
 
-  async deleteFcmToken(token: string): Promise<void> {
-    await db.primary
-      .delete(fcmTokens)
-      .where(eq(fcmTokens.token, token));
+  async deleteFcmToken(token: string, userId?: number): Promise<void> {
+    await db.primary.delete(fcmTokens).where(
+      userId == null
+        ? eq(fcmTokens.token, token)
+        : and(eq(fcmTokens.token, token), eq(fcmTokens.userId, userId)),
+    );
   }
 
   async deleteFcmTokensByUserId(userId: number): Promise<void> {

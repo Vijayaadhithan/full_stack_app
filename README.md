@@ -417,14 +417,23 @@ Systemd and Kubernetes probe templates are available under `deploy/systemd/` and
 # Type check
 npm run check
 
+# Lint
+npm run lint
+
 # Run tests
 npm run test
+
+# Run endpoint regression tests for changed routes
+npm run test:endpoint-regression
 
 # Run with coverage
 npm run test:coverage
 
 # Generate test report
 npm run test:report
+
+# Full quality gate
+npm run check && npm run lint && npm test
 ```
 
 ### Load Testing
@@ -433,9 +442,36 @@ npm run test:report
 # Install k6
 brew install k6  # macOS
 
-# Run load test
-k6 run load-test.js
+# Start backend in another terminal first
+npm run dev:server
+
+# Run regression load test (default scenario: tier_100)
+BASE_URL=http://localhost:5000 npm run load:regression
+
+# Tune thresholds or scenario
+BASE_URL=http://localhost:5000 \
+SCENARIO=tier_500 \
+P95_TARGET_MS=1800 \
+P99_TARGET_MS=3000 \
+MAX_FAILED_RATE_PERCENT=3 \
+npm run load:regression
 ```
+
+Load regression outputs:
+- `benchmark-results/regression/summary_<scenario>_<timestamp>.json`
+- `benchmark-results/regression/assertions_<scenario>_<timestamp>.json`
+- `benchmark-results/regression/assertions_<scenario>_<timestamp>.md`
+
+### Security Checklist
+
+```bash
+# Run security pass/fail matrix
+npm run security:checklist
+```
+
+Security checklist outputs:
+- `output/security/security-matrix-<timestamp>.json`
+- `output/security/security-matrix-<timestamp>.md`
 
 ---
 
@@ -473,7 +509,10 @@ k6 run load-test.js
 | `npm run format` | Format code with Prettier |
 | `npm run test` | Run test suite |
 | `npm run test:coverage` | Run tests with coverage |
+| `npm run test:endpoint-regression` | Run endpoint-level regression tests for changed routes |
 | `npm run monitor` | Poll health endpoint |
+| `npm run load:regression` | Run k6 load regression with p95/p99/failure assertions |
+| `npm run security:checklist` | Generate security checklist pass/fail matrix |
 
 ---
 

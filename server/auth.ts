@@ -5,7 +5,7 @@ import { Express } from "express";
 import { z } from "zod";
 import session from "express-session";
 import logger from "./logger";
-import { scrypt, randomBytes, timingSafeEqual, createHash } from "crypto";
+import { scrypt, randomBytes, timingSafeEqual, createHash, randomInt } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import {
@@ -790,7 +790,7 @@ export function registerAuthRoutes(app: Express) {
 
   // Generate 6-digit OTP
   function generateOtp(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return randomInt(100000, 1000000).toString();
   }
 
   // Send OTP for forgot password
@@ -1022,14 +1022,44 @@ export function registerAuthRoutes(app: Express) {
       return res.status(401).json({ message: "Not authenticated" });
     }
 
-    const { shopName, description, businessType } = req.body;
-
-    if (!shopName || typeof shopName !== "string" || shopName.trim().length === 0) {
-      return res.status(400).json({ message: "Shop name is required" });
+    const createShopSchema = z
+      .object({
+        shopName: z.string().trim().min(1, "Shop name is required").max(120),
+        description: z.string().trim().max(2000).optional(),
+        businessType: z.string().trim().max(200).optional(),
+        useCustomerAddress: z.boolean().optional().default(true),
+        shopAddressStreet: z.string().trim().max(250).optional(),
+        shopAddressArea: z.string().trim().max(200).optional(),
+        shopAddressCity: z.string().trim().max(100).optional(),
+        shopAddressState: z.string().trim().max(100).optional(),
+        shopAddressPincode: z.string().trim().max(20).optional(),
+        shopLocationLat: z.union([z.string(), z.number()]).optional().nullable(),
+        shopLocationLng: z.union([z.string(), z.number()]).optional().nullable(),
+      })
+      .strict();
+    const parsedBody = createShopSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({
+        message: "Invalid shop profile data",
+        errors: parsedBody.error.flatten(),
+      });
     }
 
     try {
       const userId = req.user.id;
+      const {
+        shopName,
+        description,
+        businessType,
+        useCustomerAddress,
+        shopAddressStreet,
+        shopAddressArea,
+        shopAddressCity,
+        shopAddressState,
+        shopAddressPincode,
+        shopLocationLat,
+        shopLocationLng,
+      } = parsedBody.data;
 
       // Check if shop already exists
       const existing = await db.primary
@@ -1041,19 +1071,66 @@ export function registerAuthRoutes(app: Express) {
       if (existing.length > 0) {
         return res.status(400).json({ message: "You already have a shop" });
       }
+      const owner = await storage.getUser(userId);
+      if (!owner) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const hasCustomAddress =
+        !useCustomerAddress &&
+        Boolean(
+          shopAddressStreet?.trim() &&
+          shopAddressCity?.trim() &&
+          shopAddressPincode?.trim(),
+        );
+      if (!useCustomerAddress && !hasCustomAddress) {
+        return res.status(400).json({
+          message:
+            "Custom shop address requires street, city, and pincode.",
+        });
+      }
+
+      const resolvedStreet = useCustomerAddress
+        ? owner.addressStreet?.trim() || null
+        : shopAddressStreet?.trim() || null;
+      const resolvedCity = useCustomerAddress
+        ? owner.addressCity?.trim() || null
+        : shopAddressCity?.trim() || null;
+      const resolvedState = useCustomerAddress
+        ? owner.addressState?.trim() || null
+        : shopAddressState?.trim() || owner.addressState?.trim() || null;
+      const resolvedPincode = useCustomerAddress
+        ? owner.addressPostalCode?.trim() || null
+        : shopAddressPincode?.trim() || null;
+      const resolvedArea = useCustomerAddress
+        ? owner.addressLandmark?.trim() || null
+        : shopAddressArea?.trim() || null;
+
+      const resolvedLat =
+        useCustomerAddress && shopLocationLat == null
+          ? owner.latitude
+          : shopLocationLat == null
+            ? null
+            : String(shopLocationLat);
+      const resolvedLng =
+        useCustomerAddress && shopLocationLng == null
+          ? owner.longitude
+          : shopLocationLng == null
+            ? null
+            : String(shopLocationLng);
 
       const [shop] = await db.primary.insert(shops).values({
         ownerId: userId,
         shopName: shopName.trim(),
         description: description?.trim(),
         businessType: businessType?.trim(),
-        shopAddressStreet: req.body.shopAddressStreet?.trim() || null,
-        shopAddressArea: req.body.shopAddressArea?.trim() || null,
-        shopAddressCity: req.body.shopAddressCity?.trim() || null,
-        shopAddressState: req.body.shopAddressState?.trim() || null,
-        shopAddressPincode: req.body.shopAddressPincode?.trim() || null,
-        shopLocationLat: req.body.shopLocationLat,
-        shopLocationLng: req.body.shopLocationLng
+        shopAddressStreet: resolvedStreet,
+        shopAddressArea: resolvedArea,
+        shopAddressCity: resolvedCity,
+        shopAddressState: resolvedState,
+        shopAddressPincode: resolvedPincode,
+        shopLocationLat: resolvedLat,
+        shopLocationLng: resolvedLng,
       }).returning();
 
       return res.status(201).json(shop);

@@ -279,14 +279,14 @@ export interface IStorage {
     userId: number,
     options?: { page: number; limit: number },
   ): Promise<{ data: Notification[]; total: number; totalPages: number }>;
-  markNotificationAsRead(id: number): Promise<void>;
+  markNotificationAsRead(id: number, userId: number): Promise<void>;
   markAllNotificationsAsRead(userId: number): Promise<void>;
-  deleteNotification(id: number): Promise<void>;
+  deleteNotification(id: number, userId: number): Promise<void>;
 
   // FCM Token operations for push notifications
   createOrUpdateFcmToken(token: InsertFcmToken): Promise<FcmToken>;
   getFcmTokensByUserId(userId: number): Promise<FcmToken[]>;
-  deleteFcmToken(token: string): Promise<void>;
+  deleteFcmToken(token: string, userId?: number): Promise<void>;
   deleteFcmTokensByUserId(userId: number): Promise<void>;
 
   // Promotion operations

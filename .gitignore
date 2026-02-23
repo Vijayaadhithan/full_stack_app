@@ -8,6 +8,8 @@ vite.config.ts.*
 /reports
 /coverage
 /logs
+/benchmark-results
+/output/security
 app.log
 config/network-config.json
 

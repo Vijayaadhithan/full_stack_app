@@ -31,6 +31,7 @@ import {
   insertProductSchema,
   insertReviewSchema,
   insertUserSchema,
+  shopProfileSchema,
   insertReturnRequestSchema,
   insertProductReviewSchema,
   insertBlockedTimeSlotSchema,
@@ -50,6 +51,7 @@ import {
   TimeSlotLabel,
   timeSlotLabelSchema,
   shops,
+  shopWorkers,
   InsertNotification,
   bookings,
 } from "@shared/schema";
@@ -151,13 +153,19 @@ type RequestWithAuth = Request & {
 
 function buildPublicShopResponse(shop: User & { ownerId?: number; shopTableId?: number }) {
   const modes = resolveShopModes(shop.shopProfile);
+  const publicShopProfile = shop.shopProfile
+    ? (() => {
+      const { payLaterWhitelist: _payLaterWhitelist, ...rest } = shop.shopProfile;
+      return rest;
+    })()
+    : null;
   return {
     id: shop.id, // This is the user ID (owner), used for product lookups
     ownerId: shop.ownerId ?? shop.id, // Explicit owner ID for clarity
     shopTableId: shop.shopTableId, // The shops table row ID (if available)
     name: shop.name,
     phone: shop.phone ?? null,
-    shopProfile: shop.shopProfile ?? null,
+    shopProfile: publicShopProfile,
     profilePicture: shop.profilePicture ?? null,
     shopBannerImageUrl: shop.shopBannerImageUrl ?? null,
     shopLogoImageUrl: shop.shopLogoImageUrl ?? null,
@@ -1308,8 +1316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       : createCsrfProtection({
         ignoreMethods: ["GET", "HEAD", "OPTIONS", "PROPFIND"],
         // Exempt analytics endpoint - sendBeacon doesn't preserve session cookies for CSRF
-        // Exempt FCM endpoints - they are protected by requireAuth and cause CSRF timing issues in Chrome
-        ignorePaths: ["/api/performance-metrics", "/api/fcm/register", "/api/fcm/unregister"],
+        ignorePaths: ["/api/performance-metrics"],
       });
 
   app.use(csrfProtection);
@@ -2244,8 +2251,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { latitude, longitude, context } = req.body;
-      logger.info({ body: req.body }, "Location Update Request Body");
-      logger.info({ latitude, longitude, context, lat: Number(latitude), lng: Number(longitude) }, "Parsed values");
+      logger.debug(
+        { userId: req.user?.id, context, lat: Number(latitude), lng: Number(longitude) },
+        "Processing location update",
+      );
 
       const lat = Number(latitude);
       const lng = Number(longitude);
@@ -2255,7 +2264,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.warn(msg);
         return res.status(400).json({
           message: msg,
-          debug: { body: req.body }
         });
       }
 
@@ -2395,22 +2403,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
-  const profileUpdateSchema = insertUserSchema.partial().extend({
-    upiId: z
-      .string()
-      .regex(/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/)
-      .optional()
-      .nullable(),
-    upiQrCodeUrl: z.string().optional().nullable(),
-    pickupAvailable: z.boolean().optional(),
-    deliveryAvailable: z.boolean().optional(),
-    returnsEnabled: z.boolean().optional(),
-  }).strict();
+  const profileUpdateSchema = insertUserSchema
+    .omit({
+      id: true,
+      role: true,
+      password: true,
+      pin: true,
+      workerNumber: true,
+      googleId: true,
+      isSuspended: true,
+      verificationStatus: true,
+      verificationDocuments: true,
+      profileCompleteness: true,
+      averageRating: true,
+      totalReviews: true,
+      emailVerified: true,
+      isPhoneVerified: true,
+      createdAt: true,
+    })
+    .partial()
+    .extend({
+      phone: z.preprocess(
+        (value) => {
+          if (typeof value !== "string") return value;
+          const digitsOnly = value.replace(/\D+/g, "");
+          // Keep login/update flows aligned for Indian numbers entered as +91XXXXXXXXXX.
+          if (digitsOnly.length === 12 && digitsOnly.startsWith("91")) {
+            return digitsOnly.slice(-10);
+          }
+          return digitsOnly;
+        },
+        z
+          .string()
+          .length(10, "Phone number must be exactly 10 digits")
+          .optional(),
+      ),
+      email: z.preprocess(
+        (value) =>
+          typeof value === "string" && value.trim().length === 0 ? null : value,
+        z.string().email("Invalid email address").optional().nullable(),
+      ),
+      shopProfile: shopProfileSchema.partial().optional().nullable(),
+      upiId: z
+        .preprocess(
+          (value) =>
+            typeof value === "string" && value.trim().length === 0
+              ? null
+              : value,
+          z
+            .string()
+            .regex(/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/)
+            .optional()
+            .nullable(),
+        ),
+      upiQrCodeUrl: z.preprocess(
+        (value) =>
+          typeof value === "string" && value.trim().length === 0 ? null : value,
+        z.string().optional().nullable(),
+      ),
+      pickupAvailable: z.boolean().optional(),
+      deliveryAvailable: z.boolean().optional(),
+      returnsEnabled: z.boolean().optional(),
+    })
+    .strict();
 
   app.patch("/api/users/:id", requireAuth, async (req, res) => {
     try {
       const userId = getValidatedParam(req, "id");
-      if (userId !== req.user!.id) {
+      const requesterId = coerceNumericId(req.user?.id);
+      if (requesterId === null || userId !== requesterId) {
         return res.status(403).json({ message: "Can only update own profile" });
       }
 
@@ -2719,6 +2780,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!safeUser) {
         return res.status(500).json({ message: "Failed to fetch user" });
       }
+      const requesterId = coerceNumericId(req.user?.id);
+      const canViewPrivateProfile =
+        (requesterId !== null && requesterId === user.id) ||
+        Boolean(req.session?.adminId) ||
+        req.user?.role === "admin";
 
       const shopOwner = await fetchShopOwnerWithProfile(user.id, user);
       if (shopOwner && req.user) {
@@ -2729,7 +2795,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (safeUser as Record<string, unknown>).catalogModeEnabled = shopModes.catalogModeEnabled;
         (safeUser as Record<string, unknown>).openOrderMode = shopModes.openOrderMode;
         if (shopOwner.shopProfile) {
-          (safeUser as Record<string, unknown>).shopProfile = shopOwner.shopProfile;
+          if (canViewPrivateProfile) {
+            (safeUser as Record<string, unknown>).shopProfile = shopOwner.shopProfile;
+          } else {
+            const { payLaterWhitelist: _payLaterWhitelist, ...publicShopProfile } =
+              shopOwner.shopProfile;
+            (safeUser as Record<string, unknown>).shopProfile = publicShopProfile;
+          }
         }
         const shopCoords = extractUserCoordinates(shopOwner);
         (safeUser as Record<string, unknown>).latitude = shopCoords.latitude;
@@ -2742,11 +2814,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (safeUser as Record<string, unknown>).addressCountry =
           shopOwner.addressCountry ?? null;
 
-        const requesterId =
-          typeof req.user.id === "number"
-            ? req.user.id
-            : Number.parseInt(String(req.user.id), 10);
-        if (Number.isFinite(requesterId)) {
+        if (requesterId !== null) {
           const eligibility = await evaluatePayLaterEligibility(
             shopOwner,
             requesterId,
@@ -5066,6 +5134,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .status(403)
             .json({ message: "You can only review your own bookings." });
         }
+        if (booking.serviceId == null || booking.serviceId !== serviceId) {
+          return res.status(400).json({
+            message: "Booking does not match the provided service.",
+          });
+        }
 
         const existingReview = await db.primary
           .select()
@@ -5297,9 +5370,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
-      await storage.markNotificationAsRead(getValidatedParam(req, "id"));
+      await storage.markNotificationAsRead(
+        getValidatedParam(req, "id"),
+        req.user!.id,
+      );
       res.status(200).json({ success: true });
     } catch (error) {
+      if (error instanceof Error && error.message === "Notification not found") {
+        return res.status(404).json({ message: "Notification not found" });
+      }
       logger.error("Error marking notification as read:", error);
       res
         .status(500)
@@ -5340,9 +5419,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteNotification(getValidatedParam(req, "id"));
+      await storage.deleteNotification(
+        getValidatedParam(req, "id"),
+        req.user!.id,
+      );
       res.status(200).json({ success: true });
     } catch (error) {
+      if (error instanceof Error && error.message === "Notification not found") {
+        return res.status(404).json({ message: "Notification not found" });
+      }
       logger.error("Error deleting notification:", error);
       res
         .status(500)
@@ -5412,7 +5497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      await storage.deleteFcmToken(parsed.data.token);
+      await storage.deleteFcmToken(parsed.data.token, req.user!.id);
       logger.info({ userId: req.user!.id }, "FCM token unregistered");
       res.json({ success: true });
     } catch (error) {
@@ -5449,7 +5534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .object({
                   productId: z.number(),
                   quantity: z.number().min(1),
-                  price: z.string().or(z.number()),
+                  price: z.string().or(z.number()).optional(),
                 })
                 .strict(),
             ),
@@ -5550,7 +5635,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const shopModes = resolveShopModes(shop.shopProfile);
-        const enforceStock = !(shopModes.catalogModeEnabled || shopModes.openOrderMode);
+        const trackInventory = !shopModes.catalogModeEnabled;
+        const enforceStock = trackInventory && !shopModes.openOrderMode;
 
         if (enforceStock) {
           const insufficientEntry = Array.from(quantityByProduct.entries()).find(
@@ -5618,41 +5704,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        const subtotalFromRequest = optionalToNumber(subtotal);
-        const subtotalValue =
-          subtotalFromRequest !== undefined
-            ? subtotalFromRequest
-            : items.reduce((sum, item) => sum + toNumber(item.price) * item.quantity, 0);
+        const canonicalItems: Array<{
+          productId: number;
+          quantity: number;
+          unitPrice: number;
+          lineTotal: number;
+        }> = [];
+        let subtotalValue = 0;
+        for (const item of items) {
+          const product = productMap.get(item.productId);
+          if (!product) {
+            return res.status(400).json({
+              message: `Product with ID ${item.productId} not found`,
+            });
+          }
+          const unitPrice = Number(product.price);
+          if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+            return res.status(400).json({
+              message: `Invalid price configured for product: ${product.name ?? item.productId}`,
+            });
+          }
+          const lineTotal = Number((unitPrice * item.quantity).toFixed(2));
+          subtotalValue = Number((subtotalValue + lineTotal).toFixed(2));
+          canonicalItems.push({
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice,
+            lineTotal,
+          });
+        }
 
-        if (!Number.isFinite(subtotalValue)) {
+        const subtotalFromRequest = optionalToNumber(subtotal);
+        if (
+          subtotalFromRequest !== undefined &&
+          !Number.isFinite(subtotalFromRequest)
+        ) {
           return res.status(400).json({ message: "Invalid subtotal amount" });
         }
-
-        const discountValue = optionalToNumber(discount) ?? 0;
-        if (!Number.isFinite(discountValue)) {
-          return res.status(400).json({ message: "Invalid discount amount" });
-        }
-
-        const computedTotalRaw =
-          subtotalValue - discountValue + PLATFORM_SERVICE_FEE + deliveryFeeAmount;
-        if (!Number.isFinite(computedTotalRaw)) {
-          return res.status(400).json({ message: "Invalid order amount" });
-        }
-
-        const computedTotal = Number(computedTotalRaw.toFixed(2));
-        const totalAsString = computedTotal.toFixed(2);
-
-        const requestedTotalValue = optionalToNumber(requestedTotal);
         if (
-          requestedTotalValue !== undefined &&
-          Math.abs(requestedTotalValue - computedTotal) > 0.01
+          subtotalFromRequest !== undefined &&
+          Math.abs(subtotalFromRequest - subtotalValue) > 0.01
         ) {
-          logger.warn(
-            `Order total mismatch for user ${req.user!.id}: requested ${requestedTotalValue}, computed ${computedTotal}`,
-          );
           return res.status(400).json({
-            message: "Order total mismatch. Please review your cart and try again.",
-            expectedTotal: totalAsString,
+            message: "Cart subtotal mismatch. Please refresh and try again.",
+            expectedSubtotal: subtotalValue.toFixed(2),
           });
         }
 
@@ -5664,7 +5759,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return Number.isNaN(parsed.getTime()) ? null : parsed;
         };
 
-        // If a promotion is applied, verify it's valid
+        let appliedPromotion: typeof promotions.$inferSelect | null = null;
+        let promotionDiscountValue = 0;
+
         if (promotionId) {
           const promotionResult = await db.primary
             .select()
@@ -5675,15 +5772,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           const promotion = promotionResult[0];
-
-          // Verify promotion belongs to the shop
           if (promotion.shopId !== shopId) {
             return res
               .status(400)
               .json({ message: "Promotion does not apply to this shop" });
           }
 
-          // Verify promotion is active and not expired
           const now = new Date();
           const nowTs = now.getTime();
           const promotionStartDate = parsePromotionDate(promotion.startDate);
@@ -5698,8 +5792,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .status(400)
               .json({ message: "Promotion is not active or has expired" });
           }
-
-          // Verify usage limit
           if (
             promotion.usageLimit &&
             (promotion.usedCount ?? 0) >= promotion.usageLimit
@@ -5708,6 +5800,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .status(400)
               .json({ message: "This promotion has reached its usage limit" });
           }
+
+          const minPurchaseValue = toNonNegativeNumber(promotion.minPurchase ?? 0);
+          if (minPurchaseValue > 0 && subtotalValue < minPurchaseValue) {
+            return res.status(400).json({
+              message: `Minimum purchase of ₹${minPurchaseValue} required for this promotion`,
+              minPurchase: minPurchaseValue,
+            });
+          }
+
+          let applicableItems = canonicalItems;
+          if (
+            promotion.applicableProducts &&
+            promotion.applicableProducts.length > 0
+          ) {
+            const allowedProducts = new Set(promotion.applicableProducts);
+            applicableItems = applicableItems.filter((item) =>
+              allowedProducts.has(item.productId),
+            );
+          }
+          if (
+            promotion.excludedProducts &&
+            promotion.excludedProducts.length > 0
+          ) {
+            const blockedProducts = new Set(promotion.excludedProducts);
+            applicableItems = applicableItems.filter(
+              (item) => !blockedProducts.has(item.productId),
+            );
+          }
+          if (applicableItems.length === 0) {
+            return res
+              .status(400)
+              .json({ message: "No applicable products for this promotion" });
+          }
+
+          const applicableSubtotal = applicableItems.reduce(
+            (sum, item) => sum + item.lineTotal,
+            0,
+          );
+          const promotionValue = toNonNegativeNumber(promotion.value);
+          if (promotion.type === "percentage") {
+            promotionDiscountValue = (applicableSubtotal * promotionValue) / 100;
+          } else {
+            promotionDiscountValue = promotionValue;
+          }
+          const maxDiscountValue =
+            promotion.maxDiscount == null
+              ? null
+              : toNonNegativeNumber(promotion.maxDiscount);
+          if (
+            maxDiscountValue !== null &&
+            promotionDiscountValue > maxDiscountValue
+          ) {
+            promotionDiscountValue = maxDiscountValue;
+          }
+          if (promotionDiscountValue > applicableSubtotal) {
+            promotionDiscountValue = applicableSubtotal;
+          }
+          promotionDiscountValue = Number(promotionDiscountValue.toFixed(2));
+          appliedPromotion = promotion;
+        }
+
+        const discountFromRequest = optionalToNumber(discount);
+        if (
+          discountFromRequest !== undefined &&
+          !Number.isFinite(discountFromRequest)
+        ) {
+          return res.status(400).json({ message: "Invalid discount amount" });
+        }
+        if (
+          discountFromRequest !== undefined &&
+          Math.abs(discountFromRequest - promotionDiscountValue) > 0.01
+        ) {
+          return res.status(400).json({
+            message: "Discount mismatch. Please review your cart and try again.",
+            expectedDiscount: promotionDiscountValue.toFixed(2),
+          });
+        }
+
+        const computedTotalRaw =
+          subtotalValue - promotionDiscountValue + PLATFORM_SERVICE_FEE + deliveryFeeAmount;
+        if (!Number.isFinite(computedTotalRaw)) {
+          return res.status(400).json({ message: "Invalid order amount" });
+        }
+
+        const computedTotal = Number(computedTotalRaw.toFixed(2));
+        const totalAsString = computedTotal.toFixed(2);
+
+        const requestedTotalValue = optionalToNumber(requestedTotal);
+        if (
+          requestedTotalValue !== undefined &&
+          !Number.isFinite(requestedTotalValue)
+        ) {
+          return res.status(400).json({ message: "Invalid order amount" });
+        }
+        if (
+          requestedTotalValue !== undefined &&
+          Math.abs(requestedTotalValue - computedTotal) > 0.01
+        ) {
+          logger.warn(
+            `Order total mismatch for user ${req.user!.id}: requested ${requestedTotalValue}, computed ${computedTotal}`,
+          );
+          return res.status(400).json({
+            message: "Order total mismatch. Please review your cart and try again.",
+            expectedTotal: totalAsString,
+          });
         }
 
         if (shopId == null) {
@@ -5750,87 +5947,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        const orderItemsPayload = items.map((item) => {
-          const numericPrice = toNumber(item.price);
-          const price = Number.isFinite(numericPrice) ? numericPrice : 0;
-          const itemTotal = Number((price * item.quantity).toFixed(2));
+        const orderItemsPayload = canonicalItems.map((item) => {
           return {
             productId: item.productId,
             quantity: item.quantity,
-            price: price.toFixed(2),
-            total: itemTotal.toFixed(2),
+            price: item.unitPrice.toFixed(2),
+            total: item.lineTotal.toFixed(2),
           };
         });
 
-        const newOrder = await storage.createOrderWithItems(
-          {
-            customerId: customer.id,
-            shopId,
-            status: "pending",
-            paymentStatus: "pending",
-            deliveryMethod,
-            paymentMethod,
-            total: totalAsString,
-            deliveryFee: deliveryFeeAmount.toFixed(2),
-            deliveryDistanceKm:
-              deliveryDistanceKm != null
-                ? deliveryDistanceKm.toFixed(2)
-                : null,
-            orderDate: new Date(),
-            shippingAddress,
-            billingAddress: derivedBillingAddress || "",
-            notes:
-              !enforceStock || isPayLater
-                ? [
-                  !enforceStock
-                    ? "Open order: shop owner will confirm availability."
-                    : null,
-                  isPayLater
-                    ? `Pay later requested by ${payLaterEligibility?.isWhitelisted
-                      ? "whitelisted customer"
-                      : "known customer"
-                    }. Pending approval.`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" ")
-                : undefined,
-          },
-          orderItemsPayload,
-        );
+        let promotionUsageReserved = false;
+        if (appliedPromotion) {
+          const usageLimitCondition = appliedPromotion.usageLimit
+            ? sql`COALESCE(${promotions.usedCount}, 0) < ${appliedPromotion.usageLimit}`
+            : sql`TRUE`;
+          const reserved = await db.primary
+            .update(promotions)
+            .set({ usedCount: sql`COALESCE(${promotions.usedCount}, 0) + 1` })
+            .where(
+              and(eq(promotions.id, appliedPromotion.id), usageLimitCondition),
+            )
+            .returning({ id: promotions.id });
+          if (!reserved[0]) {
+            return res.status(400).json({
+              message: "This promotion has reached its usage limit",
+            });
+          }
+          promotionUsageReserved = true;
+        }
+
+        let newOrder: Order;
+        try {
+          newOrder = await storage.createOrderWithItems(
+            {
+              customerId: customer.id,
+              shopId,
+              status: "pending",
+              paymentStatus: "pending",
+              deliveryMethod,
+              paymentMethod,
+              total: totalAsString,
+              deliveryFee: deliveryFeeAmount.toFixed(2),
+              deliveryDistanceKm:
+                deliveryDistanceKm != null
+                  ? deliveryDistanceKm.toFixed(2)
+                  : null,
+              orderDate: new Date(),
+              shippingAddress,
+              billingAddress: derivedBillingAddress || "",
+              notes:
+                shopModes.openOrderMode || isPayLater
+                  ? [
+                    shopModes.openOrderMode
+                      ? "Open order: shop owner will confirm availability."
+                      : null,
+                    isPayLater
+                      ? `Pay later requested by ${payLaterEligibility?.isWhitelisted
+                        ? "whitelisted customer"
+                        : "known customer"
+                      }. Pending approval.`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")
+                  : undefined,
+            },
+            orderItemsPayload,
+          );
+        } catch (error) {
+          if (promotionUsageReserved && appliedPromotion) {
+            try {
+              await db.primary
+                .update(promotions)
+                .set({
+                  usedCount: sql`GREATEST(COALESCE(${promotions.usedCount}, 0) - 1, 0)`,
+                })
+                .where(eq(promotions.id, appliedPromotion.id));
+            } catch (rollbackError) {
+              logger.warn(
+                { err: rollbackError, promotionId: appliedPromotion.id },
+                "Failed to rollback promotion usage after order failure",
+              );
+            }
+          }
+          throw error;
+        }
         logger.info(`Created order ${newOrder.id}`);
 
         // Notify shop about new order
         if (shopId) {
-          if (isPayLater) {
-            // Pay-later orders get specific notification about credit approval
-            await storage.createNotification({
-              userId: shopId,
-              type: "order",
-              title: "Pay Later approval needed",
-              message: `Order #${newOrder.id} (₹${totalAsString}) is waiting for credit approval.`,
-            });
-          } else {
-            // Regular orders
-            await storage.createNotification({
-              userId: shopId,
-              type: "order",
-              title: "New Order Received",
-              message: `Order #${newOrder.id} has been placed (₹${totalAsString}).`,
-            });
+          try {
+            if (isPayLater) {
+              // Pay-later orders get specific notification about credit approval
+              await storage.createNotification({
+                userId: shopId,
+                type: "order",
+                title: "Pay Later approval needed",
+                message: `Order #${newOrder.id} (₹${totalAsString}) is waiting for credit approval.`,
+              });
+            } else {
+              // Regular orders
+              await storage.createNotification({
+                userId: shopId,
+                type: "order",
+                title: "New Order Received",
+                message: `Order #${newOrder.id} has been placed (₹${totalAsString}).`,
+              });
+            }
+          } catch (notificationError) {
+            logger.warn(
+              { err: notificationError, orderId: newOrder.id, shopId },
+              "Failed to send order notification",
+            );
           }
         }
 
         // Clear cart after order creation
-        await storage.clearCart(req.user!.id);
+        try {
+          await storage.clearCart(req.user!.id);
+        } catch (clearCartError) {
+          logger.warn(
+            { err: clearCartError, orderId: newOrder.id, userId: req.user!.id },
+            "Failed to clear cart after checkout",
+          );
+        }
 
         // Invalidate shop product caches to reflect stock changes
-        await invalidateCache(`products:shop:${shopId}`);
-        await Promise.all(
-          items.map((item) =>
-            invalidateCache(`product_detail_${shopId}_${item.productId}`),
-          ),
-        );
+        try {
+          await invalidateCache(`products:shop:${shopId}`);
+          await Promise.all(
+            canonicalItems.map((item) =>
+              invalidateCache(`product_detail_${shopId}_${item.productId}`),
+            ),
+          );
+        } catch (cacheError) {
+          logger.warn(
+            { err: cacheError, orderId: newOrder.id, shopId },
+            "Failed to invalidate product cache after checkout",
+          );
+        }
 
         res.status(201).json({ order: newOrder });
       } catch (error) {
@@ -6463,6 +6718,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isCustomer =
         requesterId !== null && order.customerId === requesterId;
       if (!isCustomer) {
+        if (req.user?.role === "worker") {
+          const workerUserId = coerceNumericId(req.user.id);
+          if (workerUserId === null) {
+            return res.status(403).json({ message: "Not authorized" });
+          }
+          const workerLinks = await db.primary
+            .select({
+              shopId: shopWorkers.shopId,
+              active: shopWorkers.active,
+              responsibilities: shopWorkers.responsibilities,
+            })
+            .from(shopWorkers)
+            .where(eq(shopWorkers.workerUserId, workerUserId))
+            .limit(1);
+          const workerLink = workerLinks[0];
+          if (!workerLink || workerLink.active === false) {
+            return res.status(403).json({ message: "Not authorized" });
+          }
+          const permissions = Array.isArray(workerLink.responsibilities)
+            ? workerLink.responsibilities
+            : [];
+          if (!permissions.includes("orders:read")) {
+            return res.status(403).json({ message: "Not authorized" });
+          }
+          req.shopContextId = workerLink.shopId;
+        }
         const shopContextId = await resolveShopContextId(
           req as RequestWithContext,
         );
@@ -7185,6 +7466,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const existingBooking = await storage.getBooking(bookingId);
         if (!existingBooking) {
           return res.status(404).json({ message: "Booking not found" });
+        }
+        if (existingBooking.serviceId == null) {
+          return res.status(400).json({ message: "Booking is missing a service" });
+        }
+        const service = await storage.getService(existingBooking.serviceId);
+        if (!service || service.providerId !== req.user!.id) {
+          return res.status(403).json({ message: "Not authorized to confirm this booking" });
         }
 
         const confirmationMessage = `Your booking for ${formatIndianDisplay(existingBooking.bookingDate, "date")} has been confirmed.`;
@@ -7957,10 +8245,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!result.data.orderId) {
         return res.status(400).json({ message: "Order id required" });
       }
+      if (!result.data.productId) {
+        return res.status(400).json({ message: "Product id required" });
+      }
       try {
         const order = await storage.getOrder(result.data.orderId);
         if (!order || order.customerId !== req.user!.id) {
           return res.status(403).json({ message: "Cannot review this order" });
+        }
+        const orderItems = await storage.getOrderItemsByOrder(result.data.orderId);
+        const purchasedProductIds = new Set(
+          orderItems
+            .map((item) => item.productId)
+            .filter((value): value is number => typeof value === "number"),
+        );
+        if (!purchasedProductIds.has(result.data.productId)) {
+          return res.status(403).json({
+            message: "Cannot review a product that is not in this order",
+          });
         }
 
         const review = await storage.createProductReview({

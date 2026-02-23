@@ -11,6 +11,17 @@ import fs from "fs";
 
 let firebaseApp: admin.app.App | null = null;
 
+function isTruthyEnv(value: string | undefined): boolean {
+    if (!value) return false;
+    const normalized = value.trim().toLowerCase();
+    return (
+        normalized === "true" ||
+        normalized === "1" ||
+        normalized === "yes" ||
+        normalized === "on"
+    );
+}
+
 /**
  * Initialize Firebase Admin SDK
  * Uses the service account specified in FIREBASE_SERVICE_ACCOUNT_PATH env var
@@ -18,6 +29,15 @@ let firebaseApp: admin.app.App | null = null;
 export function initializeFirebaseAdmin(): boolean {
     if (firebaseApp) {
         return true; // Already initialized
+    }
+
+    const isTestEnv = (process.env.NODE_ENV ?? "").toLowerCase() === "test";
+    const enableInTests = isTruthyEnv(process.env.ENABLE_FIREBASE_ADMIN_IN_TEST);
+    if (isTestEnv && !enableInTests) {
+        logger.info(
+            "Skipping Firebase Admin SDK initialization in test environment"
+        );
+        return false;
     }
 
     const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
@@ -157,11 +177,13 @@ export async function verifyAndExtractPhone(idToken: string): Promise<{
     phone?: string;
     error?: string;
 }> {
-    // ALLOW MOCK TOKEN IN DEVELOPMENT/TEST
-    // This allows the "auth/billing-not-enabled" workaround to function end-to-end
-    if (process.env.NODE_ENV !== "production" && idToken.startsWith("mock-token-")) {
+    const allowMockToken =
+        process.env.NODE_ENV === "test" ||
+        process.env.ALLOW_MOCK_FIREBASE_TOKENS === "true";
+    // Mock tokens are only accepted in automated tests, or when explicitly enabled.
+    if (allowMockToken && idToken.startsWith("mock-token-")) {
         const mockPhone = idToken.replace("mock-token-", "");
-        logger.info({ mockPhone }, "Using MOCK token verification for development");
+        logger.info({ mockPhone }, "Using mock Firebase token verification");
 
         const normalizedPhone = normalizeFirebasePhone(mockPhone);
         return {

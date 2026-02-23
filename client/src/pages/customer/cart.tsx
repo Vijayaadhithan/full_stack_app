@@ -308,11 +308,59 @@ export default function Cart() {
     }
 
     try {
-      // Calculate discount based on promotion type
+      if (promotion.code && shopId && cartItems && cartItems.length > 0) {
+        const validationRes = await apiRequest("POST", "/api/promotions/validate", {
+          code: promotion.code,
+          shopId,
+          cartItems: cartItems.map((item) => ({
+            productId: item.product.id,
+            quantity: item.quantity,
+          })),
+          subtotal,
+        });
+        if (!validationRes.ok) {
+          const err = await validationRes.json().catch(() => ({}));
+          throw new Error(err.message || "Promotion is not valid for this cart");
+        }
+        const validated = await validationRes.json();
+        setSelectedPromotion(promotion);
+        setDiscountAmount(Number(validated.discountAmount) || 0);
+        return;
+      }
+
+      let applicableItems = cartItems ?? [];
+      if (
+        promotion.applicableProducts &&
+        promotion.applicableProducts.length > 0
+      ) {
+        const allowed = new Set(promotion.applicableProducts);
+        applicableItems = applicableItems.filter((item) =>
+          allowed.has(item.product.id),
+        );
+      }
+      if (promotion.excludedProducts && promotion.excludedProducts.length > 0) {
+        const blocked = new Set(promotion.excludedProducts);
+        applicableItems = applicableItems.filter(
+          (item) => !blocked.has(item.product.id),
+        );
+      }
+      if (applicableItems.length === 0) {
+        throw new Error("No applicable products for this promotion");
+      }
+      if (promotion.minPurchase && subtotal < Number(promotion.minPurchase)) {
+        throw new Error(
+          `Minimum purchase of ₹${promotion.minPurchase} required for this promotion`,
+        );
+      }
+
+      const applicableSubtotal = applicableItems.reduce(
+        (sum, item) => sum + Number(item.product.price) * item.quantity,
+        0,
+      );
       let discount = 0;
       if (promotion.type === "percentage") {
-        discount = (parseFloat(promotion.value.toString()) / 100) * subtotal;
-        // Apply max discount cap if specified
+        discount =
+          (parseFloat(promotion.value.toString()) / 100) * applicableSubtotal;
         if (
           promotion.maxDiscount &&
           discount > parseFloat(promotion.maxDiscount.toString())
@@ -320,16 +368,14 @@ export default function Cart() {
           discount = parseFloat(promotion.maxDiscount.toString());
         }
       } else {
-        // Fixed amount discount
         discount = parseFloat(promotion.value.toString());
-        // Ensure discount doesn't exceed the subtotal
-        if (discount > subtotal) {
-          discount = subtotal;
-        }
+      }
+      if (discount > applicableSubtotal) {
+        discount = applicableSubtotal;
       }
 
       setSelectedPromotion(promotion);
-      setDiscountAmount(discount);
+      setDiscountAmount(Math.round(discount * 100) / 100);
     } catch (error) {
       console.error("Error applying promotion:", error);
       toast({
@@ -377,21 +423,7 @@ export default function Cart() {
 
       return res.json();
     },
-    onSuccess: async (data) => {
-
-      if (selectedPromotion) {
-        try {
-          await apiRequest(
-            "POST",
-            `/api/promotions/${selectedPromotion.id}/apply`,
-            {
-              orderId: data.order.id,
-            },
-          );
-        } catch (error) {
-          console.error("Error updating promotion usage:", error);
-        }
-      }
+    onSuccess: async (_data) => {
       toast({
         title: "Order sent to shop",
         description: "The shop will confirm the final bill amount soon.",

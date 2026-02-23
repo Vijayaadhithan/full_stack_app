@@ -53,7 +53,18 @@ function evictOldestEntries(count: number) {
   }
 }
 
-export function __resetCacheForTesting() {
+export async function __resetCacheForTesting() {
+  if (redisClient) {
+    try {
+      if (typeof redisClient.quit === "function") {
+        await redisClient.quit();
+      } else if (typeof redisClient.disconnect === "function") {
+        await redisClient.disconnect();
+      }
+    } catch {
+      // Ignore errors when closing Redis in test cleanup
+    }
+  }
   redisClient = null;
   redisReady = false;
   redisInitPromise = null;

@@ -117,6 +117,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
 
         const savedMode = localStorage.getItem("appMode") as AppMode | null;
+        const canUseShopMode =
+            profiles.hasShop || user.role === "shop" || user.role === "worker";
+        const canUseProviderMode =
+            profiles.hasProvider || user.role === "provider";
 
         // Helper function to set mode and optionally navigate
         const setModeAndNavigate = (mode: AppMode, shouldNavigate: boolean) => {
@@ -153,9 +157,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         if (savedMode && Object.keys(MODE_THEMES).includes(savedMode)) {
             // Validate the user can access the saved mode
-            if (savedMode === "SHOP" && !profiles.hasShop) {
+            if (savedMode === "SHOP" && !canUseShopMode) {
                 setModeAndNavigate("CUSTOMER", true);
-            } else if (savedMode === "PROVIDER" && !profiles.hasProvider) {
+            } else if (savedMode === "PROVIDER" && !canUseProviderMode) {
                 setModeAndNavigate("CUSTOMER", true);
             } else {
                 // Restore saved mode AND navigate if on wrong page
@@ -182,19 +186,23 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }, [user, profiles, isLoadingProfiles, setLocation]);
 
     const setAppMode = useCallback((mode: AppMode) => {
+        const canUseShopMode =
+            profiles.hasShop || user?.role === "shop" || user?.role === "worker";
+        const canUseProviderMode =
+            profiles.hasProvider || user?.role === "provider";
         // Validate mode access
-        if (mode === "SHOP" && !profiles.hasShop) {
+        if (mode === "SHOP" && !canUseShopMode) {
             console.warn("User does not have a shop profile");
             return;
         }
-        if (mode === "PROVIDER" && !profiles.hasProvider) {
+        if (mode === "PROVIDER" && !canUseProviderMode) {
             console.warn("User does not have a provider profile");
             return;
         }
 
         setAppModeInternal(mode);
         localStorage.setItem("appMode", mode);
-    }, [profiles]);
+    }, [profiles, user]);
 
     const currentTheme = MODE_THEMES[appMode];
 

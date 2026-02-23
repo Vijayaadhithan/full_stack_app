@@ -297,7 +297,8 @@ The platform uses **23+ tables**:
 - **Environment**: `.env` configures DB URLs, Redis, Firebase credentials, session secrets
 - **Migrations**: Drizzle Kit-managed SQL migrations under `migrations/`
 - **CI/CD**: GitHub Actions (`.github/`)
-- **Load Testing**: k6-compatible `load-test.js` and `load-test-benchmark.js` scripts included
+- **Load Testing**: k6-compatible `load-test.js` and `load-test-benchmark.js` scripts, plus `npm run load:regression` helper for p95/p99/failure assertions
+- **Security Checks**: `npm run security:checklist` generates a pass/fail security matrix in `output/security/`
 
 ---
 

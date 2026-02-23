@@ -2,7 +2,7 @@ import { Express, type Request } from "express";
 import { z } from "zod";
 import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { promotions, shopWorkers, shops } from "@shared/schema";
+import { promotions, shopWorkers, shops, products, orders } from "@shared/schema";
 import logger from "../logger";
 import {
   requireShopOrWorkerPermission,
@@ -104,11 +104,6 @@ const promotionValidationSchema = z
           .object({
             productId: z.coerce.number().int().positive(),
             quantity: z.coerce.number().int().positive(),
-            price: z
-              .coerce.number()
-              .refine((val) => Number.isFinite(val) && val >= 0, {
-                message: "Invalid price",
-              }),
           })
           .strict(),
       )
@@ -117,7 +112,8 @@ const promotionValidationSchema = z
       .coerce.number()
       .refine((val) => Number.isFinite(val) && val >= 0, {
         message: "Invalid subtotal",
-      }),
+      })
+      .optional(),
   })
   .strict();
 
@@ -860,12 +856,64 @@ export function registerPromotionRoutes(app: Express) {
           code,
           shopId: requestedShopId,
           cartItems: rawCartItems,
-          subtotal,
+          subtotal: subtotalFromRequest,
         } = result.data;
-        const cartItems = [...rawCartItems];
         const normalizedCode = code.trim().toLowerCase();
         const shopIds = await resolvePromotionLookupShopIds(requestedShopId);
         const now = new Date();
+
+        const productIds = Array.from(
+          new Set(rawCartItems.map((item) => item.productId)),
+        );
+        const cartProducts = productIds.length
+          ? await db.primary
+            .select({
+              id: products.id,
+              shopId: products.shopId,
+              price: products.price,
+            })
+            .from(products)
+            .where(inArray(products.id, productIds))
+          : [];
+        const productMap = new Map(cartProducts.map((item) => [item.id, item]));
+        const missingProductIds = productIds.filter((id) => !productMap.has(id));
+        if (missingProductIds.length > 0) {
+          return res.status(400).json({
+            message: `Product with ID ${missingProductIds[0]} not found`,
+          });
+        }
+
+        const canonicalItems = rawCartItems.map((item) => {
+          const product = productMap.get(item.productId)!;
+          if (product.shopId == null || !shopIds.includes(product.shopId)) {
+            throw new Error(
+              `Product ${item.productId} does not belong to the selected shop`,
+            );
+          }
+          const price = toFiniteNumber(product.price);
+          if (price === null || price < 0) {
+            throw new Error(`Invalid product price for product ${item.productId}`);
+          }
+          return {
+            productId: item.productId,
+            quantity: item.quantity,
+            price,
+          };
+        });
+        const subtotal = Number(
+          canonicalItems
+            .reduce((sum, item) => sum + item.price * item.quantity, 0)
+            .toFixed(2),
+        );
+        if (
+          subtotalFromRequest !== undefined &&
+          Math.abs(subtotalFromRequest - subtotal) > 0.01
+        ) {
+          return res.status(400).json({
+            message: "Cart subtotal mismatch. Please refresh your cart and retry.",
+            expectedSubtotal: subtotal,
+          });
+        }
 
         // Find active promotions for this shop, then match code case-insensitively.
         const promotionsForShop = await db.primary
@@ -907,12 +955,12 @@ export function registerPromotionRoutes(app: Express) {
         }
 
         // Filter applicable products if specified
-        let applicableItems = cartItems;
+        let applicableItems = canonicalItems;
         if (
           promoDetails.applicableProducts &&
           promoDetails.applicableProducts.length > 0
         ) {
-          applicableItems = cartItems.filter((item) =>
+          applicableItems = canonicalItems.filter((item) =>
             promoDetails.applicableProducts!.includes(item.productId),
           );
         }
@@ -952,15 +1000,20 @@ export function registerPromotionRoutes(app: Express) {
         if (maxDiscountValue !== null && discountAmount > maxDiscountValue) {
           discountAmount = maxDiscountValue;
         }
+        if (discountAmount > applicableSubtotal) {
+          discountAmount = applicableSubtotal;
+        }
 
         // Round to 2 decimal places
         discountAmount = Math.round(discountAmount * 100) / 100;
+        const finalTotal = Number((subtotal - discountAmount).toFixed(2));
 
         res.json({
           valid: true,
           promotion: normalizePromotionResponse(promoDetails),
           discountAmount,
-          finalTotal: subtotal - discountAmount,
+          subtotal,
+          finalTotal,
         });
       } catch (error) {
         logger.error("Error validating promotion:", error);
@@ -1023,7 +1076,7 @@ export function registerPromotionRoutes(app: Express) {
             .status(400)
             .json(formatValidationError(bodyResult.error));
         }
-        const { orderId: _orderId } = bodyResult.data;
+        const { orderId } = bodyResult.data;
 
         // Get the promotion
         const promotionResult = await db.primary
@@ -1053,13 +1106,42 @@ export function registerPromotionRoutes(app: Express) {
             .json({ message: "This promotion has reached its usage limit" });
         }
 
-        // Increment the used count (add null check)
-        await db.primary
-          .update(promotions)
-          .set({ usedCount: (promotion.usedCount || 0) + 1 })
-          .where(eq(promotions.id, promotionId));
+        const orderResult = await db.primary
+          .select({
+            id: orders.id,
+            customerId: orders.customerId,
+            shopId: orders.shopId,
+          })
+          .from(orders)
+          .where(eq(orders.id, orderId))
+          .limit(1);
+        const order = orderResult[0];
+        if (!order) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+        const userIdRaw = req.user?.id;
+        if (userIdRaw == null) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const requesterId =
+          typeof userIdRaw === "number"
+            ? userIdRaw
+            : Number.parseInt(String(userIdRaw), 10);
+        if (!Number.isFinite(requesterId) || order.customerId !== requesterId) {
+          return res.status(403).json({ message: "Not authorized for this order" });
+        }
+        if (order.shopId !== promotion.shopId) {
+          return res.status(400).json({
+            message: "Promotion does not apply to this order",
+          });
+        }
 
-        res.json({ message: "Promotion applied successfully" });
+        // Promotion usage is now reserved during checkout (/api/orders) to avoid race
+        // conditions and duplicate apply calls from the client.
+        res.json({
+          message: "Promotion already accounted at checkout",
+          applied: true,
+        });
       } catch (error) {
         logger.error("Error applying promotion:", error);
         res

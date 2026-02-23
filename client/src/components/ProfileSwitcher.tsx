@@ -87,10 +87,19 @@ export function ProfileSwitcher({ onCreateShop: _onCreateShop, onCreateProvider:
 
         setIsCreating(true);
         try {
-            await apiRequest("POST", "/api/auth/create-shop", {
+            const payload: Record<string, unknown> = {
                 shopName: shopName.trim(),
                 description: shopDescription.trim(),
                 useCustomerAddress,
+            };
+            if (!useCustomerAddress) {
+                payload.shopAddressStreet = tempAddress.street.trim();
+                payload.shopAddressCity = tempAddress.city.trim();
+                payload.shopAddressState = tempAddress.state.trim();
+                payload.shopAddressPincode = tempAddress.pincode.trim();
+            }
+            await apiRequest("POST", "/api/auth/create-shop", {
+                ...payload,
             });
 
             toast({ title: "Success!", description: "Your shop has been created" });

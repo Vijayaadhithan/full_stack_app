@@ -7,12 +7,20 @@ import {
   type NotificationLike,
 } from "@/lib/notification-routing";
 
-const normalizePath = (target: string) => {
+const normalizePath = (target: string): string | null => {
+  const trimmed = target.trim();
+  if (!trimmed) return null;
   try {
-    const url = new URL(target);
-    return `${url.pathname}${url.search}`;
+    const url = new URL(trimmed, window.location.origin);
+    if (url.origin !== window.location.origin) {
+      return null;
+    }
+    if (!url.pathname.startsWith("/")) {
+      return null;
+    }
+    return `${url.pathname}${url.search}${url.hash}`;
   } catch {
-    return target;
+    return trimmed.startsWith("/") ? trimmed : null;
   }
 };
 
@@ -60,7 +68,7 @@ export default function NotificationRedirect() {
     }
 
     const target = resolved?.path || payload.fallbackUrl || "/customer";
-    if (!target) return;
+    const normalizedTarget = normalizePath(target) || "/customer";
 
     console.info("[notification-redirect] routing", {
       type: payload.notification.type,
@@ -68,11 +76,11 @@ export default function NotificationRedirect() {
       hasTitle: Boolean(payload.notification.title),
       hasMessage: Boolean(payload.notification.message),
       appMode: resolved?.appMode ?? null,
-      target,
+      target: normalizedTarget,
     });
 
     hasRedirected.current = true;
-    setLocation(normalizePath(target));
+    setLocation(normalizedTarget);
   }, [
     isLoading,
     isLoadingProfiles,

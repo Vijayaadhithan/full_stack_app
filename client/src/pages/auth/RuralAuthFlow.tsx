@@ -354,7 +354,7 @@ export default function RuralAuthFlow({ onSuccess, onForgotPassword }: RuralAuth
                 name: name.trim(),
                 pin,
                 initialRole: selectedRole,
-                language: "ta",
+                language,
             });
 
             if (!res.ok) {

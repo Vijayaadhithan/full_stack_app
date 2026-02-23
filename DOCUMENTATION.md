@@ -540,14 +540,23 @@ npm run monitor
 # Type check
 npm run check
 
+# Lint
+npm run lint
+
 # Run test suite
 npm run test
+
+# Run endpoint regression tests (changed routes)
+npm run test:endpoint-regression
 
 # With coverage
 npm run test:coverage
 
 # Generate report
 npm run test:report
+
+# Full quality gate
+npm run check && npm run lint && npm test
 ```
 
 ### 10.2 Load Testing
@@ -556,15 +565,36 @@ npm run test:report
 # Install k6
 brew install k6  # macOS
 
-# Start server with test config
-SESSION_SECRET='TestSecret123!' \
-USE_IN_MEMORY_DB=true \
-DISABLE_RATE_LIMITERS=true \
-npm run start
+# Start backend in another terminal
+npm run dev:server
 
-# Run load test
-k6 run load-test.js
+# Run load regression (default scenario: tier_100)
+BASE_URL=http://localhost:5000 npm run load:regression
+
+# Run custom scenario/thresholds
+BASE_URL=http://localhost:5000 \
+SCENARIO=tier_500 \
+P95_TARGET_MS=1800 \
+P99_TARGET_MS=3000 \
+MAX_FAILED_RATE_PERCENT=3 \
+npm run load:regression
 ```
+
+Load regression artifacts:
+- `benchmark-results/regression/summary_<scenario>_<timestamp>.json`
+- `benchmark-results/regression/assertions_<scenario>_<timestamp>.json`
+- `benchmark-results/regression/assertions_<scenario>_<timestamp>.md`
+
+### 10.3 Security Checklist
+
+```bash
+# Generate security pass/fail matrix
+npm run security:checklist
+```
+
+Security checklist artifacts:
+- `output/security/security-matrix-<timestamp>.json`
+- `output/security/security-matrix-<timestamp>.md`
 
 ---
 
@@ -584,7 +614,10 @@ k6 run load-test.js
 | `npm run format` | Prettier formatting |
 | `npm run test` | Run tests |
 | `npm run test:coverage` | Test with coverage |
+| `npm run test:endpoint-regression` | Endpoint-level regression tests for changed routes |
 | `npm run monitor` | Poll health endpoint |
+| `npm run load:regression` | Run k6 load regression with p95/p99/failure assertions |
+| `npm run security:checklist` | Generate security checklist pass/fail matrix |
 
 ---
 
