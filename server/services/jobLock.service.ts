@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import logger from "../logger";
+import { getRedisClient as getSharedRedisClient } from "../cache";
 
 type RedisClient = {
-  connect(): Promise<void>;
-  on(event: "error" | "end", listener: (err?: unknown) => void): void;
   set(
     key: string,
     value: string,
@@ -23,13 +22,9 @@ const RELEASE_LOCK_LUA =
 const REFRESH_LOCK_LUA =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end";
 
-let redisClient: RedisClient | null = null;
-let connectPromise: Promise<RedisClient | null> | null = null;
-let nextRetryAt = 0;
-
 let loggedMissingUrl = false;
-let loggedMissingModule = false;
 let loggedDisabled = false;
+let loggedUnavailable = false;
 
 function isTruthyEnv(value: string | undefined): boolean {
   const normalized = value ? value.trim().toLowerCase() : "";
@@ -55,30 +50,7 @@ function buildLockKey(name: string): string {
   return `${LOCK_KEY_PREFIX}:${normalized}`;
 }
 
-async function loadRedisModule(): Promise<{ createClient?: unknown } | null> {
-  try {
-    return await import("redis");
-  } catch (err) {
-    if (!loggedMissingModule) {
-      logger.warn(
-        { err },
-        "[JobLock] Failed to load redis module; distributed job locks disabled.",
-      );
-      loggedMissingModule = true;
-    }
-    return null;
-  }
-}
-
 async function getRedisClient(): Promise<RedisClient | null> {
-  if (redisClient) return redisClient;
-  if (connectPromise) return connectPromise;
-
-  const now = Date.now();
-  if (now < nextRetryAt) {
-    return null;
-  }
-
   if (isRedisDisabled() || isJobLockDisabled()) {
     if (!loggedDisabled) {
       logger.info(
@@ -86,7 +58,6 @@ async function getRedisClient(): Promise<RedisClient | null> {
       );
       loggedDisabled = true;
     }
-    nextRetryAt = Number.POSITIVE_INFINITY;
     return null;
   }
 
@@ -97,60 +68,22 @@ async function getRedisClient(): Promise<RedisClient | null> {
       );
       loggedMissingUrl = true;
     }
-    nextRetryAt = Number.POSITIVE_INFINITY;
     return null;
   }
 
-  connectPromise = (async () => {
-    const redisModule = await loadRedisModule();
-    const createClient = redisModule?.createClient;
-    if (typeof createClient !== "function") {
-      if (!loggedMissingModule) {
-        logger.warn(
-          { err: new Error("redis module does not export createClient") },
-          "[JobLock] Failed to load redis client; distributed job locks disabled.",
-        );
-        loggedMissingModule = true;
-      }
-      nextRetryAt = Number.POSITIVE_INFINITY;
-      return null;
-    }
-
-    try {
-      const client = (createClient as any)({
-        url: REDIS_URL,
-        socket: {
-          reconnectStrategy: (retries: number) => Math.min(retries * 50, 2000),
-        },
-      }) as RedisClient;
-
-      client.on("error", (err?: unknown) => {
-        logger.warn({ err }, "[JobLock] Redis connection error");
-      });
-
-      client.on("end", () => {
-        logger.warn("[JobLock] Redis connection closed; distributed locks unavailable");
-        redisClient = null;
-      });
-
-      await client.connect();
-      redisClient = client;
-      nextRetryAt = 0;
-      logger.info("[JobLock] Connected to Redis; distributed job locks enabled");
-      return client;
-    } catch (err) {
-      nextRetryAt = Date.now() + 60_000; // avoid log spam
+  const sharedClient = await getSharedRedisClient();
+  if (!sharedClient) {
+    if (!loggedUnavailable) {
       logger.warn(
-        { err },
-        "[JobLock] Failed to connect to Redis; distributed locks temporarily unavailable",
+        "[JobLock] Shared Redis client unavailable; distributed locks disabled.",
       );
-      return null;
-    } finally {
-      connectPromise = null;
+      loggedUnavailable = true;
     }
-  })();
+    return null;
+  }
 
-  return connectPromise;
+  loggedUnavailable = false;
+  return sharedClient as RedisClient;
 }
 
 async function tryAcquireLock(params: {
@@ -266,10 +199,7 @@ export async function withJobLock<T>(
 }
 
 export function __resetJobLockForTesting() {
-  redisClient = null;
-  connectPromise = null;
-  nextRetryAt = 0;
   loggedMissingUrl = false;
-  loggedMissingModule = false;
   loggedDisabled = false;
+  loggedUnavailable = false;
 }

@@ -21,6 +21,25 @@ let loggedDisabled = false;
 let redisModuleLoader: (() => Promise<any>) | null = null;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
+function patternToRegex(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped.replace(/\*/g, ".*")}$`);
+}
+
+function invalidateMemoryCacheByPattern(pattern: string): void {
+  if (!pattern.includes("*")) {
+    memoryCache.delete(pattern);
+    return;
+  }
+
+  const regex = patternToRegex(pattern);
+  for (const key of Array.from(memoryCache.keys())) {
+    if (regex.test(key)) {
+      memoryCache.delete(key);
+    }
+  }
+}
+
 // PERFORMANCE FIX: Periodic cleanup of expired entries
 function startCleanupTimer() {
   if (cleanupTimer) return;
@@ -54,29 +73,12 @@ function evictOldestEntries(count: number) {
 }
 
 export async function __resetCacheForTesting() {
-  if (redisClient) {
-    try {
-      if (typeof redisClient.quit === "function") {
-        await redisClient.quit();
-      } else if (typeof redisClient.disconnect === "function") {
-        await redisClient.disconnect();
-      }
-    } catch {
-      // Ignore errors when closing Redis in test cleanup
-    }
-  }
-  redisClient = null;
-  redisReady = false;
-  redisInitPromise = null;
+  await closeRedisConnection();
   redisNextRetry = 0;
   loggedMissingUrl = false;
   loggedDisabled = false;
   redisModuleLoader = null;
   memoryCache.clear();
-  if (cleanupTimer) {
-    clearInterval(cleanupTimer);
-    cleanupTimer = null;
-  }
 }
 export function __setRedisModuleLoaderForTesting(
   loader: (() => Promise<any>) | null,
@@ -258,7 +260,39 @@ export async function invalidateCache(key: string): Promise<void> {
     }
   }
 
-  memoryCache.delete(key);
+  invalidateMemoryCacheByPattern(key);
+}
+
+export async function invalidateCachePattern(pattern: string): Promise<void> {
+  await initRedis();
+
+  if (redisClient && redisReady) {
+    try {
+      if (!pattern.includes("*")) {
+        await redisClient.del(pattern);
+      } else {
+        let cursor: number | string = 0;
+        do {
+          const scanResult: any = await redisClient.scan(cursor, {
+            MATCH: pattern,
+            COUNT: 100,
+          });
+          const nextCursor: number | string | undefined = Array.isArray(scanResult)
+            ? scanResult[0]
+            : scanResult?.cursor;
+          const keys = Array.isArray(scanResult) ? scanResult[1] : scanResult?.keys;
+          if (Array.isArray(keys) && keys.length > 0) {
+            await redisClient.del(...keys);
+          }
+          cursor = nextCursor ?? 0;
+        } while (String(cursor) !== "0");
+      }
+    } catch (error) {
+      logger.warn({ err: error, pattern }, "Failed to invalidate Redis cache pattern");
+    }
+  }
+
+  invalidateMemoryCacheByPattern(pattern);
 }
 
 export async function flushCache(): Promise<void> {
@@ -273,4 +307,26 @@ export async function flushCache(): Promise<void> {
   }
 
   memoryCache.clear();
+}
+
+export async function closeRedisConnection(): Promise<void> {
+  if (redisClient) {
+    try {
+      if (typeof redisClient.quit === "function") {
+        await redisClient.quit();
+      } else if (typeof redisClient.disconnect === "function") {
+        await redisClient.disconnect();
+      }
+    } catch (error) {
+      logger.warn({ err: error }, "Failed to close Redis cache connection cleanly");
+    }
+  }
+
+  redisClient = null;
+  redisReady = false;
+  redisInitPromise = null;
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  }
 }

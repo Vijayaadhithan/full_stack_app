@@ -25,6 +25,8 @@ type MetricPayload = Omit<PerformanceMetric, "page" | "timestamp"> & {
 const MAX_BUFFER_SIZE = 5;
 let metricBuffer: PerformanceMetric[] = [];
 let flushScheduled = false;
+const MAX_PAINT_METRIC_MS = 30_000;
+const LCP_FINALIZE_TIMEOUT_MS = 10_000;
 
 function getMetricRating(name: MetricName, value: number): PerformanceMetric["rating"] {
   const thresholds = METRIC_THRESHOLDS[name];
@@ -111,6 +113,13 @@ export function useClientPerformanceMetrics(role: UserRole) {
     const page = window.location.pathname;
 
     const sendMetric = (metric: MetricPayload) => {
+      if (
+        (metric.name === "FCP" || metric.name === "LCP") &&
+        (!Number.isFinite(metric.value) || metric.value < 0 || metric.value > MAX_PAINT_METRIC_MS)
+      ) {
+        return;
+      }
+
       const enriched: PerformanceMetric = {
         ...metric,
         page,
@@ -172,7 +181,10 @@ export function useClientPerformanceMetrics(role: UserRole) {
     const lcpObserver = tryObserve("largest-contentful-paint", (entryList) => {
       const entries = entryList.getEntries();
       if (entries.length) {
-        lcpEntry = entries[entries.length - 1];
+        const candidate = entries[entries.length - 1];
+        if (candidate && candidate.startTime <= MAX_PAINT_METRIC_MS) {
+          lcpEntry = candidate;
+        }
       }
     });
 
@@ -229,11 +241,19 @@ export function useClientPerformanceMetrics(role: UserRole) {
       }
     };
 
+    const finalizeLcpTimer = window.setTimeout(() => {
+      flushMetrics();
+      lcpObserver?.disconnect();
+      clsObserver?.disconnect();
+      fidObserver?.disconnect();
+    }, LCP_FINALIZE_TIMEOUT_MS);
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         flushMetrics();
         // Flush the batched metric buffer when page goes hidden
         flushMetricBuffer().catch(() => { });
+        clearTimeout(finalizeLcpTimer);
         lcpObserver?.disconnect();
         clsObserver?.disconnect();
         fidObserver?.disconnect();
@@ -246,6 +266,7 @@ export function useClientPerformanceMetrics(role: UserRole) {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", handleVisibilityChange);
+      clearTimeout(finalizeLcpTimer);
       lcpObserver?.disconnect();
       clsObserver?.disconnect();
       fidObserver?.disconnect();

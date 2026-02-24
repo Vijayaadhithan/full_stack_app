@@ -134,6 +134,20 @@
       "when": 1769788964571,
       "tag": "0018_perfect_maginty",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1771890500000,
+      "tag": "0031_query_performance_cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1771902000000,
+      "tag": "0032_postgis_spatial_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,3 @@
-/* eslint-env serviceworker */
 /* global firebase */
 
 // Firebase Messaging Service Worker

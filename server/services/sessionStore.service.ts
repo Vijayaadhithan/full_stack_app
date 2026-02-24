@@ -1,12 +1,8 @@
 import session from "express-session";
 import logger from "../logger";
+import { getRedisClient as getSharedRedisClient } from "../cache";
 
 type RedisClient = {
-  connect(): Promise<void>;
-  on(
-    event: "error" | "end" | "connect" | "ready",
-    listener: (err?: unknown) => void,
-  ): void;
   get(key: string): Promise<string | null>;
   set(
     key: string,
@@ -18,13 +14,9 @@ type RedisClient = {
 
 const REDIS_URL = process.env.REDIS_URL?.trim();
 
-let redisClient: RedisClient | null = null;
-let connectPromise: Promise<RedisClient | null> | null = null;
-let nextRetryAt = 0;
-
 let loggedMissingUrl = false;
-let loggedMissingModule = false;
 let loggedDisabled = false;
+let loggedUnavailable = false;
 
 function isTruthyEnv(value: string | undefined): boolean {
   const normalized = value ? value.trim().toLowerCase() : "";
@@ -88,28 +80,7 @@ function resolveSessionTtlMs(sessionValue: unknown): number {
   return resolveDefaultSessionTtlMs();
 }
 
-async function loadRedisModule(): Promise<{ createClient?: unknown } | null> {
-  try {
-    return await import("redis");
-  } catch (err) {
-    if (!loggedMissingModule) {
-      logger.warn(
-        { err },
-        "[SessionStore] Failed to load redis module; Redis sessions disabled.",
-      );
-      loggedMissingModule = true;
-    }
-    return null;
-  }
-}
-
 async function getRedisClient(): Promise<RedisClient | null> {
-  if (redisClient) return redisClient;
-  if (connectPromise) return connectPromise;
-
-  const now = Date.now();
-  if (now < nextRetryAt) return null;
-
   if (isRedisDisabled()) {
     if (!loggedDisabled) {
       logger.info(
@@ -117,7 +88,6 @@ async function getRedisClient(): Promise<RedisClient | null> {
       );
       loggedDisabled = true;
     }
-    nextRetryAt = Number.POSITIVE_INFINITY;
     return null;
   }
 
@@ -128,59 +98,22 @@ async function getRedisClient(): Promise<RedisClient | null> {
       );
       loggedMissingUrl = true;
     }
-    nextRetryAt = Number.POSITIVE_INFINITY;
     return null;
   }
 
-  connectPromise = (async () => {
-    const redisModule = await loadRedisModule();
-    const createClient = redisModule?.createClient;
-    if (typeof createClient !== "function") {
-      if (!loggedMissingModule) {
-        logger.warn(
-          { err: new Error("redis module does not export createClient") },
-          "[SessionStore] Failed to load redis client; Redis sessions disabled.",
-        );
-        loggedMissingModule = true;
-      }
-      nextRetryAt = Number.POSITIVE_INFINITY;
-      return null;
-    }
-
-    try {
-      const client = (createClient as any)({
-        url: REDIS_URL,
-        socket: {
-          reconnectStrategy: (retries: number) => Math.min(retries * 50, 2000),
-        },
-      }) as RedisClient;
-
-      client.on("error", (err?: unknown) => {
-        logger.warn({ err }, "[SessionStore] Redis connection error");
-      });
-      client.on("end", () => {
-        logger.warn("[SessionStore] Redis connection closed; sessions may fail");
-        redisClient = null;
-      });
-
-      await client.connect();
-      redisClient = client;
-      nextRetryAt = 0;
-      logger.info("[SessionStore] Connected to Redis; using Redis session store");
-      return client;
-    } catch (err) {
-      nextRetryAt = Date.now() + 60_000;
+  const sharedClient = await getSharedRedisClient();
+  if (!sharedClient) {
+    if (!loggedUnavailable) {
       logger.warn(
-        { err },
-        "[SessionStore] Failed to connect to Redis; falling back to PostgreSQL sessions",
+        "[SessionStore] Shared Redis client unavailable; falling back to PostgreSQL sessions.",
       );
-      return null;
-    } finally {
-      connectPromise = null;
+      loggedUnavailable = true;
     }
-  })();
+    return null;
+  }
 
-  return connectPromise;
+  loggedUnavailable = false;
+  return sharedClient as RedisClient;
 }
 
 class RedisSessionStore extends session.Store {
@@ -410,10 +343,7 @@ export function createSessionStore(params: {
 }
 
 export function __resetSessionStoreForTesting() {
-  redisClient = null;
-  connectPromise = null;
-  nextRetryAt = 0;
   loggedMissingUrl = false;
-  loggedMissingModule = false;
   loggedDisabled = false;
+  loggedUnavailable = false;
 }

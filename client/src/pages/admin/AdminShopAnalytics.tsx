@@ -40,8 +40,8 @@ export default function AdminShopAnalytics() {
   });
 
   const { data: orders } = useQuery<Order[]>({
-    queryKey: ["/api/admin/all-orders"],
-    queryFn: () => apiRequest("GET", "/api/admin/all-orders").then((r) => r.json()),
+    queryKey: ["/api/admin/all-orders", { limit: 1000 }],
+    queryFn: () => apiRequest("GET", "/api/admin/all-orders?limit=1000").then((r) => r.json()),
     enabled: canViewOrders,
   });
 

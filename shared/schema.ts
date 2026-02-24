@@ -294,6 +294,10 @@ export const shops = pgTable(
   },
   (table) => ({
     shopsOwnerIdx: index("shops_owner_id_idx").on(table.ownerId),
+    shopsCityStateIdx: index("idx_shops_city_state").on(
+      table.shopAddressCity,
+      table.shopAddressState,
+    ),
   }),
 );
 
@@ -484,15 +488,28 @@ export const sessions = pgTable("sessions", {
 // Using phone OTP for auth instead (see phoneOtpTokens below)
 
 // Phone OTP tokens for forgot password and phone verification
-export const phoneOtpTokens = pgTable("phone_otp_tokens", {
-  id: serial("id").primaryKey(),
-  phone: text("phone").notNull(),
-  otpHash: text("otp_hash").notNull(), // Hashed OTP for security
-  purpose: text("purpose").$type<"forgot_password" | "phone_verification">().notNull(),
-  expiresAt: timestamp("expires_at").notNull(),
-  isUsed: boolean("is_used").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const phoneOtpTokens = pgTable(
+  "phone_otp_tokens",
+  {
+    id: serial("id").primaryKey(),
+    phone: text("phone").notNull(),
+    otpHash: text("otp_hash").notNull(), // Hashed OTP for security
+    purpose: text("purpose").$type<"forgot_password" | "phone_verification">().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    isUsed: boolean("is_used").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    phoneOtpLookupIdx: index("idx_phone_otp_lookup").on(
+      table.phone,
+      table.purpose,
+      table.isUsed,
+      table.otpHash,
+      table.expiresAt,
+    ),
+    phoneOtpExpiryIdx: index("idx_phone_otp_expires_at").on(table.expiresAt),
+  }),
+);
 
 export const emailNotificationPreferenceOverrides = pgTable(
   "email_notification_preferences",
@@ -542,14 +559,27 @@ export const reviews = pgTable(
   },
 );
 
-export const waitlist = pgTable("waitlist", {
-  id: serial("id").primaryKey(),
-  customerId: integer("customer_id").references(() => users.id),
-  serviceId: integer("service_id").references(() => services.id),
-  preferredDate: timestamp("preferred_date").notNull(),
-  status: text("status").$type<"active" | "fulfilled" | "expired">().notNull(),
-  notificationSent: boolean("notification_sent").default(false),
-});
+export const waitlist = pgTable(
+  "waitlist",
+  {
+    id: serial("id").primaryKey(),
+    customerId: integer("customer_id").references(() => users.id),
+    serviceId: integer("service_id").references(() => services.id),
+    preferredDate: timestamp("preferred_date").notNull(),
+    status: text("status").$type<"active" | "fulfilled" | "expired">().notNull(),
+    notificationSent: boolean("notification_sent").default(false),
+  },
+  (table) => ({
+    waitlistServiceCustomerIdx: index("idx_waitlist_service_customer").on(
+      table.serviceId,
+      table.customerId,
+    ),
+    waitlistServicePositionIdx: index("idx_waitlist_service_position").on(
+      table.serviceId,
+      table.id,
+    ),
+  }),
+);
 
 export const products = pgTable(
   "products",
@@ -600,12 +630,21 @@ export const products = pgTable(
   }),
 );
 
-export const cart = pgTable("cart", {
-  id: serial("id").primaryKey(),
-  customerId: integer("customer_id").references(() => users.id),
-  productId: integer("product_id").references(() => products.id),
-  quantity: integer("quantity").notNull(),
-});
+export const cart = pgTable(
+  "cart",
+  {
+    id: serial("id").primaryKey(),
+    customerId: integer("customer_id").references(() => users.id),
+    productId: integer("product_id").references(() => products.id),
+    quantity: integer("quantity").notNull(),
+  },
+  (table) => ({
+    cartCustomerProductIdx: index("idx_cart_customer_product").on(
+      table.customerId,
+      table.productId,
+    ),
+  }),
+);
 
 export const wishlist = pgTable("wishlist", {
   id: serial("id").primaryKey(),

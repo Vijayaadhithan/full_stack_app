@@ -1,7 +1,7 @@
 import type { Response } from "express";
 import { setInterval, clearInterval } from "node:timers";
 import logger from "./logger";
-import Redis from "ioredis";
+import { getRedisClient as getSharedRedisClient } from "./cache";
 
 type SseEvent =
   | { event: "connected"; data: { connected: true } }
@@ -128,6 +128,9 @@ const CHANNEL = "realtime:events";
 
 let publisher: any = null;
 let subscriber: any = null;
+let pubSubInitPromise: Promise<void> | null = null;
+let loggedPubSubUnavailable = false;
+let realtimeInitialized = false;
 
 const disableFlag = (process.env.DISABLE_REDIS ?? "").toLowerCase();
 const redisDisabled =
@@ -137,36 +140,58 @@ const redisDisabled =
   disableFlag === "yes" ||
   disableFlag === "on";
 
-if (REDIS_URL && !redisDisabled) {
-  try {
-    publisher = new Redis(REDIS_URL);
-    subscriber = new Redis(REDIS_URL);
+async function ensureRealtimePubSub(): Promise<void> {
+  if (realtimeInitialized || pubSubInitPromise) {
+    await pubSubInitPromise;
+    return;
+  }
 
-    subscriber.subscribe(CHANNEL, (err: unknown) => {
-      if (err) {
-        logger.error({ err }, "Failed to subscribe to realtime channel");
-      } else {
-        logger.info("Subscribed to realtime channel");
+  if (!REDIS_URL || redisDisabled) {
+    return;
+  }
+
+  pubSubInitPromise = (async () => {
+    try {
+      const sharedClient = await getSharedRedisClient();
+      if (!sharedClient || typeof sharedClient.duplicate !== "function") {
+        if (!loggedPubSubUnavailable) {
+          logger.warn(
+            "[Realtime] Shared Redis client unavailable; using local-only invalidation.",
+          );
+          loggedPubSubUnavailable = true;
+        }
+        return;
       }
-    });
 
-    subscriber.on("message", (channel: string, message: string) => {
-      if (channel === CHANNEL) {
+      publisher = sharedClient;
+      const subClient = sharedClient.duplicate();
+      subClient.on("error", (err: unknown) => {
+        logger.warn({ err }, "[Realtime] Redis subscriber error");
+      });
+      await subClient.connect();
+      await subClient.subscribe(CHANNEL, (message: string) => {
         try {
           const { recipients, keys } = JSON.parse(message);
           localBroadcastInvalidation(recipients, keys);
         } catch (err) {
           logger.warn({ err }, "Failed to parse realtime message");
         }
-      }
-    });
+      });
+      subscriber = subClient;
+      realtimeInitialized = true;
+      loggedPubSubUnavailable = false;
+      logger.info("Redis realtime Pub/Sub initialized");
+    } catch (err) {
+      logger.warn({ err }, "Failed to initialize Redis for realtime");
+      publisher = null;
+      subscriber = null;
+      realtimeInitialized = false;
+    } finally {
+      pubSubInitPromise = null;
+    }
+  })();
 
-    logger.info("Redis realtime Pub/Sub initialized");
-  } catch (err) {
-    logger.warn({ err }, "Failed to initialize Redis for realtime");
-    publisher = null;
-    subscriber = null;
-  }
+  await pubSubInitPromise;
 }
 
 function normalizeKeys(keys: string[]): string[] {
@@ -201,7 +226,11 @@ export function broadcastInvalidation(
   recipients: number | Array<number | null | undefined>,
   keys: string[],
 ) {
-  if (publisher) {
+  if (!realtimeInitialized) {
+    void ensureRealtimePubSub();
+  }
+
+  if (publisher && realtimeInitialized) {
     publisher
       .publish(CHANNEL, JSON.stringify({ recipients, keys }))
       .catch((err: unknown) => {
@@ -301,14 +330,35 @@ export function notifyOrderChange(params: {
 }
 
 export async function closeRealtimeConnections() {
-  if (publisher) {
-    await publisher.quit();
-    logger.info("Realtime publisher closed");
-    publisher = null;
+  for (const set of Array.from(connections.values())) {
+    for (const connection of Array.from(set.values())) {
+      cleanupConnection(connection);
+      try {
+        connection.res.end();
+      } catch {
+        // no-op: connection may already be closed
+      }
+    }
   }
+  connections.clear();
+
   if (subscriber) {
-    await subscriber.quit();
-    logger.info("Realtime subscriber closed");
-    subscriber = null;
+    try {
+      await subscriber.unsubscribe(CHANNEL);
+    } catch (err) {
+      logger.warn({ err }, "[Realtime] Failed to unsubscribe channel");
+    }
+    try {
+      await subscriber.quit();
+      logger.info("Realtime subscriber closed");
+    } catch (err) {
+      logger.warn({ err }, "[Realtime] Failed to close subscriber");
+    } finally {
+      subscriber = null;
+    }
   }
+  publisher = null;
+  realtimeInitialized = false;
 }
+
+void ensureRealtimePubSub();

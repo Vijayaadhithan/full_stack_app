@@ -22,7 +22,7 @@ import { startBookingExpirationJob } from "./jobs/bookingExpirationJob";
 import { startPaymentReminderJob } from "./jobs/paymentReminderJob";
 import { ensureDefaultAdmin } from "./bootstrap";
 import { reportError } from "./monitoring/errorReporter";
-import { trackRequestStart } from "./monitoring/metrics";
+import { getMonitoringSnapshot, trackRequestStart } from "./monitoring/metrics";
 import { startLowStockDigestJob } from "./jobs/lowStockDigestJob";
 import { closeJobQueue, getJobQueue, initializeWorker } from "./jobQueue";
 import { registerPushNotificationDispatchJob } from "./jobs/pushNotificationDispatchJob";
@@ -695,6 +695,14 @@ app.get("/api/health", (_req, res) => {
     status: "ok",
     uptime: process.uptime(),
     timestamp: Date.now(),
+  });
+});
+
+app.get("/api/health/system", (_req, res) => {
+  const snapshot = getMonitoringSnapshot();
+  res.status(200).json({
+    updatedAt: snapshot.updatedAt,
+    resources: snapshot.resources,
   });
 });
 

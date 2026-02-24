@@ -134,8 +134,8 @@ export default function AdminDashboard() {
   });
 
   const { data: auditLogs } = useQuery<AuditLog[]>({
-    queryKey: ["/api/admin/audit-logs"],
-    queryFn: () => apiRequest("GET", "/api/admin/audit-logs").then((r) => r.json()),
+    queryKey: ["/api/admin/audit-logs", { limit: 200 }],
+    queryFn: () => apiRequest("GET", "/api/admin/audit-logs?limit=200").then((r) => r.json()),
     enabled: canManageAdmins,
   });
 

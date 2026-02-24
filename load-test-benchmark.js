@@ -440,9 +440,9 @@ export function setup() {
 // Fetch server metrics from monitoring endpoint
 function fetchServerMetrics(session) {
     try {
-        const response = http.get(`${BASE_URL}/api/admin/monitoring/system`, {
+        const response = http.get(`${BASE_URL}/api/health/system`, {
             jar: session.jar,
-            tags: { name: "GET /api/admin/monitoring/system" },
+            tags: { name: "GET /api/health/system" },
             timeout: "2s",
         });
 
@@ -647,6 +647,12 @@ function submitOrder(baseUrl, product, session) {
 export default function main(data) {
     const session = getSession();
 
+    if (data?.error) {
+        testAnonymousEndpoints(session);
+        sleep(Math.random() * 0.5 + 0.1);
+        return;
+    }
+
     // Weight operations - more anonymous requests, fewer authenticated
     const operation = Math.random();
 
@@ -661,28 +667,23 @@ export default function main(data) {
         testSessionCheck(session);
         fetchCsrfToken(session, "token-check");
     } else {
-        // 25% - Catalog browsing with occasional order attempts
-        if (data?.product) {
-            // Ensure we are logged in as customer
-            if (!vuAuthState.get(__VU)) {
-                const loggedIn = loginCustomer(data.baseUrl, data.customerCredentials, session);
-                vuAuthState.set(__VU, loggedIn);
+        // 25% - Authenticated catalog browsing with occasional order attempts
+        if (!vuAuthState.get(__VU)) {
+            const loggedIn = loginCustomer(data.baseUrl, data.customerCredentials, session);
+            vuAuthState.set(__VU, loggedIn);
 
-                // If login failed, we can't do authenticated actions
-                if (!loggedIn) {
-                    sleep(1);
-                    return;
-                }
+            if (!loggedIn) {
+                sleep(1);
+                return;
             }
+        }
 
-            browseCatalog(data.baseUrl, data.product.category, session);
+        const browseCategory = data?.product?.category || DEFAULT_CATEGORY;
+        browseCatalog(data.baseUrl, browseCategory, session);
 
-            // 10% chance to try order creation
-            if (Math.random() < 0.1) {
-                submitOrder(data.baseUrl, data.product, session);
-            }
-        } else {
-            testAnonymousEndpoints(session);
+        // 10% chance to try order creation when setup produced a product
+        if (data?.product && Math.random() < 0.1) {
+            submitOrder(data.baseUrl, data.product, session);
         }
     }
 
@@ -736,8 +737,16 @@ export function handleSummary(data) {
             errorRate: ((data.metrics.custom_error_rate?.values?.rate || 0) * 100).toFixed(2),
             authSuccessRate: ((data.metrics.auth_success_rate?.values?.rate || 0) * 100).toFixed(2),
             orderSuccessRate: ((data.metrics.order_success_rate?.values?.rate || 0) * 100).toFixed(2),
-            serverMemoryMB: (data.metrics.server_memory_mb?.values?.value || 0).toFixed(2),
-            serverCpuPercent: (data.metrics.server_cpu_percent?.values?.value || 0).toFixed(2),
+            serverMemoryMB: (
+                data.metrics.server_memory_mb?.values?.avg ??
+                data.metrics.server_memory_mb?.values?.max ??
+                0
+            ).toFixed(2),
+            serverCpuPercent: (
+                data.metrics.server_cpu_percent?.values?.avg ??
+                data.metrics.server_cpu_percent?.values?.max ??
+                0
+            ).toFixed(2),
         },
     };
 

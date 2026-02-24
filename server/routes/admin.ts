@@ -39,6 +39,8 @@ const scryptAsync = promisify(scrypt);
 const LOG_READ_MAX_BYTES = 1024 * 1024; // 1MB slice from tail of log file
 const LOG_DEFAULT_LIMIT = 100;
 const TRANSACTIONS_MAX_PAGE_SIZE = 100;
+const ADMIN_LIST_DEFAULT_LIMIT = 200;
+const ADMIN_LIST_MAX_LIMIT = 1000;
 const LOG_CATEGORIES: LogCategory[] = [
   "admin",
   "service_provider",
@@ -184,6 +186,19 @@ const adminAccountsQuerySchema = z
     page: optionalPositiveInt,
     limit: optionalPositiveInt,
     search: optionalTrimmedString,
+  })
+  .strict();
+
+const adminListQuerySchema = z
+  .object({
+    limit: optionalPositiveInt,
+    offset: z
+      .preprocess((value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === "string" && value.trim() === "") return undefined;
+        return value;
+      }, z.coerce.number().int().min(0))
+      .optional(),
   })
   .strict();
 
@@ -552,7 +567,23 @@ router.post(
       "Received admin performance metrics",
     );
 
+    const isValidMetric = (metric: (typeof metrics)[number]) => {
+      if (!Number.isFinite(metric.value) || metric.value < 0) {
+        return false;
+      }
+      if ((metric.name === "FCP" || metric.name === "LCP") && metric.value > 30_000) {
+        return false;
+      }
+      if (metric.name === "CLS" && metric.value > 10) {
+        return false;
+      }
+      return true;
+    };
+
     for (const metric of metrics) {
+      if (!isValidMetric(metric)) {
+        continue;
+      }
       recordFrontendMetric(metric, "admin");
     }
 
@@ -816,8 +847,27 @@ router.get(
   "/all-orders",
   isAdminAuthenticated,
   checkPermissions(["view_all_orders"]),
-  async (_req, res) => {
-    const all = await db.primary.select().from(orders);
+  async (req, res) => {
+    const parsedQuery = adminListQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return res.status(400).json(formatValidationError(parsedQuery.error));
+    }
+
+    const requestedLimit = parsedQuery.data.limit ?? ADMIN_LIST_DEFAULT_LIMIT;
+    const limit = Math.min(
+      ADMIN_LIST_MAX_LIMIT,
+      Math.max(1, requestedLimit),
+    );
+    const offset = parsedQuery.data.offset ?? 0;
+
+    const all = await db.primary
+      .select()
+      .from(orders)
+      .orderBy(desc(orders.orderDate))
+      .limit(limit)
+      .offset(offset);
+    res.setHeader("x-pagination-limit", String(limit));
+    res.setHeader("x-pagination-offset", String(offset));
     res.json(all);
   },
 );
@@ -856,8 +906,27 @@ router.get(
   "/all-bookings",
   isAdminAuthenticated,
   checkPermissions(["view_all_bookings"]),
-  async (_req, res) => {
-    const all = await db.primary.select().from(bookings);
+  async (req, res) => {
+    const parsedQuery = adminListQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return res.status(400).json(formatValidationError(parsedQuery.error));
+    }
+
+    const requestedLimit = parsedQuery.data.limit ?? ADMIN_LIST_DEFAULT_LIMIT;
+    const limit = Math.min(
+      ADMIN_LIST_MAX_LIMIT,
+      Math.max(1, requestedLimit),
+    );
+    const offset = parsedQuery.data.offset ?? 0;
+
+    const all = await db.primary
+      .select()
+      .from(bookings)
+      .orderBy(desc(bookings.bookingDate))
+      .limit(limit)
+      .offset(offset);
+    res.setHeader("x-pagination-limit", String(limit));
+    res.setHeader("x-pagination-offset", String(offset));
     res.json(all);
   },
 );
@@ -993,11 +1062,27 @@ router.get(
   "/audit-logs",
   isAdminAuthenticated,
   checkPermissions(["manage_admins"]),
-  async (_req, res) => {
+  async (req, res) => {
+    const parsedQuery = adminListQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return res.status(400).json(formatValidationError(parsedQuery.error));
+    }
+
+    const requestedLimit = parsedQuery.data.limit ?? ADMIN_LIST_DEFAULT_LIMIT;
+    const limit = Math.min(
+      ADMIN_LIST_MAX_LIMIT,
+      Math.max(1, requestedLimit),
+    );
+    const offset = parsedQuery.data.offset ?? 0;
+
     const logs = await db.primary
       .select()
       .from(adminAuditLogs)
-      .orderBy(sql`created_at DESC`);
+      .orderBy(desc(adminAuditLogs.createdAt))
+      .limit(limit)
+      .offset(offset);
+    res.setHeader("x-pagination-limit", String(limit));
+    res.setHeader("x-pagination-offset", String(offset));
     res.json(logs);
   },
 );

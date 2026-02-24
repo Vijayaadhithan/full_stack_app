@@ -87,8 +87,8 @@ export default function AdminBookings() {
   const [paymentFilter, setPaymentFilter] = useState("");
 
   const { data: bookings } = useQuery<Booking[]>({
-    queryKey: ["/api/admin/all-bookings"],
-    queryFn: () => apiRequest("GET", "/api/admin/all-bookings").then((r) => r.json()),
+    queryKey: ["/api/admin/all-bookings", { limit: 1000 }],
+    queryFn: () => apiRequest("GET", "/api/admin/all-bookings?limit=1000").then((r) => r.json()),
     enabled: canViewBookings,
   });
 

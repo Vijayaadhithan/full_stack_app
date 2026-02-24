@@ -17,6 +17,8 @@ const METRIC_THRESHOLDS: Record<MetricName, { good: number; needsImprovement: nu
 const MAX_BUFFER_SIZE = 5;
 let adminMetricBuffer: PerformanceMetric[] = [];
 let adminFlushScheduled = false;
+const MAX_PAINT_METRIC_MS = 30_000;
+const LCP_FINALIZE_TIMEOUT_MS = 10_000;
 
 function getMetricRating(name: MetricName, value: number): PerformanceMetric["rating"] {
   const thresholds = METRIC_THRESHOLDS[name];
@@ -91,6 +93,13 @@ export function useAdminPerformanceMetrics() {
         details?: PerformanceMetric["details"];
       },
     ) => {
+      if (
+        (metric.name === "FCP" || metric.name === "LCP") &&
+        (!Number.isFinite(metric.value) || metric.value < 0 || metric.value > MAX_PAINT_METRIC_MS)
+      ) {
+        return;
+      }
+
       // Use queueAdminMetric for batching - metrics are flushed together
       queueAdminMetric({
         ...metric,
@@ -146,7 +155,10 @@ export function useAdminPerformanceMetrics() {
     const lcpObserver = tryObserve("largest-contentful-paint", (entryList) => {
       const entries = entryList.getEntries();
       if (entries.length) {
-        lcpEntry = entries[entries.length - 1];
+        const candidate = entries[entries.length - 1];
+        if (candidate && candidate.startTime <= MAX_PAINT_METRIC_MS) {
+          lcpEntry = candidate;
+        }
       }
     });
 
@@ -203,11 +215,19 @@ export function useAdminPerformanceMetrics() {
       }
     };
 
+    const finalizeLcpTimer = window.setTimeout(() => {
+      flushMetrics();
+      lcpObserver?.disconnect();
+      clsObserver?.disconnect();
+      fidObserver?.disconnect();
+    }, LCP_FINALIZE_TIMEOUT_MS);
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         flushMetrics();
         // Flush the batched metric buffer when page goes hidden
         flushAdminMetricBuffer().catch(() => { });
+        clearTimeout(finalizeLcpTimer);
         lcpObserver?.disconnect();
         clsObserver?.disconnect();
         fidObserver?.disconnect();
@@ -220,6 +240,7 @@ export function useAdminPerformanceMetrics() {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", handleVisibilityChange);
+      clearTimeout(finalizeLcpTimer);
       lcpObserver?.disconnect();
       clsObserver?.disconnect();
       fidObserver?.disconnect();

@@ -107,6 +107,10 @@ import {
   normalizeCoordinate,
   DEFAULT_NEARBY_RADIUS_KM,
 } from "./utils/geo";
+import {
+  buildGeoDistanceCondition,
+  shouldUsePostgis,
+} from "./utils/geo-sql";
 import { enqueuePushNotificationDispatch } from "./jobs/pushNotificationDispatchJob";
 // Import date utilities for storage/display handling
 
@@ -274,48 +278,12 @@ function buildProductCacheKey(filters?: Record<string, unknown>): string {
   return `${PRODUCT_CACHE_PREFIX}:${digest}`;
 }
 
-const EARTH_RADIUS_KM = 6371;
-
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 function buildContainsLikePattern(value: string): string {
   return `%${escapeLikePattern(value)}%`;
-}
-
-function buildHaversineCondition({
-  columnLat,
-  columnLng,
-  lat,
-  lng,
-  radiusKm,
-}: {
-  columnLat: SQL | unknown;
-  columnLng: SQL | unknown;
-  lat: number;
-  lng: number;
-  radiusKm: number;
-}) {
-  const latRad = sql`radians(${lat})`;
-  const lngRad = sql`radians(${lng})`;
-  const rowLat = sql`radians(${columnLat}::float8)`;
-  const rowLng = sql`radians(${columnLng}::float8)`;
-  const distanceExpr = sql`
-    ${EARTH_RADIUS_KM} * 2 * asin(
-      sqrt(
-        power(sin((${rowLat} - ${latRad}) / 2), 2) +
-        cos(${latRad}) * cos(${rowLat}) *
-        power(sin((${rowLng} - ${lngRad}) / 2), 2)
-      )
-    )
-  `;
-  const condition = sql`(
-    ${columnLat} IS NOT NULL
-    AND ${columnLng} IS NOT NULL
-    AND ${distanceExpr} <= ${radiusKm}
-  )`;
-  return { condition, distanceExpr };
 }
 
 export class PostgresStorage implements IStorage {
@@ -408,175 +376,83 @@ export class PostgresStorage implements IStorage {
 
   async deleteUserAndData(userId: number): Promise<void> {
     await db.primary.transaction(async (tx) => {
-      // Step 1: Collect all relevant IDs
+      const providerServiceIdsSubquery =
+        sql`SELECT ${services.id} FROM ${services} WHERE ${services.providerId} = ${userId}`;
+      const relatedBookingIdsSubquery = sql`
+        SELECT ${bookings.id}
+        FROM ${bookings}
+        WHERE ${bookings.customerId} = ${userId}
+           OR ${bookings.serviceId} IN (${providerServiceIdsSubquery})
+      `;
+      const relatedOrderIdsSubquery = sql`
+        SELECT ${orders.id}
+        FROM ${orders}
+        WHERE ${orders.customerId} = ${userId}
+           OR ${orders.shopId} = ${userId}
+      `;
+      const ownedProductIdsSubquery =
+        sql`SELECT ${products.id} FROM ${products} WHERE ${products.shopId} = ${userId}`;
 
-      // Bookings related to the user (as customer or provider)
-      const customerBookingsQuery = tx
-        .select({ id: bookings.id })
-        .from(bookings)
-        .where(eq(bookings.customerId, userId));
-      const userServicesQuery = tx
-        .select({ id: services.id })
-        .from(services)
-        .where(eq(services.providerId, userId));
-
-      const [customerBookingsResult, userServicesResult] = await Promise.all([
-        customerBookingsQuery,
-        userServicesQuery,
-      ]);
-
-      const customerBookingIds = customerBookingsResult.map((b) => b.id);
-      const serviceIds = userServicesResult.map((s) => s.id);
-
-      let providerServiceBookingIds: number[] = [];
-      if (serviceIds.length > 0) {
-        const providerServiceBookings = await tx
-          .select({ id: bookings.id })
-          .from(bookings)
-          .where(sql`${bookings.serviceId} IN ${serviceIds}`);
-        providerServiceBookingIds = providerServiceBookings.map((b) => b.id);
-      }
-
-      const allBookingIds = Array.from(
-        new Set([...customerBookingIds, ...providerServiceBookingIds]),
+      // Booking-related entities.
+      await tx.delete(bookingHistory).where(
+        sql`${bookingHistory.bookingId} IN (${relatedBookingIdsSubquery})`,
+      );
+      await tx.delete(notifications).where(
+        sql`${notifications.relatedBookingId} IN (${relatedBookingIdsSubquery})`,
+      );
+      await tx.delete(reviews).where(sql`
+        ${reviews.customerId} = ${userId}
+        OR ${reviews.serviceId} IN (${providerServiceIdsSubquery})
+        OR ${reviews.bookingId} IN (${relatedBookingIdsSubquery})
+      `);
+      await tx.delete(bookings).where(
+        sql`${bookings.id} IN (${relatedBookingIdsSubquery})`,
       );
 
-      // Orders related to the user either as customer or as shop owner
-      const customerOrdersQuery = tx
-        .select({ id: orders.id })
-        .from(orders)
-        .where(eq(orders.customerId, userId));
-      const shopOrdersQuery = tx
-        .select({ id: orders.id })
-        .from(orders)
-        .where(eq(orders.shopId, userId));
+      // Order/product dependencies.
+      await tx.delete(returns).where(
+        sql`${returns.orderId} IN (${relatedOrderIdsSubquery})`,
+      );
+      await tx.delete(orderStatusUpdates).where(
+        sql`${orderStatusUpdates.orderId} IN (${relatedOrderIdsSubquery})`,
+      );
+      await tx.delete(productReviews).where(sql`
+        ${productReviews.customerId} = ${userId}
+        OR ${productReviews.orderId} IN (${relatedOrderIdsSubquery})
+        OR ${productReviews.productId} IN (${ownedProductIdsSubquery})
+      `);
+      await tx.delete(orderItems).where(sql`
+        ${orderItems.orderId} IN (${relatedOrderIdsSubquery})
+        OR ${orderItems.productId} IN (${ownedProductIdsSubquery})
+      `);
+      await tx.delete(orders).where(
+        sql`${orders.id} IN (${relatedOrderIdsSubquery})`,
+      );
 
-      const [customerOrders, shopOrders] = await Promise.all([
-        customerOrdersQuery,
-        shopOrdersQuery,
-      ]);
-
-      const orderIds = customerOrders.map((o) => o.id);
-      const shopOrderIds = shopOrders.map((o) => o.id);
-      const allOrderIds = Array.from(new Set([...orderIds, ...shopOrderIds]));
-
-      // Products related to the user (as shop owner)
-      const userProducts = await tx
-        .select({ id: products.id })
-        .from(products)
-        .where(eq(products.shopId, userId));
-      const productIds = userProducts.map((p) => p.id);
-
-      // Step 2: Delete dependent data in the correct order
-
-      // Reviews linked to bookings
-      if (allBookingIds.length > 0) {
-        await tx
-          .delete(reviews)
-          .where(sql`${reviews.bookingId} IN ${allBookingIds}`);
-      }
-
-      // Reviews linked directly to services (if schema supports reviews.serviceId and they are not captured by bookingId)
-      if (serviceIds.length > 0) {
-        // This handles reviews that might be directly on a service, not through a booking.
-        await tx
-          .delete(reviews)
-          .where(sql`${reviews.serviceId} IN ${serviceIds}`);
-      }
-
-      // Booking history
-      if (allBookingIds.length > 0) {
-        await tx
-          .delete(bookingHistory)
-          .where(sql`${bookingHistory.bookingId} IN ${allBookingIds}`);
-      }
-      // Notifications linked to these bookings (for any user)
-      if (allBookingIds.length > 0) {
-        await tx
-          .delete(notifications)
-          .where(sql`${notifications.relatedBookingId} IN ${allBookingIds}`);
-      }
-      // Now delete bookings
-      if (allBookingIds.length > 0) {
-        await tx
-          .delete(bookings)
-          .where(sql`${bookings.id} IN ${allBookingIds}`);
-      }
-
-      // Order items (linked to orders by customer and shop owner, and products by shop owner)
-      if (allOrderIds.length > 0) {
-        await tx
-          .delete(orderItems)
-          .where(sql`${orderItems.orderId} IN ${allOrderIds}`);
-        await tx
-          .delete(orderStatusUpdates)
-          .where(sql`${orderStatusUpdates.orderId} IN ${allOrderIds}`);
-        await tx
-          .delete(productReviews)
-          .where(sql`${productReviews.orderId} IN ${allOrderIds}`);
-      }
-      if (productIds.length > 0) {
-        // OrderItems for shop owner's products
-        await tx
-          .delete(orderItems)
-          .where(sql`${orderItems.productId} IN ${productIds}`);
-      }
-
-      // Returns (linked to orders)
-      if (allOrderIds.length > 0) {
-        await tx
-          .delete(returns)
-          .where(sql`${returns.orderId} IN ${allOrderIds}`);
-      }
-
-      // Now delete orders (customer's orders and shop's orders)
-      if (allOrderIds.length > 0) {
-        await tx.delete(orders).where(sql`${orders.id} IN ${allOrderIds}`);
-      }
-
-      // Promotions (linked to shop)
-      if (productIds.length > 0 || serviceIds.length > 0) {
-        await tx.delete(promotions).where(eq(promotions.shopId, userId));
-      }
-
-      // Now delete products (shop owner's products)
-      if (productIds.length > 0) {
-        // First, remove these products from any wishlist they might be in
-        await tx
-          .delete(wishlist)
-          .where(sql`${wishlist.productId} IN ${productIds}`);
-        await tx
-          .delete(productReviews)
-          .where(sql`${productReviews.productId} IN ${productIds}`);
-        // Then, delete the products themselves
-        await tx.delete(products).where(eq(products.shopId, userId));
-      }
-
-      // Other direct dependencies on user/customer ID
-      await tx.delete(reviews).where(eq(reviews.customerId, userId)); // Handles reviews directly by customerId if not linked to booking/service
-
+      // Shop-owned resources.
+      await tx.delete(promotions).where(eq(promotions.shopId, userId));
+      await tx.delete(wishlist).where(sql`
+        ${wishlist.customerId} = ${userId}
+        OR ${wishlist.productId} IN (${ownedProductIdsSubquery})
+      `);
+      await tx.delete(cart).where(sql`
+        ${cart.customerId} = ${userId}
+        OR ${cart.productId} IN (${ownedProductIdsSubquery})
+      `);
+      await tx.delete(waitlist).where(sql`
+        ${waitlist.customerId} = ${userId}
+        OR ${waitlist.serviceId} IN (${providerServiceIdsSubquery})
+      `);
       await tx.delete(notifications).where(eq(notifications.userId, userId));
-      await tx.delete(cart).where(eq(cart.customerId, userId));
-      await tx.delete(wishlist).where(eq(wishlist.customerId, userId));
-      await tx.delete(productReviews).where(eq(productReviews.customerId, userId));
-      await tx.delete(waitlist).where(eq(waitlist.customerId, userId));
-      if (serviceIds.length > 0) {
-        await tx
-          .delete(waitlist)
-          .where(sql`${waitlist.serviceId} IN ${serviceIds}`);
-      }
       await tx
         .delete(shopWorkers)
         .where(
           sql`${shopWorkers.workerUserId} = ${userId} OR ${shopWorkers.shopId} = ${userId}`,
         );
 
-      // Delete services (after related bookings/reviews are handled)
-      if (serviceIds.length > 0) {
-        await tx.delete(services).where(eq(services.providerId, userId));
-      }
+      await tx.delete(products).where(eq(products.shopId, userId));
+      await tx.delete(services).where(eq(services.providerId, userId));
 
-      // Finally, delete the user
       await tx.delete(users).where(eq(users.id, userId));
     });
   }
@@ -687,6 +563,8 @@ export class PostgresStorage implements IStorage {
     let query: any = db.replica.select().from(products);
     let joinedUsers = false;
 
+    const usePostgis = await shouldUsePostgis();
+
     if (criteria && Object.keys(criteria).length > 0) {
       if (criteria.category) {
         conditions.push(
@@ -751,12 +629,13 @@ export class PostgresStorage implements IStorage {
         const lat = Number(criteria.lat);
         const lng = Number(criteria.lng);
         const radiusKm = Number(criteria.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM);
-        const { condition, distanceExpr } = buildHaversineCondition({
+        const { condition, distanceExpr } = buildGeoDistanceCondition({
           columnLat: users.latitude,
           columnLng: users.longitude,
           lat,
           lng,
           radiusKm,
+          usePostgis,
         });
         conditions.push(condition);
         orderByClauses.push(distanceExpr);
@@ -1462,26 +1341,22 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
   async updateProviderRating(providerId: number): Promise<void> {
-    const providerServices = await db.primary
-      .select({ id: services.id })
-      .from(services)
-      .where(eq(services.providerId, providerId));
-    const serviceIds = providerServices.map((s) => s.id);
-    if (serviceIds.length === 0) {
-      await db.primary.execute(
-        sql`UPDATE users SET average_rating = NULL WHERE id = ${providerId}`,
-      );
-      return;
-    }
-    const ratings = await db.primary
-      .select({ rating: reviews.rating })
-      .from(reviews)
-      .where(sql`${reviews.serviceId} IN ${serviceIds}`);
-    const total = ratings.reduce((sum, r) => sum + r.rating, 0);
-    const average = ratings.length > 0 ? total / ratings.length : null;
-    await db.primary.execute(
-      sql`UPDATE users SET average_rating = ${average}, total_reviews = ${ratings.length} WHERE id = ${providerId}`,
-    );
+    await db.primary.execute(sql`
+      UPDATE ${users}
+      SET
+        average_rating = stats.average_rating,
+        total_reviews = stats.total_reviews
+      FROM (
+        SELECT
+          AVG(${reviews.rating})::numeric(5, 2) AS average_rating,
+          COUNT(${reviews.rating})::int AS total_reviews
+        FROM ${services}
+        LEFT JOIN ${reviews}
+          ON ${reviews.serviceId} = ${services.id}
+        WHERE ${services.providerId} = ${providerId}
+      ) AS stats
+      WHERE ${users.id} = ${providerId}
+    `);
   }
 
   // ─── NOTIFICATION OPERATIONS ─────────────────────────────────────
@@ -1572,7 +1447,7 @@ export class PostgresStorage implements IStorage {
     if (criteria.excludeProviderId !== undefined) {
       conditions.push(ne(services.providerId, criteria.excludeProviderId));
     }
-    let query: any = db.primary.select().from(services);
+    let query: any = db.replica.select().from(services);
     let joinedProviders = false;
     const ensureProviderJoin = () => {
       if (joinedProviders) return;
@@ -1580,16 +1455,18 @@ export class PostgresStorage implements IStorage {
       joinedProviders = true;
     };
 
+    const usePostgis = await shouldUsePostgis();
+
     if (criteria) {
       if (criteria.category) {
         conditions.push(
           sql`LOWER(${services.category}) = LOWER(${criteria.category})`,
         );
       }
-      if (criteria.minPrice) {
+      if (criteria.minPrice !== undefined) {
         conditions.push(sql`${services.price} >= ${criteria.minPrice}`);
       }
-      if (criteria.maxPrice) {
+      if (criteria.maxPrice !== undefined) {
         conditions.push(sql`${services.price} <= ${criteria.maxPrice}`);
       }
       if (criteria.searchTerm) {
@@ -1661,12 +1538,13 @@ export class PostgresStorage implements IStorage {
         const radiusKm = Number(
           criteria.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM,
         );
-        const { condition, distanceExpr } = buildHaversineCondition({
+        const { condition, distanceExpr } = buildGeoDistanceCondition({
           columnLat: users.latitude,
           columnLng: users.longitude,
           lat,
           lng,
           radiusKm,
+          usePostgis,
         });
         conditions.push(condition);
         query = query.orderBy(distanceExpr);
@@ -2215,147 +2093,89 @@ export class PostgresStorage implements IStorage {
     productId: number,
     quantity: number,
   ): Promise<void> {
-    logger.info(
-      `Attempting to add product ID ${productId} to cart for customer ID ${customerId} with quantity ${quantity}`,
-    );
     if (quantity <= 0) {
-      logger.error(`Invalid quantity ${quantity} for product ID ${productId}`);
       throw new Error("Quantity must be positive");
     }
 
     try {
-      // Get the product being added to find its shopId
-      const productToAddResult = await db.primary
-        .select({ shopId: products.shopId })
-        .from(products)
-        .where(eq(products.id, productId));
-      if (productToAddResult.length === 0) {
-        logger.error(`Product ID ${productId} not found`);
-        throw new Error("Product not found");
-      }
-      const shopIdToAdd = productToAddResult[0].shopId;
-      logger.info(`Product ID ${productId} belongs to shop ID ${shopIdToAdd}`);
-
-      // Get current cart items for the customer
-      const currentCartItems = await db.primary
-        .select({ productId: cart.productId })
-        .from(cart)
-        .where(eq(cart.customerId, customerId));
-      logger.info(
-        `Customer ID ${customerId} has ${currentCartItems.length} item(s) in cart`,
-      );
-
-      if (currentCartItems.length > 0) {
-        // If cart is not empty, check if the new item's shop matches the existing items' shop
-        const firstCartProductId = currentCartItems[0].productId;
-        logger.info(`First item in cart has product ID ${firstCartProductId}`);
-        const firstProductResult = await db.primary
-          .select({ shopId: products.shopId })
+      await db.primary.transaction(async (tx) => {
+        const productRows = await tx
+          .select({
+            shopId: products.shopId,
+            stock: products.stock,
+            shopProfile: users.shopProfile,
+          })
           .from(products)
-          .where(eq(products.id, firstCartProductId!));
+          .leftJoin(users, eq(products.shopId, users.id))
+          .where(and(eq(products.id, productId), eq(products.isDeleted, false)))
+          .limit(1);
+        const productRecord = productRows[0];
+        if (!productRecord) {
+          throw new Error("Product not found");
+        }
 
-        if (firstProductResult.length > 0) {
-          const existingShopId = firstProductResult[0].shopId;
-          logger.info(
-            `Existing items in cart belong to shop ID ${existingShopId}`,
-          );
-          if (shopIdToAdd !== existingShopId) {
-            logger.error(
-              `Shop ID mismatch: Cannot add product from shop ${shopIdToAdd} to cart containing items from shop ${existingShopId}`,
-            );
-            throw new Error(
-              "Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.",
-            );
-          }
-        } else {
-          // This case should ideally not happen if DB is consistent, but log it.
-          logger.warn(
-            `Could not find product details for the first item (ID: ${firstCartProductId}) in the cart for customer ${customerId}. Proceeding with caution.`,
+        const shopIdToAdd = productRecord.shopId;
+        if (shopIdToAdd == null) {
+          throw new Error("Product is not associated with a shop");
+        }
+
+        // Determine if the existing cart already belongs to another shop with a single joined lookup.
+        const existingCartShopRows = await tx
+          .select({ shopId: products.shopId })
+          .from(cart)
+          .innerJoin(products, eq(cart.productId, products.id))
+          .where(eq(cart.customerId, customerId))
+          .limit(1);
+        const existingShopId = existingCartShopRows[0]?.shopId;
+        if (
+          existingShopId !== undefined &&
+          existingShopId !== null &&
+          existingShopId !== shopIdToAdd
+        ) {
+          throw new Error(
+            "Cannot add items from different shops to the cart. Please clear your cart or checkout with items from the current shop.",
           );
         }
-      }
 
-      // Proceed with adding or updating the cart item
-      // First, get product stock to validate against
-      const productDetails = await db.primary
-        .select({ stock: products.stock })
-        .from(products)
-        .where(eq(products.id, productId))
-        .limit(1);
-      if (productDetails.length === 0) {
-        logger.error(`Product ID ${productId} not found for stock validation.`);
-        throw new Error("Product not found when trying to add to cart.");
-      }
-      const availableStock = productDetails[0].stock ?? 0;
-      const shopModes = await loadShopModes(shopIdToAdd);
-      const enforceStock = !(shopModes.catalogModeEnabled || shopModes.openOrderMode);
+        const shopModes = resolveShopModes(
+          (productRecord.shopProfile as ShopProfile | null | undefined) ?? null,
+        );
+        const enforceStock = !(shopModes.catalogModeEnabled || shopModes.openOrderMode);
+        const availableStock = productRecord.stock ?? 0;
+        if (enforceStock && quantity > availableStock) {
+          throw new Error(
+            `Cannot add ${quantity} items. Only ${availableStock} left in stock.`,
+          );
+        }
 
-      if (enforceStock && quantity > availableStock) {
-        logger.error(
-          `Requested quantity ${quantity} for product ID ${productId} exceeds available stock ${availableStock}.`,
-        );
-        throw new Error(
-          `Cannot add ${quantity} items. Only ${availableStock} left in stock.`,
-        );
-      }
-
-      if (quantity <= 0) {
-        logger.info(
-          `Quantity ${quantity} is zero or less for product ID ${productId}. Removing from cart for customer ID ${customerId}.`,
-        );
-        await db.primary
-          .delete(cart)
+        const existingCartItem = await tx
+          .select({ id: cart.id })
+          .from(cart)
           .where(
             and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
-          );
-        logger.info(
-          `Successfully removed product ID ${productId} from cart for customer ID ${customerId} due to zero/negative quantity.`,
-        );
-        notifyCartChange(customerId);
-        return; // Exit after removing
-      }
+          )
+          .limit(1);
 
-      const existingCartItem = await db.primary
-        .select()
-        .from(cart)
-        .where(
-          and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
-        )
-        .limit(1);
+        if (existingCartItem.length > 0) {
+          await tx
+            .update(cart)
+            .set({ quantity })
+            .where(
+              and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
+            );
+          return;
+        }
 
-      if (existingCartItem.length > 0) {
-        // Item exists, update its quantity (direct assignment)
-        logger.info(
-          `Updating existing cart item for customer ID ${customerId}, product ID ${productId}. New quantity: ${quantity}`,
-        );
-        await db.primary
-          .update(cart)
-          .set({ quantity: quantity }) // Direct assignment
-          .where(
-            and(eq(cart.customerId, customerId), eq(cart.productId, productId)),
-          );
-      } else {
-        // Item does not exist, insert new cart item
-        logger.info(
-          `Creating new cart item for customer ID ${customerId}, product ID ${productId} with quantity ${quantity}`,
-        );
-        await db.primary.insert(cart).values({ customerId, productId, quantity });
-      }
-      logger.info(
-        `Successfully added/updated product ID ${productId} with quantity ${quantity} in cart for customer ID ${customerId}`,
-      );
+        await tx.insert(cart).values({ customerId, productId, quantity });
+      });
       notifyCartChange(customerId);
     } catch (error) {
-      logger.error(
-        `Error in addToCart for customer ID ${customerId}, product ID ${productId}:`,
-        error,
-      );
-      // Re-throw the original error or a new one with context
+      logger.error({ err: error, customerId, productId }, "Failed to add to cart");
       if (
         error instanceof Error &&
         error.message.startsWith("Cannot add items")
       ) {
-        throw error; // Re-throw the specific shop mismatch error
+        throw error;
       }
       throw new Error(
         `Failed to add product to cart: ${error instanceof Error ? error.message : String(error)}`,
@@ -4053,13 +3873,29 @@ export class PostgresStorage implements IStorage {
     customerId: number,
     serviceId: number,
   ): Promise<number> {
-    const entries = await db.primary
+    const targetEntry = await db.primary
       .select()
       .from(waitlist)
-      .where(eq(waitlist.serviceId, serviceId))
-      .orderBy(waitlist.id);
-    const index = entries.findIndex((e) => e.customerId === customerId);
-    return index === -1 ? -1 : index + 1;
+      .where(
+        and(
+          eq(waitlist.serviceId, serviceId),
+          eq(waitlist.customerId, customerId),
+        ),
+      )
+      .orderBy(waitlist.id)
+      .limit(1);
+    const targetId = targetEntry[0]?.id;
+    if (targetId === undefined) {
+      return -1;
+    }
+
+    const positionRows = await db.primary
+      .select({ position: sql<number>`COUNT(*)::int` })
+      .from(waitlist)
+      .where(
+        and(eq(waitlist.serviceId, serviceId), sql`${waitlist.id} <= ${targetId}`),
+      );
+    return Number(positionRows[0]?.position ?? -1);
   }
 
   async createReturnRequest(
@@ -4157,34 +3993,86 @@ export class PostgresStorage implements IStorage {
 
   // Global search with database-side filtering, distance calculation, and sorting
   async globalSearch(params: GlobalSearchParams): Promise<GlobalSearchResult[]> {
-    const { query, lat, lng, limit, excludeUserId } = params;
+    const { query, lat, lng, radiusKm, limit, excludeUserId } = params;
     const normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.length === 0) {
+      return [];
+    }
     const containsPattern = buildContainsLikePattern(normalizedQuery);
+    const startsWithPattern = `${escapeLikePattern(normalizedQuery)}%`;
+    const queryTokens = normalizedQuery
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0);
 
     // If location is provided, we use it for distance sorting
     const hasLocation = lat !== undefined && lng !== undefined;
+    const searchLimit = Math.max(1, Math.min(100, limit));
+    const usePostgis = hasLocation ? await shouldUsePostgis() : false;
 
-    // Haversine distance expression for users table (services/products join to users)
-    const usersDistanceExpr = hasLocation
-      ? sql`${EARTH_RADIUS_KM} * 2 * asin(sqrt(
-          power(sin((radians(${users.latitude}::float8) - radians(${lat})) / 2), 2) +
-          cos(radians(${lat})) * cos(radians(${users.latitude}::float8)) *
-          power(sin((radians(${users.longitude}::float8) - radians(${lng})) / 2), 2)
-        ))`
-      : sql`NULL::float8`;
+    const serviceGeo = hasLocation
+      ? buildGeoDistanceCondition({
+        columnLat: users.latitude,
+        columnLng: users.longitude,
+        lat: Number(lat),
+        lng: Number(lng),
+        radiusKm: Number(radiusKm ?? DEFAULT_NEARBY_RADIUS_KM),
+        usePostgis,
+      })
+      : null;
+    const productGeo = hasLocation
+      ? buildGeoDistanceCondition({
+        columnLat: shops.shopLocationLat,
+        columnLng: shops.shopLocationLng,
+        lat: Number(lat),
+        lng: Number(lng),
+        radiusKm: Number(radiusKm ?? DEFAULT_NEARBY_RADIUS_KM),
+        usePostgis,
+      })
+      : null;
+    const shopGeo = hasLocation
+      ? buildGeoDistanceCondition({
+        columnLat: shops.shopLocationLat,
+        columnLng: shops.shopLocationLng,
+        lat: Number(lat),
+        lng: Number(lng),
+        radiusKm: Number(radiusKm ?? DEFAULT_NEARBY_RADIUS_KM),
+        usePostgis,
+      })
+      : null;
 
-    // Haversine distance expression for shops table
-    const shopsDistanceExpr = hasLocation
-      ? sql`${EARTH_RADIUS_KM} * 2 * asin(sqrt(
-          power(sin((radians(${shops.shopLocationLat}::float8) - radians(${lat})) / 2), 2) +
-          cos(radians(${lat})) * cos(radians(${shops.shopLocationLat}::float8)) *
-          power(sin((radians(${shops.shopLocationLng}::float8) - radians(${lng})) / 2), 2)
-        ))`
-      : sql`NULL::float8`;
+    const buildTextMatchCondition = (nameCol: unknown, descCol: unknown): SQL => {
+      const phraseMatch = sql`(
+        ${nameCol} ILIKE ${containsPattern} ESCAPE '\\'
+        OR COALESCE(${descCol}, '') ILIKE ${containsPattern} ESCAPE '\\'
+      )`;
+      if (queryTokens.length <= 1) {
+        return phraseMatch;
+      }
+
+      let wordAndChain: SQL | null = null;
+      for (const token of queryTokens) {
+        const tokenPattern = buildContainsLikePattern(token);
+        const wordClause = sql`(
+          ${nameCol} ILIKE ${tokenPattern} ESCAPE '\\'
+          OR COALESCE(${descCol}, '') ILIKE ${tokenPattern} ESCAPE '\\'
+        )`;
+        wordAndChain = wordAndChain
+          ? sql`${wordAndChain} AND ${wordClause}`
+          : wordClause;
+      }
+
+      return wordAndChain ? sql`(${phraseMatch} OR (${wordAndChain}))` : phraseMatch;
+    };
 
     // Relevance scoring helper
     const relevanceExpr = (nameCol: any, descCol: any, distExpr: any) => sql`
-      CASE WHEN LOWER(${nameCol}::text || ' ' || COALESCE(${descCol}::text, '')) LIKE ${containsPattern} ESCAPE '\\' THEN 4 ELSE 0 END
+      CASE
+        WHEN ${nameCol} ILIKE ${startsWithPattern} ESCAPE '\\' THEN 5
+        WHEN ${nameCol} ILIKE ${containsPattern} ESCAPE '\\' THEN 4
+        WHEN COALESCE(${descCol}, '') ILIKE ${containsPattern} ESCAPE '\\' THEN 2
+        ELSE 0
+      END
       + CASE 
           WHEN ${distExpr} IS NULL THEN 0
           WHEN ${distExpr} < 1 THEN 2
@@ -4196,7 +4084,8 @@ export class PostgresStorage implements IStorage {
     `;
 
     // 1. Services Query - exclude user's own services by providerId
-    const servicesQuery = db.primary
+    const servicesDistanceExpr = serviceGeo?.distanceExpr ?? sql`NULL::float8`;
+    const servicesQuery = db.replica
       .select({
         id: services.id,
         name: services.name,
@@ -4207,34 +4096,26 @@ export class PostgresStorage implements IStorage {
         providerName: users.name,
         city: users.addressCity,
         state: users.addressState,
-        distanceKm: usersDistanceExpr.as("distance_km"),
-        relevanceScore: relevanceExpr(services.name, services.description, usersDistanceExpr).as("relevance_score"),
+        distanceKm: servicesDistanceExpr.as("distance_km"),
+        relevanceScore: relevanceExpr(services.name, services.description, servicesDistanceExpr).as("relevance_score"),
       })
       .from(services)
       .leftJoin(users, eq(services.providerId, users.id))
       .where(
         and(
           eq(services.isDeleted, false),
-          sql`LOWER(${services.name}::text || ' ' || COALESCE(${services.description}::text, '')) LIKE ${containsPattern} ESCAPE '\\'`,
+          buildTextMatchCondition(services.name, services.description),
+          serviceGeo?.condition,
           // Exclude user's own services
           excludeUserId !== undefined ? ne(services.providerId, excludeUserId) : undefined
         )
       )
       .orderBy(desc(sql`relevance_score`), asc(sql`distance_km`))
-      .limit(limit);
+      .limit(searchLimit);
 
     // 2. Products Query - exclude user's own products (products from shops they own)
-    // Use LIKE query for better matching of short product names/codes like "A1"
-    // Join through shops table to get proper shop location for distance filtering
-    const productsDistanceExpr = hasLocation
-      ? sql`${EARTH_RADIUS_KM} * 2 * asin(sqrt(
-          power(sin((radians(${shops.shopLocationLat}::float8) - radians(${lat})) / 2), 2) +
-          cos(radians(${lat})) * cos(radians(${shops.shopLocationLat}::float8)) *
-          power(sin((radians(${shops.shopLocationLng}::float8) - radians(${lng})) / 2), 2)
-        ))`
-      : sql`NULL::float8`;
-
-    const productsQuery = db.primary
+    const productsDistanceExpr = productGeo?.distanceExpr ?? sql`NULL::float8`;
+    const productsQuery = db.replica
       .select({
         id: products.id,
         shopId: products.shopId,
@@ -4254,16 +4135,18 @@ export class PostgresStorage implements IStorage {
       .where(
         and(
           eq(products.isDeleted, false),
-          sql`LOWER(${products.name}::text || ' ' || COALESCE(${products.description}::text, '')) LIKE ${containsPattern} ESCAPE '\\'`,
+          buildTextMatchCondition(products.name, products.description),
+          productGeo?.condition,
           // Exclude user's own products (products from their shop)
           excludeUserId !== undefined ? ne(products.shopId, excludeUserId) : undefined
         )
       )
       .orderBy(desc(sql`relevance_score`), asc(sql`distance_km`))
-      .limit(limit);
+      .limit(searchLimit);
 
     // 3. Shops Query - exclude user's own shop
-    const shopsQuery = db.primary
+    const shopsDistanceExpr = shopGeo?.distanceExpr ?? sql`NULL::float8`;
+    const shopsQuery = db.replica
       .select({
         id: shops.id,
         ownerId: shops.ownerId,
@@ -4279,13 +4162,14 @@ export class PostgresStorage implements IStorage {
       .leftJoin(users, eq(shops.ownerId, users.id))
       .where(
         and(
-          sql`LOWER(${shops.shopName}::text || ' ' || COALESCE(${shops.description}::text, '')) LIKE ${containsPattern} ESCAPE '\\'`,
+          buildTextMatchCondition(shops.shopName, shops.description),
+          shopGeo?.condition,
           // Exclude user's own shop
           excludeUserId !== undefined ? ne(shops.ownerId, excludeUserId) : undefined
         )
       )
       .orderBy(desc(sql`relevance_score`), asc(sql`distance_km`))
-      .limit(limit);
+      .limit(searchLimit);
 
     // Execute queries
     const [servicesResults, productsResults, shopsResults] = await Promise.all([
@@ -4354,6 +4238,8 @@ export class PostgresStorage implements IStorage {
       return (a.name ?? "").localeCompare(b.name ?? "");
     });
 
-    return combined.slice(0, limit).map(({ relevanceScore, ...rest }) => rest);
+    return combined
+      .slice(0, searchLimit)
+      .map(({ relevanceScore, ...rest }) => rest);
   }
 }

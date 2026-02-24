@@ -72,6 +72,10 @@ import {
   toNumericCoordinate,
   haversineDistanceKm,
 } from "./utils/geo";
+import {
+  buildGeoDistanceCondition,
+  shouldUsePostgis,
+} from "./utils/geo-sql";
 import { registerPromotionRoutes } from "./routes/promotions"; // Import promotion routes
 import { bookingsRouter } from "./routes/bookings";
 import { ordersRouter } from "./routes/orders";
@@ -2328,18 +2332,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const { lat, lng, radius } = parsed.data;
     const currentUserId = req.user?.id as number | undefined;
+    const usePostgis = await shouldUsePostgis();
 
-    // Query shops table with haversine distance calculation
-    // Use COALESCE to fall back to user coordinates if shop coordinates are not set
-    const distanceExpr = sql`
-      6371 * 2 * asin(
-        sqrt(
-          power(sin((radians(CAST(COALESCE(${shops.shopLocationLat}, ${users.latitude}) AS numeric)) - radians(${lat})) / 2), 2) +
-          cos(radians(${lat})) * cos(radians(CAST(COALESCE(${shops.shopLocationLat}, ${users.latitude}) AS numeric))) *
-          power(sin((radians(CAST(COALESCE(${shops.shopLocationLng}, ${users.longitude}) AS numeric)) - radians(${lng})) / 2), 2)
-        )
-      )
-    `;
+    const { condition, distanceExpr } = buildGeoDistanceCondition({
+      columnLat: sql`COALESCE(${shops.shopLocationLat}, ${users.latitude})`,
+      columnLng: sql`COALESCE(${shops.shopLocationLng}, ${users.longitude})`,
+      lat,
+      lng,
+      radiusKm: radius,
+      usePostgis,
+    });
 
     // Query shops table joined with users
     const shopRecords = await db.primary
@@ -2351,7 +2353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // At least one set of coordinates must be available (shop or user)
           sql`(${shops.shopLocationLat} IS NOT NULL OR ${users.latitude} IS NOT NULL)`,
           sql`(${shops.shopLocationLng} IS NOT NULL OR ${users.longitude} IS NOT NULL)`,
-          sql`${distanceExpr} <= ${radius}`,
+          condition,
           // Exclude own shop if user is logged in
           currentUserId !== undefined
             ? sql`${shops.ownerId} != ${currentUserId}`
@@ -8425,7 +8427,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ? "provider"
                 : "other";
 
+      const isValidMetric = (metric: (typeof metrics)[number]) => {
+        if (!Number.isFinite(metric.value) || metric.value < 0) {
+          return false;
+        }
+        if ((metric.name === "FCP" || metric.name === "LCP") && metric.value > 30_000) {
+          return false;
+        }
+        if (metric.name === "CLS" && metric.value > 10) {
+          return false;
+        }
+        return true;
+      };
+
       for (const metric of metrics) {
+        if (!isValidMetric(metric)) {
+          continue;
+        }
         recordFrontendMetric(metric, segment);
       }
 
