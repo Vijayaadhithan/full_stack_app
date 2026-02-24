@@ -21,7 +21,7 @@ import {
   CalendarDays,
   Siren,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Service } from "@shared/schema";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,7 +47,11 @@ import {
 import { LocationFilterPopover } from "@/components/location/location-filter-popover";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { getServiceImage, serviceCategoryImages, getGradientCSS } from "@shared/predefinedImages";
-import { serviceFilterConfig } from "@shared/config";
+import { useLanguage } from "@/contexts/language-context";
+import {
+  SERVICE_CATEGORY_OPTIONS,
+  getServiceCategoryLabel,
+} from "@/lib/service-categories";
 
 const container = {
   hidden: { opacity: 0 },
@@ -94,16 +98,6 @@ const computeDistance = (
   return haversineDistance(origin.latitude, origin.longitude, lat, lng);
 };
 
-// Category tiles using predefined service images
-const categoryTiles = [
-  { value: "all", label: "All Services", description: "Explore everything we offer" },
-  { value: "plumbing", label: "Plumbing", description: "Pipes & water service" },
-  { value: "electrical_work", label: "Electrical", description: "Wiring & fixtures" },
-  { value: "carpentry", label: "Carpentry", description: "Wood & furniture work" },
-  { value: "beauty_salon", label: "Beauty", description: "Salon & makeup" },
-  { value: "motor_repair", label: "Vehicle", description: "Two-wheeler service" },
-];
-
 type ProviderSummary = {
   id: number;
   name: string | null;
@@ -123,8 +117,15 @@ type ServiceWithProvider = Service & {
   provider: ProviderSummary | null;
 };
 
+type ServiceCategoryFilterOption = {
+  value: string;
+  label: string;
+  count: number;
+};
+
 export default function BrowseServices() {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const locationFilter = useLocationFilter({ storageKey: "services-radius" });
   const pageSize = 24;
   const [page, setPage] = useState(1);
@@ -227,6 +228,79 @@ export default function BrowseServices() {
 
   // Client-side filtering is no longer needed
   const filteredServices = servicesResponse?.items ?? [];
+  const serviceCategoryOptions = useMemo<ServiceCategoryFilterOption[]>(() => {
+    const baseOptions = SERVICE_CATEGORY_OPTIONS.map((option) => ({
+      value: option.value,
+      label: getServiceCategoryLabel(option.value, t),
+      count: 0,
+    }));
+    const optionMap = new Map(
+      baseOptions.map((option) => [option.value.toLowerCase(), option]),
+    );
+
+    filteredServices.forEach((service) => {
+      const rawCategory = service.category?.trim();
+      if (!rawCategory) return;
+      const key = rawCategory.toLowerCase();
+      const existing = optionMap.get(key);
+      if (existing) {
+        existing.count += 1;
+        return;
+      }
+      optionMap.set(key, {
+        value: rawCategory,
+        label: getServiceCategoryLabel(rawCategory, t),
+        count: 1,
+      });
+    });
+
+    const options = Array.from(optionMap.values());
+    const withResults = options
+      .filter((option) => option.count > 0)
+      .sort(
+        (a, b) =>
+          b.count - a.count || a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      );
+    const withoutResults = options
+      .filter((option) => option.count === 0)
+      .sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      );
+
+    return [
+      {
+        value: "all",
+        label: t("all_categories"),
+        count: filteredServices.length,
+      },
+      ...withResults,
+      ...withoutResults,
+    ];
+  }, [filteredServices, t]);
+
+  const categoryTileOptions = useMemo(() => {
+    const available = serviceCategoryOptions
+      .filter((option) => option.value !== "all" && option.count > 0)
+      .slice(0, 8);
+    const fallback = serviceCategoryOptions
+      .filter((option) => option.value !== "all")
+      .slice(0, 8);
+    const topCategories = available.length > 0 ? available : fallback;
+    return [serviceCategoryOptions[0], ...topCategories].filter(
+      (option): option is ServiceCategoryFilterOption => Boolean(option),
+    );
+  }, [serviceCategoryOptions]);
+
+  useEffect(() => {
+    if (filters.category === "all") return;
+    const isValidCategory = serviceCategoryOptions.some(
+      (option) => option.value === filters.category,
+    );
+    if (!isValidCategory) {
+      setFilters((prev) => ({ ...prev, category: "all" }));
+    }
+  }, [filters.category, serviceCategoryOptions]);
+
   const showPagination = Boolean(
     servicesResponse && (servicesResponse.hasMore || page > 1),
   );
@@ -254,7 +328,7 @@ export default function BrowseServices() {
           <div>
             <h1 className="text-2xl font-bold">Browse Services</h1>
             <p className="text-sm text-muted-foreground">
-              Tap an icon to choose the vibe you need.
+              Choose a category first, then search nearby providers.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 w-full md:w-auto items-center">
@@ -313,9 +387,10 @@ export default function BrowseServices() {
                       <SelectValue placeholder="Category" />
                     </SelectTrigger>
                     <SelectContent>
-                      {serviceFilterConfig.categories.map((category) => (
+                      {serviceCategoryOptions.map((category) => (
                         <SelectItem key={category.value} value={category.value}>
                           {category.label}
+                          {category.count > 0 ? ` (${category.count})` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -385,42 +460,56 @@ export default function BrowseServices() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-          {categoryTiles.map((tile) => {
-            const isActive = filters.category === tile.value;
-            const categoryImage = tile.value === 'all'
-              ? serviceCategoryImages.other_service
-              : getServiceImage(tile.value);
-            return (
-              <motion.div
-                key={tile.value}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <div
-                  onClick={() => handleFilterChange("category", tile.value)}
-                  className={`
-                    relative cursor-pointer group overflow-hidden rounded-xl aspect-[4/5]
-                    ${isActive ? 'ring-2 ring-primary ring-offset-2' : ''}
-                  `}
+        <div className="space-y-3 mb-8">
+          <p className="text-sm font-medium text-muted-foreground">
+            Easy category picks
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+            {categoryTileOptions.map((categoryOption) => {
+              const isActive = filters.category === categoryOption.value;
+              const categoryImage =
+                categoryOption.value === "all"
+                  ? serviceCategoryImages.other_service
+                  : getServiceImage(categoryOption.value);
+              const serviceCountLabel =
+                categoryOption.value === "all"
+                  ? "Show every category"
+                  : categoryOption.count === 1
+                    ? "1 service"
+                    : `${categoryOption.count} services`;
+
+              return (
+                <motion.button
+                  key={categoryOption.value}
+                  type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleFilterChange("category", categoryOption.value)}
+                  className={`relative overflow-hidden rounded-xl border p-4 text-left text-white shadow-sm transition-shadow hover:shadow-md ${
+                    isActive
+                      ? "ring-2 ring-primary ring-offset-2"
+                      : "ring-1 ring-black/10"
+                  }`}
                   style={{
-                    background: getGradientCSS(categoryImage.gradient, '135deg'),
+                    background: getGradientCSS(categoryImage.gradient, "135deg"),
                   }}
                 >
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors z-10" />
-                  <div className="absolute inset-0 z-20 p-4 flex flex-col items-center justify-center text-white">
+                  <div className="absolute inset-0 bg-black/20" />
+                  <div className="relative z-10 space-y-3">
                     <CategoryIcon
                       category={categoryImage}
-                      size="lg"
+                      size="md"
                       showLabel={false}
                     />
-                    <h3 className="font-bold text-lg leading-tight mt-3 text-center">{tile.label}</h3>
-                    <p className="text-xs text-white/80 line-clamp-2 text-center mt-1">{tile.description}</p>
+                    <div>
+                      <p className="font-semibold leading-tight">{categoryOption.label}</p>
+                      <p className="mt-1 text-xs text-white/85">{serviceCountLabel}</p>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            );
-          })}
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">

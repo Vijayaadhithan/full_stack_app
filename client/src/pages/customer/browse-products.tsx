@@ -16,7 +16,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { Search, ShoppingCart, Heart, Filter } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "wouter";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +38,10 @@ import { LocationFilterPopover } from "@/components/location/location-filter-pop
 import { useLanguage } from "@/contexts/language-context";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { getProductImage } from "@shared/predefinedImages";
+import {
+  PRODUCT_CATEGORY_OPTIONS,
+  getProductCategoryLabel,
+} from "@/lib/product-categories";
 
 const container = {
   hidden: { opacity: 0 },
@@ -52,6 +56,12 @@ const container = {
 const item = {
   hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0 },
+};
+
+type ProductCategoryFilterOption = {
+  value: string;
+  label: string;
+  count: number;
 };
 
 export default function BrowseProducts() {
@@ -92,7 +102,6 @@ export default function BrowseProducts() {
     locationState: "",
     attributes: createAttributeDefaults(),
   }));
-  const quickCategories = productFilterConfig.categories.slice(0, 4);
 
   useEffect(() => {
     setPage(1);
@@ -330,6 +339,63 @@ export default function BrowseProducts() {
 
   // Client-side filtering is no longer needed as it's done server-side
   const filteredProducts = productsResponse?.items ?? [];
+  const productCategoryOptions = useMemo<ProductCategoryFilterOption[]>(() => {
+    const baseOptions = PRODUCT_CATEGORY_OPTIONS.map((option) => ({
+      value: option.value,
+      label: getProductCategoryLabel(option.value, t),
+      count: 0,
+    }));
+    const optionMap = new Map(
+      baseOptions.map((option) => [option.value.toLowerCase(), option]),
+    );
+
+    filteredProducts.forEach((product) => {
+      const rawCategory = product.category?.trim();
+      if (!rawCategory) return;
+      const key = rawCategory.toLowerCase();
+      const existing = optionMap.get(key);
+      if (existing) {
+        existing.count += 1;
+        return;
+      }
+      optionMap.set(key, {
+        value: rawCategory,
+        label: getProductCategoryLabel(rawCategory, t),
+        count: 1,
+      });
+    });
+
+    const options = Array.from(optionMap.values());
+    const withResults = options
+      .filter((option) => option.count > 0)
+      .sort(
+        (a, b) =>
+          b.count - a.count || a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      );
+    const withoutResults = options
+      .filter((option) => option.count === 0)
+      .sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      );
+    return [...withResults, ...withoutResults];
+  }, [filteredProducts, t]);
+
+  const quickCategories = useMemo(() => {
+    const withResults = productCategoryOptions.filter((option) => option.count > 0);
+    const source = withResults.length > 0 ? withResults : productCategoryOptions;
+    return source.slice(0, 6);
+  }, [productCategoryOptions]);
+
+  useEffect(() => {
+    if (filters.category === "all") return;
+    const isValidCategory = productCategoryOptions.some(
+      (option) => option.value === filters.category,
+    );
+    if (!isValidCategory) {
+      setFilters((prev) => ({ ...prev, category: "all" }));
+    }
+  }, [filters.category, productCategoryOptions]);
+
   const showPagination = Boolean(
     productsResponse && (productsResponse.hasMore || page > 1),
   );
@@ -393,9 +459,10 @@ export default function BrowseProducts() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("all_categories")}</SelectItem>
-                  {productFilterConfig.categories.map((category) => (
+                  {productCategoryOptions.map((category) => (
                     <SelectItem key={category.value} value={category.value}>
                       {category.label}
+                      {category.count > 0 ? ` (${category.count})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -493,7 +560,7 @@ export default function BrowseProducts() {
                 <LocationFilterPopover state={locationFilter} />
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("quick_categories")}
               </span>
@@ -516,6 +583,7 @@ export default function BrowseProducts() {
                   onClick={() => handleFilterChange("category", category.value)}
                 >
                   {category.label}
+                  {category.count > 0 ? ` (${category.count})` : ""}
                 </Button>
               ))}
             </div>

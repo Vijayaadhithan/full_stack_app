@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +47,7 @@ import com.doorstep.tn.common.util.haversineDistanceKm
 import com.doorstep.tn.common.util.parseGeoPoint
 import com.doorstep.tn.customer.data.model.Service
 import com.doorstep.tn.customer.ui.CustomerViewModel
+import java.util.Locale
 
 /**
  * Services List Screen - Matches web UI with location filter and booking type options
@@ -148,17 +150,92 @@ fun ServicesListScreen(
         }
     }
     
-    val categories = listOf(
-        "all",
-        "carpentry",
-        "beauty_salon",
-        "motor_repair",
-        "plumbing",
-        "electrical_work"
-    ).map { value ->
-        val label = if (value == "all") "All Services" else serviceCategoryLabel(value)
-        val categoryValue = if (value == "all") null else value
-        Triple(label, categoryValue, serviceCategoryIcon(value))
+    val allServiceCategoryOptions = remember(services) {
+        val baseOptions = SERVICE_CATEGORIES
+            .filter { it.value != "all" }
+            .map { option ->
+                ServiceCategoryUiOption(
+                    value = option.value,
+                    label = option.label,
+                    icon = option.icon,
+                    count = 0
+                )
+            }
+            .toMutableList()
+        val optionMap = baseOptions.associateBy {
+            it.value?.lowercase(Locale.ROOT)
+        }.toMutableMap()
+
+        services.forEach { service ->
+            val rawCategory = service.category?.trim()
+            if (rawCategory.isNullOrEmpty()) return@forEach
+            val key = rawCategory.lowercase(Locale.ROOT)
+            val existing = optionMap[key]
+            if (existing != null) {
+                existing.count += 1
+            } else {
+                val dynamic = ServiceCategoryUiOption(
+                    value = rawCategory,
+                    label = serviceCategoryLabel(rawCategory),
+                    icon = serviceCategoryIcon(rawCategory),
+                    count = 1
+                )
+                baseOptions.add(dynamic)
+                optionMap[key] = dynamic
+            }
+        }
+
+        val withResults = baseOptions
+            .filter { it.count > 0 }
+            .sortedWith(
+                compareByDescending<ServiceCategoryUiOption> { it.count }
+                    .thenBy { it.label.lowercase(Locale.getDefault()) }
+            )
+        val withoutResults = baseOptions
+            .filter { it.count == 0 }
+            .sortedBy { it.label.lowercase(Locale.getDefault()) }
+
+        listOf(
+            ServiceCategoryUiOption(
+                value = null,
+                label = "All Services",
+                icon = serviceCategoryIcon("all"),
+                count = services.size
+            )
+        ) + withResults + withoutResults
+    }
+
+    val categoryRowOptions = remember(allServiceCategoryOptions) {
+        val withResults = allServiceCategoryOptions
+            .filter { it.value != null && it.count > 0 }
+        val source = if (withResults.isNotEmpty()) {
+            withResults
+        } else {
+            allServiceCategoryOptions.filter { it.value != null }
+        }
+        listOfNotNull(allServiceCategoryOptions.firstOrNull()) + source.take(8)
+    }
+
+    val filterDialogCategories = remember(allServiceCategoryOptions) {
+        allServiceCategoryOptions.map { option ->
+            ServiceCategoryOption(
+                value = option.value ?: "all",
+                label = if (option.value == null || option.count <= 0) {
+                    option.label
+                } else {
+                    "${option.label} (${option.count})"
+                },
+                icon = option.icon
+            )
+        }
+    }
+
+    LaunchedEffect(allServiceCategoryOptions, selectedCategory) {
+        if (selectedCategory == null) return@LaunchedEffect
+        val exists = allServiceCategoryOptions.any { it.value == selectedCategory }
+        if (!exists) {
+            viewModel.updateServiceCategory(null)
+        }
     }
     
     LaunchedEffect(
@@ -328,7 +405,7 @@ fun ServicesListScreen(
                 
                 // Subtitle
                 Text(
-                    text = "Tap an icon to choose the vibe you need.",
+                    text = "Choose a category first, then search nearby providers.",
                     style = MaterialTheme.typography.bodySmall,
                     color = WhiteTextMuted
                 )
@@ -340,13 +417,13 @@ fun ServicesListScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp)
             ) {
-                items(categories) { (categoryLabel, categoryValue, icon) ->
-                    val isSelected = selectedCategory == categoryValue
+                items(categoryRowOptions) { category ->
+                    val isSelected = selectedCategory == category.value
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .width(72.dp)
-                            .clickable { viewModel.updateServiceCategory(categoryValue) }
+                            .clickable { viewModel.updateServiceCategory(category.value) }
                     ) {
                         Box(
                             modifier = Modifier
@@ -356,18 +433,22 @@ fun ServicesListScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = icon,
-                                contentDescription = categoryLabel,
+                                imageVector = category.icon,
+                                contentDescription = category.label,
                                 tint = WhiteText,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = categoryLabel.replace(" ", "\n"),
+                            text = if (category.value == null || category.count <= 0) {
+                                category.label.replace(" ", "\n")
+                            } else {
+                                "${category.label}\n(${category.count})"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isSelected) OrangePrimary else WhiteTextMuted,
-                            maxLines = 2,
+                            maxLines = 3,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -470,7 +551,7 @@ fun ServicesListScreen(
             initialCity = locationCityFilter,
             initialState = locationStateFilter,
             initialCategory = selectedCategory,
-            categories = SERVICE_CATEGORIES,
+            categories = filterDialogCategories,
             onApply = { minPrice, maxPrice, city, state, category ->
                 minPriceFilter = minPrice
                 maxPriceFilter = maxPrice
@@ -482,6 +563,13 @@ fun ServicesListScreen(
         )
     }
 }
+
+private data class ServiceCategoryUiOption(
+    val value: String?,
+    val label: String,
+    val icon: ImageVector,
+    var count: Int
+)
 
 @Composable
 private fun ServicesPaginationRow(

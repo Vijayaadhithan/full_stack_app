@@ -45,6 +45,7 @@ import com.doorstep.tn.common.config.PRODUCT_CATEGORIES
 import com.doorstep.tn.customer.data.model.Product
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import org.json.JSONObject
+import java.util.Locale
 
 /**
  * Products List Screen - with location filter matching web UI
@@ -150,7 +151,62 @@ fun ProductsListScreen(
         }
     }
     
-    val categories = listOf("All" to null) + PRODUCT_CATEGORIES.map { it.label to it.value }
+    val categories = remember(products) {
+        val baseOptions = PRODUCT_CATEGORIES.map { option ->
+            ProductCategoryUiOption(
+                value = option.value,
+                label = option.label,
+                count = 0
+            )
+        }.toMutableList()
+        val optionMap = baseOptions.associateBy {
+            it.value?.lowercase(Locale.ROOT)
+        }.toMutableMap()
+
+        products.forEach { product ->
+            val rawCategory = product.category?.trim()
+            if (rawCategory.isNullOrEmpty()) return@forEach
+            val key = rawCategory.lowercase(Locale.ROOT)
+            val existing = optionMap[key]
+            if (existing != null) {
+                existing.count += 1
+            } else {
+                val dynamic = ProductCategoryUiOption(
+                    value = rawCategory,
+                    label = rawCategory,
+                    count = 1
+                )
+                baseOptions.add(dynamic)
+                optionMap[key] = dynamic
+            }
+        }
+
+        val withResults = baseOptions
+            .filter { it.count > 0 }
+            .sortedWith(
+                compareByDescending<ProductCategoryUiOption> { it.count }
+                    .thenBy { it.label.lowercase(Locale.getDefault()) }
+            )
+        val withoutResults = baseOptions
+            .filter { it.count == 0 }
+            .sortedBy { it.label.lowercase(Locale.getDefault()) }
+
+        listOf(
+            ProductCategoryUiOption(
+                value = null,
+                label = "All",
+                count = products.size
+            )
+        ) + withResults + withoutResults
+    }
+
+    LaunchedEffect(categories, selectedCategory) {
+        if (selectedCategory == null) return@LaunchedEffect
+        val exists = categories.any { it.value == selectedCategory }
+        if (!exists) {
+            viewModel.updateProductCategory(null)
+        }
+    }
 
     val gridState = rememberLazyGridState()
     val pageNumbers = remember(productsPage, productsHasMore) {
@@ -332,7 +388,7 @@ fun ProductsListScreen(
             }
             
             // Category Chips
-            val selectedTabIndex = categories.indexOfFirst { it.second == selectedCategory }.let { index ->
+            val selectedTabIndex = categories.indexOfFirst { it.value == selectedCategory }.let { index ->
                 if (index >= 0) index else 0
             }
 
@@ -343,12 +399,12 @@ fun ProductsListScreen(
                 edgePadding = 16.dp,
                 divider = {}
             ) {
-                categories.forEach { (categoryLabel, categoryValue) ->
-                    val isSelected = selectedCategory == categoryValue
+                categories.forEach { category ->
+                    val isSelected = selectedCategory == category.value
                     Tab(
                         selected = isSelected,
                         onClick = { 
-                            viewModel.updateProductCategory(categoryValue)
+                            viewModel.updateProductCategory(category.value)
                         }
                     ) {
                         Surface(
@@ -357,7 +413,13 @@ fun ProductsListScreen(
                             modifier = Modifier.padding(8.dp)
                         ) {
                             Text(
-                                text = categoryLabel,
+                                text = if (category.value == null) {
+                                    "${category.label} (${category.count})"
+                                } else if (category.count > 0) {
+                                    "${category.label} (${category.count})"
+                                } else {
+                                    category.label
+                                },
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                 color = WhiteText
                             )
@@ -453,6 +515,12 @@ fun ProductsListScreen(
         )
     }
 }
+
+private data class ProductCategoryUiOption(
+    val value: String?,
+    val label: String,
+    var count: Int
+)
 
 @Composable
 private fun ProductsPaginationRow(

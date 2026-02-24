@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { productFilterConfig } from "@shared/config";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
@@ -26,7 +25,7 @@ import {
   ArrowLeft,
   Truck,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import Meta from "@/components/meta";
 import type { PublicShop } from "@/types/public-shop";
@@ -35,6 +34,7 @@ import { CategoryIcon } from "@/components/ui/category-icon";
 import { getProductImage } from "@shared/predefinedImages";
 import { useAuth } from "@/hooks/use-auth";
 import { computeDistanceKm, toCoordinates } from "@/lib/geo";
+import { getProductCategoryLabel } from "@/lib/product-categories";
 
 const container = {
   hidden: { opacity: 0 },
@@ -77,6 +77,12 @@ type ShopProductListResponse = {
 type CartItem = {
   product: ShopProductListItem;
   quantity: number;
+};
+
+type ProductCategoryFilterOption = {
+  value: string;
+  label: string;
+  count: number;
 };
 
 export default function ShopDetails() {
@@ -269,6 +275,40 @@ export default function ShopDetails() {
   const products = productsResponse?.items ?? [];
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  const shopCategoryOptions = useMemo<ProductCategoryFilterOption[]>(() => {
+    const optionMap = new Map<string, ProductCategoryFilterOption>();
+
+    products.forEach((product) => {
+      const rawCategory = product.category?.trim();
+      if (!rawCategory) return;
+      const key = rawCategory.toLowerCase();
+      const existing = optionMap.get(key);
+      if (existing) {
+        existing.count += 1;
+        return;
+      }
+      optionMap.set(key, {
+        value: rawCategory,
+        label: getProductCategoryLabel(rawCategory, t),
+        count: 1,
+      });
+    });
+
+    return Array.from(optionMap.values()).sort(
+      (a, b) =>
+        b.count - a.count || a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+    );
+  }, [products, t]);
+
+  useEffect(() => {
+    if (selectedCategory === "all") return;
+    const isValidCategory = shopCategoryOptions.some(
+      (option) => option.value === selectedCategory,
+    );
+    if (!isValidCategory) {
+      setSelectedCategory("all");
+    }
+  }, [selectedCategory, shopCategoryOptions]);
 
   const filteredProducts =
     products?.filter((product) => {
@@ -481,32 +521,59 @@ export default function ShopDetails() {
           </div>
 
           <Card className="border-0 bg-gradient-to-br from-slate-50 via-white to-emerald-50 shadow-sm">
-            <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
-              <div className="relative flex-1 md:w-80">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder={t("browse_products_search_placeholder")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+            <CardContent className="space-y-3 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                <div className="relative flex-1 md:w-80">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                  <Input
+                    placeholder={t("browse_products_search_placeholder")}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select
+                  value={selectedCategory}
+                  onValueChange={(value) => setSelectedCategory(value)}
+                >
+                  <SelectTrigger className="w-full md:w-56">
+                    <SelectValue placeholder={t("product_category")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("all_categories")}</SelectItem>
+                    {shopCategoryOptions.map((category) => (
+                      <SelectItem key={category.value} value={category.value}>
+                        {category.label}
+                        {` (${category.count})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <Select
-                value={selectedCategory}
-                onValueChange={(value) => setSelectedCategory(value)}
-              >
-                <SelectTrigger className="w-full md:w-44">
-                  <SelectValue placeholder={t("product_category")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("all_categories")}</SelectItem>
-                  {productFilterConfig.categories.map((category) => (
-                    <SelectItem key={category.value} value={category.value}>
-                      {category.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={selectedCategory === "all" ? "secondary" : "outline"}
+                  onClick={() => setSelectedCategory("all")}
+                >
+                  {t("all_categories")}
+                </Button>
+                {shopCategoryOptions.slice(0, 6).map((category) => (
+                  <Button
+                    key={category.value}
+                    type="button"
+                    size="sm"
+                    variant={
+                      selectedCategory === category.value ? "secondary" : "outline"
+                    }
+                    onClick={() => setSelectedCategory(category.value)}
+                  >
+                    {category.label}
+                    {` (${category.count})`}
+                  </Button>
+                ))}
+              </div>
             </CardContent>
           </Card>
 
