@@ -12,8 +12,11 @@ import kotlinx.coroutines.flow.Flow
 interface ProductCacheDao {
     @Query("SELECT * FROM cached_products ORDER BY cachedAt DESC")
     fun getAllProducts(): Flow<List<CachedProduct>>
+
+    @Query("SELECT * FROM cached_products WHERE cacheKey = :cacheKey ORDER BY itemOrder ASC")
+    suspend fun getProductsByCacheKey(cacheKey: String): List<CachedProduct>
     
-    @Query("SELECT * FROM cached_products WHERE id = :productId")
+    @Query("SELECT * FROM cached_products WHERE id = :productId ORDER BY cachedAt DESC LIMIT 1")
     suspend fun getProductById(productId: Int): CachedProduct?
     
     @Query("SELECT * FROM cached_products WHERE category = :category ORDER BY cachedAt DESC")
@@ -27,6 +30,9 @@ interface ProductCacheDao {
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProduct(product: CachedProduct)
+
+    @Query("DELETE FROM cached_products WHERE cacheKey = :cacheKey")
+    suspend fun deleteByCacheKey(cacheKey: String)
     
     @Query("DELETE FROM cached_products WHERE cachedAt < :expireTime")
     suspend fun deleteExpiredProducts(expireTime: Long)
@@ -39,8 +45,11 @@ interface ProductCacheDao {
 interface ServiceCacheDao {
     @Query("SELECT * FROM cached_services ORDER BY cachedAt DESC")
     fun getAllServices(): Flow<List<CachedService>>
+
+    @Query("SELECT * FROM cached_services WHERE cacheKey = :cacheKey ORDER BY itemOrder ASC")
+    suspend fun getServicesByCacheKey(cacheKey: String): List<CachedService>
     
-    @Query("SELECT * FROM cached_services WHERE id = :serviceId")
+    @Query("SELECT * FROM cached_services WHERE id = :serviceId ORDER BY cachedAt DESC LIMIT 1")
     suspend fun getServiceById(serviceId: Int): CachedService?
     
     @Query("SELECT * FROM cached_services WHERE category = :category ORDER BY cachedAt DESC")
@@ -51,6 +60,9 @@ interface ServiceCacheDao {
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertService(service: CachedService)
+
+    @Query("DELETE FROM cached_services WHERE cacheKey = :cacheKey")
+    suspend fun deleteByCacheKey(cacheKey: String)
     
     @Query("DELETE FROM cached_services WHERE cachedAt < :expireTime")
     suspend fun deleteExpiredServices(expireTime: Long)
@@ -63,8 +75,11 @@ interface ServiceCacheDao {
 interface ShopCacheDao {
     @Query("SELECT * FROM cached_shops ORDER BY cachedAt DESC")
     fun getAllShops(): Flow<List<CachedShop>>
+
+    @Query("SELECT * FROM cached_shops WHERE cacheKey = :cacheKey ORDER BY itemOrder ASC")
+    suspend fun getShopsByCacheKey(cacheKey: String): List<CachedShop>
     
-    @Query("SELECT * FROM cached_shops WHERE id = :shopId")
+    @Query("SELECT * FROM cached_shops WHERE id = :shopId ORDER BY cachedAt DESC LIMIT 1")
     suspend fun getShopById(shopId: Int): CachedShop?
     
     @Query("SELECT * FROM cached_shops WHERE category = :category ORDER BY cachedAt DESC")
@@ -75,6 +90,9 @@ interface ShopCacheDao {
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertShop(shop: CachedShop)
+
+    @Query("DELETE FROM cached_shops WHERE cacheKey = :cacheKey")
+    suspend fun deleteByCacheKey(cacheKey: String)
     
     @Query("DELETE FROM cached_shops WHERE cachedAt < :expireTime")
     suspend fun deleteExpiredShops(expireTime: Long)

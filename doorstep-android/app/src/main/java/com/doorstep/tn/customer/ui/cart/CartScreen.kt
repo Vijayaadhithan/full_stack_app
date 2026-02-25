@@ -127,7 +127,7 @@ fun CartScreen(
         null
     }
     val deliveryFeeReady = deliveryMethod == "delivery" && deliveryDistanceKm != null
-    val deliveryFeeAmount = if (deliveryFeeReady && deliveryDistanceKm!! > freeDeliveryRadiusKm) {
+    val deliveryFeeAmount = if (deliveryFeeReady && (deliveryDistanceKm ?: 0.0) > freeDeliveryRadiusKm) {
         deliveryFeeRate
     } else {
         0.0
@@ -879,9 +879,10 @@ private fun CartItemCard(
                     .background(GlassWhite),
                 contentAlignment = Alignment.Center
             ) {
-                if (!item.product.images.isNullOrEmpty()) {
+                val firstImage = item.product.images?.firstOrNull()
+                if (firstImage != null) {
                     AsyncImage(
-                        model = item.product.images!!.first(),
+                        model = firstImage,
                         contentDescription = item.product.name,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop

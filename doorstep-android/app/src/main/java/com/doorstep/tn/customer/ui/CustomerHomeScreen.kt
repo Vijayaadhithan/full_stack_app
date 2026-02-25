@@ -131,7 +131,7 @@ fun CustomerHomeScreen(
         }
     }
 
-    PollingEffect(intervalMs = 30_000L) {
+    PollingEffect(intervalMs = 120_000L) {
         viewModel.loadOrders()
         viewModel.loadBookings()
         viewModel.loadBookingRequests()

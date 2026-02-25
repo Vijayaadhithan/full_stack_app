@@ -13,12 +13,21 @@ import javax.inject.Singleton
 class ShopRepository @Inject constructor(
     private val api: DoorStepApi
 ) {
+    private fun <T> successFromBody(response: retrofit2.Response<T>): Result<T> {
+        val body = response.body()
+        return if (body != null) {
+            Result.Success(body)
+        } else {
+            Result.Error("Empty response body")
+        }
+    }
+
     // ─── Dashboard ──────────────────────────────────────────────────────────────
     
     suspend fun getDashboardStats(): Result<DashboardStats> = try {
         val response = api.getShopDashboardStats()
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch dashboard stats")
         }
@@ -29,7 +38,7 @@ class ShopRepository @Inject constructor(
     suspend fun getRecentOrders(): Result<List<ShopOrder>> = try {
         val response = api.getRecentShopOrders()
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch recent orders")
         }
@@ -40,7 +49,7 @@ class ShopRepository @Inject constructor(
     suspend fun getShopReviews(shopId: Int): Result<List<ShopReview>> = try {
         val response = api.getShopReviews(shopId)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch reviews")
         }
@@ -53,7 +62,7 @@ class ShopRepository @Inject constructor(
     suspend fun getActiveOrdersBoard(): Result<ActiveBoardResponse> = try {
         val response = api.getActiveOrdersBoard()
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch active orders")
         }
@@ -64,7 +73,7 @@ class ShopRepository @Inject constructor(
     suspend fun getOrders(status: String? = null): Result<List<ShopOrder>> = try {
         val response = api.getShopOrders(status)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch orders")
         }
@@ -81,7 +90,7 @@ class ShopRepository @Inject constructor(
         val request = UpdateOrderStatusRequest(status, comments, trackingInfo)
         val response = api.updateShopOrderStatus(orderId, request)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to update order status")
         }
@@ -94,7 +103,7 @@ class ShopRepository @Inject constructor(
     suspend fun getProducts(shopId: Int): Result<List<ShopProduct>> = try {
         val response = api.getMyShopProducts(shopId)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch products")
         }
@@ -105,7 +114,7 @@ class ShopRepository @Inject constructor(
     suspend fun createProduct(request: CreateProductRequest): Result<ShopProduct> = try {
         val response = api.createProduct(request)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to create product")
         }
@@ -119,7 +128,7 @@ class ShopRepository @Inject constructor(
     ): Result<ShopProduct> = try {
         val response = api.updateProduct(productId, request)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to update product")
         }
@@ -146,7 +155,7 @@ class ShopRepository @Inject constructor(
         val request = UpdateProductStockRequest(stock = stock, isAvailable = isAvailable)
         val response = api.updateProductStock(productId, request)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to update stock")
         }
@@ -159,7 +168,7 @@ class ShopRepository @Inject constructor(
     suspend fun getPromotions(shopId: Int): Result<List<ShopPromotion>> = try {
         val response = api.getShopPromotions(shopId)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch promotions")
         }
@@ -170,7 +179,7 @@ class ShopRepository @Inject constructor(
     suspend fun createPromotion(request: CreatePromotionRequest): Result<ShopPromotion> = try {
         val response = api.createPromotion(request)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to create promotion")
         }
@@ -184,7 +193,7 @@ class ShopRepository @Inject constructor(
     ): Result<ShopPromotion> = try {
         val response = api.updatePromotion(promotionId, request)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to update promotion")
         }
@@ -210,7 +219,7 @@ class ShopRepository @Inject constructor(
         val request = UpdatePromotionRequest(isActive = isActive)
         val response = api.updatePromotion(promotionId, request)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to toggle promotion status")
         }
@@ -223,7 +232,7 @@ class ShopRepository @Inject constructor(
     suspend fun getWorkers(): Result<List<ShopWorker>> = try {
         val response = api.getShopWorkers()
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch workers")
         }
@@ -234,7 +243,7 @@ class ShopRepository @Inject constructor(
     suspend fun getWorkerResponsibilities(): Result<WorkerResponsibilitiesResponse> = try {
         val response = api.getWorkerResponsibilities()
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch worker responsibilities")
         }
@@ -245,7 +254,7 @@ class ShopRepository @Inject constructor(
     suspend fun checkWorkerNumber(workerNumber: String): Result<Map<String, Any>> = try {
         val response = api.checkWorkerNumber(workerNumber)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to check worker number")
         }
@@ -255,8 +264,13 @@ class ShopRepository @Inject constructor(
     
     suspend fun addWorker(request: AddWorkerRequest): Result<ShopWorker> = try {
         val response = api.addShopWorker(request)
-        if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!.worker ?: throw Exception("Worker not returned"))
+        if (response.isSuccessful) {
+            val worker = response.body()?.worker
+            if (worker != null) {
+                Result.Success(worker)
+            } else {
+                Result.Error("Worker not returned")
+            }
         } else {
             Result.Error(response.message() ?: "Failed to add worker")
         }
@@ -269,8 +283,13 @@ class ShopRepository @Inject constructor(
         request: UpdateWorkerRequest
     ): Result<ShopWorker> = try {
         val response = api.updateShopWorker(workerUserId, request)
-        if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!.worker ?: throw Exception("Worker not returned"))
+        if (response.isSuccessful) {
+            val worker = response.body()?.worker
+            if (worker != null) {
+                Result.Success(worker)
+            } else {
+                Result.Error("Worker not returned")
+            }
         } else {
             Result.Error(response.message() ?: "Failed to update worker")
         }
@@ -295,8 +314,13 @@ class ShopRepository @Inject constructor(
     ): Result<ShopWorker> = try {
         val request = UpdateWorkerRequest(active = active)
         val response = api.updateShopWorker(workerUserId, request)
-        if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!.worker ?: throw Exception("Worker not returned"))
+        if (response.isSuccessful) {
+            val worker = response.body()?.worker
+            if (worker != null) {
+                Result.Success(worker)
+            } else {
+                Result.Error("Worker not returned")
+            }
         } else {
             Result.Error(response.message() ?: "Failed to toggle worker status")
         }
@@ -313,7 +337,7 @@ class ShopRepository @Inject constructor(
         val request = ReviewReplyRequest(reply)
         val response = api.replyToProductReview(reviewId, request)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to reply to review")
         }
@@ -326,7 +350,7 @@ class ShopRepository @Inject constructor(
     suspend fun getShopProfile(): Result<ShopProfile> = try {
         val response = api.getCurrentShopProfile()
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch shop profile")
         }
@@ -345,7 +369,7 @@ class ShopRepository @Inject constructor(
             }
             val refreshed = api.getCurrentShopProfile()
             if (refreshed.isSuccessful && refreshed.body() != null) {
-                Result.Success(refreshed.body()!!)
+                successFromBody(refreshed)
             } else {
                 Result.Error(refreshed.message() ?: "Failed to refresh shop profile")
             }
@@ -359,7 +383,7 @@ class ShopRepository @Inject constructor(
     suspend fun getPayLaterWhitelist(): Result<PayLaterWhitelistResponse> = try {
         val response = api.getPayLaterWhitelist()
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch pay-later whitelist")
         }
@@ -395,7 +419,7 @@ class ShopRepository @Inject constructor(
     suspend fun getReturnRequests(): Result<List<ReturnRequest>> = try {
         val response = api.getShopReturnRequests()
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to fetch return requests")
         }
@@ -407,7 +431,7 @@ class ShopRepository @Inject constructor(
         val body = comments?.let { mapOf("comments" to it) }
         val response = api.approveReturnRequest(returnId, body)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to approve return request")
         }
@@ -419,7 +443,7 @@ class ShopRepository @Inject constructor(
         val body = comments?.let { mapOf("comments" to it) }
         val response = api.rejectReturnRequest(returnId, body)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to reject return request")
         }
@@ -432,7 +456,7 @@ class ShopRepository @Inject constructor(
     suspend fun confirmPayment(orderId: Int): Result<ShopOrder> = try {
         val response = api.confirmShopPayment(orderId)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to confirm payment")
         }
@@ -443,7 +467,7 @@ class ShopRepository @Inject constructor(
     suspend fun approvePayLater(orderId: Int): Result<ShopOrder> = try {
         val response = api.approvePayLater(orderId)
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to approve pay-later")
         }
@@ -454,7 +478,7 @@ class ShopRepository @Inject constructor(
     suspend fun quoteTextOrder(orderId: Int, total: String): Result<ShopOrder> = try {
         val response = api.quoteTextOrder(orderId, mapOf("total" to total))
         if (response.isSuccessful && response.body() != null) {
-            Result.Success(response.body()!!)
+            successFromBody(response)
         } else {
             Result.Error(response.message() ?: "Failed to send quote")
         }

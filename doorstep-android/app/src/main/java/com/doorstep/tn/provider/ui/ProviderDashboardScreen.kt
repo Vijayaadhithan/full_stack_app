@@ -2,6 +2,7 @@ package com.doorstep.tn.provider.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -25,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.util.launchIntentSafely
+import com.doorstep.tn.common.util.openUriSafely
 import com.doorstep.tn.core.network.ServiceReview
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import com.doorstep.tn.provider.data.model.ProviderBooking
@@ -75,7 +78,7 @@ fun ProviderDashboardScreen(
         notificationsViewModel.loadNotifications()
     }
 
-    PollingEffect(intervalMs = 30_000L) {
+    PollingEffect(intervalMs = 120_000L) {
         viewModel.loadPendingBookings()
         viewModel.loadAllBookings()
         viewModel.loadBookingHistory()
@@ -847,7 +850,9 @@ private fun PendingBookingItem(
                                 val intent = Intent(Intent.ACTION_DIAL).apply {
                                     data = Uri.parse("tel:$phoneDigits")
                                 }
-                                context.startActivity(intent)
+                                if (!context.launchIntentSafely(intent)) {
+                                    Toast.makeText(context, "No app found to place a call", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         },
                         enabled = canContact,
@@ -861,8 +866,9 @@ private fun PendingBookingItem(
                     OutlinedButton(
                         onClick = {
                             whatsAppUri?.let {
-                                val intent = Intent(Intent.ACTION_VIEW, it)
-                                context.startActivity(intent)
+                                if (!context.openUriSafely(it)) {
+                                    Toast.makeText(context, "No app found to open this link", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         },
                         enabled = canContact && whatsAppUri != null,

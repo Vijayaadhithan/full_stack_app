@@ -3,6 +3,7 @@ package com.doorstep.tn.customer.ui.bookings
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,6 +31,7 @@ import coil.compose.AsyncImage
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.util.StatusUtils
+import com.doorstep.tn.common.util.openUriSafely
 import com.doorstep.tn.core.network.ServiceReview
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -86,7 +88,7 @@ fun BookingsListScreen(
         viewModel.loadBookings()
     }
 
-    PollingEffect(intervalMs = 30_000L) {
+    PollingEffect(intervalMs = 120_000L) {
         viewModel.loadBookings()
     }
     
@@ -666,26 +668,24 @@ private fun BookingCardInline(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable {
-                            // Open Google Maps
                             val mapsUri = if (hasLocation) {
-                                // Use lat/lng if available
                                 android.net.Uri.parse("geo:${provider.latitude},${provider.longitude}?q=${provider.latitude},${provider.longitude}(Provider)")
                             } else {
-                                // Use address if no coordinates
                                 android.net.Uri.parse("geo:0,0?q=${android.net.Uri.encode(providerAddress)}")
                             }
-                            val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, mapsUri)
-                            mapIntent.setPackage("com.google.android.apps.maps")
-                            try {
-                                context.startActivity(mapIntent)
-                            } catch (e: Exception) {
-                                // If Google Maps not installed, open in browser
+                            val openedGoogleMaps = context.openUriSafely(
+                                uri = mapsUri,
+                                targetPackage = "com.google.android.apps.maps"
+                            )
+                            if (!openedGoogleMaps) {
                                 val browserUri = if (hasLocation) {
                                     android.net.Uri.parse("https://maps.google.com/?q=${provider.latitude},${provider.longitude}")
                                 } else {
                                     android.net.Uri.parse("https://maps.google.com/?q=${android.net.Uri.encode(providerAddress)}")
                                 }
-                                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, browserUri))
+                                if (!context.openUriSafely(browserUri)) {
+                                    Toast.makeText(context, "No app found to open map", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                     ) {

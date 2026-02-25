@@ -121,7 +121,7 @@ fun ProviderServicesScreen(
         notificationsViewModel.loadNotifications()
     }
 
-    PollingEffect(intervalMs = 30_000L) {
+    PollingEffect(intervalMs = 120_000L) {
         notificationsViewModel.loadNotifications()
     }
     
@@ -262,9 +262,10 @@ fun ProviderServicesScreen(
             service = editingService,
             onDismiss = { showAddEditDialog = false },
             onSave = { request ->
-                if (editingService != null) {
+                val editing = editingService
+                if (editing != null) {
                     viewModel.updateService(
-                        editingService!!.id,
+                        editing.id,
                         UpdateServiceRequest(
                             name = request.name,
                             description = request.description,

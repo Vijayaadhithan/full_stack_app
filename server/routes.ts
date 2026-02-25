@@ -118,6 +118,21 @@ const PLATFORM_SERVICE_FEE = featureFlags.platformFeesEnabled
   : 0;
 const SERVICE_DETAIL_CACHE_TTL_SECONDS = 60;
 const PRODUCT_DETAIL_CACHE_TTL_SECONDS = 60;
+
+function parseByteCount(value: unknown): number | undefined {
+  const candidate = Array.isArray(value) ? value[0] : value;
+
+  if (typeof candidate === "number") {
+    return Number.isFinite(candidate) && candidate >= 0 ? candidate : undefined;
+  }
+
+  if (typeof candidate !== "string") return undefined;
+  const trimmed = candidate.trim();
+  if (trimmed.length === 0) return undefined;
+
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
 const SHOP_DETAIL_CACHE_TTL_SECONDS = 120;
 const NEARBY_SEARCH_LIMIT = 200;
 const GLOBAL_SEARCH_RESULT_LIMIT = 25;
@@ -1351,6 +1366,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const adminId = request.session?.adminId ?? undefined;
 
     const startedAt = process.hrtime.bigint();
+    const socketBytesWrittenBefore = req.socket?.bytesWritten ?? 0;
+    const requestBytes = parseByteCount(req.headers["content-length"]);
     if (!res.headersSent) {
       res.setHeader("x-request-id", requestId);
       res.setHeader("x-correlation-id", correlationId);
@@ -1368,12 +1385,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             const durationNs = process.hrtime.bigint() - startedAt;
             const durationMs = Number(durationNs) / 1_000_000;
+            const responseBytesFromHeader = parseByteCount(
+              res.getHeader("content-length"),
+            );
+            const socketBytesWrittenAfter = req.socket?.bytesWritten ?? socketBytesWrittenBefore;
+            const responseBytesFromSocket = Math.max(
+              0,
+              socketBytesWrittenAfter - socketBytesWrittenBefore,
+            );
+            const responseBytes = responseBytesFromHeader ?? responseBytesFromSocket;
+            const responseBytesSource =
+              responseBytesFromHeader !== undefined
+                ? "content-length"
+                : "socket-estimate";
             logger.info(
               {
                 method: req.method,
                 path: req.originalUrl,
                 status: res.statusCode,
                 durationMs,
+                requestBytes,
+                responseBytes,
+                responseBytesSource,
               },
               "Request completed",
             );

@@ -51,7 +51,7 @@ fun ProviderEarningsScreen(
         notificationsViewModel.loadNotifications()
     }
 
-    PollingEffect(intervalMs = 30_000L) {
+    PollingEffect(intervalMs = 120_000L) {
         viewModel.loadAllBookings()
         notificationsViewModel.loadNotifications()
     }

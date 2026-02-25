@@ -293,13 +293,15 @@ fun ShopsListScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(filteredShops) { shop ->
-                            val distanceLabel = if (locationLat != null && locationLng != null) {
+                            val userLat = locationLat
+                            val userLng = locationLng
+                            val distanceLabel = if (userLat != null && userLng != null) {
                                 val shopLat = shop.latitudeValue
                                 val shopLng = shop.longitudeValue
                                 if (shopLat != null && shopLng != null) {
                                     val distanceKm = haversineDistanceKm(
-                                        locationLat!!,
-                                        locationLng!!,
+                                        userLat,
+                                        userLng,
                                         shopLat,
                                         shopLng
                                     )

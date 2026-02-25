@@ -2,6 +2,7 @@ package com.doorstep.tn.customer.ui.shops
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,6 +32,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.util.haversineDistanceKm
+import com.doorstep.tn.common.util.launchIntentSafely
+import com.doorstep.tn.common.util.openUriSafely
 import com.doorstep.tn.common.util.parseGeoPoint
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.config.productCategoryLabel
@@ -121,7 +124,7 @@ fun ShopDetailScreen(
                 CircularProgressIndicator(color = ShopGreen)
             }
         } else if (shop != null) {
-            val s = shop!!
+            val s = shop ?: return@Scaffold
             val freeDeliveryRadiusKm = s.shopProfile?.freeDeliveryRadiusKm ?: 0.0
             val deliveryFeeRate = s.shopProfile?.deliveryFee ?: 0.0
             val customerPoint = parseGeoPoint(user?.latitude, user?.longitude)
@@ -291,8 +294,9 @@ fun ShopDetailScreen(
                                 if (mapUri != null) {
                                     OutlinedButton(
                                         onClick = {
-                                            val intent = Intent(Intent.ACTION_VIEW, mapUri)
-                                            context.startActivity(intent)
+                                            if (!context.openUriSafely(mapUri)) {
+                                                Toast.makeText(context, "No app found to open map", Toast.LENGTH_SHORT).show()
+                                            }
                                         },
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(12.dp),
@@ -323,7 +327,9 @@ fun ShopDetailScreen(
                                                 Intent.ACTION_DIAL,
                                                 Uri.parse("tel:$phoneDigits")
                                             )
-                                            context.startActivity(intent)
+                                            if (!context.launchIntentSafely(intent)) {
+                                                Toast.makeText(context, "No app found to place a call", Toast.LENGTH_SHORT).show()
+                                            }
                                         },
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(12.dp),

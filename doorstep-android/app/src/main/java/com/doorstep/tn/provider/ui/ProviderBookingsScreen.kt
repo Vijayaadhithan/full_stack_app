@@ -4,6 +4,7 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.util.launchIntentSafely
+import com.doorstep.tn.common.util.openUriSafely
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import com.doorstep.tn.provider.data.model.ProviderBooking
 import java.time.Instant
@@ -102,7 +105,7 @@ fun ProviderBookingsScreen(
         notificationsViewModel.loadNotifications()
     }
 
-    PollingEffect(intervalMs = 30_000L) {
+    PollingEffect(intervalMs = 120_000L) {
         viewModel.loadAllBookings()
         notificationsViewModel.loadNotifications()
     }
@@ -260,7 +263,9 @@ fun ProviderBookingsScreen(
                                         val intent = Intent(Intent.ACTION_DIAL).apply {
                                             data = Uri.parse("tel:$digits")
                                         }
-                                        context.startActivity(intent)
+                                        if (!context.launchIntentSafely(intent)) {
+                                            Toast.makeText(context, "No app found to place a call", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 }
                             },
@@ -268,8 +273,9 @@ fun ProviderBookingsScreen(
                                 val message = buildWhatsAppMessage(booking)
                                 val uri = buildWhatsAppUri(booking.customer?.phone, message)
                                 if (uri != null) {
-                                    val intent = Intent(Intent.ACTION_VIEW, uri)
-                                    context.startActivity(intent)
+                                    if (!context.openUriSafely(uri)) {
+                                        Toast.makeText(context, "No app found to open this link", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             },
                             onOpenMap = {
@@ -282,8 +288,9 @@ fun ProviderBookingsScreen(
                                 }
                                 val uri = buildMapsUri(lat, lng, address)
                                 if (uri != null) {
-                                    val intent = Intent(Intent.ACTION_VIEW, uri)
-                                    context.startActivity(intent)
+                                    if (!context.openUriSafely(uri)) {
+                                        Toast.makeText(context, "No app found to open map", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
                         )
@@ -293,79 +300,84 @@ fun ProviderBookingsScreen(
         }
     }
 
-    if (showActionDialog && actionBooking != null && actionType != null) {
-        BookingActionDialog(
-            booking = actionBooking!!,
-            actionType = actionType!!,
-            comments = actionComments,
-            onCommentsChange = { actionComments = it },
-            rescheduleDateTime = rescheduleDateTime,
-            onRescheduleDateTimeChange = { rescheduleDateTime = it },
-            onDismiss = { showActionDialog = false },
-            onConfirm = {
-                val bookingId = actionBooking!!.id
-                when (actionType) {
-                    BookingAction.ACCEPT -> viewModel.acceptBooking(bookingId, actionComments.ifBlank { null })
-                    BookingAction.REJECT -> viewModel.rejectBooking(bookingId, actionComments.ifBlank { null })
-                    BookingAction.RESCHEDULE -> {
-                        val dateTime = rescheduleDateTime
-                        if (dateTime != null) {
-                            val iso = dateTime.atZone(ZoneId.systemDefault()).toInstant().toString()
-                            viewModel.rescheduleBooking(bookingId, iso, actionComments.ifBlank { null })
+    actionBooking?.let { booking ->
+        actionType?.let { type ->
+            if (showActionDialog) {
+                BookingActionDialog(
+                    booking = booking,
+                    actionType = type,
+                    comments = actionComments,
+                    onCommentsChange = { actionComments = it },
+                    rescheduleDateTime = rescheduleDateTime,
+                    onRescheduleDateTimeChange = { rescheduleDateTime = it },
+                    onDismiss = { showActionDialog = false },
+                    onConfirm = {
+                        val bookingId = booking.id
+                        when (type) {
+                            BookingAction.ACCEPT -> viewModel.acceptBooking(bookingId, actionComments.ifBlank { null })
+                            BookingAction.REJECT -> viewModel.rejectBooking(bookingId, actionComments.ifBlank { null })
+                            BookingAction.RESCHEDULE -> {
+                                val dateTime = rescheduleDateTime
+                                if (dateTime != null) {
+                                    val iso = dateTime.atZone(ZoneId.systemDefault()).toInstant().toString()
+                                    viewModel.rescheduleBooking(bookingId, iso, actionComments.ifBlank { null })
+                                }
+                            }
+                            BookingAction.COMPLETE -> viewModel.completeBooking(bookingId, actionComments.ifBlank { null })
                         }
+                        showActionDialog = false
                     }
-                    BookingAction.COMPLETE -> viewModel.completeBooking(bookingId, actionComments.ifBlank { null })
-                    null -> { /* no action */ }
-                }
-                showActionDialog = false
+                )
             }
-        )
+        }
     }
 
-    if (showDisputeDialog && disputeBooking != null) {
-        AlertDialog(
-            onDismissRequest = { showDisputeDialog = false },
-            title = { Text("Report Issue", color = WhiteText) },
-            text = {
-                Column {
-                    Text(
-                        text = "Describe the issue for booking #${disputeBooking!!.id}",
-                        color = WhiteTextMuted
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = disputeReason,
-                        onValueChange = { disputeReason = it },
-                        label = { Text("Issue details") },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ErrorRed,
-                            unfocusedBorderColor = GlassBorder,
-                            focusedTextColor = WhiteText,
-                            unfocusedTextColor = WhiteText
+    disputeBooking?.let { booking ->
+        if (showDisputeDialog) {
+            AlertDialog(
+                onDismissRequest = { showDisputeDialog = false },
+                title = { Text("Report Issue", color = WhiteText) },
+                text = {
+                    Column {
+                        Text(
+                            text = "Describe the issue for booking #${booking.id}",
+                            color = WhiteTextMuted
                         )
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.reportDispute(disputeBooking!!.id, disputeReason.trim())
-                        showDisputeDialog = false
-                    },
-                    enabled = disputeReason.trim().isNotEmpty(),
-                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
-                ) {
-                    Text("Submit")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDisputeDialog = false }) {
-                    Text("Cancel", color = WhiteTextMuted)
-                }
-            },
-            containerColor = SlateCard
-        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = disputeReason,
+                            onValueChange = { disputeReason = it },
+                            label = { Text("Issue details") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ErrorRed,
+                                unfocusedBorderColor = GlassBorder,
+                                focusedTextColor = WhiteText,
+                                unfocusedTextColor = WhiteText
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.reportDispute(booking.id, disputeReason.trim())
+                            showDisputeDialog = false
+                        },
+                        enabled = disputeReason.trim().isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+                    ) {
+                        Text("Submit")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDisputeDialog = false }) {
+                        Text("Cancel", color = WhiteTextMuted)
+                    }
+                },
+                containerColor = SlateCard
+            )
+        }
     }
 }
 

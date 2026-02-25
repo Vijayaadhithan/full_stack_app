@@ -112,7 +112,7 @@ fun ProductDetailScreen(
                 CircularProgressIndicator(color = OrangePrimary)
             }
         } else if (product != null) {
-            val p = product!!
+            val p = product ?: return@Scaffold
             val openOrderAllowed = (p.openOrderMode == true || p.catalogModeEnabled == true)
             val minQuantity = max(1, p.minOrderQuantity ?: 1)
             val maxQuantity = run {

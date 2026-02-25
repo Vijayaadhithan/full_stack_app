@@ -8,7 +8,6 @@ import com.doorstep.tn.core.network.DoorStepApi
 import com.doorstep.tn.core.network.FcmTokenUnregisterRequest
 import com.doorstep.tn.core.network.ServiceBookingSlot
 import com.doorstep.tn.customer.data.model.*
-import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,6 +38,72 @@ class CustomerRepository @Inject constructor(
             val description = shop.shopProfile?.description ?: ""
             name.lowercase().contains(query) || description.lowercase().contains(query)
         }
+    }
+
+    private fun <T> successFromBody(response: retrofit2.Response<T>): Result<T> {
+        val body = response.body()
+        return if (body != null) {
+            Result.Success(body)
+        } else {
+            Result.Error("Empty response body", response.code())
+        }
+    }
+
+    private suspend fun productsFallbackFromCache(
+        cacheKey: String,
+        page: Int,
+        pageSize: Int,
+        failureMessage: String,
+        failureCode: Int? = null
+    ): Result<ProductsResponse> {
+        if (!cacheRepository.isProductsCacheValid(cacheKey)) {
+            return Result.Error(failureMessage, failureCode)
+        }
+        val metadata = cacheRepository.getCacheMetadata(cacheKey)
+        val cachedProducts = cacheRepository.getCachedProducts(cacheKey)
+        return Result.Success(
+            ProductsResponse(
+                page = metadata?.responsePage ?: page.coerceAtLeast(1),
+                pageSize = metadata?.responsePageSize ?: pageSize.coerceAtLeast(1),
+                hasMore = metadata?.responseHasMore ?: false,
+                items = cachedProducts
+            )
+        )
+    }
+
+    private suspend fun servicesFallbackFromCache(
+        cacheKey: String,
+        page: Int,
+        pageSize: Int,
+        failureMessage: String,
+        failureCode: Int? = null
+    ): Result<ServicesResponse> {
+        if (!cacheRepository.isServicesCacheValid(cacheKey)) {
+            return Result.Error(failureMessage, failureCode)
+        }
+        val metadata = cacheRepository.getCacheMetadata(cacheKey)
+        val cachedServices = cacheRepository.getCachedServices(cacheKey)
+        return Result.Success(
+            ServicesResponse(
+                page = metadata?.responsePage ?: page.coerceAtLeast(1),
+                pageSize = metadata?.responsePageSize ?: pageSize.coerceAtLeast(1),
+                hasMore = metadata?.responseHasMore ?: false,
+                items = cachedServices
+            )
+        )
+    }
+
+    private suspend fun shopsFallbackFromCache(
+        cacheKey: String,
+        search: String?,
+        failureMessage: String,
+        failureCode: Int? = null
+    ): Result<List<Shop>> {
+        if (!cacheRepository.isShopsCacheValid(cacheKey)) {
+            return Result.Error(failureMessage, failureCode)
+        }
+        val cachedShops = cacheRepository.getCachedShops(cacheKey)
+        return Result.Success(filterShopsBySearch(cachedShops, search))
     }
     
     /**
@@ -99,44 +164,46 @@ class CustomerRepository @Inject constructor(
                 longitude = longitude,
                 radius = radius
             )
-            if (response.isSuccessful && response.body() != null) {
-                val body = response.body()!!
-                // Cache to memory (Layer 1)
-                productsCache.put(cacheKey, body)
-                // Cache to Room database (Layer 2 - offline support)
-                cacheRepository.cacheProducts(body.items, cacheKey)
-                Result.Success(body)
-            } else {
-                // Network failed, try Room cache
-                val cachedProducts = cacheRepository.getCachedProducts().firstOrNull()
-                if (!cachedProducts.isNullOrEmpty()) {
-                    Result.Success(
-                        ProductsResponse(
-                            page = page,
-                            pageSize = pageSize,
-                            hasMore = false,
-                            items = cachedProducts
-                        )
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null) {
+                    // Cache to memory (Layer 1)
+                    productsCache.put(cacheKey, body)
+                    // Cache to Room database (Layer 2 - offline support)
+                    cacheRepository.cacheProducts(
+                        products = body.items,
+                        cacheKey = cacheKey,
+                        page = body.page,
+                        pageSize = body.pageSize,
+                        hasMore = body.hasMore
                     )
+                    Result.Success(body)
                 } else {
-                    Result.Error(response.message(), response.code())
-                }
-            }
-        } catch (e: Exception) {
-            // Network error - return Room cache for offline support
-            val cachedProducts = cacheRepository.getCachedProducts().firstOrNull()
-            if (!cachedProducts.isNullOrEmpty()) {
-                Result.Success(
-                    ProductsResponse(
+                    productsFallbackFromCache(
+                        cacheKey = cacheKey,
                         page = page,
                         pageSize = pageSize,
-                        hasMore = false,
-                        items = cachedProducts
+                        failureMessage = "Empty response body",
+                        failureCode = response.code()
                     )
-                )
+                }
             } else {
-                Result.Error(e.message ?: "Failed to load products")
+                productsFallbackFromCache(
+                    cacheKey = cacheKey,
+                    page = page,
+                    pageSize = pageSize,
+                    failureMessage = response.message(),
+                    failureCode = response.code()
+                )
             }
+        } catch (e: Exception) {
+            productsFallbackFromCache(
+                cacheKey = cacheKey,
+                page = page,
+                pageSize = pageSize,
+                failureMessage = e.message ?: "Failed to load products",
+                failureCode = null
+            )
         }
     }
     
@@ -146,10 +213,15 @@ class CustomerRepository @Inject constructor(
         
         return try {
             val response = api.getProductById(productId)
-            if (response.isSuccessful && response.body() != null) {
-                val product = response.body()!!
-                productDetailCache.put(productId, product)
-                Result.Success(product)
+            if (response.isSuccessful) {
+                when (val parsed = successFromBody(response)) {
+                    is Result.Success -> {
+                        productDetailCache.put(productId, parsed.data)
+                        parsed
+                    }
+                    is Result.Error -> parsed
+                    is Result.Loading -> Result.Loading
+                }
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -165,10 +237,15 @@ class CustomerRepository @Inject constructor(
         
         return try {
             val response = api.getShopProduct(shopId, productId)
-            if (response.isSuccessful && response.body() != null) {
-                val product = response.body()!!
-                productDetailCache.put(productId, product)
-                Result.Success(product)
+            if (response.isSuccessful) {
+                when (val parsed = successFromBody(response)) {
+                    is Result.Success -> {
+                        productDetailCache.put(productId, parsed.data)
+                        parsed
+                    }
+                    is Result.Error -> parsed
+                    is Result.Loading -> Result.Loading
+                }
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -201,26 +278,35 @@ class CustomerRepository @Inject constructor(
             } else {
                 api.getShops(locationCity, locationState)
             }
-            if (response.isSuccessful && response.body() != null) {
-                val shops = response.body()!!
-                shopsCache.put(cacheKey, shops)
-                cacheRepository.cacheShops(shops, cacheKey)
-                Result.Success(filterShopsBySearch(shops, search))
-            } else {
-                val cachedShops = cacheRepository.getCachedShops().firstOrNull()
-                if (!cachedShops.isNullOrEmpty()) {
-                    Result.Success(filterShopsBySearch(cachedShops, search))
+            if (response.isSuccessful) {
+                val shops = response.body()
+                if (shops != null) {
+                    shopsCache.put(cacheKey, shops)
+                    cacheRepository.cacheShops(shops, cacheKey)
+                    Result.Success(filterShopsBySearch(shops, search))
                 } else {
-                    Result.Error(response.message(), response.code())
+                    shopsFallbackFromCache(
+                        cacheKey = cacheKey,
+                        search = search,
+                        failureMessage = "Empty response body",
+                        failureCode = response.code()
+                    )
                 }
+            } else {
+                shopsFallbackFromCache(
+                    cacheKey = cacheKey,
+                    search = search,
+                    failureMessage = response.message(),
+                    failureCode = response.code()
+                )
             }
         } catch (e: Exception) {
-            val cachedShops = cacheRepository.getCachedShops().firstOrNull()
-            if (!cachedShops.isNullOrEmpty()) {
-                Result.Success(filterShopsBySearch(cachedShops, search))
-            } else {
-                Result.Error(e.message ?: "Failed to load shops")
-            }
+            shopsFallbackFromCache(
+                cacheKey = cacheKey,
+                search = search,
+                failureMessage = e.message ?: "Failed to load shops",
+                failureCode = null
+            )
         }
     }
     
@@ -229,10 +315,15 @@ class CustomerRepository @Inject constructor(
         
         return try {
             val response = api.getShopById(shopId)
-            if (response.isSuccessful && response.body() != null) {
-                val shop = response.body()!!
-                shopDetailCache.put(shopId, shop)
-                Result.Success(shop)
+            if (response.isSuccessful) {
+                when (val parsed = successFromBody(response)) {
+                    is Result.Success -> {
+                        shopDetailCache.put(shopId, parsed.data)
+                        parsed
+                    }
+                    is Result.Error -> parsed
+                    is Result.Loading -> Result.Loading
+                }
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -286,40 +377,44 @@ class CustomerRepository @Inject constructor(
                 longitude = longitude,
                 radius = radius
             )
-            if (response.isSuccessful && response.body() != null) {
-                val body = response.body()!!
-                servicesCache.put(cacheKey, body)
-                cacheRepository.cacheServices(body.items, cacheKey)
-                Result.Success(body)
-            } else {
-                val cachedServices = cacheRepository.getCachedServices().firstOrNull()
-                if (!cachedServices.isNullOrEmpty()) {
-                    Result.Success(
-                        ServicesResponse(
-                            page = page,
-                            pageSize = pageSize,
-                            hasMore = false,
-                            items = cachedServices
-                        )
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null) {
+                    servicesCache.put(cacheKey, body)
+                    cacheRepository.cacheServices(
+                        services = body.items,
+                        cacheKey = cacheKey,
+                        page = body.page,
+                        pageSize = body.pageSize,
+                        hasMore = body.hasMore
                     )
+                    Result.Success(body)
                 } else {
-                    Result.Error(response.message(), response.code())
-                }
-            }
-        } catch (e: Exception) {
-            val cachedServices = cacheRepository.getCachedServices().firstOrNull()
-            if (!cachedServices.isNullOrEmpty()) {
-                Result.Success(
-                    ServicesResponse(
+                    servicesFallbackFromCache(
+                        cacheKey = cacheKey,
                         page = page,
                         pageSize = pageSize,
-                        hasMore = false,
-                        items = cachedServices
+                        failureMessage = "Empty response body",
+                        failureCode = response.code()
                     )
-                )
+                }
             } else {
-                Result.Error(e.message ?: "Failed to load services")
+                servicesFallbackFromCache(
+                    cacheKey = cacheKey,
+                    page = page,
+                    pageSize = pageSize,
+                    failureMessage = response.message(),
+                    failureCode = response.code()
+                )
             }
+        } catch (e: Exception) {
+            servicesFallbackFromCache(
+                cacheKey = cacheKey,
+                page = page,
+                pageSize = pageSize,
+                failureMessage = e.message ?: "Failed to load services",
+                failureCode = null
+            )
         }
     }
     
@@ -328,10 +423,15 @@ class CustomerRepository @Inject constructor(
         
         return try {
             val response = api.getServiceById(serviceId)
-            if (response.isSuccessful && response.body() != null) {
-                val service = response.body()!!
-                serviceDetailCache.put(serviceId, service)
-                Result.Success(service)
+            if (response.isSuccessful) {
+                when (val parsed = successFromBody(response)) {
+                    is Result.Success -> {
+                        serviceDetailCache.put(serviceId, parsed.data)
+                        parsed
+                    }
+                    is Result.Error -> parsed
+                    is Result.Loading -> Result.Loading
+                }
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -346,7 +446,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getCart()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -388,7 +488,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getWishlist()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -430,7 +530,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.updateProfile(userId, data)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -466,7 +566,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getUserById(userId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -481,7 +581,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getCustomerOrders(status = status)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -494,7 +594,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getOrderById(orderId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -524,8 +624,13 @@ class CustomerRepository @Inject constructor(
                 paymentMethod = paymentMethod
             )
             val response = api.createOrder(request)
-            if (response.isSuccessful && response.body()?.order != null) {
-                Result.Success(response.body()!!.order!!)
+            if (response.isSuccessful) {
+                val order = response.body()?.order
+                if (order != null) {
+                    Result.Success(order)
+                } else {
+                    Result.Error("Empty response body", response.code())
+                }
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -540,7 +645,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.agreeFinalBill(orderId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -553,7 +658,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.submitPaymentReference(orderId, mapOf("paymentReference" to reference))
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -566,7 +671,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.updatePaymentMethod(orderId, mapOf("paymentMethod" to paymentMethod))
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -579,7 +684,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.cancelOrder(orderId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -594,7 +699,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getCustomerBookings()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -607,7 +712,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getCustomerBookingRequests()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -620,7 +725,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getCustomerBookingHistory()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -633,7 +738,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getBookingById(bookingId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -646,7 +751,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getServiceBookingSlots(serviceId, date)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -671,7 +776,7 @@ class CustomerRepository @Inject constructor(
             )
             val response = api.createBooking(request)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -688,7 +793,7 @@ class CustomerRepository @Inject constructor(
             )
             val response = api.updateBooking(bookingId, request)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -710,7 +815,7 @@ class CustomerRepository @Inject constructor(
             )
             val response = api.updateBooking(bookingId, request)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -786,7 +891,7 @@ class CustomerRepository @Inject constructor(
             )
             val response = api.submitReview(request)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -802,7 +907,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getServiceReviews(serviceId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -818,7 +923,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getProductReviews(productId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -832,7 +937,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getCustomerReviews()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -846,7 +951,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getCustomerProductReviews()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -861,7 +966,7 @@ class CustomerRepository @Inject constructor(
             val request = com.doorstep.tn.core.network.UpdateReviewRequest(rating = rating, review = review)
             val response = api.updateServiceReview(reviewId, request)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -876,7 +981,7 @@ class CustomerRepository @Inject constructor(
             val request = com.doorstep.tn.core.network.UpdateReviewRequest(rating = rating, review = review)
             val response = api.updateProductReview(reviewId, request)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -915,9 +1020,14 @@ class CustomerRepository @Inject constructor(
     suspend fun getNotifications(): Result<List<com.doorstep.tn.core.network.AppNotification>> {
         return try {
             val response = api.getNotifications()
-            if (response.isSuccessful && response.body() != null) {
+            if (response.isSuccessful) {
                 // Extract notifications list from wrapper object (server returns {data: [...], total, totalPages})
-                Result.Success(response.body()!!.data)
+                val body = response.body()
+                if (body != null) {
+                    Result.Success(body.data)
+                } else {
+                    Result.Error("Empty response body", response.code())
+                }
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -947,7 +1057,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getActivePromotions(shopId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -971,7 +1081,7 @@ class CustomerRepository @Inject constructor(
             )
             val response = api.validatePromotion(request)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -1035,7 +1145,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.globalSearch(query, latitude, longitude, radius, limit)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -1060,7 +1170,7 @@ class CustomerRepository @Inject constructor(
             )
             val response = api.createTextOrder(request)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -1085,7 +1195,7 @@ class CustomerRepository @Inject constructor(
             )
             val response = api.quickAddProduct(request)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -1101,7 +1211,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getOrderTimeline(orderId)
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -1144,7 +1254,7 @@ class CustomerRepository @Inject constructor(
         return try {
             val response = api.getBuyAgainRecommendations()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }

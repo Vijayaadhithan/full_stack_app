@@ -1,6 +1,7 @@
 package com.doorstep.tn.core.database
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -11,9 +12,19 @@ import androidx.room.PrimaryKey
 /**
  * Cached product entity for offline access
  */
-@Entity(tableName = "cached_products")
+@Entity(
+    tableName = "cached_products",
+    primaryKeys = ["cacheKey", "id"],
+    indices = [
+        Index(value = ["cacheKey"]),
+        Index(value = ["id"]),
+        Index(value = ["cachedAt"])
+    ]
+)
 data class CachedProduct(
-    @PrimaryKey val id: Int,
+    val cacheKey: String,
+    val id: Int,
+    val itemOrder: Int = 0,
     val name: String,
     val description: String?,
     val price: String,
@@ -31,9 +42,19 @@ data class CachedProduct(
 /**
  * Cached service entity for offline access
  */
-@Entity(tableName = "cached_services")
+@Entity(
+    tableName = "cached_services",
+    primaryKeys = ["cacheKey", "id"],
+    indices = [
+        Index(value = ["cacheKey"]),
+        Index(value = ["id"]),
+        Index(value = ["cachedAt"])
+    ]
+)
 data class CachedService(
-    @PrimaryKey val id: Int,
+    val cacheKey: String,
+    val id: Int,
+    val itemOrder: Int = 0,
     val name: String,
     val description: String?,
     val price: String,
@@ -51,9 +72,19 @@ data class CachedService(
 /**
  * Cached shop entity for offline access
  */
-@Entity(tableName = "cached_shops")
+@Entity(
+    tableName = "cached_shops",
+    primaryKeys = ["cacheKey", "id"],
+    indices = [
+        Index(value = ["cacheKey"]),
+        Index(value = ["id"]),
+        Index(value = ["cachedAt"])
+    ]
+)
 data class CachedShop(
-    @PrimaryKey val id: Int,
+    val cacheKey: String,
+    val id: Int,
+    val itemOrder: Int = 0,
     val name: String,
     val description: String?,
     val address: String?,
@@ -74,5 +105,8 @@ data class CachedShop(
 data class CacheMetadata(
     @PrimaryKey val cacheKey: String,
     val lastUpdated: Long = System.currentTimeMillis(),
-    val expiresAt: Long = System.currentTimeMillis() + (5 * 60 * 1000) // 5 min default TTL
+    val expiresAt: Long = System.currentTimeMillis() + (5 * 60 * 1000), // 5 min default TTL
+    val responsePage: Int? = null,
+    val responsePageSize: Int? = null,
+    val responseHasMore: Boolean? = null
 )

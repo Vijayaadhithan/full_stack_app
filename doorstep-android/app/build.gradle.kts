@@ -120,32 +120,37 @@ fun String.requiresReleaseConfigValidation(): Boolean {
     val isAssembleRelease = lower.startsWith("assemble") && lower.endsWith("release")
     val isBundleRelease = lower.startsWith("bundle") && lower.endsWith("release")
     val isPublishRelease = lower.startsWith("publish") && lower.contains("release")
-    return isAssembleRelease || isBundleRelease || isPublishRelease
+    val isPackageRelease = lower.startsWith("package") && lower.endsWith("release")
+    return isAssembleRelease || isBundleRelease || isPublishRelease || isPackageRelease
 }
 
-tasks.configureEach {
-    if (!name.requiresReleaseConfigValidation()) return@configureEach
-    doFirst {
-        if (versionCodeOverride == null) {
-            throw GradleException("VERSION_CODE must be set for release builds (e.g., -PVERSION_CODE=2 or env VERSION_CODE=2).")
-        }
-        if (apiCertPins.isNullOrBlank()) {
-            throw GradleException("API_CERT_PINS must be set for release builds.")
-        }
-        val missingSigningConfig = listOf(
-            "RELEASE_KEYSTORE_FILE" to releaseKeystoreFile,
-            "RELEASE_KEYSTORE_PASSWORD" to releaseStorePassword,
-            "RELEASE_KEY_ALIAS" to releaseKeyAlias,
-            "RELEASE_KEY_PASSWORD" to releaseKeyPassword
-        ).filter { it.second.isNullOrBlank() }.map { it.first }
-        if (missingSigningConfig.isNotEmpty()) {
-            throw GradleException(
-                "Release signing is not configured. Missing: ${missingSigningConfig.joinToString(", ")}"
-            )
-        }
-        if (!file(releaseKeystoreFile!!).exists()) {
-            throw GradleException("Release keystore file not found: $releaseKeystoreFile")
-        }
+fun validateReleaseBuildConfig() {
+    if (versionCodeOverride == null) {
+        throw GradleException("VERSION_CODE must be set for release builds (e.g., -PVERSION_CODE=2 or env VERSION_CODE=2).")
+    }
+    if (apiCertPins.isNullOrBlank()) {
+        throw GradleException("API_CERT_PINS must be set for release builds.")
+    }
+    val missingSigningConfig = listOf(
+        "RELEASE_KEYSTORE_FILE" to releaseKeystoreFile,
+        "RELEASE_KEYSTORE_PASSWORD" to releaseStorePassword,
+        "RELEASE_KEY_ALIAS" to releaseKeyAlias,
+        "RELEASE_KEY_PASSWORD" to releaseKeyPassword
+    ).filter { it.second.isNullOrBlank() }.map { it.first }
+    if (missingSigningConfig.isNotEmpty()) {
+        throw GradleException(
+            "Release signing is not configured. Missing: ${missingSigningConfig.joinToString(", ")}"
+        )
+    }
+    if (!file(releaseKeystoreFile!!).exists()) {
+        throw GradleException("Release keystore file not found: $releaseKeystoreFile")
+    }
+}
+
+gradle.taskGraph.whenReady {
+    val requiresValidation = allTasks.any { it.name.requiresReleaseConfigValidation() }
+    if (requiresValidation) {
+        validateReleaseBuildConfig()
     }
 }
 

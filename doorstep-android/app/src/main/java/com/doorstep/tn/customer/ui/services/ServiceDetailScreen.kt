@@ -74,7 +74,7 @@ fun ServiceDetailScreen(
                 CircularProgressIndicator(color = ProviderBlue)
             }
         } else if (service != null) {
-            val s = service!!
+            val s = service ?: return@Scaffold
             val reviews by viewModel.serviceReviews.collectAsState()
             val reviewCount = if (reviews.isNotEmpty()) reviews.size else s.reviewCount
             val computedRating = if (reviews.isNotEmpty()) {

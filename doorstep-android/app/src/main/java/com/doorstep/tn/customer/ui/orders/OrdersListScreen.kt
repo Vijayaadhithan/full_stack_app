@@ -66,7 +66,7 @@ fun OrdersListScreen(
         viewModel.loadOrders(status = if (selectedStatus == "all") null else selectedStatus)
     }
 
-    PollingEffect(intervalMs = 30_000L) {
+    PollingEffect(intervalMs = 120_000L) {
         viewModel.loadOrders(status = if (selectedStatus == "all") null else selectedStatus)
     }
     

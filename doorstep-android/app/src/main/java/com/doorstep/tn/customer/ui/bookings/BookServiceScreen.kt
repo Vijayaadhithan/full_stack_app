@@ -1,7 +1,6 @@
 package com.doorstep.tn.customer.ui.bookings
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.auth.ui.AuthViewModel
 import com.doorstep.tn.common.config.PlatformConfig
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.util.openUriSafely
 import com.doorstep.tn.core.network.UpdateProfileRequest
 import com.doorstep.tn.customer.ui.CustomerViewModel
 import com.google.android.gms.location.LocationServices
@@ -105,6 +105,58 @@ fun BookServiceScreen(
     val dateFormatter = remember { DateTimeFormatter.ofPattern("MMMM d, yyyy") }
     val zoneId = remember { ZoneId.of("Asia/Kolkata") }
 
+    fun captureAndSaveLocation() {
+        isCapturingLocation = true
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        val cancellationTokenSource = CancellationTokenSource()
+
+        client.getCurrentLocation(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            cancellationTokenSource.token
+        ).addOnSuccessListener { location ->
+            if (location != null) {
+                capturedLatitude = location.latitude
+                capturedLongitude = location.longitude
+                lastGpsAccuracyMeters = location.accuracy.toDouble()
+
+                if (user == null) {
+                    isCapturingLocation = false
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Unable to save location. Please try again.")
+                    }
+                    return@addOnSuccessListener
+                }
+
+                viewModel.updateProfileLocation(
+                    latitude = String.format(Locale.US, "%.7f", location.latitude),
+                    longitude = String.format(Locale.US, "%.7f", location.longitude),
+                    onSuccess = {
+                        isCapturingLocation = false
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Location saved successfully")
+                        }
+                    },
+                    onError = { error ->
+                        isCapturingLocation = false
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Error: $error")
+                        }
+                    }
+                )
+            } else {
+                isCapturingLocation = false
+                scope.launch {
+                    snackbarHostState.showSnackbar("Unable to get your location")
+                }
+            }
+        }.addOnFailureListener { error ->
+            isCapturingLocation = false
+            scope.launch {
+                snackbarHostState.showSnackbar(error.message ?: "Failed to get location")
+            }
+        }
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -112,55 +164,7 @@ fun BookServiceScreen(
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
         if (fineGranted || coarseGranted) {
-            isCapturingLocation = true
-            val client = LocationServices.getFusedLocationProviderClient(context)
-            val cancellationTokenSource = CancellationTokenSource()
-
-            client.getCurrentLocation(
-                Priority.PRIORITY_HIGH_ACCURACY,
-                cancellationTokenSource.token
-            ).addOnSuccessListener { location ->
-                if (location != null) {
-                    capturedLatitude = location.latitude
-                    capturedLongitude = location.longitude
-                    lastGpsAccuracyMeters = location.accuracy.toDouble()
-
-                    if (user == null) {
-                        isCapturingLocation = false
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Unable to save location. Please try again.")
-                        }
-                        return@addOnSuccessListener
-                    }
-
-                    viewModel.updateProfileLocation(
-                        latitude = String.format(Locale.US, "%.7f", location.latitude),
-                        longitude = String.format(Locale.US, "%.7f", location.longitude),
-                        onSuccess = {
-                            isCapturingLocation = false
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Location saved successfully")
-                            }
-                        },
-                        onError = { error ->
-                            isCapturingLocation = false
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Error: $error")
-                            }
-                        }
-                    )
-                } else {
-                    isCapturingLocation = false
-                    scope.launch {
-                        snackbarHostState.showSnackbar("Unable to get your location")
-                    }
-                }
-            }.addOnFailureListener { error ->
-                isCapturingLocation = false
-                scope.launch {
-                    snackbarHostState.showSnackbar(error.message ?: "Failed to get location")
-                }
-            }
+            captureAndSaveLocation()
         } else {
             scope.launch {
                 snackbarHostState.showSnackbar("Location permission denied")
@@ -179,12 +183,7 @@ fun BookServiceScreen(
         ) == PackageManager.PERMISSION_GRANTED
 
         if (hasFineLocation || hasCoarseLocation) {
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
+            captureAndSaveLocation()
         } else {
             locationPermissionLauncher.launch(
                 arrayOf(
@@ -299,9 +298,7 @@ fun BookServiceScreen(
     }
 
     fun openUrl(url: String) {
-        try {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        } catch (_: Exception) {
+        if (!context.openUriSafely(Uri.parse(url))) {
             scope.launch {
                 snackbarHostState.showSnackbar("Unable to open link")
             }
@@ -841,12 +838,14 @@ fun BookServiceScreen(
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
-                                if (lastGpsAccuracyMeters != null && lastGpsAccuracyMeters!! > GPS_WEAK_ACCURACY_METERS) {
-                                    Text(
-                                        text = "GPS accuracy is weak (${lastGpsAccuracyMeters?.toInt()} m).",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = ErrorRed
-                                    )
+                                lastGpsAccuracyMeters?.let { accuracy ->
+                                    if (accuracy > GPS_WEAK_ACCURACY_METERS) {
+                                        Text(
+                                            text = "GPS accuracy is weak (${accuracy.toInt()} m).",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = ErrorRed
+                                        )
+                                    }
                                 }
                                 Button(
                                     onClick = { requestLocation() },

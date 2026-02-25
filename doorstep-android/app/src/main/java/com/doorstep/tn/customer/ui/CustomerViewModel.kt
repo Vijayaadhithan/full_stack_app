@@ -808,42 +808,6 @@ class CustomerViewModel @Inject constructor(
                     price = cartItem.product.price
                 )
             }
-            
-            // Create request manually to include discount and promotionId
-            val request = com.doorstep.tn.core.network.CreateOrderRequest(
-                items = orderItems,
-                subtotal = subtotal,
-                total = total,
-                discount = discount,
-                promotionId = promotionId,
-                deliveryMethod = deliveryMethod,
-                paymentMethod = paymentMethod
-            )
-
-            // Direct call to API since repo wrapper might not expose all fields yet or need updating
-            // Actually reusing repo's createOrder but we need to update it to accept new params OR 
-            // since we can't easily change repo method signature without breaking other calls, 
-            // let's update repository method too. 
-            // Wait, I can update the repository method in a separate step or just overload it?
-            // Checking repository code... it constructs CreateOrderRequest inside. 
-            // I need to update repo first or use a new method. 
-            // For now, I'll update the repo call in the next step to support these params, 
-            // assuming I'll update repo right after this.
-            
-            // Actually, I can just use the repository's createOrder if I update it. 
-            // Let's assume I updated repository.createOrder to take discount and promotionId.
-            // But wait, the previous tool call didn't update createOrder signature in Repository.
-            // I should update Repository signature first.
-            
-            // To be safe and sequential, I will revert to using repository.createOrder 
-            // but I need to update it to support discount/promo.
-            // Since I cannot update two files in one step easily if I missed it, 
-            // I will update this VM method to call a NEW repository method `createOrderWithPromotion` 
-            // OR I will simply construct the request here if I could access API directly (but I can't, it's private in repo).
-            
-            // Plan: Update `CustomerRepository`'s `createOrder` to accept optional `discount` and `promotionId` 
-            // AND then update this VM method.
-            // Since I am already in VM file edit, I will write the code assuming Repo update comes next.
              
             when (val result = repository.createOrder(
                 items = orderItems,
@@ -855,14 +819,6 @@ class CustomerViewModel @Inject constructor(
                 promotionId = promotionId
             )) {
                 is Result.Success -> {
-                    if (promotionId != null) {
-                        when (val promoResult = repository.applyPromotion(promotionId, result.data.id)) {
-                            is Result.Error -> {
-                                _toastEvent.emit(promoResult.message ?: "Failed to apply promotion")
-                            }
-                            else -> {}
-                        }
-                    }
                     // Clear cart immediately for instant UI update
                     // Server clears cart on order creation, so no need to reload
                     _cartItems.value = emptyList()

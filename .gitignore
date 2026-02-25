@@ -5,6 +5,7 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
+doorstep-android/release.env
 /reports
 /coverage
 /logs

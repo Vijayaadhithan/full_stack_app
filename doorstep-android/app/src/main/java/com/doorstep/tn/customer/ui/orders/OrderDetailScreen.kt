@@ -1,6 +1,5 @@
 package com.doorstep.tn.customer.ui.orders
 
-import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -33,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.doorstep.tn.auth.data.model.UserResponse
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.util.openUriSafely
 import com.doorstep.tn.core.network.OrderTimelineEntry
 import com.doorstep.tn.customer.data.model.Order
 import com.doorstep.tn.customer.data.model.OrderItem
@@ -133,7 +133,7 @@ fun OrderDetailScreen(
                 }
             }
         } else {
-            val order = selectedOrder!!
+            val order = selectedOrder ?: return@Scaffold
             OrderDetailContent(
                 order = order,
                 orderId = orderId,
@@ -142,15 +142,23 @@ fun OrderDetailScreen(
                 viewModel = viewModel,
                 onOpenMap = { lat, lng ->
                     val gmmIntentUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng")
-                    val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                    mapIntent.setPackage("com.google.android.apps.maps")
-                    context.startActivity(mapIntent)
+                    val openedGoogleMaps = context.openUriSafely(
+                        uri = gmmIntentUri,
+                        targetPackage = "com.google.android.apps.maps"
+                    )
+                    if (!openedGoogleMaps) {
+                        val browserUri = Uri.parse("https://maps.google.com/?q=$lat,$lng")
+                        if (!context.openUriSafely(browserUri)) {
+                            Toast.makeText(context, "No app found to open maps", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 },
                 onSendWhatsApp = { phone, lat, lng ->
                     val message = "Here is the shop location: https://www.google.com/maps?q=$lat,$lng"
                     val uri = Uri.parse("https://wa.me/$phone?text=${Uri.encode(message)}")
-                    val intent = Intent(Intent.ACTION_VIEW, uri)
-                    context.startActivity(intent)
+                    if (!context.openUriSafely(uri)) {
+                        Toast.makeText(context, "No app found to share this message", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 onLeaveReview = { item ->
                     selectedProductForReview = item

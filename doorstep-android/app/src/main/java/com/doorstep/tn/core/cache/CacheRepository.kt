@@ -4,8 +4,6 @@ import com.doorstep.tn.core.database.*
 import com.doorstep.tn.customer.data.model.Product
 import com.doorstep.tn.customer.data.model.Service
 import com.doorstep.tn.customer.data.model.Shop
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,12 +25,10 @@ class CacheRepository @Inject constructor(
     // ==================== Products ====================
     
     /**
-     * Get all cached products as Flow
+     * Get cached products for a specific cache key.
      */
-    fun getCachedProducts(): Flow<List<Product>> {
-        return productCacheDao.getAllProducts().map { cachedList ->
-            cachedList.map { it.toProduct() }
-        }
+    suspend fun getCachedProducts(cacheKey: String): List<Product> {
+        return productCacheDao.getProductsByCacheKey(cacheKey).map { it.toProduct() }
     }
     
     /**
@@ -45,13 +41,25 @@ class CacheRepository @Inject constructor(
     /**
      * Cache products from API response
      */
-    suspend fun cacheProducts(products: List<Product>, cacheKey: String) {
-        val cachedProducts = products.map { it.toCachedProduct() }
+    suspend fun cacheProducts(
+        products: List<Product>,
+        cacheKey: String,
+        page: Int,
+        pageSize: Int,
+        hasMore: Boolean
+    ) {
+        val cachedProducts = products.mapIndexed { index, product ->
+            product.toCachedProduct(cacheKey, index)
+        }
+        productCacheDao.deleteByCacheKey(cacheKey)
         productCacheDao.insertProducts(cachedProducts)
         cacheMetadataDao.setMetadata(
             CacheMetadata(
                 cacheKey = cacheKey,
-                expiresAt = System.currentTimeMillis() + CACHE_TTL_MS
+                expiresAt = System.currentTimeMillis() + CACHE_TTL_MS,
+                responsePage = page,
+                responsePageSize = pageSize,
+                responseHasMore = hasMore
             )
         )
     }
@@ -65,23 +73,33 @@ class CacheRepository @Inject constructor(
     
     // ==================== Services ====================
     
-    fun getCachedServices(): Flow<List<Service>> {
-        return serviceCacheDao.getAllServices().map { cachedList ->
-            cachedList.map { it.toService() }
-        }
+    suspend fun getCachedServices(cacheKey: String): List<Service> {
+        return serviceCacheDao.getServicesByCacheKey(cacheKey).map { it.toService() }
     }
     
     suspend fun getCachedService(serviceId: Int): Service? {
         return serviceCacheDao.getServiceById(serviceId)?.toService()
     }
     
-    suspend fun cacheServices(services: List<Service>, cacheKey: String) {
-        val cachedServices = services.map { it.toCachedService() }
+    suspend fun cacheServices(
+        services: List<Service>,
+        cacheKey: String,
+        page: Int,
+        pageSize: Int,
+        hasMore: Boolean
+    ) {
+        val cachedServices = services.mapIndexed { index, service ->
+            service.toCachedService(cacheKey, index)
+        }
+        serviceCacheDao.deleteByCacheKey(cacheKey)
         serviceCacheDao.insertServices(cachedServices)
         cacheMetadataDao.setMetadata(
             CacheMetadata(
                 cacheKey = cacheKey,
-                expiresAt = System.currentTimeMillis() + CACHE_TTL_MS
+                expiresAt = System.currentTimeMillis() + CACHE_TTL_MS,
+                responsePage = page,
+                responsePageSize = pageSize,
+                responseHasMore = hasMore
             )
         )
     }
@@ -92,10 +110,8 @@ class CacheRepository @Inject constructor(
     
     // ==================== Shops ====================
     
-    fun getCachedShops(): Flow<List<Shop>> {
-        return shopCacheDao.getAllShops().map { cachedList ->
-            cachedList.map { it.toShop() }
-        }
+    suspend fun getCachedShops(cacheKey: String): List<Shop> {
+        return shopCacheDao.getShopsByCacheKey(cacheKey).map { it.toShop() }
     }
     
     suspend fun getCachedShop(shopId: Int): Shop? {
@@ -103,7 +119,10 @@ class CacheRepository @Inject constructor(
     }
     
     suspend fun cacheShops(shops: List<Shop>, cacheKey: String) {
-        val cachedShops = shops.map { it.toCachedShop() }
+        val cachedShops = shops.mapIndexed { index, shop ->
+            shop.toCachedShop(cacheKey, index)
+        }
+        shopCacheDao.deleteByCacheKey(cacheKey)
         shopCacheDao.insertShops(cachedShops)
         cacheMetadataDao.setMetadata(
             CacheMetadata(
@@ -115,6 +134,10 @@ class CacheRepository @Inject constructor(
     
     suspend fun isShopsCacheValid(cacheKey: String): Boolean {
         return cacheMetadataDao.isCacheValid(cacheKey)
+    }
+
+    suspend fun getCacheMetadata(cacheKey: String): CacheMetadata? {
+        return cacheMetadataDao.getMetadata(cacheKey)
     }
     
     // ==================== Cleanup ====================
@@ -158,9 +181,11 @@ private fun CachedProduct.toProduct(): Product {
     )
 }
 
-private fun Product.toCachedProduct(): CachedProduct {
+private fun Product.toCachedProduct(cacheKey: String, itemOrder: Int): CachedProduct {
     return CachedProduct(
+        cacheKey = cacheKey,
         id = id,
+        itemOrder = itemOrder,
         name = name,
         description = description,
         price = price,
@@ -191,9 +216,11 @@ private fun CachedService.toService(): Service {
     )
 }
 
-private fun Service.toCachedService(): CachedService {
+private fun Service.toCachedService(cacheKey: String, itemOrder: Int): CachedService {
     return CachedService(
+        cacheKey = cacheKey,
         id = id,
+        itemOrder = itemOrder,
         name = name,
         description = description,
         price = price,
@@ -224,9 +251,11 @@ private fun CachedShop.toShop(): Shop {
     )
 }
 
-private fun Shop.toCachedShop(): CachedShop {
+private fun Shop.toCachedShop(cacheKey: String, itemOrder: Int): CachedShop {
     return CachedShop(
+        cacheKey = cacheKey,
         id = id,
+        itemOrder = itemOrder,
         name = displayName,
         description = description,
         address = addressStreet,

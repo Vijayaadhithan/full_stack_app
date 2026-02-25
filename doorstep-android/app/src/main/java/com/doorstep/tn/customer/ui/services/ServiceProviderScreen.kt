@@ -2,6 +2,7 @@ package com.doorstep.tn.customer.ui.services
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -22,6 +23,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.theme.*
+import com.doorstep.tn.common.util.launchIntentSafely
+import com.doorstep.tn.common.util.openUriSafely
 import com.doorstep.tn.customer.data.model.ProviderInfo
 import com.doorstep.tn.customer.ui.CustomerViewModel
 
@@ -84,7 +87,7 @@ fun ServiceProviderScreen(
                 }
             }
             else -> {
-                val s = service!!
+                val s = service ?: return@Scaffold
                 val provider = s.provider
 
                 Column(
@@ -105,13 +108,17 @@ fun ServiceProviderScreen(
                                 val intent = Intent(Intent.ACTION_DIAL).apply {
                                     data = Uri.parse("tel:$digits")
                                 }
-                                context.startActivity(intent)
+                                if (!context.launchIntentSafely(intent)) {
+                                    Toast.makeText(context, "No app found to place a call", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         },
                         onOpenMap = { latitude, longitude, address ->
                             val uri = buildMapsUri(latitude, longitude, address)
                             if (uri != null) {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                                if (!context.openUriSafely(uri)) {
+                                    Toast.makeText(context, "No app found to open map", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                     )

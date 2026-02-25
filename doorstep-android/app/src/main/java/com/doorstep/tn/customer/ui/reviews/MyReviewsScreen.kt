@@ -134,39 +134,44 @@ fun MyReviewsScreen(
             }
         }
         
-        if (showEditDialog && reviewToEdit != null) {
-            EditReviewDialog(
-                reviewItem = reviewToEdit!!,
-                onDismiss = {
-                    showEditDialog = false
-                    reviewToEdit = null
-                },
-                onSubmit = { rating, text ->
-                    if (reviewToEdit is CustomerReview) {
-                        viewModel.updateServiceReview(
-                            reviewId = (reviewToEdit as CustomerReview).id,
-                            rating = rating,
-                            review = text,
-                            onSuccess = {
-                                showEditDialog = false
-                                reviewToEdit = null
-                            },
-                            onError = { /* ViewModel handles error state */ }
-                        )
-                    } else if (reviewToEdit is CustomerProductReview) {
-                        viewModel.updateProductReview(
-                            reviewId = (reviewToEdit as CustomerProductReview).id,
-                            rating = rating,
-                            review = text,
-                            onSuccess = {
-                                showEditDialog = false
-                                reviewToEdit = null
-                            },
-                            onError = { /* ViewModel handles error state */ }
-                        )
+        reviewToEdit?.let { reviewItem ->
+            if (showEditDialog) {
+                EditReviewDialog(
+                    reviewItem = reviewItem,
+                    onDismiss = {
+                        showEditDialog = false
+                        reviewToEdit = null
+                    },
+                    onSubmit = { rating, text ->
+                        when (reviewItem) {
+                            is CustomerReview -> {
+                                viewModel.updateServiceReview(
+                                    reviewId = reviewItem.id,
+                                    rating = rating,
+                                    review = text,
+                                    onSuccess = {
+                                        showEditDialog = false
+                                        reviewToEdit = null
+                                    },
+                                    onError = { /* ViewModel handles error state */ }
+                                )
+                            }
+                            is CustomerProductReview -> {
+                                viewModel.updateProductReview(
+                                    reviewId = reviewItem.id,
+                                    rating = rating,
+                                    review = text,
+                                    onSuccess = {
+                                        showEditDialog = false
+                                        reviewToEdit = null
+                                    },
+                                    onError = { /* ViewModel handles error state */ }
+                                )
+                            }
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     }
 }

@@ -1,6 +1,5 @@
 package com.doorstep.tn.customer.ui.bookings
 
-import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -27,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.common.util.StatusUtils
+import com.doorstep.tn.common.util.openUriSafely
 import com.doorstep.tn.core.network.ServiceReview
 import com.doorstep.tn.customer.data.model.Booking
 import com.doorstep.tn.customer.ui.CustomerViewModel
@@ -351,17 +351,24 @@ fun BookingDetailScreen(
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.clickable {
-                                             val mapUri = if (hasLocation) {
+                                            val mapUri = if (hasLocation) {
                                                 Uri.parse("geo:${provider.latitude},${provider.longitude}?q=${provider.latitude},${provider.longitude}(Provider)")
                                             } else {
                                                 Uri.parse("geo:0,0?q=${Uri.encode(address)}")
                                             }
-                                            val mapIntent = Intent(Intent.ACTION_VIEW, mapUri)
-                                            mapIntent.setPackage("com.google.android.apps.maps")
-                                            try {
-                                                context.startActivity(mapIntent)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Maps app not found", Toast.LENGTH_SHORT).show()
+                                            val openedGoogleMaps = context.openUriSafely(
+                                                uri = mapUri,
+                                                targetPackage = "com.google.android.apps.maps"
+                                            )
+                                            if (!openedGoogleMaps) {
+                                                val browserUri = if (hasLocation) {
+                                                    Uri.parse("https://maps.google.com/?q=${provider.latitude},${provider.longitude}")
+                                                } else {
+                                                    Uri.parse("https://maps.google.com/?q=${Uri.encode(address)}")
+                                                }
+                                                if (!context.openUriSafely(browserUri)) {
+                                                    Toast.makeText(context, "No app found to open map", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
                                         }
                                     ) {
@@ -742,9 +749,10 @@ fun BookingDetailScreen(
                                 onClick = {
                                     showReviewDialog = false
                                     val serviceId = b.serviceId ?: return@Button
-                                    if (existingReview != null) {
+                                    val review = existingReview
+                                    if (review != null) {
                                         viewModel.updateServiceReview(
-                                            reviewId = existingReview!!.id,
+                                            reviewId = review.id,
                                             rating = rating,
                                             review = reviewText,
                                             onSuccess = { 

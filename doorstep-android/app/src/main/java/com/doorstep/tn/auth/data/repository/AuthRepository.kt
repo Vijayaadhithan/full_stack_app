@@ -33,6 +33,15 @@ sealed class Result<out T> {
 class AuthRepository @Inject constructor(
     private val api: DoorStepApi
 ) {
+
+    private fun <T> successFromBody(response: retrofit2.Response<T>): Result<T> {
+        val body = response.body()
+        return if (body != null) {
+            Result.Success(body)
+        } else {
+            Result.Error("Empty response body", response.code())
+        }
+    }
     
     /**
      * Check if a user exists by phone number
@@ -41,7 +50,7 @@ class AuthRepository @Inject constructor(
         return try {
             val response = api.checkUser(CheckUserRequest(phone))
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -57,7 +66,7 @@ class AuthRepository @Inject constructor(
         return try {
             val response = api.loginWithPin(LoginPinRequest(phone, pin))
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 val errorMessage = when (response.code()) {
                     401 -> "Invalid PIN"
@@ -92,7 +101,7 @@ class AuthRepository @Inject constructor(
                 )
             )
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -108,7 +117,7 @@ class AuthRepository @Inject constructor(
         return try {
             val response = api.getCurrentUser()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error("Not logged in", response.code())
             }
@@ -175,7 +184,7 @@ class AuthRepository @Inject constructor(
         return try {
             val response = api.getAuthProfiles()
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error("Failed to fetch profiles", response.code())
             }
@@ -199,7 +208,7 @@ class AuthRepository @Inject constructor(
                 )
             )
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
@@ -217,7 +226,7 @@ class AuthRepository @Inject constructor(
         return try {
             val response = api.createProviderProfile(CreateProviderRequest(bio = bio))
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                successFromBody(response)
             } else {
                 Result.Error(response.message(), response.code())
             }
