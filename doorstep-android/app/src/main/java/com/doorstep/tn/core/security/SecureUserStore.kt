@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package com.doorstep.tn.core.security
 
 import android.content.Context

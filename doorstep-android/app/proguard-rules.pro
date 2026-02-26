@@ -28,3 +28,8 @@
 
 # Firebase
 -keep class com.google.firebase.** { *; }
+
+# Play Services Location internal metadata can reference synthetic Kotlin companion symbols.
+# Suppress this known harmless warning in release shrinking.
+-dontwarn com.google.android.gms.internal.location.zze$Companion
+-dontwarn com.google.android.gms.internal.location.**

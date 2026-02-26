@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -105,13 +107,24 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    packaging {
+        jniLibs {
+            keepDebugSymbols += setOf(
+                "**/libandroidx.graphics.path.so",
+                "**/libdatastore_shared_counter.so"
+            )
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
@@ -154,10 +167,42 @@ gradle.taskGraph.whenReady {
     }
 }
 
+fun registerApkAliasTask(variantName: String, aliasFileName: String) {
+    val assembleTaskName = "assemble${variantName.replaceFirstChar { it.uppercase() }}"
+    val aliasTaskName = "alias${variantName.replaceFirstChar { it.uppercase() }}ApkName"
+
+    tasks.register(aliasTaskName) {
+        dependsOn(assembleTaskName)
+        doLast {
+            val apkDir = layout.buildDirectory.dir("outputs/apk/$variantName").get().asFile
+            val sourceApk = apkDir.listFiles()
+                ?.firstOrNull { it.isFile && it.extension == "apk" && it.name != aliasFileName }
+                ?: return@doLast
+            val aliasApk = apkDir.resolve(aliasFileName)
+            sourceApk.copyTo(aliasApk, overwrite = true)
+            sourceApk.delete()
+            val metadataFile = apkDir.resolve("output-metadata.json")
+            if (metadataFile.exists()) {
+                metadataFile.writeText(
+                    metadataFile.readText().replace(sourceApk.name, aliasFileName)
+                )
+            }
+        }
+    }
+
+    tasks.matching { it.name == assembleTaskName }.configureEach {
+        finalizedBy(aliasTaskName)
+    }
+}
+
+registerApkAliasTask(variantName = "debug", aliasFileName = "doorsteptn-debug.apk")
+registerApkAliasTask(variantName = "release", aliasFileName = "doorsteptn-release.apk")
+
 dependencies {
     // Core Android
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
 

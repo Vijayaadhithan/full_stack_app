@@ -396,6 +396,18 @@ Set these values:
 | **Build output directory** | `dist/public` |
 | **Root directory** | _(leave empty)_ |
 
+## Step 4.1: Enforce Frontend Security Headers
+
+Cloudflare Pages will apply headers from `client/public/_headers` during deployment.
+
+Required headers now include:
+- `Strict-Transport-Security`
+- `Content-Security-Policy`
+- `X-Frame-Options`
+- `Permissions-Policy`
+
+Before deploying, confirm `client/public/_headers` is committed.
+
 ## Step 5: Add Environment Variables
 
 Click **"Environment variables"** → **"Add variable"**

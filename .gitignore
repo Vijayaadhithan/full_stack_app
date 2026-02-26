@@ -34,3 +34,4 @@ doorstep-android/*.aab
 # ================== OS ==================
 Thumbs.db
 ehthumbs.db
+doorstep-android/app/debug/output-metadata.json

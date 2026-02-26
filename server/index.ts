@@ -424,18 +424,34 @@ function installGracefulShutdownHooks(server: HttpServer | HttpsServer): void {
 const helmetConfig: HelmetOptions = {
   crossOriginResourcePolicy: { policy: "cross-origin" },
   crossOriginEmbedderPolicy: false,
-  referrerPolicy: { policy: "no-referrer" },
+  contentSecurityPolicy: false,
+  hsts: false,
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
   frameguard: { action: "deny" },
   permittedCrossDomainPolicies: { permittedPolicies: "none" },
-  ...(isProduction
-    ? {
-      hsts: { maxAge: 60 * 60 * 24 * 365, includeSubDomains: true, preload: true },
-    }
-    : {
-      contentSecurityPolicy: false,
-      hsts: false,
-    }),
 };
+
+const STRICT_TRANSPORT_SECURITY_HEADER =
+  "max-age=31536000; includeSubDomains; preload";
+const PERMISSIONS_POLICY_HEADER =
+  "accelerometer=(), autoplay=(), camera=(), geolocation=(self), gyroscope=(), magnetometer=(), microphone=(), payment=(self), usb=()";
+const CONTENT_SECURITY_POLICY_HEADER = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "script-src 'self' https://www.gstatic.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob: https://www.google.com https://www.gstatic.com https://*.tile.openstreetmap.org https://*.openstreetmap.org",
+  "connect-src 'self' https://api.doorsteptn.in https://*.googleapis.com https://*.google.com https://*.gstatic.com https://*.firebaseio.com https://*.firebaseapp.com",
+  "frame-src 'self' https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "media-src 'self' blob: data:",
+  "upgrade-insecure-requests",
+].join("; ");
 
 const MASK_PATTERNS = [
   "password",
@@ -589,9 +605,18 @@ const API_VERSION = "v1";
 const VERSIONED_API_PREFIX = `${API_BASE_PREFIX}/${API_VERSION}`;
 const UNSUPPORTED_API_VERSION_PATTERN = /^\/api\/v[0-9]+(?:\/|$)/i;
 
-// Explicitly allow geolocation on same-origin. (Helmet typings may not support permissionsPolicy.)
+// Keep critical headers explicit so they remain stable across proxy/CDN setups.
 app.use((_req, res, next) => {
-  res.setHeader("Permissions-Policy", "geolocation=(self)");
+  res.setHeader("Permissions-Policy", PERMISSIONS_POLICY_HEADER);
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  if (isProduction) {
+    res.setHeader("Strict-Transport-Security", STRICT_TRANSPORT_SECURITY_HEADER);
+    res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY_HEADER);
+  }
   next();
 });
 app.use((req, res, next) => {
@@ -630,6 +655,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(
+  "/api",
   cors({
     origin: allowAllOrigins
       ? true
