@@ -35,3 +35,9 @@ doorstep-android/*.aab
 Thumbs.db
 ehthumbs.db
 doorstep-android/app/debug/output-metadata.json
+
+# ================== Local-only files ==================
+android/
+firebase-service-account.json
+start.cjs
+ecosystem.config.cjs
