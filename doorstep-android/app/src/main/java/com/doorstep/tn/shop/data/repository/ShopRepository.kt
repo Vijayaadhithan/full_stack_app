@@ -265,7 +265,7 @@ class ShopRepository @Inject constructor(
     suspend fun addWorker(request: AddWorkerRequest): Result<ShopWorker> = try {
         val response = api.addShopWorker(request)
         if (response.isSuccessful) {
-            val worker = response.body()?.worker
+            val worker = response.body()
             if (worker != null) {
                 Result.Success(worker)
             } else {
@@ -281,15 +281,10 @@ class ShopRepository @Inject constructor(
     suspend fun updateWorker(
         workerUserId: Int,
         request: UpdateWorkerRequest
-    ): Result<ShopWorker> = try {
+    ): Result<Unit> = try {
         val response = api.updateShopWorker(workerUserId, request)
         if (response.isSuccessful) {
-            val worker = response.body()?.worker
-            if (worker != null) {
-                Result.Success(worker)
-            } else {
-                Result.Error("Worker not returned")
-            }
+            Result.Success(Unit)
         } else {
             Result.Error(response.message() ?: "Failed to update worker")
         }
@@ -311,16 +306,11 @@ class ShopRepository @Inject constructor(
     suspend fun toggleWorkerStatus(
         workerUserId: Int,
         active: Boolean
-    ): Result<ShopWorker> = try {
+    ): Result<Unit> = try {
         val request = UpdateWorkerRequest(active = active)
         val response = api.updateShopWorker(workerUserId, request)
         if (response.isSuccessful) {
-            val worker = response.body()?.worker
-            if (worker != null) {
-                Result.Success(worker)
-            } else {
-                Result.Error("Worker not returned")
-            }
+            Result.Success(Unit)
         } else {
             Result.Error(response.message() ?: "Failed to toggle worker status")
         }

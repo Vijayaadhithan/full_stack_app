@@ -637,14 +637,14 @@ interface DoorStepApi {
     @POST("api/shops/workers")
     suspend fun addShopWorker(
         @Body request: com.doorstep.tn.shop.data.model.AddWorkerRequest
-    ): Response<com.doorstep.tn.shop.data.model.WorkerResponse>
+    ): Response<com.doorstep.tn.shop.data.model.ShopWorker>
     
     // Update worker - matches web PATCH /api/shops/workers/:userId
     @PATCH("api/shops/workers/{userId}")
     suspend fun updateShopWorker(
         @Path("userId") workerUserId: Int,
         @Body request: com.doorstep.tn.shop.data.model.UpdateWorkerRequest
-    ): Response<com.doorstep.tn.shop.data.model.WorkerResponse>
+    ): Response<Unit>
     
     // Delete worker - matches web DELETE /api/shops/workers/:userId
     @DELETE("api/shops/workers/{userId}")

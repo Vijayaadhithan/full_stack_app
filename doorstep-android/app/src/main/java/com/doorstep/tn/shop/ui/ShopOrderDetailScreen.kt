@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.doorstep.tn.common.ui.PollingEffect
 import com.doorstep.tn.common.theme.*
 import com.doorstep.tn.shop.data.model.ActiveBoardOrder
 import com.doorstep.tn.shop.data.model.ShopOrder
@@ -69,12 +70,17 @@ fun ShopOrderDetailScreen(
     }
     
     LaunchedEffect(orderId) {
-        if (activeBoard == null) {
-            viewModel.loadActiveOrdersBoard()
-        }
-        if (orders.isEmpty()) {
-            viewModel.loadOrders()
-        }
+        viewModel.loadActiveOrdersBoard()
+        viewModel.loadOrders()
+    }
+
+    PollingEffect(
+        intervalMs = 8000L,
+        enabled = true,
+        immediate = false
+    ) {
+        viewModel.loadActiveOrdersBoard()
+        viewModel.loadOrders()
     }
     
     LaunchedEffect(error) {
@@ -488,10 +494,12 @@ fun ShopOrderDetailScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         // Payment Status
+                        val orderStatusForPayment = boardOrder?.status ?: fullOrder?.status
                         val paymentStatus =
-                            fullOrder?.displayPaymentStatus
-                                ?: boardOrder?.paymentStatus
-                                ?: "pending"
+                            resolvePaymentStatusForDisplay(
+                                orderStatus = orderStatusForPayment,
+                                paymentStatus = fullOrder?.displayPaymentStatus ?: boardOrder?.paymentStatus
+                            )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -623,6 +631,7 @@ fun ShopOrderDetailScreen(
                     val paymentMethod = fullOrder?.paymentMethod?.lowercase() 
                     val rawPaymentStatus =
                         (fullOrder?.paymentStatus ?: boardOrder?.paymentStatus)?.lowercase()
+                    val isTerminalStatus = status in setOf("delivered", "returned", "cancelled")
 
                     // 1. Send/Update Bill (for Pending/Awaiting Agreement)
                     if (status == "pending" || status == "awaiting_customer_agreement") {
@@ -685,8 +694,8 @@ fun ShopOrderDetailScreen(
                         }
                     }
 
-                    // 2. Payment Actions (for Confirmed orders)
-                    if (status == "confirmed") {
+                    // 2. Payment Actions
+                    if (!isTerminalStatus) {
                          // Pay Later Approval
                          if (paymentMethod == "pay_later" && rawPaymentStatus == "pending") {
                              Card(
@@ -809,6 +818,7 @@ private fun StatusBadge(status: String) {
 private fun PaymentStatusBadge(status: String) {
     val (color, text) = when (status.lowercase()) {
         "paid" -> Pair(ShopGreen, "Paid")
+        "awaiting_payment" -> Pair(ProviderBlue, "Awaiting Payment")
         "pending" -> Pair(OrangePrimary, "Pending")
         "verifying" -> Pair(WarningYellow, "Verifying")
         "failed" -> Pair(ErrorRed, "Failed")
@@ -827,6 +837,27 @@ private fun PaymentStatusBadge(status: String) {
             color = color
         )
     }
+}
+
+private fun resolvePaymentStatusForDisplay(
+    orderStatus: String?,
+    paymentStatus: String?
+): String {
+    val normalizedOrderStatus = orderStatus?.lowercase()
+    val normalizedPaymentStatus = paymentStatus?.lowercase() ?: "pending"
+    val shouldShowAwaitingPayment =
+        normalizedPaymentStatus == "pending" &&
+            normalizedOrderStatus in setOf(
+                "pending",
+                "confirmed",
+                "processing",
+                "packing",
+                "packed",
+                "ready",
+                "dispatched",
+                "shipped"
+            )
+    return if (shouldShowAwaitingPayment) "awaiting_payment" else normalizedPaymentStatus
 }
 
 private fun formatCurrency(value: String?, fallback: String = "--"): String {
