@@ -22,7 +22,7 @@ jobs:
       - run: npm run check
       - run: npm run test:coverage
       - run: npm run lint
-      - name: Remove old coverage artifacts
+      - name: Remove existing repo artifacts
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/github-script@v8
         with:
@@ -32,7 +32,6 @@ jobs:
               {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                name: 'coverage',
                 per_page: 100,
               }
             );
@@ -40,13 +39,13 @@ jobs:
             const staleArtifacts = artifacts.filter((artifact) => !artifact.expired);
 
             if (staleArtifacts.length === 0) {
-              core.info('No existing coverage artifacts found.');
+              core.info('No existing artifacts found.');
               return;
             }
 
             for (const artifact of staleArtifacts) {
               core.info(
-                `Deleting coverage artifact ${artifact.id} from run ${artifact.workflow_run?.id ?? 'unknown'}`
+                `Deleting artifact ${artifact.id} (${artifact.name}) from run ${artifact.workflow_run?.id ?? 'unknown'}`
               );
               await github.rest.actions.deleteArtifact({
                 owner: context.repo.owner,
@@ -55,7 +54,7 @@ jobs:
               });
             }
 
-            core.info(`Deleted ${staleArtifacts.length} existing coverage artifact(s).`);
+            core.info(`Deleted ${staleArtifacts.length} existing artifact(s).`);
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
