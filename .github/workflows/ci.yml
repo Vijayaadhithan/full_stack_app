@@ -5,6 +5,10 @@ on:
     branches: [ main ]
   pull_request:
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -19,6 +23,52 @@ jobs:
       - run: npm run test:coverage
       - run: npm run lint
       - uses: actions/upload-artifact@v4
+        id: upload-coverage
         with:
           name: coverage
           path: coverage
+      - name: Remove older coverage artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/github-script@v8
+        env:
+          CURRENT_ARTIFACT_ID: ${{ steps.upload-coverage.outputs.artifact-id }}
+        with:
+          script: |
+            const currentArtifactId = Number(process.env.CURRENT_ARTIFACT_ID);
+
+            if (!Number.isInteger(currentArtifactId)) {
+              core.setFailed('Missing artifact id for the current coverage upload.');
+              return;
+            }
+
+            const artifacts = await github.paginate(
+              github.rest.actions.listArtifactsForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'coverage',
+                per_page: 100,
+              }
+            );
+
+            const staleArtifacts = artifacts.filter(
+              (artifact) => artifact.id !== currentArtifactId && !artifact.expired
+            );
+
+            if (staleArtifacts.length === 0) {
+              core.info('No old coverage artifacts found.');
+              return;
+            }
+
+            for (const artifact of staleArtifacts) {
+              core.info(
+                `Deleting coverage artifact ${artifact.id} from run ${artifact.workflow_run?.id ?? 'unknown'}`
+              );
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id,
+              });
+            }
+
+            core.info(`Deleted ${staleArtifacts.length} old coverage artifact(s).`);
