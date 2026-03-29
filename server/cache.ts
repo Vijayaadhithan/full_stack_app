@@ -1,4 +1,9 @@
 import logger from "./logger";
+import {
+  getRedisUrl,
+  isRedisConnectionError,
+  isRedisDisabled,
+} from "./redisConfig";
 
 interface CacheEntry<T> {
   expire: number;
@@ -20,6 +25,7 @@ let loggedMissingUrl = false;
 let loggedDisabled = false;
 let redisModuleLoader: (() => Promise<any>) | null = null;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+let closingRedisClient = false;
 
 function patternToRegex(pattern: string): RegExp {
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
@@ -78,6 +84,7 @@ export async function __resetCacheForTesting() {
   loggedMissingUrl = false;
   loggedDisabled = false;
   redisModuleLoader = null;
+  closingRedisClient = false;
   memoryCache.clear();
 }
 export function __setRedisModuleLoaderForTesting(
@@ -97,13 +104,7 @@ async function initRedis() {
     return;
   }
 
-  const disableEnv = process.env.DISABLE_REDIS;
-  const disableFlag = disableEnv ? disableEnv.trim().toLowerCase() : undefined;
-  const redisDisabled =
-    disableFlag === "true" ||
-    disableFlag === "1" ||
-    disableFlag === "yes" ||
-    disableFlag === "on";
+  const redisDisabled = isRedisDisabled();
 
   if (redisDisabled) {
     if (process.env.NODE_ENV === "production") {
@@ -120,7 +121,7 @@ async function initRedis() {
     return;
   }
 
-  const redisUrl = process.env.REDIS_URL?.trim();
+  const redisUrl = getRedisUrl();
   if (!redisUrl) {
     if (process.env.NODE_ENV === "production") {
       logger.fatal("REDIS_URL not set but running in PRODUCTION mode. Exiting...");
@@ -155,12 +156,32 @@ async function initRedis() {
       });
 
       client.on("error", (error: Error) => {
-        if (redisReady) {
+        if (isRedisConnectionError(error)) {
+          logger.warn(
+            { err: error },
+            redisReady
+              ? "Redis cache connection lost; serving cache from memory until Redis reconnects."
+              : "Redis cache connection failed; using in-memory fallback until Redis is reachable.",
+          );
+        } else if (redisReady) {
           logger.error({ err: error }, "Redis connection error");
         } else {
           logger.warn({ err: error }, "Redis connection failed");
         }
         redisReady = false;
+      });
+
+      client.on("reconnecting", () => {
+        logger.info("Redis cache reconnecting");
+      });
+
+      client.on("end", () => {
+        redisReady = false;
+        if (closingRedisClient) {
+          logger.info("Redis cache connection closed");
+          return;
+        }
+        logger.warn("Redis cache connection closed");
       });
 
       client.on("connect", () => {
@@ -311,6 +332,7 @@ export async function flushCache(): Promise<void> {
 
 export async function closeRedisConnection(): Promise<void> {
   if (redisClient) {
+    closingRedisClient = true;
     try {
       if (typeof redisClient.quit === "function") {
         await redisClient.quit();
@@ -325,6 +347,7 @@ export async function closeRedisConnection(): Promise<void> {
   redisClient = null;
   redisReady = false;
   redisInitPromise = null;
+  closingRedisClient = false;
   if (cleanupTimer) {
     clearInterval(cleanupTimer);
     cleanupTimer = null;

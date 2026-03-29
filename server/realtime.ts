@@ -2,6 +2,12 @@ import type { Response } from "express";
 import { setInterval, clearInterval } from "node:timers";
 import logger from "./logger";
 import { getRedisClient as getSharedRedisClient } from "./cache";
+import {
+  getRedisUrl,
+  isRedisConnectionError,
+  isRedisDisabled,
+  redactRedisUrl,
+} from "./redisConfig";
 
 type SseEvent =
   | { event: "connected"; data: { connected: true } }
@@ -123,7 +129,6 @@ function broadcastToUser(userId: number, payload: SseEvent) {
   });
 }
 
-const REDIS_URL = process.env.REDIS_URL;
 const CHANNEL = "realtime:events";
 
 let publisher: any = null;
@@ -131,14 +136,14 @@ let subscriber: any = null;
 let pubSubInitPromise: Promise<void> | null = null;
 let loggedPubSubUnavailable = false;
 let realtimeInitialized = false;
+let closingSubscriber = false;
 
-const disableFlag = (process.env.DISABLE_REDIS ?? "").toLowerCase();
-const redisDisabled =
-  (process.env.NODE_ENV ?? "").toLowerCase() === "test" ||
-  disableFlag === "true" ||
-  disableFlag === "1" ||
-  disableFlag === "yes" ||
-  disableFlag === "on";
+function isRealtimeRedisDisabled(): boolean {
+  return (
+    (process.env.NODE_ENV ?? "").toLowerCase() === "test" ||
+    isRedisDisabled()
+  );
+}
 
 async function ensureRealtimePubSub(): Promise<void> {
   if (realtimeInitialized || pubSubInitPromise) {
@@ -146,7 +151,8 @@ async function ensureRealtimePubSub(): Promise<void> {
     return;
   }
 
-  if (!REDIS_URL || redisDisabled) {
+  const redisUrl = getRedisUrl();
+  if (!redisUrl || isRealtimeRedisDisabled()) {
     return;
   }
 
@@ -165,8 +171,26 @@ async function ensureRealtimePubSub(): Promise<void> {
 
       publisher = sharedClient;
       const subClient = sharedClient.duplicate();
+      closingSubscriber = false;
       subClient.on("error", (err: unknown) => {
+        if (isRedisConnectionError(err)) {
+          logger.warn(
+            { err, url: redactRedisUrl(redisUrl) },
+            "[Realtime] Redis subscriber unavailable; SSE invalidations will stay local until Redis returns",
+          );
+          return;
+        }
         logger.warn({ err }, "[Realtime] Redis subscriber error");
+      });
+      subClient.on("reconnecting", () => {
+        logger.info("[Realtime] Redis subscriber reconnecting");
+      });
+      subClient.on("end", () => {
+        if (closingSubscriber) {
+          logger.info("Realtime subscriber closed");
+          return;
+        }
+        logger.warn("[Realtime] Redis subscriber connection closed");
       });
       await subClient.connect();
       await subClient.subscribe(CHANNEL, (message: string) => {
@@ -343,6 +367,7 @@ export async function closeRealtimeConnections() {
   connections.clear();
 
   if (subscriber) {
+    closingSubscriber = true;
     try {
       await subscriber.unsubscribe(CHANNEL);
     } catch (err) {
@@ -350,7 +375,6 @@ export async function closeRealtimeConnections() {
     }
     try {
       await subscriber.quit();
-      logger.info("Realtime subscriber closed");
     } catch (err) {
       logger.warn({ err }, "[Realtime] Failed to close subscriber");
     } finally {
@@ -359,6 +383,7 @@ export async function closeRealtimeConnections() {
   }
   publisher = null;
   realtimeInitialized = false;
+  closingSubscriber = false;
 }
 
 void ensureRealtimePubSub();

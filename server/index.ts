@@ -30,6 +30,7 @@ import { getRequestMetadata } from "./requestContext";
 import {
   closeRedisConnection as closeQueueRedisConnection,
   getRedisConnection,
+  isQueueRedisEnabled,
 } from "./queue/connection";
 import { closeRealtimeConnections } from "./realtime";
 import { closeConnection as closeDatabaseConnection, testConnection } from "./db";
@@ -294,16 +295,6 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function isTruthyEnv(value: string | undefined): boolean {
-  const normalized = value ? value.trim().toLowerCase() : "";
-  return (
-    normalized === "true" ||
-    normalized === "1" ||
-    normalized === "yes" ||
-    normalized === "on"
-  );
-}
-
 const READINESS_TIMEOUT_MS = parsePositiveInt(
   process.env.READINESS_TIMEOUT_MS,
   2_000,
@@ -319,7 +310,7 @@ function isRedisExpectedForRuntime(): boolean {
   if ((process.env.NODE_ENV ?? "").toLowerCase() === "test") {
     return false;
   }
-  return !isTruthyEnv(process.env.DISABLE_REDIS);
+  return isQueueRedisEnabled();
 }
 
 async function withTimeout<T>(
@@ -808,10 +799,16 @@ export async function startServer(port?: number) {
   // Register handlers before starting worker so pending jobs always have processors.
   if (process.env.NODE_ENV !== "test") {
     registerPushNotificationDispatchJob(dbStorage);
-    startBookingExpirationJob(dbStorage);
-    startPaymentReminderJob(dbStorage);
-    startLowStockDigestJob(dbStorage);
-    initializeWorker();
+    if (isQueueRedisEnabled()) {
+      startBookingExpirationJob(dbStorage);
+      startPaymentReminderJob(dbStorage);
+      startLowStockDigestJob(dbStorage);
+      initializeWorker();
+    } else {
+      logger.warn(
+        "Redis-backed background jobs are disabled because DISABLE_REDIS is enabled or REDIS_URL is missing.",
+      );
+    }
   }
 
   const server = await registerRoutesPromise;
