@@ -2,6 +2,7 @@ import { Queue, Worker, Job } from "bullmq";
 import { getRedisConnection } from "./queue/connection";
 import logger from "./logger";
 import { getRequestMetadata, runWithRequestContext } from "./requestContext";
+import { isRedisConnectionError } from "./redisConfig";
 import { resolveTraceContextFromSeed } from "./tracing";
 
 const QUEUE_NAME =
@@ -183,6 +184,13 @@ export function initializeWorker(): Worker<JobPayload> {
   });
 
   worker.on("error", (err) => {
+    if (isRedisConnectionError(err)) {
+      logger.warn(
+        { err, queueName: QUEUE_NAME },
+        "[JobQueue] Worker lost Redis connectivity; BullMQ will reconnect automatically",
+      );
+      return;
+    }
     logger.error({ err }, "[JobQueue] Worker error");
   });
 
